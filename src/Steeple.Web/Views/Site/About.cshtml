@@ -1,0 +1,39 @@
+@{
+    var area = ViewData["AreaName"] as string;
+}
+
+<article class="content-page wrap">
+    <header class="content-head">
+        <p class="content-eyebrow">About</p>
+        <h1>Community space, near you</h1>
+        <p class="content-lead">
+            @Brand.Name is a neighbourly noticeboard. Local churches and community organisations have
+            halls, studios, and meeting rooms that sit empty during the week — @Brand.Name helps the
+            people nearby who need a space actually find them.
+        </p>
+    </header>
+
+    <div class="prose">
+        <h2>How it works</h2>
+        <p><strong>If you need a space</strong> — browse what's near you, filter by size, accessibility, and
+            what it's good for, then contact the venue directly to arrange it. Many spaces are free to use.</p>
+        <p><strong>If you have a space</strong> — list it in a few minutes and open it to local groups on your
+            own terms. You stay in control of who uses it, when, and for how much. <a href="~/host">Become a host →</a></p>
+
+        <h2>Why we built it</h2>
+        <p>Good community space is scarce and expensive, while plenty of it goes unused most of the week.
+            Churches in particular have long opened their doors to the neighbourhood — @Brand.Name just makes
+            that easier to discover, without anyone needing to know which building to knock on.</p>
+
+        <h2>Where we are</h2>
+        <p>
+            @Brand.Name is starting small and local@(string.IsNullOrEmpty(area) ? "" : $", currently serving {area}").
+            We add new spaces by hand as we grow into each new neighbourhood.
+        </p>
+
+        <h2>Trust &amp; safety</h2>
+        <p>@Brand.Name connects neighbours directly; we don't sit in the middle of your booking. We verify who
+            runs each venue, and we ask everyone to treat these spaces — and each other — with care.
+            <a href="~/terms">Read how trust &amp; safety works →</a></p>
+    </div>
+</article>

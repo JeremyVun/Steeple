@@ -1,0 +1,27 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+<div class="admin-table-wrap">
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Surface</th>
+                <th>Subject</th>
+                <th>Properties</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Analytics)
+        {
+            <tr>
+                <td>@row.At.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                <td><code>@row.Event</code></td>
+                <td>@row.Surface</td>
+                <td>@row.Subject</td>
+                <td>@row.Properties</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>

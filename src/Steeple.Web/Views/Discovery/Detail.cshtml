@@ -1,0 +1,295 @@
+@model RoomDetailDto
+@using System.Text.Json
+@{
+    ViewData["Title"] = Model.RoomName;
+    var venue = Model.Venue;
+
+    var orderedPhotos = Model.Photos
+        .OrderByDescending(p => p.IsPrimary)
+        .ThenBy(p => p.SortOrder)
+        .ToList();
+    var primary = orderedPhotos.FirstOrDefault();
+
+    var miniMapData = new
+    {
+        center = new { lat = venue.Latitude, lng = venue.Longitude },
+        bounds = (object?)null,
+        pins = new[]
+        {
+            new
+            {
+                lat = venue.Latitude,
+                lng = venue.Longitude,
+                name = Model.RoomName,
+                venue = venue.Name,
+                url = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}"),
+                photo = primary?.Url,
+                price = Model.IsFree ? "Free" : (Model.PricePerHour.HasValue ? $"${Model.PricePerHour.Value:0.##}/hr" : "Enquire"),
+                free = Model.IsFree
+            }
+        }
+    };
+    var miniMapJson = JsonSerializer.Serialize(miniMapData);
+
+    var addressParts = new[] { venue.AddressLine, venue.Suburb, venue.Postcode }
+        .Where(s => !string.IsNullOrWhiteSpace(s));
+    var address = string.Join(", ", addressParts);
+
+    var hasContact = !string.IsNullOrWhiteSpace(venue.ContactEmail);
+    // Pre-fill a friendly subject; only the query string needs escaping — the address is plain ASCII.
+    var mailtoHref = hasContact
+        ? $"mailto:{venue.ContactEmail}?subject={Uri.EscapeDataString($"Enquiry about {Model.RoomName} at {venue.Name} (via {Brand.Name})")}"
+        : null;
+    var hasGettingThere = !string.IsNullOrWhiteSpace(venue.ParkingInfo)
+        || !string.IsNullOrWhiteSpace(venue.TransitInfo);
+
+    // schema.org JSON-LD: the room as a Place, contained in the venue (a Church for churches),
+    // with address, geo, capacity, amenities and free/paid signal — for local rich results.
+    var canonicalUrl = ViewData["Canonical"] as string ?? Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}");
+    var schemaVenueType = string.Equals(venue.VenueType, "Church", StringComparison.OrdinalIgnoreCase) ? "Church" : "Place";
+    var jsonLd = new Dictionary<string, object?>
+    {
+        ["@context"] = "https://schema.org",
+        ["@type"] = "Place",
+        ["name"] = Model.RoomName,
+        ["url"] = canonicalUrl,
+        ["maximumAttendeeCapacity"] = Model.Capacity,
+        ["isAccessibleForFree"] = Model.IsFree,
+        ["photo"] = orderedPhotos.Select(p => p.Url).ToArray(),
+        ["address"] = new Dictionary<string, object?>
+        {
+            ["@type"] = "PostalAddress",
+            ["streetAddress"] = string.IsNullOrWhiteSpace(venue.AddressLine) ? null : venue.AddressLine,
+            ["addressLocality"] = string.IsNullOrWhiteSpace(venue.Suburb) ? null : venue.Suburb,
+            ["postalCode"] = string.IsNullOrWhiteSpace(venue.Postcode) ? null : venue.Postcode,
+            ["addressCountry"] = "US"
+        },
+        ["geo"] = new Dictionary<string, object>
+        {
+            ["@type"] = "GeoCoordinates",
+            ["latitude"] = venue.Latitude,
+            ["longitude"] = venue.Longitude
+        },
+        ["amenityFeature"] = Model.Amenities.Concat(Model.Accessibility)
+            .Select(name => new Dictionary<string, object>
+            {
+                ["@type"] = "LocationFeatureSpecification",
+                ["name"] = name,
+                ["value"] = true
+            }).ToArray(),
+        ["containedInPlace"] = new Dictionary<string, object>
+        {
+            ["@type"] = schemaVenueType,
+            ["name"] = venue.Name
+        }
+    };
+    if (!string.IsNullOrWhiteSpace(Model.Description))
+    {
+        jsonLd["description"] = Model.Description;
+    }
+    var jsonLdString = System.Text.Json.JsonSerializer.Serialize(jsonLd,
+        new System.Text.Json.JsonSerializerOptions
+        {
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+        });
+}
+
+@* Emit the whole tag raw: Razor encodes the "+" in the type attribute otherwise. The JSON is
+   already escaped by System.Text.Json (< > & -> \uXXXX), so it cannot break out of the script. *@
+@Html.Raw("<script type=\"application/ld+json\">" + jsonLdString + "</script>")
+
+<article class="detail wrap">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="~/">← Back to spaces</a>
+    </nav>
+
+    <div class="detail-grid">
+        <div class="detail-main">
+            <section class="gallery" aria-label="Photos of @Model.RoomName">
+                @if (primary is not null)
+                {
+                    <figure class="gallery-primary">
+                        <img id="gallery-main" src="@primary.Url" width="1200" height="800"
+                             alt="@(primary.Caption ?? Model.RoomName)" />
+                    </figure>
+                    @if (orderedPhotos.Count > 1)
+                    {
+                        <ul class="gallery-thumbs" role="list">
+                            @foreach (var photo in orderedPhotos)
+                            {
+                                <li>
+                                    <button type="button" class="gallery-thumb"
+                                            data-full="@photo.Url"
+                                            aria-label="View @(photo.Caption ?? Model.RoomName)">
+                                        <img src="@photo.Url" width="1200" height="800" loading="lazy" decoding="async"
+                                             alt="@(photo.Caption ?? Model.RoomName)" />
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                }
+                else
+                {
+                    <div class="gallery-placeholder" aria-hidden="true"><span>No photos yet</span></div>
+                }
+            </section>
+
+            <header class="detail-header">
+                <h1 class="detail-title">@Model.RoomName</h1>
+                <p class="detail-venue">@venue.Name</p>
+                @if (!string.IsNullOrWhiteSpace(address))
+                {
+                    <p class="detail-address">@address</p>
+                }
+                <div class="detail-keyfacts">
+                    @if (Model.IsFree)
+                    {
+                        <span class="badge badge-free">Free to use</span>
+                    }
+                    else if (Model.PricePerHour.HasValue)
+                    {
+                        <span class="badge badge-price">$@Model.PricePerHour.Value.ToString("0.##")/hr</span>
+                    }
+                    <span class="keyfact">Up to @Model.Capacity people</span>
+                </div>
+                @if (Model.Activities.Count > 0)
+                {
+                    <ul class="chip-list chip-list-tags" role="list">
+                        @foreach (var a in Model.Activities)
+                        {
+                            <li class="chip-static">@DiscoveryViewModel.Humanize(a)</li>
+                        }
+                    </ul>
+                }
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Description))
+            {
+                <section class="detail-section">
+                    <h2>About this space</h2>
+                    <p class="detail-prose">@Model.Description</p>
+                </section>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(Model.HouseRules))
+            {
+                <section class="detail-section">
+                    <h2>House rules</h2>
+                    <p class="detail-prose">@Model.HouseRules</p>
+                </section>
+            }
+
+            @if (Model.Amenities.Count > 0)
+            {
+                <section class="detail-section">
+                    <h2>Amenities</h2>
+                    <ul class="feature-list" role="list">
+                        @foreach (var am in Model.Amenities)
+                        {
+                            <li class="feature-item"><span class="feature-tick" aria-hidden="true">✓</span> @DiscoveryViewModel.Humanize(am)</li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            @if (Model.Accessibility.Count > 0)
+            {
+                <section class="detail-section">
+                    <h2>Accessibility</h2>
+                    <ul class="feature-list" role="list">
+                        @foreach (var acc in Model.Accessibility)
+                        {
+                            <li class="feature-item"><span class="feature-tick" aria-hidden="true">♿</span> @DiscoveryViewModel.Humanize(acc)</li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            <section class="detail-section">
+                <h2>Where it is</h2>
+                <div id="map"
+                     class="map map-mini"
+                     aria-label="Map showing the location of @venue.Name">
+                    <p class="map-fallback">Map unavailable — see the address above.</p>
+                </div>
+                <script id="map-data" type="application/json">@Html.Raw(miniMapJson)</script>
+            </section>
+
+            @if (hasGettingThere)
+            {
+                <section class="detail-section">
+                    <h2>Getting there</h2>
+                    <dl class="gt-list">
+                        @if (!string.IsNullOrWhiteSpace(venue.ParkingInfo))
+                        {
+                            <div class="gt-item">
+                                <dt class="gt-term"><span class="gt-icon" aria-hidden="true">🅿️</span> Parking</dt>
+                                <dd class="gt-desc">@venue.ParkingInfo</dd>
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(venue.TransitInfo))
+                        {
+                            <div class="gt-item">
+                                <dt class="gt-term"><span class="gt-icon" aria-hidden="true">🚌</span> Public transport</dt>
+                                <dd class="gt-desc">@venue.TransitInfo</dd>
+                            </div>
+                        }
+                    </dl>
+                </section>
+            }
+        </div>
+
+        <aside class="detail-aside">
+            <div class="apply-card">
+                @if (Model.IsFree)
+                {
+                    <p class="apply-price"><strong>Free</strong> to use</p>
+                }
+                else if (Model.PricePerHour.HasValue)
+                {
+                    <p class="apply-price"><strong>$@Model.PricePerHour.Value.ToString("0.##")</strong> / hour</p>
+                }
+                else
+                {
+                    <p class="apply-price"><strong>Enquire</strong> for pricing</p>
+                }
+
+                @if (hasContact)
+                {
+                    <a class="btn btn-primary btn-block" href="@mailtoHref">Contact the venue</a>
+                    <p class="apply-note">Contact @venue.Name to arrange a booking directly.</p>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-primary btn-block" disabled aria-disabled="true">
+                        Contact the venue
+                    </button>
+                    <p class="apply-note">This venue hasn't added contact details yet — check back soon.</p>
+                }
+
+                <button type="button" class="btn btn-ghost btn-block" data-copy-link
+                        data-copied-label="Link copied ✓">
+                    Copy link to this space
+                </button>
+            </div>
+
+            <div class="trust-block">
+                @if (venue.IsIdentityVerified)
+                {
+                    <p class="trust-line">
+                        <span class="trust-check" aria-hidden="true">✓</span>
+                        <span><strong>Verified host.</strong> We've confirmed there's a real person behind @venue.Name — so you know who you'll be dealing with.</span>
+                    </p>
+                }
+                else
+                {
+                    <p class="trust-line trust-line-muted">
+                        <span class="trust-check" aria-hidden="true">○</span>
+                        <span><strong>Host not yet verified.</strong> We haven't confirmed who runs this space yet. It's worth a quick call or a visit before you commit.</span>
+                    </p>
+                }
+            </div>
+        </aside>
+    </div>
+</article>

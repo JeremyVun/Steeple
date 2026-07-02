@@ -1,0 +1,56 @@
+@{
+    var area = ViewData["AreaName"] as string;
+}
+
+<section class="host-hero wrap">
+    <div class="host-hero-copy">
+        <p class="content-eyebrow">Become a host</p>
+        <h1>Open your hall to the neighbourhood</h1>
+        <p class="content-lead">
+            You've got a hall, a studio, or a meeting room that sits quiet most of the week. Local
+            groups are looking for exactly that. List it on @Brand.Name and put it to good use — on your
+            own terms.
+        </p>
+        <div class="host-cta-row">
+            <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Sign in to list your space</a>
+            <a class="btn btn-ghost" href="~/">Browse the listings</a>
+        </div>
+        <p class="host-cta-note">
+            We onboard new venues personally, so getting set up is quick and you'll have a hand to hold.
+        </p>
+    </div>
+</section>
+
+<section class="host-steps wrap" aria-label="How hosting works">
+    <ol class="step-list">
+        <li class="step">
+            <span class="step-num" aria-hidden="true">1</span>
+            <h2 class="step-title">List your space</h2>
+            <p>Add a few photos, the basics, and what it's good for. It takes about ten minutes.</p>
+        </li>
+        <li class="step">
+            <span class="step-num" aria-hidden="true">2</span>
+            <h2 class="step-title">Set your terms</h2>
+            <p>Free or paid, your house rules, who it's open to. You stay in control of every detail.</p>
+        </li>
+        <li class="step">
+            <span class="step-num" aria-hidden="true">3</span>
+            <h2 class="step-title">Meet your neighbours</h2>
+            <p>Local organisers find you and get in touch directly. You decide who uses the space.</p>
+        </li>
+    </ol>
+</section>
+
+<section class="host-why wrap">
+    <h2>Why churches and community venues host</h2>
+    <ul class="feature-list" role="list">
+        <li class="feature-item"><span class="feature-tick" aria-hidden="true">✓</span> Put a quiet building to good use during the week</li>
+        <li class="feature-item"><span class="feature-tick" aria-hidden="true">✓</span> Welcome new people through your doors</li>
+        <li class="feature-item"><span class="feature-tick" aria-hidden="true">✓</span> Earn a little towards upkeep, or offer it free — your call</li>
+        <li class="feature-item"><span class="feature-tick" aria-hidden="true">✓</span> No commission — organisers arrange directly with you</li>
+    </ul>
+    <p class="host-foot">
+        @Brand.Name is starting local@(string.IsNullOrEmpty(area) ? "" : $", currently in {area}"), and we'd
+        love to add your space. <a href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Get started →</a>
+    </p>
+</section>

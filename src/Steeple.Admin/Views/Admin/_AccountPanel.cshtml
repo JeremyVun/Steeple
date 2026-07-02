@@ -1,0 +1,76 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+<div class="admin-account-grid">
+    <section class="admin-subpanel" aria-labelledby="admin-password-heading">
+        <h3 id="admin-password-heading">Password</h3>
+        <form class="admin-form">
+            <label class="admin-field">
+                <span>Current password</span>
+                <input type="password" autocomplete="current-password" />
+            </label>
+            <label class="admin-field">
+                <span>New password</span>
+                <input type="password" autocomplete="new-password" />
+            </label>
+            <label class="admin-field">
+                <span>Confirm new password</span>
+                <input type="password" autocomplete="new-password" />
+            </label>
+            <button type="button">Rotate password</button>
+        </form>
+    </section>
+
+    <section class="admin-subpanel" aria-labelledby="admin-mfa-heading">
+        <h3 id="admin-mfa-heading">MFA</h3>
+        <p class="admin-muted">TOTP is @(Model.Account.MfaEnabled ? "enabled" : "not enrolled") for @Model.Account.Username.</p>
+        <div class="admin-mfa-box" aria-label="TOTP setup preview">
+            <div class="admin-qr-placeholder"></div>
+            <div>
+                <strong>Setup flow</strong>
+                <p>Generate pending TOTP secret, verify current password and a six-digit code, then show recovery codes once.</p>
+            </div>
+        </div>
+        <div class="admin-button-row">
+            <button type="button">Regenerate recovery codes</button>
+            <button type="button">Disable MFA</button>
+        </div>
+    </section>
+
+    <section class="admin-subpanel admin-subpanel-wide" aria-labelledby="admin-devices-heading">
+        <h3 id="admin-devices-heading">Trusted devices</h3>
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>IP</th>
+                        <th>Trusted</th>
+                        <th>Last seen</th>
+                        <th>Expires</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var device in Model.Account.TrustedDevices)
+                {
+                    <tr>
+                        <td>
+                            <strong>@device.Browser</strong>
+                            @if (device.IsCurrent)
+                            {
+                                <span class="admin-status">This device</span>
+                            }
+                        </td>
+                        <td>@device.SourceIp</td>
+                        <td>@device.CreatedAt.ToLocalTime().ToString("MMM d")</td>
+                        <td>@device.LastSeenAt.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                        <td>@device.ExpiresAt.ToLocalTime().ToString("MMM d")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+        <form method="post" action="~/admin/account/logout">
+            <button type="submit">Log out</button>
+        </form>
+    </section>
+</div>

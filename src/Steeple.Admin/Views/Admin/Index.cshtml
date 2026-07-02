@@ -1,0 +1,43 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Robots"] = "noindex,nofollow";
+}
+
+<section class="admin-page wrap">
+    @await Html.PartialAsync("_AdminNav", Model)
+
+    <div class="admin-kpis" aria-label="Admin metrics">
+        @foreach (var metric in Model.Shell.Metrics)
+        {
+            <article class="admin-kpi admin-kpi-@metric.Tone">
+                <p class="admin-kpi-label">@metric.Label</p>
+                <p class="admin-kpi-value">@metric.Value</p>
+                <p class="admin-kpi-detail">@metric.Detail</p>
+            </article>
+        }
+    </div>
+
+    <section class="admin-panel" aria-labelledby="admin-activity-heading">
+        <div class="admin-panel-header">
+            <div>
+                <p class="admin-eyebrow">Operations</p>
+                <h2 id="admin-activity-heading">Recent activity</h2>
+            </div>
+            <a class="admin-link-button" href="~/admin/analytics">View analytics</a>
+        </div>
+        <ol class="admin-activity">
+            @foreach (var item in Model.Shell.Activity)
+            {
+                <li class="admin-activity-item">
+                    <span class="admin-activity-marker" aria-hidden="true"></span>
+                    <div class="admin-activity-body">
+                        <p class="admin-activity-line"><strong>@item.Actor</strong> · @item.Event</p>
+                        <p class="admin-activity-detail">@item.Detail</p>
+                    </div>
+                    <time class="admin-activity-time">@item.At.ToLocalTime().ToString("MMM d, h:mm tt")</time>
+                </li>
+            }
+        </ol>
+    </section>
+</section>

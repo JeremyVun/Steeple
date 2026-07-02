@@ -1,0 +1,18 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    Layout = "_Layout";
+    ViewData["Robots"] = "noindex,nofollow";
+}
+
+<section class="admin-page wrap">
+    @await Html.PartialAsync("_AdminNav", Model)
+    <section class="admin-panel" aria-labelledby="admin-account-heading">
+        <div class="admin-panel-header">
+            <div>
+                <p class="admin-eyebrow">Security</p>
+                <h1 id="admin-account-heading">Admin account</h1>
+            </div>
+        </div>
+        @await Html.PartialAsync("_AccountPanel", Model)
+    </section>
+</section>

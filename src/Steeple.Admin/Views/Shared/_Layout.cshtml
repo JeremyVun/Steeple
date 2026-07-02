@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@(ViewData["Title"] is null ? "Steeple Admin" : ViewData["Title"] + " · Steeple Admin")</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="admin-shell">
+    <a class="skip-link" href="#main">Skip to content</a>
+    <main id="main">
+        @RenderBody()
+    </main>
+    <script src="~/js/htmx.min.js"></script>
+    <script>
+        // Bulk-select wiring shared by the admin tables (listings, users). Tables re-render via
+        // htmx outerHTML swaps with every row checkbox cleared, so selection state is always
+        // rebuilt from the live checkboxes — there is nothing to persist across a swap.
+        function hsBulkSync(form) {
+            if (!form) return;
+            var rows = form.querySelectorAll('.admin-row-check');
+            var checked = 0;
+            rows.forEach(function (b) { if (b.checked) checked++; });
+
+            var count = form.querySelector('[data-selected-count]');
+            if (count) count.textContent = checked + ' selected';
+
+            var all = form.querySelector('.admin-select-all');
+            if (all) {
+                all.checked = rows.length > 0 && checked === rows.length;
+                all.indeterminate = checked > 0 && checked < rows.length;
+            }
+
+            var apply = form.querySelector('.admin-bulkbar-apply button');
+            if (apply) apply.disabled = checked === 0;
+        }
+
+        function hsBulkRow(el) { hsBulkSync(el.closest('form')); }
+
+        function hsBulkAll(el) {
+            var form = el.closest('form');
+            if (!form) return;
+            form.querySelectorAll('.admin-row-check').forEach(function (b) { b.checked = el.checked; });
+            hsBulkSync(form);
+        }
+    </script>
+    @await RenderSectionAsync("scripts", required: false)
+</body>
+</html>

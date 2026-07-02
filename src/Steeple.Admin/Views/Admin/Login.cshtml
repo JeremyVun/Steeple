@@ -1,0 +1,24 @@
+@{
+    Layout = "_Layout";
+    ViewData["Robots"] = "noindex,nofollow";
+}
+
+<section class="admin-login wrap" aria-labelledby="admin-login-heading">
+    <form class="admin-login-form" method="post" action="~/admin/account/login">
+        <p class="admin-eyebrow">Admin</p>
+        <h1 id="admin-login-heading">Sign in</h1>
+        <label class="admin-field">
+            <span>Username</span>
+            <input name="username" autocomplete="username" required />
+        </label>
+        <label class="admin-field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <label class="toggle">
+            <input type="checkbox" name="stay_signed_in" value="true" />
+            <span class="toggle-label">Stay signed in</span>
+        </label>
+        <button class="btn btn-primary" type="submit">Continue</button>
+    </form>
+</section>

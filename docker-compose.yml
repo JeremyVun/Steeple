@@ -1,0 +1,135 @@
+# Steeple stack: Postgres + the containerised apps on a private compose network.
+# Only `web` and `admin` publish host ports; `api` and `flags` are internal-only (reachable by
+# other services over the `steeple` network). Admin sits behind caddy/authelia at the edge.
+# The apps run in Production here (HSTS, Secure cookies, real error pages); the inner dev loop
+# is `dotnet run` (Development). Postgres is bound to localhost purely for that dev loop.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: steeple-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-steeple}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-steeple_dev_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-steeple}
+      # Pin the data dir so the named volume maps to PGDATA directly. The postgres:18 image
+      # otherwise stores data in a versioned subdir, which would silently re-init on a major bump.
+      PGDATA: /var/lib/postgresql/data
+    # Bound to 127.0.0.1 only: exposed for the local `dotnet run` dev loop, not the host network.
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - steeple_pgdata:/var/lib/postgresql/data
+    networks:
+      - steeple
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-steeple} -d ${POSTGRES_DB:-steeple}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot schema + seed. Runs Liquibase against Postgres, applies the changelog, then exits 0.
+  # This is the ONLY component that migrates — the apps never do.
+  migrate:
+    image: liquibase/liquibase:4.31
+    container_name: steeple-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./db/changelog:/liquibase/changelog:ro
+    networks:
+      - steeple
+    command:
+      - --search-path=/liquibase/changelog
+      - --changelog-file=db.changelog-master.yaml
+      - --url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-steeple}
+      - --username=${POSTGRES_USER:-steeple}
+      - --password=${POSTGRES_PASSWORD:-steeple_dev_pw}
+      - update
+    restart: "no"
+
+  # Backend API for the web funnel and the future mobile edge. Reads the shared Postgres; never migrates.
+  # Internal only — not published to the host. The web funnel reaches it at http://api:8080.
+  api:
+    # image: steeple-api:${STEEPLE_API_VERSION:-latest}
+    container_name: steeple-api
+    build:
+      context: .
+      dockerfile: src/Steeple.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - steeple
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    # image: steeple-web:${STEEPLE_WEB_VERSION:-latest}
+    container_name: steeple-web
+    build:
+      context: .
+      dockerfile: src/Steeple.Web/Dockerfile
+    environment:
+      # Pure frontend — no database. It calls the API for all data.
+      ASPNETCORE_ENVIRONMENT: Production
+      Api__BaseUrl: "http://api:8080"
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - steeple
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  admin:
+    # image: steeple-admin:${STEEPLE_ADMIN_VERSION:-latest}
+    container_name: steeple-admin
+    build:
+      context: .
+      dockerfile: src/Steeple.Admin/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
+    ports:
+      - "${ADMIN_PORT:-8082}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    networks:
+      - steeple
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  steeple:
+    driver: bridge
+
+volumes:
+  steeple_pgdata:

@@ -1,0 +1,10 @@
+# Liquibase master changelog. Thin include manifest only — all DDL/DML lives in the SQL files
+# (formatted-SQL changelogs can't include each other, so the manifest is YAML). Applied by the
+# one-shot "migrate" service in docker-compose.yml; the apps never migrate.
+databaseChangeLog:
+  - include:
+      file: 001-schema.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 002-seed.sql
+      relativeToChangelogFile: true

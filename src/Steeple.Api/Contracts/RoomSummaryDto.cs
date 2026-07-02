@@ -1,0 +1,35 @@
+namespace Steeple.Api.Contracts;
+/// <summary>
+/// A room projected as a search-result card.
+/// </summary>
+/// <param name="RoomId">Room identifier.</param>
+/// <param name="RoomSlug">URL-friendly room identifier.</param>
+/// <param name="VenueSlug">URL-friendly venue identifier.</param>
+/// <param name="VenueName">Owning venue name.</param>
+/// <param name="RoomName">Room display name.</param>
+/// <param name="PrimaryPhotoUrl">URL of the primary photo, if any.</param>
+/// <param name="Capacity">Maximum occupancy.</param>
+/// <param name="IsFree">Whether the room is free to use.</param>
+/// <param name="PricePerHour">Hourly price, if any.</param>
+/// <param name="Currency">ISO currency code for the price.</param>
+/// <param name="Latitude">Latitude in decimal degrees.</param>
+/// <param name="Longitude">Longitude in decimal degrees.</param>
+/// <param name="Activities">Accepted activity types as string tokens.</param>
+/// <param name="Accessibility">Accessibility features as string tokens.</param>
+/// <param name="DistanceMeters">Distance from the search center in metres, if computed.</param>
+public record RoomSummaryDto(
+    Guid RoomId,
+    string RoomSlug,
+    string VenueSlug,
+    string VenueName,
+    string RoomName,
+    string? PrimaryPhotoUrl,
+    int Capacity,
+    bool IsFree,
+    decimal? PricePerHour,
+    string Currency,
+    double Latitude,
+    double Longitude,
+    IReadOnlyList<string> Activities,
+    IReadOnlyList<string> Accessibility,
+    double? DistanceMeters);

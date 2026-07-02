@@ -1,0 +1,91 @@
+@model DiscoveryViewModel
+@using System.Text.Json
+@{
+    var result = Model.Result;
+    var bounds = Model.Result.AppliedBounds;
+    var beachhead = Model.Beachhead;
+
+    var pins = result.Items.Select(i => new
+    {
+        lat = i.Latitude,
+        lng = i.Longitude,
+        name = i.RoomName,
+        venue = i.VenueName,
+        url = Url.Content($"~/space/{i.VenueSlug}/{i.RoomSlug}"),
+        photo = i.PrimaryPhotoUrl,
+        price = i.IsFree ? "Free" : (i.PricePerHour.HasValue ? $"${i.PricePerHour.Value:0.##}/hr" : "Enquire"),
+        free = i.IsFree
+    });
+
+    // Frame the map on the whole served area by default; when a suburb is selected, tighten the
+    // frame around its venues (with a little padding) so picking a suburb zooms the map onto it.
+    object boundsData;
+    if (!string.IsNullOrWhiteSpace(Model.Query.Suburb) && result.Items.Count > 0)
+    {
+        const double pad = 0.012; // ~1.3km of breathing room around the matched venues
+        boundsData = new
+        {
+            minLat = result.Items.Min(i => i.Latitude) - pad,
+            maxLat = result.Items.Max(i => i.Latitude) + pad,
+            minLng = result.Items.Min(i => i.Longitude) - pad,
+            maxLng = result.Items.Max(i => i.Longitude) + pad
+        };
+    }
+    else
+    {
+        boundsData = new
+        {
+            minLat = beachhead.MinLatitude,
+            maxLat = beachhead.MaxLatitude,
+            minLng = beachhead.MinLongitude,
+            maxLng = beachhead.MaxLongitude
+        };
+    }
+
+    var mapData = new
+    {
+        center = new { lat = Model.Center.Latitude, lng = Model.Center.Longitude },
+        bounds = boundsData,
+        pins
+    };
+
+    var mapJson = JsonSerializer.Serialize(mapData);
+}
+
+@* Re-emitted on every HTMX swap; site.js reads this on htmx:afterSwap to rebuild markers. *@
+<script id="map-data" type="application/json">@Html.Raw(mapJson)</script>
+
+<p class="result-count">
+    @if (result.IsZeroResult)
+    {
+        <span>No spaces yet in @Model.AreaName</span>
+    }
+    else
+    {
+        <strong>@result.TotalCount</strong>
+        <span>@(result.TotalCount == 1 ? "space" : "spaces") in @Model.AreaName</span>
+    }
+</p>
+
+@if (result.IsZeroResult)
+{
+    <div class="empty-state" role="status">
+        <p class="empty-emoji" aria-hidden="true">🌱</p>
+        <h2 class="empty-title">No spaces match yet</h2>
+        <p class="empty-body">
+            Try widening your filters — turn off "Free only", lower the capacity, or clear an activity chip.
+            New halls are added by hand every week, so it is worth checking back.
+        </p>
+    </div>
+}
+else
+{
+    <ul class="card-grid" role="list">
+        @foreach (var room in result.Items)
+        {
+            <li class="card-grid-item">
+                @await Html.PartialAsync("_RoomCard", room)
+            </li>
+        }
+    </ul>
+}

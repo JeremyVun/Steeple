@@ -1,0 +1,25 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+<div id="admin-flags-panel" class="admin-flags">
+    @foreach (var flag in Model.FeatureFlags)
+    {
+        <article class="admin-flag">
+            <div>
+                <div class="admin-flag-title">
+                    <code>@flag.Key</code>
+                    <span class="admin-status">@(flag.Enabled ? "Enabled" : "Disabled")</span>
+                    @if (flag.IsPublic)
+                    {
+                        <span class="admin-status">Public</span>
+                    }
+                </div>
+                <p>@flag.Description</p>
+                <small>@flag.Audience · updated @flag.UpdatedAt.ToLocalTime().ToString("MMM d, h:mm tt")</small>
+            </div>
+            <form hx-post="@Url.Content($"~/admin/feature-flags/{flag.Key}/toggle")" hx-target="#admin-flags-panel" hx-swap="outerHTML">
+                <input type="hidden" name="enabled" value="@(!flag.Enabled)" />
+                <button class="admin-toggle-button" type="submit">@(flag.Enabled ? "Disable" : "Enable")</button>
+            </form>
+        </article>
+    }
+</div>

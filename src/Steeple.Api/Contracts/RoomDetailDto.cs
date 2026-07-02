@@ -1,0 +1,33 @@
+namespace Steeple.Api.Contracts;
+/// <summary>
+/// Full room detail for the listing detail page, including its venue.
+/// </summary>
+/// <param name="RoomId">Room identifier.</param>
+/// <param name="RoomSlug">URL-friendly room identifier.</param>
+/// <param name="RoomName">Room display name.</param>
+/// <param name="Description">Free-text room description.</param>
+/// <param name="Capacity">Maximum occupancy.</param>
+/// <param name="IsFree">Whether the room is free to use.</param>
+/// <param name="PricePerHour">Hourly price, if any.</param>
+/// <param name="Currency">ISO currency code for the price.</param>
+/// <param name="HouseRules">House rules and usage conditions.</param>
+/// <param name="Amenities">Amenities as string tokens.</param>
+/// <param name="Accessibility">Accessibility features as string tokens.</param>
+/// <param name="Activities">Accepted activity types as string tokens.</param>
+/// <param name="Photos">Room photos.</param>
+/// <param name="Venue">The owning venue.</param>
+public record RoomDetailDto(
+    Guid RoomId,
+    string RoomSlug,
+    string RoomName,
+    string Description,
+    int Capacity,
+    bool IsFree,
+    decimal? PricePerHour,
+    string Currency,
+    string HouseRules,
+    IReadOnlyList<string> Amenities,
+    IReadOnlyList<string> Accessibility,
+    IReadOnlyList<string> Activities,
+    IReadOnlyList<RoomPhotoDto> Photos,
+    VenueSummaryDto Venue);

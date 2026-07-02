@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="10.0.9" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+  </ItemGroup>
+
+  <!-- Folder-matched namespaces exposed project-wide, matching the other projects' convention. -->
+  <ItemGroup>
+    <Using Include="Steeple.Admin.Controllers" />
+    <Using Include="Steeple.Admin.Services.Admin" />
+    <Using Include="Steeple.Admin.ViewModels.Admin" />
+    <Using Include="Steeple.Persistence" />
+    <Using Include="Steeple.Persistence.Models" />
+    <Using Include="Steeple.Persistence.Constants" />
+  </ItemGroup>
+
+  <!-- Shares the EF mapping with the API via the persistence library; reads the same Postgres
+       the public web funnel does. Schema itself is owned by the Liquibase migrate service. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Steeple.Persistence\Steeple.Persistence.csproj" />
+  </ItemGroup>
+
+</Project>

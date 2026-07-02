@@ -1,0 +1,25 @@
+# Build artifacts — never copy host build output into the image context.
+**/bin/
+**/obj/
+**/out/
+
+# VCS & editor/tooling
+.git/
+.gitignore
+.github/
+.claude/
+.vs/
+.vscode/
+**/*.user
+
+# Docs & local-only infra (not needed to build the images)
+docs/
+*.md
+docker-compose.yml
+docker-bake.hcl
+versions.hcl
+.env
+
+# Don't bake dev-only settings (carries the local DB connection string) into
+# production images; prod config comes from environment variables.
+**/appsettings.Development.json

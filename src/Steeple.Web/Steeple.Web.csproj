@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Razor.RuntimeCompilation" Version="10.0.9" />
+  </ItemGroup>
+
+  <!-- Pure frontend: it shares no project with the server. It speaks HTTP/JSON to the API and
+       deserializes responses into its own view models (Models/), which it renders. -->
+  <ItemGroup>
+    <Using Include="Steeple.Web.Models" />
+    <Using Include="Steeple.Web.Configuration" />
+    <Using Include="Steeple.Web.Extensions" />
+    <Using Include="Steeple.Web.Services" />
+  </ItemGroup>
+
+</Project>

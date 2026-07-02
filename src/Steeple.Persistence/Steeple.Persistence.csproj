@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- The persistence/domain layer: entities, value objects, enums, and the EF Core mapping
+       (provider-agnostic). Consumers (Api, Admin) pick the provider via UseNpgsql. Relational
+       carries ToTable/HasMaxLength/HasPrecision used by the configurations. Pinned to 10.0.4 to
+       match the Npgsql provider constraint (see CLAUDE.md). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.4" />
+  </ItemGroup>
+
+  <!-- Folder-matched namespaces exposed project-wide. -->
+  <ItemGroup>
+    <Using Include="Steeple.Persistence.Models" />
+    <Using Include="Steeple.Persistence.Constants" />
+  </ItemGroup>
+
+</Project>

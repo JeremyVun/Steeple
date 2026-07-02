@@ -1,0 +1,60 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+<div id="admin-users-table" class="admin-stack">
+    <form hx-post="@Url.Content("~/admin/users/status")" hx-target="#admin-users-table" hx-swap="outerHTML">
+        <div class="admin-bulkbar">
+            <label class="admin-bulkbar-all">
+                <input type="checkbox" class="admin-select-all" onclick="hsBulkAll(this)" aria-label="Select all users" />
+                Select all
+            </label>
+            <span class="admin-bulkbar-count" data-selected-count>0 selected</span>
+            <span class="admin-bulkbar-apply">
+                <label class="sr-only" for="admin-user-bulk-status">Status to apply</label>
+                <select id="admin-user-bulk-status" name="status">
+                    @foreach (var status in new[] { "Active", "Review", "Paused" })
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+                <button type="submit" disabled>Apply to selected</button>
+            </span>
+        </div>
+
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th class="admin-col-check"><span class="sr-only">Select</span></th>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Trust</th>
+                        <th>Status</th>
+                        <th>Bookings</th>
+                        <th>Last seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var user in Model.Users)
+                {
+                    <tr>
+                        <td class="admin-col-check">
+                            <input type="checkbox" class="admin-row-check" name="ids" value="@user.Id"
+                                   onclick="hsBulkRow(this)"
+                                   aria-label="Select @user.Name" />
+                        </td>
+                        <td>
+                            <strong>@user.Name</strong>
+                            <span>@user.Email</span>
+                        </td>
+                        <td>@user.Role</td>
+                        <td>@user.TrustLevel</td>
+                        <td><span class="admin-status">@user.Status</span></td>
+                        <td>@user.Bookings</td>
+                        <td>@user.LastSeenAt.ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </form>
+</div>

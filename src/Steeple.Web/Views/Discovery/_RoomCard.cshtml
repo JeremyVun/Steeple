@@ -1,0 +1,63 @@
+@model RoomSummaryDto
+@{
+    var url = Url.Content($"~/space/{Model.VenueSlug}/{Model.RoomSlug}");
+    string? distanceLabel = null;
+    if (Model.DistanceMeters is double m)
+    {
+        distanceLabel = m < 1000
+            ? $"{Math.Round(m)} m away"
+            : $"{(m / 1000.0):0.#} km away";
+    }
+}
+
+<a class="card" href="@url">
+    <div class="card-photo">
+        @if (!string.IsNullOrEmpty(Model.PrimaryPhotoUrl))
+        {
+            <img src="@Model.PrimaryPhotoUrl" width="1200" height="800" loading="lazy" decoding="async"
+                 alt="@Model.RoomName at @Model.VenueName" />
+        }
+        else
+        {
+            <div class="card-photo-placeholder" aria-hidden="true">
+                <span>@(string.IsNullOrEmpty(Model.RoomName) ? "?" : Model.RoomName.Substring(0, 1))</span>
+            </div>
+        }
+
+        @if (Model.IsFree)
+        {
+            <span class="badge badge-free">Free</span>
+        }
+        else if (Model.PricePerHour.HasValue)
+        {
+            <span class="badge badge-price">$@Model.PricePerHour.Value.ToString("0.##")/hr</span>
+        }
+    </div>
+
+    <div class="card-body">
+        <h3 class="card-title">@Model.RoomName</h3>
+        <p class="card-venue">@Model.VenueName</p>
+
+        <p class="card-meta">
+            <span class="card-capacity">Up to @Model.Capacity</span>
+            @if (distanceLabel is not null)
+            {
+                <span class="card-distance">· @distanceLabel</span>
+            }
+        </p>
+
+        @if (Model.Activities.Count > 0)
+        {
+            <ul class="chip-list" role="list">
+                @foreach (var a in Model.Activities.Take(3))
+                {
+                    <li class="chip-static">@DiscoveryViewModel.Humanize(a)</li>
+                }
+                @if (Model.Activities.Count > 3)
+                {
+                    <li class="chip-static chip-more">+@(Model.Activities.Count - 3)</li>
+                }
+            </ul>
+        }
+    </div>
+</a>

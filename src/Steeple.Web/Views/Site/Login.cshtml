@@ -1,0 +1,23 @@
+@{
+    var returnUrl = ViewData["ReturnUrl"] as string ?? Url.Content("~/");
+}
+
+<section class="auth-page wrap" aria-labelledby="auth-heading">
+    <div class="auth-card">
+        <p class="content-eyebrow">@Brand.Name</p>
+        <h1 id="auth-heading">Log in or sign up</h1>
+        <p class="auth-sub">One account to apply for spaces, message hosts, and manage your own listings.</p>
+
+        <div class="auth-providers">
+            <button type="button" class="auth-btn" disabled aria-disabled="true">Continue with Google</button>
+            <button type="button" class="auth-btn" disabled aria-disabled="true">Continue with Apple</button>
+        </div>
+
+        <p class="auth-note">
+            Accounts are coming soon. While @Brand.Name is in preview you can browse every space and contact
+            venues directly — no sign-in needed.
+        </p>
+
+        <a class="auth-back" href="@returnUrl">← Back to browsing</a>
+    </div>
+</section>

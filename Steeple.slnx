@@ -1,0 +1,15 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Steeple.Admin/Steeple.Admin.csproj" />
+    <Project Path="src/Steeple.Api/Steeple.Api.csproj" />
+    <Project Path="src/Steeple.FlagsSdk/Steeple.FlagsSdk.csproj" />
+    <Project Path="src/Steeple.Persistence/Steeple.Persistence.csproj" />
+    <Project Path="src/Steeple.FlagsService/Steeple.FlagsService.csproj" />
+    <Project Path="src/Steeple.Web/Steeple.Web.csproj" />
+  </Folder>
+</Solution>

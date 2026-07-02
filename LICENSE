@@ -1,0 +1,74 @@
+Steeple Source-Available Proprietary License
+
+Copyright (c) 2026 Steeple. All rights reserved.
+
+This repository is made available for review, transparency, evaluation, and
+internal development only. It is not open-source software.
+
+Subject to the restrictions below, you may:
+
+1. View and inspect the source code.
+2. Clone or fork the repository where the hosting platform permits it, solely
+   for review, backup, evaluation, or proposing changes to Steeple.
+3. Run the software locally for private, non-production evaluation.
+4. Submit patches, issues, or pull requests to Steeple.
+
+You may not, without prior written permission from Steeple:
+
+1. Use the software, source code, documentation, designs, data, or other
+   repository content in a production service, commercial product, hosted
+   service, or competing product.
+2. Copy, publish, distribute, sublicense, sell, lease, or otherwise make the
+   software or repository content available to third parties, except as
+   technically required to view, fork, or submit contributions through the
+   repository hosting platform.
+3. Create derivative works based on the software or repository content, except
+   for private evaluation or proposed contributions back to Steeple.
+4. Remove or alter copyright notices, license notices, or proprietary markings.
+5. Use any Steeple name, logo, trademark, trade dress, or branding without
+   prior written permission.
+
+AI and automated data-use restrictions
+
+You may not use the software, source code, documentation, designs, data, commit
+history, issues, pull requests, discussions, or any other repository content:
+
+1. To train, fine-tune, improve, evaluate, benchmark, validate, or test any
+   artificial intelligence, machine learning, large language model, foundation
+   model, embedding model, code-generation system, retrieval system, or related
+   automated system.
+2. As part of any dataset, corpus, index, vector database, embedding store,
+   knowledge base, benchmark, model input collection, or model output
+   evaluation set.
+3. For automated scraping, crawling, harvesting, mirroring, bulk downloading,
+   indexing, or extraction, except as strictly necessary for ordinary source
+   control operations by a human user or for security scanning performed on
+   Steeple's behalf.
+4. To generate or assist in generating substantially similar software,
+   documentation, product designs, business materials, listings, or data.
+
+Contributions
+
+By submitting a contribution to Steeple, you grant Steeple a perpetual,
+worldwide, irrevocable, royalty-free license to use, reproduce, modify,
+distribute, sublicense, and otherwise exploit that contribution in any form.
+You represent that you have the right to grant this license.
+
+Third-party materials
+
+Third-party dependencies and assets included in or used by this repository may
+be governed by their own licenses. Those third-party licenses apply to those
+materials only and do not grant rights to Steeple-owned materials.
+
+No warranty
+
+The software and repository content are provided "as is", without warranties of
+any kind, express or implied, including warranties of merchantability, fitness
+for a particular purpose, title, and non-infringement. Steeple will not be
+liable for any claim, damages, or other liability arising from use of the
+software or repository content.
+
+Permission requests
+
+For permission to use Steeple materials outside this license, contact the
+project owner.

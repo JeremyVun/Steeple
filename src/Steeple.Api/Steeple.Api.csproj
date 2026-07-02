@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- The backend API for both the web funnel and the future mobile edge. Owns its web contracts
+       (Contracts/) and the use-case services; reads the DB through the shared persistence library.
+       Schema itself is owned by the Liquibase migrate service — the API never migrates. -->
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Steeple.Persistence\Steeple.Persistence.csproj" />
+  </ItemGroup>
+
+  <!-- Folder-matched namespaces exposed project-wide, mirroring the other projects' convention. -->
+  <ItemGroup>
+    <Using Include="Steeple.Persistence" />
+    <Using Include="Steeple.Persistence.Models" />
+    <Using Include="Steeple.Persistence.Constants" />
+    <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Configuration" />
+    <Using Include="Steeple.Api.Services" />
+    <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Extensions" />
+    <Using Include="Steeple.Api.Utils" />
+  </ItemGroup>
+
+</Project>

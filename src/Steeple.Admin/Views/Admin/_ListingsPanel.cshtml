@@ -1,0 +1,76 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+<div id="admin-listings-panel" class="admin-stack">
+    <form hx-post="@Url.Content("~/admin/listings/status")" hx-target="#admin-listings-panel" hx-swap="outerHTML">
+        <div class="admin-bulkbar">
+            <label class="admin-bulkbar-all">
+                <input type="checkbox" class="admin-select-all" onclick="hsBulkAll(this)" aria-label="Select all listings" />
+                Select all
+            </label>
+            <span class="admin-bulkbar-count" data-selected-count>0 selected</span>
+            <span class="admin-bulkbar-apply">
+                <label class="sr-only" for="admin-bulk-status">Status to apply</label>
+                <select id="admin-bulk-status" name="status">
+                    @foreach (var status in new[] { "Published", "Draft", "Needs review", "Paused" })
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+                <button type="submit" disabled>Apply to selected</button>
+            </span>
+        </div>
+
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th class="admin-col-check"><span class="sr-only">Select</span></th>
+                        <th>Listing</th>
+                        <th>Area</th>
+                        <th>Capacity</th>
+                        <th>Price</th>
+                        <th>Queue</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var listing in Model.Listings)
+                {
+                    <tr>
+                        <td class="admin-col-check">
+                            <input type="checkbox" class="admin-row-check" name="ids" value="@listing.Id"
+                                   onclick="hsBulkRow(this)"
+                                   aria-label="Select @listing.Venue @listing.Room" />
+                        </td>
+                        <td>
+                            <strong>@listing.Venue</strong>
+                            <span>@listing.Room</span>
+                        </td>
+                        <td>@listing.Suburb</td>
+                        <td>@listing.Capacity</td>
+                        <td>@listing.Price</td>
+                        <td>@listing.PendingApplications pending · @listing.ActiveBookings active</td>
+                        <td><span class="admin-status">@listing.Status</span></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    <div class="admin-bookings">
+        @foreach (var booking in Model.Bookings)
+        {
+            <article class="admin-booking">
+                <div>
+                    <strong>@booking.Listing</strong>
+                    <p>@booking.Organizer · @booking.Intent</p>
+                </div>
+                <div>
+                    <span class="admin-status">@booking.Status</span>
+                    <p>@booking.When</p>
+                </div>
+            </article>
+        }
+    </div>
+</div>
