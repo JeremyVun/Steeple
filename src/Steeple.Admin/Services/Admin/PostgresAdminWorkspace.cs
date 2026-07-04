@@ -120,7 +120,7 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                     new("Published listings", publishedCount.ToString(), "Live in discovery", "good"),
                     // Placeholder — no users/auth schema yet (later slice).
                     new("Active users", "—", "Not yet tracked", "neutral"),
-                    new("Tracked events", events.Count.ToString(), "Postgres analytics stream", "good"),
+                    new("Tracked events", events.Count.ToString(), "Legacy Postgres stream (pre-Loki)", "good"),
                 ],
                 Activity: activity);
 

@@ -99,8 +99,8 @@ public sealed class ListingService : IListingService
             Items: itemList,
             TotalCount: totalCount,
             IsZeroResult: totalCount == 0,
-            AppliedBounds: bounds,
-            Center: center,
+            AppliedBounds: bounds.ToDto(),
+            Center: center.ToDto(),
             Page: page,
             PageSize: pageSize);
     }
@@ -135,6 +135,14 @@ public sealed class ListingService : IListingService
     private async Task<RoomDetailDto?> ToDetailIfDiscoverableAsync(Room? room, CancellationToken ct)
     {
         if (room?.Venue is not { } venue)
+        {
+            return null;
+        }
+
+        // Only Published rooms are publicly visible. Search filters status in SQL, but direct
+        // id/slug lookups reach here unfiltered — without this gate a Draft/Unlisted room leaks
+        // via a guessed or previously-shared URL.
+        if (room.Status != RoomStatus.Published)
         {
             return null;
         }

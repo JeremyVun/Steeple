@@ -14,7 +14,7 @@ public record ListingSearchResult(
     IReadOnlyList<RoomSummaryDto> Items,
     int TotalCount,
     bool IsZeroResult,
-    BoundingBox AppliedBounds,
-    GeoPoint Center,
+    BoundingBoxDto AppliedBounds,
+    GeoPointDto Center,
     int Page,
     int PageSize);

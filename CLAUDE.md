@@ -1,47 +1,145 @@
 # CLAUDE.md
 
-Steeple — POC marketplace connecting churches (spare halls) with local community organizers.
-.NET 10 backend API + HTMX web funnel + HTMX admin + PostgreSQL. Product: `docs/PRD.md`. Design: `ARCHITECTURE.md`.
+Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
+organizers. Request→approve booking (not instant-book), free-first, one NoVA beachhead.
+.NET 10 API + HTMX web + HTMX admin + PostgreSQL + Flutter mobile (planned, `/mobile`).
+Currently shipped: read-only discovery slice. Solo-operated; lean (~$100 AUD/mo ceiling).
 
-## Layout
+## Read this first — document map
 
-Postgres is the system of record. Its **schema + seed are owned by a one-shot Liquibase migration
-service** (`db/changelog/`) — no application migrates. The backend `Steeple.Api` and the
-`Steeple.Admin` dashboard both read the DB through the shared `Steeple.Persistence` library;
-`Steeple.Web` is a pure frontend that calls the API over HTTP.
+**If a doc here answers your question, trust it over inference from code.** Each doc owns
+one concern; update the owning doc in the same PR as the change it describes.
 
-- `/docs` — product & design docs (PRD, product brief, SEO plan, analytics plan)
-- `/db/changelog` — Liquibase changelog: `db.changelog-master.yaml` (include manifest) + `001-schema.sql` + `002-seed.sql` (formatted SQL)
-- `/src/Steeple.Persistence` — the domain/persistence layer (provider-agnostic EF): entities + value objects `GeoPoint`/`BoundingBox` (`Models/`), enums (`Constants/`), `SteepleDbContext`, `Configurations/`. Consumed by Api + Admin (they pick the Npgsql provider). **Web never references this.**
-- `/src/Steeple.Api` — backend JSON API for the web funnel **and** the future mobile edge. It owns its **web contracts** and maps domain → them. Folders: `Contracts` (the DTOs it exposes), `Controllers` (JSON endpoints under `/api`), `Services` (use-case logic + ports `IListingService`/`IGeofencePolicy`), `Proxies` (EF repository, geocoding stub, analytics sink), `Configuration` (`GeofenceOptions`), `Extensions` (`AddSteepleApi`, mappings/flags), `Utils` (`GeoMath`). References Persistence.
-- `/src/Steeple.Web` — ASP.NET Core MVC + HTMX + Leaflet funnel. **No DB and no shared project** — it speaks HTTP/JSON to the API and deserializes into its own view models. Folders: `Controllers`, `Services` (`ISteepleApiClient` typed HttpClient), `Models` (view models mirroring the API's JSON), `Configuration` (`BrandOptions`), `Extensions` (`AddSteeple` → brand + API client).
-- `/src/Steeple.Admin` — standalone HTMX dashboard; reads Postgres directly via `Steeple.Persistence` (`PostgresAdminWorkspace`). Listings/analytics are live; users/bookings/flags are still in-memory placeholders (no schema yet).
-- `/src/Steeple.FlagsSdk`, `/src/Steeple.FlagsService` — separate, standalone projects
-- `docker-compose.yml` — full stack on a private `steeple` network. Only **web** (**8080**) and **admin** (**8082**) publish host ports; **api** and **flags** are internal-only (reached over the compose network); Postgres is bound to **127.0.0.1:5433** for the local dev loop only. One-shot `migrate` gates the apps; containers run **Production** (HSTS, Secure cookies, error pages). Admin sits behind caddy/authelia at the edge.
-- `ARCHITECTURE.md` — layering + current slice scope
+| Doc | Owns | Trust it for |
+|---|---|---|
+| `docs/PRD.md` | Product scope & why | What's in/out of v1, trust model, constraints |
+| `docs/SYSTEM_DESIGN.md` | **Target** architecture + decision log | Where anything new should go; seams; auth/booking/notification design |
+| `ARCHITECTURE.md` | **As-built** state | What exists today (updated as slices land) |
+| `CONTRACTS.md` | Every wire contract + change rules | DTO shapes, conventions, endpoint specs, event taxonomy |
+| `docs/ROADMAP.md` | Phase order & exit criteria | What to build next and what's deliberately deferred |
+| `docs/MOBILE_DESIGN.md` | Flutter app design | Anything under `/mobile` |
+| `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
+| `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
+| `docs/ANALYTICS.md` / `docs/SEO.md` | Pipeline & SEO checklists | Event pipeline shape; SEO to-dos |
+| `CICD.md` | Deployment system design | How deploys will work (design, not built) |
 
-**Dependency rule:** `Web → (HTTP) → Api → Persistence ← Admin`. Web shares no assembly with the server;
-its `Models/` mirror the API's web contract by convention. Folder-matched namespaces
-(`Steeple.Api.Contracts`, `Steeple.Persistence.Models`, `Steeple.Web.Models`, …) are exposed
-project-wide as global usings in each `.csproj`, so files reference each other without per-file usings.
+Target-state docs describe things that **don't exist yet** — don't assume an endpoint or
+table exists because SYSTEM_DESIGN/CONTRACTS mentions it; ARCHITECTURE.md and the code are
+the as-built truth (CONTRACTS.md marks ✅ built vs 🔲 planned per endpoint).
 
-## Run
+## Layout & dependency rule
 
-- `docker compose up -d --build` — full stack. Order is enforced: postgres (healthy) → `migrate` (applies changelog, exits 0) → `api`/`admin` → `web`. Only Web (http://localhost:8080) and Admin (http://localhost:8082/admin) are published; the API and flags service are internal to the compose network. Containers run in **Production**; the local `dotnet run` loop below stays Development (hot reload).
-- Local (non-Docker) dev: `docker compose up -d postgres migrate` first (provisions + seeds the DB), then `dotnet run --project src/Steeple.Api` (http://localhost:5200) and `dotnet run --project src/Steeple.Web` (http://localhost:5187, reads `Api:BaseUrl`). Admin: `dotnet run --project src/Steeple.Admin`.
-- Build: `dotnet build` (solution is `Steeple.slnx`, the XML format).
+```
+Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP only) → Api
+```
 
-## DB / migrations
+- `/src/Steeple.Persistence` — domain entities, value objects, enums, `SteepleDbContext`,
+  EF configs. Provider-agnostic; **database-first** (mirrors Liquibase SQL by hand).
+- `/src/Steeple.Api` — the one JSON API (all clients). `Contracts/` (wire DTOs),
+  `Controllers/`, `Services/` (use-cases + **port** interfaces), `Proxies/` (adapters),
+  `Configuration/ Extensions/ Utils/`. New work grows **module subfolders** inside each
+  (e.g. `Services/Applications/`) — see SYSTEM_DESIGN §4.
+- `/src/Steeple.Web` — MVC + HTMX + Leaflet funnel. **No DB, no shared server assembly.**
+  Mirrors API JSON in `Models/ApiModels.cs` by convention (CONTRACTS.md governs).
+- `/src/Steeple.Admin` — operator dashboard; reads Postgres via Persistence. No in-app
+  auth **by design** — authelia gates it at the edge proxy in the deployed environment.
+- `/db/changelog` — Liquibase formatted SQL (`001-schema.sql`, `002-seed.sql` + master
+  manifest). **Owns the schema; no application ever migrates.**
+- `/tests` — `Steeple.Api.Tests` (xUnit unit: geofence, geo math, listing visibility) +
+  `Steeple.Integration.Tests` (Testcontainers Postgres; applies the Liquibase SQL raw,
+  tests the repository layer against real seed data).
+- `/mobile` — Flutter app (not yet started; MOBILE_DESIGN.md is the spec).
+- Folder-matched namespaces are global usings per `.csproj` — no per-file usings needed;
+  keep new folders following the `Namespace = Project.Folder` convention.
 
-- **Liquibase owns the schema** (`db/changelog/`). Applications never migrate — `Steeple.Persistence` is database-first; its EF entity configs must be kept in sync with the SQL by hand.
-- Schema change = add a new `--changeset` to the SQL files (and update the matching EF config). The one-shot `migrate` service applies it on next `docker compose up`. (To bootstrap SQL from the EF model you can temporarily scaffold a migration and `dotnet ef migrations script`, but Liquibase is the source of truth.)
-- Connection string `ConnectionStrings:SteepleDb`: dev in each app's `appsettings.Development.json` (localhost:5433); in Docker via env `ConnectionStrings__SteepleDb`. Web instead uses `Api:BaseUrl` / `Api__BaseUrl` — it has no DB connection.
-- Reset data: `docker compose down -v && docker compose up -d` (re-runs `migrate` from scratch).
+**Hard rules:** Web/mobile never reference Persistence or Api assemblies. `Api/Contracts`
+must not leak Persistence types. Nothing mutates another module's data except through the
+owning module's service. Never store PII beyond what CONTRACTS/SYSTEM_DESIGN specify —
+no passwords, gov IDs, card data, ever.
 
-## Notes
+## Deployed-infra context (exists in production, not in this repo)
 
-- EF stack pinned to **10.0.4** (Npgsql provider constraint) — don't bump EF above it. Persistence references `Microsoft.EntityFrameworkCore.Relational`; Api/Admin add `Npgsql.EntityFrameworkCore.PostgreSQL`.
-- Views hot-reload in Development (Razor runtime compilation); C# changes need rebuild/restart.
-- **Sub-path hosting:** Web and Admin are path-base aware — the edge proxy sends `X-Forwarded-Prefix` (e.g. `/steeple`) and both `Program.cs` enable `ForwardedHeaders.XForwardedPrefix` → `Request.PathBase`. So **never hardcode root-relative URLs**: use `~/…` for `href`/`action`/`src`, `@Url.Content("~/…")` for HTMX `hx-get`/`hx-post` and server-built paths, and route-based redirects. With no prefix header (local dev / compose) everything resolves at `/`. Full topology + caddy rules in `ARCHITECTURE.md` → "Deployment — reverse proxy & sub-path hosting".
-- Current build = read-only discovery slice only (no auth / apply / booking yet); SSO, notifications, maps are stubbed behind ports in the API.
-- This machine: `cd` into the repo can strip `PATH` (a local env hook) — when scripting, use absolute binary paths or avoid `cd`.
+Feature-flags service (Perchd-pattern; SSE + snapshot — CONTRACTS §8), authelia edge auth
+for Admin, Loki/Promtail/Grafana telemetry, Caddy edge proxy, self-hosted registry.
+Integrate against them; don't design replacements. The flags SDK's source lives outside
+this repo — Steeple's services don't consume flags yet (wiring is a pending ROADMAP
+Phase 0 item until the SDK source has a home here).
+
+## Build / run / verify
+
+```bash
+docker compose up -d --build      # full stack: postgres → migrate → api/admin → web
+                                  # Web http://localhost:8080 · Admin http://localhost:8082/admin
+docker compose up -d postgres migrate   # DB only, then:
+dotnet run --project src/Steeple.Api    # http://localhost:5200
+dotnet run --project src/Steeple.Web    # http://localhost:5187 (needs Api:BaseUrl)
+dotnet run --project src/Steeple.Admin
+docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
+```
+
+- Razor views hot-reload in Development; C# changes need restart.
+- Verify a change by driving the real flow (search on `:5187`, hit the API endpoint, check
+  the admin screen) — not just by compiling.
+- `dotnet test` is part of done (unit tests are instant; integration tests need Docker for
+  Testcontainers). Booking-integrity work **must** include the concurrent-approval
+  exclusion test (ROADMAP Phase 3).
+- ⚠️ This machine: `cd` into the repo can strip `PATH` (local env hook) — script with
+  absolute binary paths or avoid `cd`.
+
+## Recipes (follow exactly)
+
+**Schema change:** add a new `--changeset author:id` block to `db/changelog/00X-*.sql`
+(never edit an applied changeset) → update the matching EF config + entity in Persistence
+by hand → `docker compose up -d migrate` (or full reset) → keep SQL and EF in sync
+column-for-column. Indexes/constraints live in SQL first.
+
+**New/changed endpoint:** CONTRACTS.md §1 checklist is binding — update
+`Api/Contracts` + controller/service/proxy → Web `ApiModels.cs` + views → mobile models
+(once `/mobile` exists) → CONTRACTS.md itself, all in one commit. Additive is free;
+breaking inside `/api/v1` only if all clients update in the same commit. New public
+writable endpoints get rate limiting (+ Turnstile if anonymous).
+
+**Analytics event:** add to the CONTRACTS §7 taxonomy table → emit via `IAnalyticsSink`
+(server-authoritative events server-side only; interaction events via the client
+batchers). Nothing user-visible ships un-instrumented (PRD commitment).
+
+**Feature flag:** name it `<surface|domain>.<feature>`; risky surfaces ship behind one;
+evaluation is local/in-memory via the SDK — never a blocking network call on the request
+path; clean up stable flags.
+
+**Config:** connection string `ConnectionStrings:SteepleDb` (dev: `appsettings.Development.json`,
+localhost:5433; Docker: `ConnectionStrings__SteepleDb` env). Web has **no** DB — it gets
+`Api:BaseUrl` / `Api__BaseUrl`. Geofence bounds = `Geofence` section in Api appsettings.
+
+## Gotchas that bite
+
+- **EF pinned to 10.0.4** (Npgsql provider constraint) — do not bump EF packages above it.
+- **Sub-path hosting:** Web + Admin live behind `X-Forwarded-Prefix` (e.g. `/steeple`).
+  Never hardcode root-relative URLs: `~/…` for `href`/`action`/`src`,
+  `@Url.Content("~/…")` for HTMX `hx-get`/`hx-post` and server-built paths, route-based
+  redirects. Details: ARCHITECTURE.md → "Deployment".
+- **Enums on the wire:** flags enums (`ActivityType`, `Amenity`, `AccessibilityFeature`)
+  persist as int bitmasks; query binding re-reads repeated query params manually
+  (see `ListingsApiController.ReadFlags`). `/api/v1` emits **stable camelCase tokens**
+  (`"stepFreeAccess"`) — clients humanize for display (Web: `DiscoveryViewModel.Humanize`).
+  Multi-value filter matching is **AND** ("accepts all requested"), by design.
+- **Times:** DB stores UTC; booking schedules are **venue-local** wall-clock and must be
+  materialized per-date in the venue's IANA timezone (DST!) — see SYSTEM_DESIGN §5.
+- **Only Published rooms are publicly visible** — search filters status in SQL *and*
+  `ListingService` gates direct id/slug lookups (Draft/Unlisted → 404); the seed contains
+  one deliberate Draft room to prove it (`renovation-annex`).
+- **Geofence rejects, silently by design:** out-of-area search input clamps to the
+  beachhead (empty results, not errors); detail lookups 404.
+- Compose runs containers in **Production** (HSTS, secure cookies); the dotnet-run loop is
+  Development. Only web/admin publish host ports; api is compose-internal.
+
+## Working agreements
+
+- Match the codebase's idiom: records for DTOs, ports-in-Services/adapters-in-Proxies,
+  thin controllers, folder-namespace convention. Comments only for non-obvious constraints.
+- Don't add packages/vendors without checking the cost ceiling and no-lock-in ethos
+  (SYSTEM_DESIGN §2); prefer the escape-hatch-friendly option.
+- Update the owning doc with the change (doc map above); record architecture deviations in
+  SYSTEM_DESIGN §17's decision log.
+- When product intent is ambiguous, PRD > product brief > inference; if still ambiguous,
+  ask rather than invent scope.

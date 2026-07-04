@@ -4,59 +4,56 @@
 > organizers (playgroups, classes, clubs, non-profits) who need affordable — often free —
 > nearby space. Proof-of-concept.
 
-Product context: [`docs/PRD.md`](docs/PRD.md) (technical) · [`docs/STEEPLE_PRODUCT.md`](docs/STEEPLE_PRODUCT.md) (brief).
-Design & layering: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+**Docs:** [`docs/PRD.md`](docs/PRD.md) (product requirements) ·
+[`docs/STEEPLE_PRODUCT.md`](docs/STEEPLE_PRODUCT.md) (brief) ·
+[`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) (target architecture) ·
+[`ARCHITECTURE.md`](ARCHITECTURE.md) (as-built) ·
+[`CONTRACTS.md`](CONTRACTS.md) (wire contracts) ·
+[`docs/ROADMAP.md`](docs/ROADMAP.md) (plan) ·
+[`docs/MOBILE_DESIGN.md`](docs/MOBILE_DESIGN.md) (Flutter app design).
+Agents: start with [`CLAUDE.md`](CLAUDE.md).
 
 ## Stack
 
-.NET 10 (ASP.NET Core MVC) · HTMX + Leaflet (no SPA) · PostgreSQL 18 + EF Core · self-hosted, no lock-in.
+.NET 10 (ASP.NET Core MVC) · HTMX + Leaflet (no SPA) · PostgreSQL 18 (schema owned by
+Liquibase) · EF Core (database-first) · Flutter mobile app planned (`/mobile`) ·
+self-hosted, no lock-in.
 
 ## Prerequisites
 
 - **.NET SDK 10**
-- **Docker** (for local Postgres)
-- **EF CLI** (for migrations): `dotnet tool install --global dotnet-ef`
+- **Docker** (Postgres + the one-shot Liquibase migrate service; also Testcontainers for integration tests)
 - _(optional)_ `psql` for poking the database
 
 ## Quick start
 
 ```bash
-# 1. Start the container stack
-docker compose up -d
+# Full stack (order enforced: postgres → migrate → api/admin → web)
+docker compose up -d --build
+# Web  → http://localhost:8080        Admin → http://localhost:8082/admin
 
-# 2. Run the web app — in Development it auto-applies EF migrations and seeds demo data
-dotnet run --project src/Steeple.Web
+# Or the local dev loop (hot reload):
+docker compose up -d postgres migrate      # provision + seed the DB
+dotnet run --project src/Steeple.Api     # http://localhost:5200
+dotnet run --project src/Steeple.Web     # http://localhost:5187 (calls the API via Api:BaseUrl)
+dotnet run --project src/Steeple.Admin   # http://localhost:5198
 ```
 
-Then open **http://localhost:5187**.
+Only `web` and `admin` publish host ports; `api` is internal to the compose network.
+Postgres binds to `127.0.0.1:5433` for the local dev loop. Compose containers run in
+**Production**; the `dotnet run` loop is Development.
 
-For local HTTPS: `dotnet run --project src/Steeple.Web --launch-profile https` → https://localhost:5188.
-
-Container ports:
-
-Only `web` and `admin` publish host ports; `api` and `flags` are internal to the compose network
-(reached by other services via their service name). Postgres is bound to localhost for local dev.
-
-| Service | Host URL | Container port |
-|---|---:|---:|
-| Web | http://localhost:8080 | 8080 |
-| Admin | http://localhost:8082/admin | 8080 |
-| API | _internal_ (`http://api:8080`) | 8080 |
-| Flags | _internal_ (`http://flags:8080`) | 8080 |
-| Postgres | 127.0.0.1:5433 | 5432 |
-
-Direct `dotnet run` launch ports:
-
-| Project | URL |
-|---|---|
-| `Steeple.Web` | http://localhost:5187 |
-| `Steeple.Web` HTTPS profile | https://localhost:5188 |
-| `Steeple.Admin` | http://localhost:5198 |
+| Service | Host URL | Notes |
+|---|---|---|
+| Web | http://localhost:8080 | funnel (compose) / :5187 (`dotnet run`) |
+| Admin | http://localhost:8082/admin | operator console (authelia-gated in deployed env) |
+| API | _internal_ `http://api:8080` | :5200 via `dotnet run` |
+| Postgres | 127.0.0.1:5433 | container port 5432 |
 
 ### What you get
 
-The current slice is the **read-only discovery funnel**: geo-fenced map search + filters + shareable
-listing pages, seeded with 5 Northern-Virginia churches / 10 rooms around Vienna.
+The current slice is the **read-only discovery funnel**: geo-fenced map search + filters +
+shareable listing pages, seeded with 5 Northern-Virginia churches / 10 rooms around Vienna.
 
 | URL | What |
 |---|---|
@@ -65,60 +62,48 @@ listing pages, seeded with 5 Northern-Virginia churches / 10 rooms around Vienna
 | `/listings/{id}` | 301 → canonical slug URL |
 | `/robots.txt`, `/sitemap.xml` | SEO |
 
-## Database
+## Database — Liquibase owns the schema
 
-- Local Postgres runs via [`docker-compose.yml`](docker-compose.yml) on host port **5433**
-  (5433, not 5432, to avoid clashing with a local Postgres). Credentials default from `.env`.
-- Connection string key: **`ConnectionStrings:SteepleDb`**
-  - dev → `src/Steeple.Web/appsettings.Development.json`
-  - prod → env var `ConnectionStrings__SteepleDb` (the base `appsettings.json` carries no password)
-- In **Development** the app migrates and seeds automatically on startup.
+**No application migrates.** The schema + seed live in [`db/changelog/`](db/changelog/)
+(formatted SQL); the one-shot `migrate` compose service applies them between
+Postgres-healthy and app startup. `Steeple.Persistence` is **database-first**: its EF
+entity configurations are kept in sync with the SQL by hand.
 
-### Migrations (EF Core)
-
-```bash
-# add a migration
-dotnet ef migrations add <Name> -p src/Steeple.Infrastructure -s src/Steeple.Infrastructure
-
-# apply manually (otherwise applied automatically on dev startup)
-dotnet ef database update -p src/Steeple.Infrastructure -s src/Steeple.Infrastructure
-```
-
-A design-time factory reads the `STEEPLE_DB` env var (falling back to `localhost:5433`), so
-`dotnet ef` works without running the app.
-
-### Reset local data
-
-```bash
-docker compose down -v && docker compose up -d
-```
+- **Schema change** = add a new `--changeset` block to the SQL (never edit an applied one)
+  **and** update the matching EF config — see the recipe in [`CLAUDE.md`](CLAUDE.md).
+- Connection string key **`ConnectionStrings:SteepleDb`** — dev in each app's
+  `appsettings.Development.json` (localhost:5433); Docker via env
+  `ConnectionStrings__SteepleDb`. Web has **no DB** — it gets `Api:BaseUrl` instead.
+- Reset local data: `docker compose down -v && docker compose up -d`
 
 ## Project structure
 
 ```
-docs/                         product + design docs (PRD, brief, SEO, analytics)
-src/Steeple.Domain          entities, enums, value objects        (no dependencies)
-src/Steeple.Application     DTOs, services, ports (interfaces)    → Domain
-src/Steeple.Infrastructure  EF Core, repositories, gateways,
-                              seed, migrations                      → Application
-src/Steeple.Web             ASP.NET Core MVC + HTMX + Leaflet     → Application + Infrastructure
-src/Steeple.Admin           ASP.NET Core MVC + HTMX admin         (mock data for now)
-src/Steeple.FlagsService    Runtime feature flag service
-docker-compose.yml            local Postgres + containerised apps
+docs/                      product + design docs (PRD, system design, roadmap, mobile, SEO, analytics)
+db/changelog/              Liquibase changelog — owns schema + seed
+src/Steeple.Persistence  domain entities, value objects, enums, DbContext, EF configs
+src/Steeple.Api          the one JSON API (web + mobile): Contracts/Controllers/Services/Proxies
+src/Steeple.Web          MVC + HTMX + Leaflet funnel — no DB, no shared server assembly
+src/Steeple.Admin        HTMX operator dashboard — reads Postgres via Persistence
+tests/                     xUnit unit tests + Testcontainers integration tests
+mobile/                    Flutter app (planned — docs/MOBILE_DESIGN.md)
+docker-compose.yml         postgres → migrate → api/admin → web
 ```
 
-Layering is **Controller (Web) → Service (Application) → Proxy/Adapter (Infrastructure)**; see
-[`ARCHITECTURE.md`](ARCHITECTURE.md).
+Dependency rule: `Web → (HTTP) → Api → Persistence ← Admin`. Web and mobile share no
+assembly with the server — they mirror the API's JSON per [`CONTRACTS.md`](CONTRACTS.md).
 
-## Configuration
+## Testing
 
-- **`Geofence`** section (appsettings) — the allowed beachhead bounding box + centre
-  (default: Vienna, Northern Virginia). The server only honours listings inside it.
-- SSO, notifications, and maps/geocoding are **stubbed behind ports** in this slice — the app
-  runs fully locally with just Docker Postgres.
+```bash
+dotnet test          # unit + integration (integration tests spin Postgres via Testcontainers/Docker)
+```
 
 ## Notes
 
-- EF Core is pinned to **10.0.4** to match the Npgsql provider — don't bump `Microsoft.EntityFrameworkCore.Design` above the EF version Npgsql ships against.
-- Views hot-reload in Development (Razor runtime compilation); C# changes need a rebuild/restart.
-- No tests yet; no auth / apply / booking yet — those are the next planned slices (see `ARCHITECTURE.md`).
+- EF stack pinned to **10.0.4** (Npgsql provider constraint) — don't bump EF above it.
+- Views hot-reload in Development; C# changes need rebuild/restart.
+- SSO, notifications, and real geocoding are **stubbed behind ports** in this slice; auth /
+  apply / booking are the next slices — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Feature flags, admin edge-auth (authelia), and the Loki/Grafana telemetry stack are
+  **deployed-environment infra services** — integrated by the app, not part of this repo.

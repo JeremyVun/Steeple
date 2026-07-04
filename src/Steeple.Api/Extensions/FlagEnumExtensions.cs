@@ -1,14 +1,14 @@
-using System.Text;
-
 namespace Steeple.Api.Extensions;
 /// <summary>
-/// Helpers for projecting <see cref="FlagsAttribute"/> enums into human-readable token lists for presentation.
+/// Helpers for projecting enums into stable camelCase wire tokens (CONTRACTS.md §2: "Enums").
+/// Display formatting (spacing/casing for humans) is a client concern — clients humanize these
+/// tokens for presentation.
 /// </summary>
 public static class FlagEnumExtensions
 {
     /// <summary>
-    /// Returns the set flag names of a flags enum, excluding the zero/<c>None</c> member, with each
-    /// PascalCase name humanised into spaced words (e.g. <c>StepFreeAccess</c> -&gt; "Step free access").
+    /// Returns the set flag names of a flags enum, excluding the zero/<c>None</c> member, as
+    /// stable camelCase tokens (e.g. <c>StepFreeAccess</c> -&gt; <c>"stepFreeAccess"</c>).
     /// </summary>
     /// <typeparam name="TEnum">A flags enum type.</typeparam>
     /// <param name="value">The combined flags value.</param>
@@ -27,7 +27,7 @@ public static class FlagEnumExtensions
 
             if (value.HasFlag(flag))
             {
-                result.Add(Humanize(flag.ToString()));
+                result.Add(ToCamelCaseToken(flag.ToString()));
             }
         }
 
@@ -35,38 +35,17 @@ public static class FlagEnumExtensions
     }
 
     /// <summary>
-    /// Converts a PascalCase identifier into spaced words with only the first letter capitalised,
-    /// e.g. <c>AccessibleRestroom</c> -&gt; "Accessible restroom".
+    /// Converts a PascalCase enum member name into a stable camelCase wire token by lowercasing
+    /// only the leading character, e.g. <c>PublicSpace</c> -&gt; <c>"publicSpace"</c>.
     /// </summary>
-    /// <param name="name">The PascalCase identifier.</param>
-    public static string Humanize(string name)
+    /// <param name="name">The PascalCase enum member name.</param>
+    public static string ToCamelCaseToken(string name)
     {
         if (string.IsNullOrEmpty(name))
         {
             return name;
         }
 
-        var sb = new StringBuilder(name.Length + 8);
-
-        for (var i = 0; i < name.Length; i++)
-        {
-            var c = name[i];
-
-            if (i > 0 && char.IsUpper(c))
-            {
-                sb.Append(' ');
-                sb.Append(char.ToLowerInvariant(c));
-            }
-            else if (i == 0)
-            {
-                sb.Append(char.ToUpperInvariant(c));
-            }
-            else
-            {
-                sb.Append(c);
-            }
-        }
-
-        return sb.ToString();
+        return char.ToLowerInvariant(name[0]) + name[1..];
     }
 }

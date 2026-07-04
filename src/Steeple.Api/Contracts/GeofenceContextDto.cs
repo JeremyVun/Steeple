@@ -7,4 +7,4 @@ namespace Steeple.Api.Contracts;
 /// <param name="AreaName">Human-readable name of the served area.</param>
 /// <param name="Center">Default map center for the served area.</param>
 /// <param name="Beachhead">The fixed beachhead bounds (used to frame the map).</param>
-public record GeofenceContextDto(string AreaName, GeoPoint Center, BoundingBox Beachhead);
+public record GeofenceContextDto(string AreaName, GeoPointDto Center, BoundingBoxDto Beachhead);

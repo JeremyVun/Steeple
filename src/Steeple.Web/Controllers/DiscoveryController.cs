@@ -79,6 +79,7 @@ public sealed class DiscoveryController : SteepleControllerBase
         {
             ViewData["OgImage"] = primaryPhoto;
         }
+        SetPreconnectOrigins(dto.Photos.Select(p => p.Url));
 
         return View(dto);
     }
@@ -115,6 +116,10 @@ public sealed class DiscoveryController : SteepleControllerBase
         // Forward the funnel's raw query string so the API applies exactly the same filters.
         var result = await _api.SearchAsync(Request.QueryString.Value, ct);
         var geofence = await _api.GetGeofenceAsync(ct);
+
+        // Preconnect to the card photos' origin(s) — harmless to set even for HTMX partial swaps
+        // (ViewData isn't rendered there since the partial has no <head>).
+        SetPreconnectOrigins(result.Items.Select(i => i.PrimaryPhotoUrl));
 
         // The suburb picker only renders on the full page, so skip the extra call for HTMX swaps.
         var suburbs = includeSuburbs

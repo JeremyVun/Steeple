@@ -1,5 +1,6 @@
 @model RoomDetailDto
 @using System.Text.Json
+@using System.Text.Json.Serialization
 @{
     ViewData["Title"] = Model.RoomName;
     var venue = Model.Venue;
@@ -43,10 +44,12 @@
     var hasGettingThere = !string.IsNullOrWhiteSpace(venue.ParkingInfo)
         || !string.IsNullOrWhiteSpace(venue.TransitInfo);
 
-    // schema.org JSON-LD: the room as a Place, contained in the venue (a Church for churches),
-    // with address, geo, capacity, amenities and free/paid signal — for local rich results.
+    // schema.org JSON-LD: the room as a Place, contained in the venue (a PlaceOfWorship for
+    // churches), with address, geo, capacity, amenities and free/paid signal — for local rich
+    // results. A separate BreadcrumbList block gives the Home -> Venue -> Room trail.
     var canonicalUrl = ViewData["Canonical"] as string ?? Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}");
-    var schemaVenueType = string.Equals(venue.VenueType, "Church", StringComparison.OrdinalIgnoreCase) ? "Church" : "Place";
+    var isChurch = string.Equals(venue.VenueType, "church", StringComparison.OrdinalIgnoreCase);
+    var schemaVenueType = isChurch ? "PlaceOfWorship" : "Place";
     var jsonLd = new Dictionary<string, object?>
     {
         ["@context"] = "https://schema.org",
@@ -74,7 +77,7 @@
             .Select(name => new Dictionary<string, object>
             {
                 ["@type"] = "LocationFeatureSpecification",
-                ["name"] = name,
+                ["name"] = DiscoveryViewModel.Humanize(name),
                 ["value"] = true
             }).ToArray(),
         ["containedInPlace"] = new Dictionary<string, object>
@@ -87,16 +90,50 @@
     {
         jsonLd["description"] = Model.Description;
     }
-    var jsonLdString = System.Text.Json.JsonSerializer.Serialize(jsonLd,
-        new System.Text.Json.JsonSerializerOptions
+    if (!Model.IsFree && Model.PricePerHour is decimal pricePerHour)
+    {
+        // Paid rooms: an Offer with a per-hour UnitPriceSpecification (price + currency).
+        jsonLd["offers"] = new Dictionary<string, object?>
         {
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
+            ["@type"] = "Offer",
+            ["price"] = pricePerHour,
+            ["priceCurrency"] = Model.Currency,
+            ["priceSpecification"] = new Dictionary<string, object?>
+            {
+                ["@type"] = "UnitPriceSpecification",
+                ["price"] = pricePerHour,
+                ["priceCurrency"] = Model.Currency,
+                ["unitText"] = "HOUR"
+            }
+        };
+    }
+
+    var jsonLdOptions = new JsonSerializerOptions
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    var jsonLdString = JsonSerializer.Serialize(jsonLd, jsonLdOptions);
+
+    // BreadcrumbList: Home -> Venue -> Room, for the breadcrumb rich result.
+    var homeUrl = $"{Context.Request.Scheme}://{Context.Request.Host}{Context.Request.PathBase}/";
+    var breadcrumbJsonLd = new Dictionary<string, object?>
+    {
+        ["@context"] = "https://schema.org",
+        ["@type"] = "BreadcrumbList",
+        ["itemListElement"] = new object[]
+        {
+            new Dictionary<string, object?> { ["@type"] = "ListItem", ["position"] = 1, ["name"] = "Home", ["item"] = homeUrl },
+            new Dictionary<string, object?> { ["@type"] = "ListItem", ["position"] = 2, ["name"] = venue.Name },
+            new Dictionary<string, object?> { ["@type"] = "ListItem", ["position"] = 3, ["name"] = Model.RoomName, ["item"] = canonicalUrl },
+        }
+    };
+    var breadcrumbJsonLdString = JsonSerializer.Serialize(breadcrumbJsonLd, jsonLdOptions);
 }
 
 @* Emit the whole tag raw: Razor encodes the "+" in the type attribute otherwise. The JSON is
    already escaped by System.Text.Json (< > & -> \uXXXX), so it cannot break out of the script. *@
 @Html.Raw("<script type=\"application/ld+json\">" + jsonLdString + "</script>")
+@Html.Raw("<script type=\"application/ld+json\">" + breadcrumbJsonLdString + "</script>")
 
 <article class="detail wrap">
     <nav class="breadcrumb" aria-label="Breadcrumb">

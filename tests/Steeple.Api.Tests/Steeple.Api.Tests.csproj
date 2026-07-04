@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Unit tests for the stable Steeple.Api layers (GeofencePolicy, GeoMath) — pure logic with no
+       DB/HTTP. Deliberately does not cover Contracts/Controllers/Extensions, which are under
+       concurrent development elsewhere. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Steeple.Api\Steeple.Api.csproj" />
+  </ItemGroup>
+
+  <!-- Folder-matched namespaces exposed project-wide, mirroring the other projects' convention. -->
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Steeple.Persistence.Models" />
+    <Using Include="Steeple.Persistence.Constants" />
+    <Using Include="Steeple.Api.Configuration" />
+    <Using Include="Steeple.Api.Services" />
+    <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Utils" />
+  </ItemGroup>
+
+</Project>

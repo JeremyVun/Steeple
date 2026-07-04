@@ -7,9 +7,11 @@
   <Folder Name="/src/">
     <Project Path="src/Steeple.Admin/Steeple.Admin.csproj" />
     <Project Path="src/Steeple.Api/Steeple.Api.csproj" />
-    <Project Path="src/Steeple.FlagsSdk/Steeple.FlagsSdk.csproj" />
     <Project Path="src/Steeple.Persistence/Steeple.Persistence.csproj" />
-    <Project Path="src/Steeple.FlagsService/Steeple.FlagsService.csproj" />
     <Project Path="src/Steeple.Web/Steeple.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Steeple.Api.Tests/Steeple.Api.Tests.csproj" />
+    <Project Path="tests/Steeple.Integration.Tests/Steeple.Integration.Tests.csproj" />
   </Folder>
 </Solution>

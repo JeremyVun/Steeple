@@ -66,21 +66,25 @@ public sealed class DiscoveryViewModel
     }
 
     /// <summary>
-    /// Turns a PascalCase enum name (e.g. <c>"StepFreeAccess"</c>) into a spaced,
-    /// sentence-cased label (e.g. <c>"Step free access"</c>).
+    /// Turns a PascalCase or camelCase compound identifier into a spaced, sentence-cased label —
+    /// e.g. the funnel's own enum names (<c>"StepFreeAccess"</c>) or the API's stable camelCase
+    /// wire tokens (<c>"stepFreeAccess"</c>, <c>"airConditioning"</c>) both become
+    /// <c>"Step free access"</c> / <c>"Air conditioning"</c>. Used both to label filter chips
+    /// (this view model's own <see cref="ActivityType"/>/<see cref="AccessibilityFeature"/> names)
+    /// and to display Activities/Accessibility/Amenities/VenueType values returned by the API.
     /// </summary>
-    public static string Humanize(string pascal)
+    public static string Humanize(string token)
     {
-        if (string.IsNullOrEmpty(pascal))
+        if (string.IsNullOrEmpty(token))
         {
-            return pascal;
+            return token;
         }
 
-        var sb = new StringBuilder(pascal.Length + 4);
-        for (var i = 0; i < pascal.Length; i++)
+        var sb = new StringBuilder(token.Length + 4);
+        for (var i = 0; i < token.Length; i++)
         {
-            var c = pascal[i];
-            if (i > 0 && char.IsUpper(c) && (!char.IsUpper(pascal[i - 1]) || (i + 1 < pascal.Length && !char.IsUpper(pascal[i + 1]))))
+            var c = token[i];
+            if (i > 0 && char.IsUpper(c) && (!char.IsUpper(token[i - 1]) || (i + 1 < token.Length && !char.IsUpper(token[i + 1]))))
             {
                 sb.Append(' ');
                 sb.Append(char.ToLowerInvariant(c));

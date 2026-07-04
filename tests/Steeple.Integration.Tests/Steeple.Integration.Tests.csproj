@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!-- Repository integration tests against a real Postgres via Testcontainers. The schema and seed
+       are applied from the Liquibase-owned SQL in db/changelog (the same scripts the one-shot
+       `migrate` service runs) — this project never migrates on its own. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.13.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Steeple.Api\Steeple.Api.csproj" />
+    <ProjectReference Include="..\..\src\Steeple.Persistence\Steeple.Persistence.csproj" />
+  </ItemGroup>
+
+  <!-- Folder-matched namespaces exposed project-wide, mirroring the other projects' convention. -->
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Steeple.Persistence" />
+    <Using Include="Steeple.Persistence.Models" />
+    <Using Include="Steeple.Persistence.Constants" />
+    <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Utils" />
+  </ItemGroup>
+
+</Project>

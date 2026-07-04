@@ -8,7 +8,14 @@ namespace Steeple.Api.Controllers;
 /// contract DTOs the web app renders. Analytics for search/detail are recorded server-side by the
 /// listing service, so callers get instrumentation for free.
 /// </summary>
-[Route("api")]
+/// <remarks>
+/// <see cref="ApiControllerAttribute"/> is required for MVC's <c>NotFound()</c>/other client-error
+/// results to be transformed into ProblemDetails by <c>UseStatusCodePages()</c> — without it, a
+/// bare <see cref="NotFoundResult"/> writes an empty body that the status-code-pages middleware
+/// never intercepts (only "no endpoint matched" 404s do).
+/// </remarks>
+[ApiController]
+[Route("api/v1")]
 public sealed class ListingsApiController : ControllerBase
 {
     private readonly IListingService _listings;
@@ -62,7 +69,7 @@ public sealed class ListingsApiController : ControllerBase
     /// <summary>Served-area context (name, center, beachhead box) for framing the map.</summary>
     [HttpGet("geofence")]
     public ActionResult<GeofenceContextDto> Geofence() =>
-        Ok(new GeofenceContextDto(_geofence.AreaName, _geofence.Center, _geofence.Beachhead));
+        Ok(new GeofenceContextDto(_geofence.AreaName, _geofence.Center.ToDto(), _geofence.Beachhead.ToDto()));
 
     /// <summary>
     /// Reads repeated/comma-joined query values for <paramref name="key"/> and ORs them into a

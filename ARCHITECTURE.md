@@ -3,6 +3,10 @@
 > Companion to `docs/PRD.md`. This documents the **as-built** backend + web app: how the
 > code is laid out, the layering rules, and what is in / out of the current slice.
 > It is updated as the build progresses.
+>
+> The **target-state** architecture (full product: web + mobile + API + seams) lives in
+> `docs/SYSTEM_DESIGN.md`; wire contracts in `CONTRACTS.md`; the phased plan in
+> `docs/ROADMAP.md`; the Flutter app design in `docs/MOBILE_DESIGN.md`.
 
 ## What's built so far — Slice 1: read-only discovery (vertical)
 
@@ -17,6 +21,23 @@ contracts can be reviewed before the project builds outward.
 - Map-based browse (Leaflet, light JS) + HTMX-driven filtering — no SPA framework (PRD: HTMX + light JS, no React/Next).
 - Postgres system of record, EF Core, seed data for a Northern-Virginia beachhead.
 - Analytics events logged to Postgres (PRD: instrument the funnel; no-lock-in sink).
+
+**Hardening pass (2026-07-03) — ROADMAP Phase 0**
+- **`/api/v1`** versioned base path; wire enums normalized to **stable camelCase tokens**
+  (`"stepFreeAccess"`, `"church"`) with clients humanizing for display; contracts now
+  self-contained (`GeoPointDto`/`BoundingBoxDto` — no Persistence types on the wire);
+  404s return RFC 9457 **ProblemDetails**. See `CONTRACTS.md`.
+- **Listing visibility gate:** direct id/slug detail lookups now 404 for non-Published
+  rooms (previously Draft/Unlisted leaked via guessed URLs; search already filtered).
+- **Analytics sink swapped** to `StdoutLogAnalyticsSink` (structured JSON log line →
+  container stdout → deployed Promtail/Loki/Grafana); Production uses the JSON console
+  formatter; the request-path Postgres write is gone (`analytics_events` is legacy/read-only).
+- **SEO completed** on listing pages: full JSON-LD (`Place`/`PlaceOfWorship`, `Offer` +
+  `UnitPriceSpecification` for paid rooms, `BreadcrumbList`), dynamic preconnect hints for
+  photo origins, explicit image dimensions. `docs/SEO.md` tracks the remaining items.
+- **Tests:** `tests/Steeple.Api.Tests` (unit: geofence, geo math, listing visibility) and
+  `tests/Steeple.Integration.Tests` (Testcontainers Postgres, Liquibase SQL applied raw,
+  repository behavior against real seed data).
 
 **Deferred to later slices (interfaces/seams left clean, not yet implemented)**
 - Apply → approve → booking, the application/booking state machine, and the
@@ -38,7 +59,8 @@ Steeple.slnx
 │    Proxies/      — port adapters: EF repository, geocoding stub, analytics sink
 │    Configuration/ Extensions/ Utils/  — GeofenceOptions, AddSteepleApi + mappings, GeoMath
 ├─ src/Steeple.Web         — MVC + HTMX + Leaflet funnel. No DB, no shared project; own view models; calls the API.
-└─ src/Steeple.Admin       — HTMX dashboard; reads Postgres directly via Steeple.Persistence.
+├─ src/Steeple.Admin       — HTMX dashboard; reads Postgres directly via Steeple.Persistence.
+└─ tests/                    — Steeple.Api.Tests (unit) + Steeple.Integration.Tests (Testcontainers Postgres)
 ```
 
 The discovery half was four projects (`Domain` / `Application` / `Infrastructure` / `Web`), briefly
@@ -68,7 +90,7 @@ edge — exactly as the PRD's two-edge design requires.
 |---|---|---|
 | `IRoomRepository` | `RoomRepository` (EF Core, bounding-box query) | — |
 | `IGeocodingGateway` | `StubGeocodingGateway` (returns beachhead centre) | Google Geocoding / Apple MapKit |
-| `IAnalyticsSink` | `PostgresAnalyticsSink` (event rows in Postgres) | (same; or PostHog) |
+| `IAnalyticsSink` | `StdoutLogAnalyticsSink` (structured JSON log line → stdout → Promtail/Loki) | (same) |
 | `IGeofencePolicy` | `GeofencePolicy` (pure logic over config) | — |
 
 ## Domain model (this slice)
@@ -123,8 +145,9 @@ Web routes (rendered from API data):
 - `/space/{venueSlug}/{roomSlug}`  — shareable listing detail
 - `/listings/{id}`                 — canonical redirect to the slug URL
 
-API routes (JSON, also for the future mobile edge): `/api/listings/search`, `/api/listings/{id}`,
-`/api/listings/by-slug/{venue}/{room}`, `/api/suburbs`, `/api/sitemap`, `/api/geofence`.
+API routes (JSON, also for the future mobile edge — full specs in `CONTRACTS.md`):
+`/api/v1/listings/search`, `/api/v1/listings/{id}`, `/api/v1/listings/by-slug/{venue}/{room}`,
+`/api/v1/suburbs`, `/api/v1/sitemap`, `/api/v1/geofence`.
 
 ## Deployment — reverse proxy & sub-path hosting
 

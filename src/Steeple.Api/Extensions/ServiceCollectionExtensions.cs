@@ -28,7 +28,10 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<IRoomRepository, RoomRepository>();
         services.AddScoped<IGeocodingGateway, StubGeocodingGateway>();
-        services.AddScoped<IAnalyticsSink, PostgresAnalyticsSink>();
+
+        // Stateless over ILogger (writes one JSON line per event to stdout for Promtail/Loki,
+        // see docs/ANALYTICS.md) -> singleton.
+        services.AddSingleton<IAnalyticsSink, StdoutLogAnalyticsSink>();
 
         return services;
     }

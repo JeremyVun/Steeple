@@ -3,16 +3,20 @@ namespace Steeple.Web.Models;
 // Web's own view models — the shapes it deserializes the Steeple.Api JSON into and renders.
 // The funnel shares no project with the server; this is its private mirror of the API's web
 // contract, kept in sync by convention. Property names match the API's camelCase JSON.
+//
+// Enum-derived string values (Activities/Accessibility/Amenities/VenueType) are stable camelCase
+// wire tokens (e.g. "stepFreeAccess", "publicSpace"), not pre-humanized display strings — see
+// DiscoveryViewModel.Humanize for turning them into sentence-case labels for display.
 
 /// <summary>An immutable WGS84 coordinate (decimal degrees).</summary>
 public readonly record struct GeoPoint(double Latitude, double Longitude);
 
 /// <summary>An axis-aligned geographic rectangle (decimal degrees), used to frame the map.</summary>
 public readonly record struct BoundingBox(
-    double MinLatitude,
-    double MaxLatitude,
-    double MinLongitude,
-    double MaxLongitude);
+    double MinLat,
+    double MaxLat,
+    double MinLng,
+    double MaxLng);
 
 /// <summary>Activity categories a room accepts / the funnel filters by (bitwise flags).</summary>
 [Flags]

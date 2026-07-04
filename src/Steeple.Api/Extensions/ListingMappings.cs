@@ -2,8 +2,8 @@
 namespace Steeple.Api.Extensions;
 /// <summary>
 /// Pure projection helpers mapping Domain entities to presentation DTOs for the discovery slice.
-/// Flag enums are humanised via <see cref="FlagEnumExtensions"/>; the primary photo is resolved
-/// from the explicit cover flag, falling back to the lowest sort order.
+/// Flag enums are projected to stable camelCase wire tokens via <see cref="FlagEnumExtensions"/>;
+/// the primary photo is resolved from the explicit cover flag, falling back to the lowest sort order.
 /// </summary>
 public static class ListingMappings
 {
@@ -65,7 +65,7 @@ public static class ListingMappings
             VenueId: venue.Id,
             Name: venue.Name,
             Slug: venue.Slug,
-            VenueType: FlagEnumExtensions.Humanize(venue.Type.ToString()),
+            VenueType: FlagEnumExtensions.ToCamelCaseToken(venue.Type.ToString()),
             AddressLine: venue.AddressLine,
             Suburb: venue.Suburb,
             Postcode: venue.Postcode,

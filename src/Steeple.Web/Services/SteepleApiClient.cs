@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 
 namespace Steeple.Web.Services;
 
@@ -16,24 +15,24 @@ public sealed class SteepleApiClient : ISteepleApiClient
     public async Task<ListingSearchResult> SearchAsync(string? queryString, CancellationToken ct = default)
     {
         var qs = string.IsNullOrEmpty(queryString) ? "" : (queryString.StartsWith('?') ? queryString : "?" + queryString);
-        var result = await _http.GetFromJsonAsync<ListingSearchResult>($"api/listings/search{qs}", ct);
+        var result = await _http.GetFromJsonAsync<ListingSearchResult>($"api/v1/listings/search{qs}", ct);
         return result ?? EmptyResult();
     }
 
     public Task<RoomDetailDto?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default) =>
-        GetDetailAsync($"api/listings/by-slug/{Uri.EscapeDataString(venueSlug)}/{Uri.EscapeDataString(roomSlug)}", ct);
+        GetDetailAsync($"api/v1/listings/by-slug/{Uri.EscapeDataString(venueSlug)}/{Uri.EscapeDataString(roomSlug)}", ct);
 
     public Task<RoomDetailDto?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
-        GetDetailAsync($"api/listings/{id}", ct);
+        GetDetailAsync($"api/v1/listings/{id}", ct);
 
     public async Task<IReadOnlyList<string>> GetSuburbsAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<string>>("api/suburbs", ct) ?? [];
+        await _http.GetFromJsonAsync<List<string>>("api/v1/suburbs", ct) ?? [];
 
     public async Task<IReadOnlyList<SitemapEntry>> GetSitemapEntriesAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<List<SitemapEntry>>("api/sitemap", ct) ?? [];
+        await _http.GetFromJsonAsync<List<SitemapEntry>>("api/v1/sitemap", ct) ?? [];
 
     public async Task<GeofenceContextDto> GetGeofenceAsync(CancellationToken ct = default) =>
-        await _http.GetFromJsonAsync<GeofenceContextDto>("api/geofence", ct)
+        await _http.GetFromJsonAsync<GeofenceContextDto>("api/v1/geofence", ct)
         ?? throw new InvalidOperationException("The API returned no geofence context.");
 
     /// <summary>GETs a detail DTO, treating a 404 as a clean <c>null</c> (not found / not discoverable).</summary>
