@@ -9,7 +9,7 @@
 [`docs/SYSTEM_DESIGN.md`](docs/SYSTEM_DESIGN.md) (target architecture) ·
 [`ARCHITECTURE.md`](ARCHITECTURE.md) (as-built) ·
 [`CONTRACTS.md`](CONTRACTS.md) (wire contracts) ·
-[`docs/ROADMAP.md`](docs/ROADMAP.md) (plan) ·
+[`docs/backlog/`](docs/backlog/) (what's next) ·
 [`docs/MOBILE_DESIGN.md`](docs/MOBILE_DESIGN.md) (Flutter app design).
 Agents: start with [`CLAUDE.md`](CLAUDE.md).
 
@@ -103,7 +103,7 @@ dotnet test          # unit + integration (integration tests spin Postgres via T
 
 - EF stack pinned to **10.0.4** (Npgsql provider constraint) — don't bump EF above it.
 - Views hot-reload in Development; C# changes need rebuild/restart.
-- SSO, notifications, and real geocoding are **stubbed behind ports** in this slice; auth /
-  apply / booking are the next slices — see [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- What's next (ratings & reputation, launch hardening, payments) lives in
+  [`docs/backlog/`](docs/backlog/); as-built state is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - Feature flags, admin edge-auth (authelia), and the Loki/Grafana telemetry stack are
   **deployed-environment infra services** — integrated by the app, not part of this repo.

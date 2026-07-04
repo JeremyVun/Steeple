@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../app/theme/theme.dart';
 import '../../../core/analytics/analytics_service.dart';
+import '../../../core/maps/maps_capability.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/widgets/widgets.dart';
@@ -57,6 +58,24 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
 
   @override
   Widget build(BuildContext context) {
+    // Creating a GoogleMap without a native API key aborts the process on
+    // iOS, so resolve the capability before mounting one.
+    final mapsAvailable = ref.watch(mapsAvailableProvider).value;
+    if (mapsAvailable == null) return const SizedBox.shrink();
+    if (!mapsAvailable) {
+      return ListView(
+        children: const [
+          SizedBox(height: SteepleTokens.space10),
+          EmptyState(
+            icon: Icons.map_rounded,
+            title: 'Map unavailable',
+            body: 'This build has no maps key. '
+                'Switch back to the list to keep browsing.',
+          ),
+        ],
+      );
+    }
+
     final results = ref.watch(searchResultsProvider).value;
     final pins = _pins;
     final rooms = results?.items ?? const <RoomSummary>[];

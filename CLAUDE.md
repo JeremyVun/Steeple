@@ -3,7 +3,7 @@
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
 organizers. Request→approve booking (not instant-book), free-first, one NoVA beachhead.
 .NET 10 API + HTMX web + HTMX admin + PostgreSQL + Flutter mobile (`/mobile`, Phase 4).
-Shipped (ROADMAP Phases 0–3): the full web loop — discovery → SSO → apply → approve →
+Shipped (Phases 0–3): the full web loop — discovery → SSO → apply → approve →
 booking with DB-enforced integrity. Solo-operated; lean (~$100 AUD/mo ceiling).
 
 ## Read this first — document map
@@ -17,7 +17,7 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/SYSTEM_DESIGN.md` | **Target** architecture + decision log (§17) | Where anything new should go; seams; unbuilt designs (media, payments, flags) |
 | `docs/ARCHITECTURE.md` | **As-built** state | What exists today: modules, domain model + invariants, ports, deployment |
 | `docs/CONTRACTS.md` | Every wire contract + change rules | DTO shapes, conventions, endpoint specs, event taxonomy |
-| `docs/ROADMAP.md` | Phase order & exit criteria | What to build next and what's deliberately deferred |
+| `docs/backlog/` | Implementation plans for what's next (README = index + phase history) | What to build next and what's deliberately deferred |
 | `docs/MOBILE_DESIGN.md` | Flutter app design | Anything under `/mobile` |
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
@@ -66,7 +66,7 @@ Feature-flags service (Perchd-pattern; SSE + snapshot — CONTRACTS §8), authel
 for Admin, Loki/Promtail/Grafana telemetry, Caddy edge proxy, self-hosted registry.
 Integrate against them; don't design replacements. The flags SDK's source lives outside
 this repo — until it has a home here, flags are config-backed via `IFeatureFlags`
-(same key names; ROADMAP carry-over).
+(same key names; launch-checklist carry-over — `docs/backlog/phase-6-reputation-and-launch.md`).
 
 ## Build / run / verify
 

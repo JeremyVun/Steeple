@@ -47,7 +47,8 @@ All `--dart-define`s (see `lib/app/env_config.dart`): `STEEPLE_ENV` (dev|prod),
 - **Google Maps keys**: Android `-PMAPS_API_KEY=…` gradle property; iOS
   `GoogleMapsApiKey` in Info.plist. Empty = blank map tiles, all else works.
 - **SSO client ids**: `google_sign_in` iOS URL scheme + serverClientId, and the
-  Apple Services ID, land with the production SSO setup (ROADMAP carry-over).
+  Apple Services ID, land with the production SSO setup (launch checklist —
+  `docs/backlog/phase-6-reputation-and-launch.md`).
 - **`ios/Runner/Runner.entitlements`** (applinks, Sign in with Apple, aps) is
   written but must be attached to the Runner target in Xcode when signing is
   set up. The Google SSO button uses a text-only stand-in pending the official

@@ -304,6 +304,13 @@ abstract class PushService {
 Flag semantics: last-known snapshot cached; a missing/failed fetch means `orElse` — a
 flag read is **never** a network call (SYSTEM_DESIGN §11).
 
+**Maps capability (`core/maps/maps_capability.dart`).** `mapsAvailableProvider`
+(`FutureProvider<bool>`) answers "was the native Google Maps SDK given an API key?"
+via the `app.steeple/maps` platform channel (method `hasApiKey`; handled in
+`AppDelegate.swift` / `MainActivity.kt`). The iOS SDK **aborts the process** if a map
+view is created key-less, so any widget that mounts a `GoogleMap` must gate on this
+provider and render a placeholder when it is false; channel errors count as false.
+
 ## 11. Fixtures & fakes (how mobile builds against 🔲 endpoints)
 
 - `test/fixtures/<name>.json` — copied **verbatim from CONTRACTS.md examples** (fixture

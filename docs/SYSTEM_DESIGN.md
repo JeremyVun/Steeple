@@ -116,7 +116,8 @@ never reference `Steeple.Persistence` types.
 The as-built model (venues → rooms → applications → bookings, identity, notifications)
 and its DB-enforced invariants live in `ARCHITECTURE.md`. Remaining target additions:
 
-- `bookings 1─* ratings (RaterId, RateeType Organizer|Venue, Stars, Comment)` — Phase 6.
+- `bookings 1─* ratings (RaterId, RateeType Organizer|Venue, Stars, Comment)` — Phase 6
+  (full design: `docs/backlog/phase-6-reputation-and-launch.md`).
 
 ## 6. Identity & auth
 
@@ -220,7 +221,7 @@ Design-for now, build when triggered:
 | Safeguarding / children | v1 Option A: "Identity-verified (SSO)" only, explicit *no vetting* disclaimer; churches surface their own requirements | Listing field for church-stated requirements |
 | Privacy (VA CDPA etc.) | Under thresholds, but build the plumbing: data minimization, PII inventory, export + delete | `DELETE /api/v1/me` (anonymize, built); PII confined to `users`/`user_logins`/`applications` text |
 | PII custody | Never hold gov IDs, cards, phone numbers (until OTP step-up — then verify-only via Twilio/Plivo) | Delegation ports: `IIdTokenVerifier`, later `ISmsOtpSender`, Stripe |
-| UGC / DMCA | Provider self-service photo uploads are live (Phase 5); takedown path exists today as Admin unlist + the moderation feed (§17) | Registering a DMCA agent with the Copyright Office is the remaining ops carry-over (ROADMAP) — not code |
+| UGC / DMCA | Provider self-service photo uploads are live (Phase 5); takedown path exists today as Admin unlist + the moderation feed (§17) | Registering a DMCA agent with the Copyright Office is the remaining ops carry-over (backlog phase-6 launch checklist) — not code |
 | Email/SMS law | Transactional email only (CAN-SPAM exempt); no marketing sends without consent + unsubscribe; TCPA applies if SMS ever ships | Consent columns before any marketing channel |
 | Accessibility | WCAG 2.2 AA target for Web (ADA exposure is real for public accommodations); accessibility filters already first-class | Semantic HTML/HTMX already; audit in launch phase |
 | Tax / payments | Nothing until payments; then Stripe Connect handles KYC + 1099-K | §15 |
@@ -233,7 +234,9 @@ money-transmitter exposure); Stripe owns KYC/payouts/1099-K. Schema seam:
 `bookings.PriceAmount/Currency` nullable columns + a `payments` table keyed by booking;
 port `IPaymentGateway`; webhook endpoint under Ingest. Verified badges (Stripe
 Identity/Persona) reuse the same "delegate, don't custody" port pattern. None of this is
-built before real paid demand exists (PRD).
+built before real paid demand exists (PRD). **The full design — charge timing, recurring
+payments, refund & cancellation policy, onboarding, failure modes — is
+`docs/backlog/payments.md`**; this section stays the seam summary.
 
 ## 16. Seams & scaling triggers
 

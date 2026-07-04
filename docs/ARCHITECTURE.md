@@ -1,8 +1,8 @@
 # Steeple — Architecture (as-built)
 
 > The **as-built** state of the system, updated as slices land. Target-state design +
-> decision log: `SYSTEM_DESIGN.md`. Wire contracts: `CONTRACTS.md`. Phased plan:
-> `ROADMAP.md`. Flutter app design: `MOBILE_DESIGN.md`.
+> decision log: `SYSTEM_DESIGN.md`. Wire contracts: `CONTRACTS.md`. What's next:
+> `docs/backlog/`. Flutter app design: `MOBILE_DESIGN.md`.
 
 ## Current state — ROADMAP Phases 0–4 complete; Phase 5 code slice landed (2026-07-04)
 
