@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace Steeple.Web.Controllers;
 
@@ -12,12 +13,23 @@ public sealed class SiteController : SteepleControllerBase
 {
     private readonly ISteepleApiClient _api;
     private readonly BrandOptions _brand;
+    private readonly IFeatureFlags _flags;
+    private readonly AuthFlowOptions _auth;
+    private readonly TurnstileClientOptions _turnstile;
 
     /// <summary>Creates the controller.</summary>
-    public SiteController(ISteepleApiClient api, BrandOptions brand)
+    public SiteController(
+        ISteepleApiClient api,
+        BrandOptions brand,
+        IFeatureFlags flags,
+        IOptions<AuthFlowOptions> auth,
+        IOptions<TurnstileClientOptions> turnstile)
     {
         _api = api;
         _brand = brand;
+        _flags = flags;
+        _auth = auth.Value;
+        _turnstile = turnstile.Value;
     }
 
     /// <summary>What Steeple is and how it works.</summary>
@@ -64,16 +76,29 @@ public sealed class SiteController : SteepleControllerBase
         return View();
     }
 
-    /// <summary>Consumer sign-in (SSO stub — not wired up in the discovery slice).</summary>
+    /// <summary>
+    /// Consumer sign-in. Renders the real SSO buttons when <c>web.sign_in_enabled</c> is on
+    /// (Google Identity Services button + Apple redirect flow, optionally gated by Turnstile);
+    /// otherwise the pre-launch "accounts are coming soon" stub.
+    /// </summary>
     [HttpGet("/login")]
     public async Task<IActionResult> Login(string? returnUrl = null, CancellationToken ct = default)
     {
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            return Redirect(Url.Content("~/account"));
+        }
+
         ViewData["Title"] = "Log in";
         ViewData["Description"] = $"Sign in to {_brand.Name}.";
         ViewData["Robots"] = "noindex,follow";
         ViewData["AreaName"] = await AreaNameAsync(ct);
         // Only honour local return paths to avoid open-redirect; fall back to the (sub-path aware) root.
         ViewData["ReturnUrl"] = Url.IsLocalUrl(returnUrl) ? returnUrl : Url.Content("~/");
+        ViewData["SignInEnabled"] = _flags.IsEnabled("web.sign_in_enabled");
+        ViewData["GoogleClientId"] = _auth.Google.ClientId;
+        ViewData["AppleEnabled"] = !string.IsNullOrEmpty(_auth.Apple.ServicesId);
+        ViewData["TurnstileSiteKey"] = _turnstile.SiteKey;
         return View();
     }
 

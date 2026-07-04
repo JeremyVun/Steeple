@@ -23,6 +23,8 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
         // Mirror the SQL schema's `DEFAULT ''` so the EF model stays column-for-column with 001-schema.sql.
         builder.Property(v => v.ParkingInfo).HasMaxLength(1000).HasDefaultValue("");
         builder.Property(v => v.TransitInfo).HasMaxLength(1000).HasDefaultValue("");
+        // Mirror 005-bookings.sql's DEFAULT (existing rows inherited it the same way).
+        builder.Property(v => v.Timezone).IsRequired().HasMaxLength(64).HasDefaultValue("America/New_York");
 
         // Composite index supporting the bounding-box discovery query. A B-tree only ranges on
         // the leading column (Latitude); true 2-D pruning awaits a GiST/PostGIS index in the
@@ -31,6 +33,9 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
 
         // Slugs are the public, URL-facing identifier — keep them unique.
         builder.HasIndex(v => v.Slug).IsUnique();
+
+        // Edited-listings review feed scans only flagged rows (partial index in 006-manage.sql).
+        builder.HasIndex(v => v.ProviderEditedAtUtc).HasFilter("\"ProviderEditedAtUtc\" IS NOT NULL");
 
         builder
             .HasMany(v => v.Rooms)

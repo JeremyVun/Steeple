@@ -10,7 +10,12 @@
        (Contracts/) and the use-case services; reads the DB through the shared persistence library.
        Schema itself is owned by the Liquibase migrate service — the API never migrates. -->
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.100.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.9" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+    <!-- FCM push delivery behind IPushGateway (Apache-2.0, $0; SYSTEM_DESIGN §17 decision log). -->
+    <PackageReference Include="FirebaseAdmin" Version="3.4.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,9 +28,22 @@
     <Using Include="Steeple.Persistence.Models" />
     <Using Include="Steeple.Persistence.Constants" />
     <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Contracts.Identity" />
     <Using Include="Steeple.Api.Configuration" />
     <Using Include="Steeple.Api.Services" />
+    <Using Include="Steeple.Api.Services.Identity" />
+    <Using Include="Steeple.Api.Services.Applications" />
+    <Using Include="Steeple.Api.Services.Bookings" />
+    <Using Include="Steeple.Api.Services.Manage" />
+    <Using Include="Steeple.Api.Services.Media" />
+    <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Proxies.Identity" />
+    <Using Include="Steeple.Api.Proxies.Applications" />
+    <Using Include="Steeple.Api.Proxies.Bookings" />
+    <Using Include="Steeple.Api.Proxies.Manage" />
+    <Using Include="Steeple.Api.Proxies.Media" />
+    <Using Include="Steeple.Api.Proxies.Notifications" />
     <Using Include="Steeple.Api.Extensions" />
     <Using Include="Steeple.Api.Utils" />
   </ItemGroup>

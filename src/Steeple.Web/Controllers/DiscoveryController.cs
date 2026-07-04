@@ -11,12 +11,14 @@ public sealed class DiscoveryController : SteepleControllerBase
 {
     private readonly ISteepleApiClient _api;
     private readonly BrandOptions _brand;
+    private readonly IFeatureFlags _flags;
 
     /// <summary>Creates the controller.</summary>
-    public DiscoveryController(ISteepleApiClient api, BrandOptions brand)
+    public DiscoveryController(ISteepleApiClient api, BrandOptions brand, IFeatureFlags flags)
     {
         _api = api;
         _brand = brand;
+        _flags = flags;
     }
 
     /// <summary>
@@ -74,6 +76,8 @@ public sealed class DiscoveryController : SteepleControllerBase
 
         ViewData["Canonical"] = AbsoluteUrl($"/space/{dto.Venue.Slug}/{dto.RoomSlug}");
         ViewData["Description"] = BuildListingDescription(dto);
+        // The in-product apply flow supersedes the mailto CTA when its flag is on (ROADMAP Phase 2).
+        ViewData["ApplyEnabled"] = _flags.IsEnabled("web.apply_from_browser");
         var primaryPhoto = dto.Photos.FirstOrDefault(p => p.IsPrimary)?.Url ?? dto.Photos.FirstOrDefault()?.Url;
         if (primaryPhoto is not null)
         {

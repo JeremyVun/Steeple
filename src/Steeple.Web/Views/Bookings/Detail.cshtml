@@ -1,0 +1,176 @@
+@model BookingDetailViewModel
+@{
+    var booking = Model.Booking;
+    var spaceUrl = Url.Content($"~/space/{booking.VenueSlug}/{booking.RoomSlug}");
+    var backUrl = Model.ViewerIsOrganizer ? Url.Content("~/bookings") : Url.Content("~/manage/bookings");
+    var threadUrl = Model.ViewerIsOrganizer
+        ? Url.Content($"~/inbox/applications/{booking.ApplicationId}")
+        : Url.Content($"~/manage/applications/{booking.ApplicationId}");
+    var endsSoon = booking.Status == "confirmed"
+        && booking.Type == "recurring"
+        && booking.EndDate.DayNumber - DateOnly.FromDateTime(DateTime.UtcNow).DayNumber <= 14;
+}
+
+<section class="thread-page wrap">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="@backUrl">← All bookings</a>
+    </nav>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+    @if (Model.Error is not null)
+    {
+        <p class="auth-error" role="alert">@Model.Error</p>
+    }
+
+    <header class="thread-head">
+        <div class="thread-head-main">
+            <h1 class="thread-title"><a href="@spaceUrl">@booking.RoomName</a></h1>
+            <p class="thread-sub">
+                @if (Model.ViewerIsOrganizer)
+                {
+                    <text>@booking.VenueName</text>
+                }
+                else
+                {
+                    <text>@booking.VenueName · booked by <strong>@booking.OrganizerName</strong></text>
+                }
+            </p>
+        </div>
+        <partial name="_StatusChip" model="booking.Status" />
+    </header>
+
+    <div class="thread-grid">
+        <div class="thread-main">
+            <div class="request-card">
+                <p class="request-card-heading">The booking</p>
+                <dl class="request-facts">
+                    <div>
+                        <dt>When</dt>
+                        <dd>@ApplicationDisplay.DescribeSchedule(booking.Schedule)</dd>
+                    </div>
+                    <div>
+                        <dt>Dates</dt>
+                        <dd>@booking.Occurrences.Count total · @Model.Upcoming.Count(o => o.Status == "scheduled") upcoming</dd>
+                    </div>
+                </dl>
+                <p class="request-meta">
+                    Confirmed @ApplicationDisplay.RelativeTime(booking.CreatedAtUtc) ·
+                    all times local to the venue (@booking.VenueTimezone)
+                </p>
+            </div>
+
+            @if (Model.Upcoming.Count > 0)
+            {
+                <h2 class="occ-heading">Upcoming</h2>
+                <ol class="occ-list" role="list">
+                    @foreach (var occurrence in Model.Upcoming)
+                    {
+                        <li class="occ-row">
+                            <span class="occ-date">@BookingDisplay.FormatLocalDate(occurrence.LocalDate)</span>
+                            <span class="occ-time">@BookingDisplay.TimeWindow(booking.Schedule)</span>
+                            <span class="status-chip status-@BookingDisplay.OccurrenceRole(occurrence.Status)">@BookingDisplay.OccurrenceLabel(occurrence.Status)</span>
+                        </li>
+                    }
+                </ol>
+            }
+
+            @if (Model.Past.Count > 0)
+            {
+                <h2 class="occ-heading">Past dates</h2>
+                <ol class="occ-list" role="list">
+                    @foreach (var occurrence in Model.Past)
+                    {
+                        <li class="occ-row">
+                            <span class="occ-date">@BookingDisplay.FormatLocalDate(occurrence.LocalDate)</span>
+                            <span class="occ-time">@BookingDisplay.TimeWindow(booking.Schedule)</span>
+                            <span class="status-chip status-@BookingDisplay.OccurrenceRole(occurrence.Status)">@BookingDisplay.OccurrenceLabel(occurrence.Status)</span>
+                            @if (BookingDetailViewModel.CanMarkNoShow(occurrence))
+                            {
+                                <details class="occ-noshow">
+                                    <summary>@(Model.ViewerIsOrganizer ? "The venue didn't show?" : "They didn't show?")</summary>
+                                    <form method="post" action="@Url.Content($"~/bookings/{booking.Id}/occurrences/{occurrence.Id}/no-show")" class="occ-noshow-form">
+                                        @Html.AntiForgeryToken()
+                                        <p class="decision-note">
+                                            This records that @Model.OtherPartyName wasn't there on this date. It can't be undone.
+                                        </p>
+                                        <button type="submit" class="btn btn-danger btn-sm">Record no-show</button>
+                                    </form>
+                                </details>
+                            }
+                        </li>
+                    }
+                </ol>
+            }
+        </div>
+
+        <aside class="thread-aside">
+            @if (booking.Status == "cancelled")
+            {
+                <div class="withdraw-card">
+                    <p class="decision-heading">Cancelled</p>
+                    <p class="decision-note">
+                        Cancelled by @(booking.CancelledBy == booking.OrganizerId ? booking.OrganizerName : booking.VenueName)@(booking.CancelledAtUtc is { } at ? $" {ApplicationDisplay.RelativeTime(at)}" : "").
+                        @if (booking.CancelReason is { Length: > 0 })
+                        {
+                            <text>They said: “@booking.CancelReason”</text>
+                        }
+                    </p>
+                    @if (Model.Upcoming.Any(o => o.Status == "scheduled"))
+                    {
+                        <p class="decision-note">
+                            Dates inside the 48-hour notice window still stand — they're listed above as scheduled.
+                        </p>
+                    }
+                </div>
+            }
+
+            @if (endsSoon)
+            {
+                <div class="approved-card">
+                    <p class="approved-heading">This term ends @BookingDisplay.FormatLocalDate(booking.EndDate)</p>
+                    <p class="decision-note">
+                        @if (Model.ViewerIsOrganizer)
+                        {
+                            <text>Want to keep meeting here? <a href="@spaceUrl">Send a new request</a> before the slot opens up to others.</text>
+                        }
+                        else
+                        {
+                            <text>If @booking.OrganizerName asks to renew, you'll get a fresh request to approve.</text>
+                        }
+                    </p>
+                </div>
+            }
+
+            @if (Model.IsCancellable)
+            {
+                <div class="withdraw-card">
+                    <details class="account-confirm">
+                        <summary>Cancel this booking</summary>
+                        <p class="decision-note">
+                            @Model.OtherPartyName gets notified, and dates more than 48 hours out are freed.
+                            Anything sooner still stands — they were owed notice.
+                        </p>
+                        <form method="post" action="@Url.Content($"~/bookings/{booking.Id}/cancel")" class="decision-form">
+                            @Html.AntiForgeryToken()
+                            <label class="field-label" for="cancel-reason">Tell them why (optional)</label>
+                            <textarea class="form-input" id="cancel-reason" name="reason" rows="2" maxlength="500"
+                                      placeholder="E.g. our group is taking a break over summer."></textarea>
+                            <button type="submit" class="btn btn-danger">Cancel booking</button>
+                        </form>
+                    </details>
+                </div>
+            }
+
+            <div class="decision-card">
+                <p class="decision-heading">The original request</p>
+                <p class="decision-note">
+                    The ask/answer thread that led to this booking is kept for your records.
+                </p>
+                <a class="btn btn-ghost" href="@threadUrl">View the request thread</a>
+            </div>
+        </aside>
+    </div>
+</section>

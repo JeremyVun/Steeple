@@ -1,5 +1,7 @@
+@inject Steeple.Web.Services.IFeatureFlags Flags
 @{
     var year = DateTime.UtcNow.Year;
+    var manageEnabled = Flags.IsEnabled("web.manage_enabled");
     // The discovery/home page opts into the wide app shell so the header + footer line up with
     // its full-width map layout; reading pages keep the narrower centred shell.
     var shell = (ViewData["WideShell"] as bool?) == true ? "wrap-wide" : "wrap";
@@ -74,7 +76,20 @@
             </a>
             <p class="tagline">@Brand.Tagline</p>
             <nav class="header-actions" aria-label="Account">
-                <a class="btn btn-ghost btn-sm" href="~/login">Log in</a>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a class="btn btn-ghost btn-sm" href="~/inbox">Inbox</a>
+                    <a class="btn btn-ghost btn-sm" href="~/bookings">Bookings</a>
+                    @if (manageEnabled)
+                    {
+                        <a class="btn btn-ghost btn-sm" href="~/manage">Your spaces</a>
+                    }
+                    <a class="btn btn-ghost btn-sm" href="~/account">Account</a>
+                }
+                else
+                {
+                    <a class="btn btn-ghost btn-sm" href="~/login">Log in</a>
+                }
                 <a class="btn btn-primary btn-sm" href="~/host">Become a host</a>
             </nav>
         </div>

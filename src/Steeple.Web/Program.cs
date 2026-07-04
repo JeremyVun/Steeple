@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var mvc = builder.Services.AddControllersWithViews();
+// Every authenticated POST carries the antiforgery token (CSRF). The SSO callbacks that can't
+// (Apple's cross-site form_post) opt out explicitly and validate a signed state cookie instead.
+var mvc = builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute()));
 if (builder.Environment.IsDevelopment())
 {
     mvc.AddRazorRuntimeCompilation();
@@ -52,7 +55,9 @@ if (!app.Environment.IsDevelopment())
 }
 
 // Cheap baseline security headers for a public, reverse-proxied funnel. The CSP allows the
-// pinned unpkg Leaflet assets and remote tile/photo images; everything else is same-origin.
+// pinned unpkg Leaflet assets and remote tile/photo images, plus the Google Identity Services
+// button and the Cloudflare Turnstile widget (script + iframe each); everything else is
+// same-origin. Apple's flow is a plain redirect — no third-party assets needed.
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -62,9 +67,10 @@ app.Use(async (context, next) =>
     headers["Content-Security-Policy"] =
         "default-src 'self'; " +
         "img-src 'self' data: https:; " +
-        "style-src 'self' 'unsafe-inline' https://unpkg.com; " +
-        "script-src 'self' https://unpkg.com; " +
-        "connect-src 'self'; " +
+        "style-src 'self' 'unsafe-inline' https://unpkg.com https://accounts.google.com; " +
+        "script-src 'self' https://unpkg.com https://accounts.google.com https://challenges.cloudflare.com; " +
+        "connect-src 'self' https://accounts.google.com; " +
+        "frame-src https://accounts.google.com https://challenges.cloudflare.com; " +
         "frame-ancestors 'none'";
     await next();
 });
@@ -72,6 +78,8 @@ app.Use(async (context, next) =>
 app.UseStaticFiles();
 app.UseRouting();
 app.UseSession();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",

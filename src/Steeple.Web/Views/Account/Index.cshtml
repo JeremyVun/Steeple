@@ -1,0 +1,103 @@
+@model MeResponse
+@{
+    var authError = TempData["AuthError"] as string;
+
+    static string DocLabel(string docType) => docType switch
+    {
+        "tos" => "Terms of use",
+        "privacy" => "Privacy policy",
+        _ => char.ToUpperInvariant(docType[0]) + docType[1..],
+    };
+}
+
+<section class="account-page wrap" aria-labelledby="account-heading">
+    <header class="content-head">
+        <p class="content-eyebrow">Your account</p>
+        <h1 id="account-heading">@Model.DisplayName</h1>
+        <p class="content-lead">
+            Signed in with Google or Apple — @Brand.Name never sees or stores a password.
+        </p>
+    </header>
+
+    @if (authError is not null)
+    {
+        <p class="auth-error" role="alert">@authError</p>
+    }
+
+    <div class="account-card">
+        <h2>Profile</h2>
+        <dl class="account-facts">
+            <div>
+                <dt>Name</dt>
+                <dd>@Model.DisplayName</dd>
+            </div>
+            @if (Model.Email is { Length: > 0 })
+            {
+                <div>
+                    <dt>Email</dt>
+                    <dd>@Model.Email</dd>
+                </div>
+            }
+            <div>
+                <dt>Member since</dt>
+                <dd>@Model.CreatedAtUtc.ToString("MMMM d, yyyy")</dd>
+            </div>
+        </dl>
+    </div>
+
+    <div class="account-card">
+        <h2>Agreements</h2>
+        @if (Model.Agreements.Count == 0)
+        {
+            <p class="account-note">No agreement records yet — they're recorded when you sign in.</p>
+        }
+        else
+        {
+            <ul class="account-agreements">
+                @foreach (var agreement in Model.Agreements)
+                {
+                    <li>
+                        @DocLabel(agreement.DocType) — version @agreement.Version,
+                        accepted @agreement.AcceptedAtUtc.ToString("MMMM d, yyyy")
+                    </li>
+                }
+            </ul>
+        }
+        <p class="account-note">
+            Read the current <a href="~/terms">terms of use</a> and <a href="~/privacy">privacy policy</a>.
+        </p>
+    </div>
+
+    <div class="account-card">
+        <h2>Sessions</h2>
+        <p class="account-note">Sign out here, or everywhere you've signed in with this account.</p>
+        <div class="account-actions">
+            <form method="post" action="~/auth/signout">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-ghost">Sign out</button>
+            </form>
+            <form method="post" action="~/account/signout-everywhere">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-ghost">Sign out everywhere</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="account-card account-danger">
+        <h2>Delete account</h2>
+        <p class="account-note">
+            Deleting your account removes your name and email and signs you out everywhere.
+            This can't be undone.
+        </p>
+        <details class="account-confirm">
+            <summary>Delete my account…</summary>
+            <p class="account-note">
+                Are you sure? Your profile is anonymized immediately and you'll be signed out.
+            </p>
+            <form method="post" action="~/account/delete">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-danger">Yes, delete my account</button>
+            </form>
+        </details>
+    </div>
+</section>

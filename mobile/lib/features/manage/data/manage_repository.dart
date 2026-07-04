@@ -1,0 +1,78 @@
+import '../../../core/api/api_client.dart';
+import '../../../core/models/models.dart';
+
+/// Manage (provider self-service) wire access (MOBILE_CONTRACTS §8;
+/// CONTRACTS §6, Phase 5). Owned by the manage feature.
+abstract class ManageRepository {
+  /// `GET /api/v1/manage/venues` — venues where the caller is a
+  /// `venue_manager` (empty for non-providers).
+  Future<List<ManagedVenue>> venues();
+
+  /// `GET /api/v1/manage/venues/{id}`.
+  Future<ManagedVenueDetail> venue(String id);
+
+  /// `GET /api/v1/manage/rooms/{id}`.
+  Future<ManagedRoom> room(String id);
+
+  /// `PATCH /api/v1/manage/rooms/{id}` — only non-null [patch] fields are
+  /// sent; returns the room as it now stands.
+  Future<ManagedRoom> saveRoom(String id, ManagedRoomPatch patch);
+
+  /// `GET /api/v1/manage/applications` — the provider inbox (empty list, not
+  /// an error, for non-managers).
+  Future<Paged<Application>> applications({String? status, int page = 1});
+
+  /// `POST /api/v1/applications/{id}/decision`.
+  Future<Application> decide(String id, {required bool approve, String? message});
+}
+
+class ApiManageRepository implements ManageRepository {
+  const ApiManageRepository(this._api);
+
+  final ApiClient _api;
+
+  @override
+  Future<List<ManagedVenue>> venues() => _api.get(
+        '/api/v1/manage/venues',
+        decode: (data) => (data as List<dynamic>)
+            .map((e) => ManagedVenue.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  @override
+  Future<ManagedVenueDetail> venue(String id) => _api.get(
+        '/api/v1/manage/venues/$id',
+        decode: (data) => ManagedVenueDetail.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<ManagedRoom> room(String id) => _api.get(
+        '/api/v1/manage/rooms/$id',
+        decode: (data) => ManagedRoom.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<ManagedRoom> saveRoom(String id, ManagedRoomPatch patch) => _api.patch(
+        '/api/v1/manage/rooms/$id',
+        body: patch.toJson(),
+        decode: (data) => ManagedRoom.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<Paged<Application>> applications({String? status, int page = 1}) => _api.get(
+        '/api/v1/manage/applications',
+        query: {'status': ?status, 'page': page},
+        decode: (data) =>
+            Paged.fromJson(data as Map<String, dynamic>, Application.fromJson),
+      );
+
+  @override
+  Future<Application> decide(String id, {required bool approve, String? message}) => _api.post(
+        '/api/v1/applications/$id/decision',
+        body: {
+          'decision': approve ? 'approve' : 'decline',
+          'message': ?message,
+        },
+        decode: (data) => Application.fromJson(data as Map<String, dynamic>),
+      );
+}

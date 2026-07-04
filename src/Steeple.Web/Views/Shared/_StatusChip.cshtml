@@ -1,0 +1,4 @@
+@model string
+@* The one status-chip mapping (DESIGN_SYSTEM §8.4): tint background + label per wire token.
+   Unknown tokens fall back to a neutral chip with a humanized label. *@
+<span class="status-chip status-@ApplicationDisplay.StatusRole(Model)">@ApplicationDisplay.StatusLabel(Model)</span>

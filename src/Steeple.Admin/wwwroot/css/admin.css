@@ -1092,3 +1092,84 @@ img { max-width: 100%; display: block; }
     * { transition: none !important; }
     .card:hover { transform: none; }
 }
+
+/* Moderation queue (ROADMAP Phase 5) */
+.admin-hint {
+    margin: 0 0 0.75rem;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+}
+
+.admin-preview {
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
+}
+
+.admin-preview > summary {
+    color: var(--ink-soft);
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.admin-preview-description {
+    margin: 0.5rem 0;
+    max-width: 34rem;
+    color: var(--ink-soft);
+    white-space: pre-line;
+}
+
+.admin-preview-photos {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.admin-preview-photos img {
+    width: 96px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--line-strong);
+}
+
+/* Applications panel + venue-manager linking (ROADMAP Phase 2) */
+.admin-empty {
+    margin: 0;
+    padding: 1.25rem;
+    border: 1px dashed var(--line-strong);
+    border-radius: 8px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.admin-error {
+    margin: 0;
+    padding: 0.55rem 0.8rem;
+    border-radius: 8px;
+    background: #F6DFDA;
+    color: #9C2F23;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.admin-inline-form input[type="email"] {
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    padding: 0.42rem 0.55rem;
+    min-width: 16rem;
+}
+
+.admin-link-danger {
+    border: 0;
+    background: none;
+    color: #9C2F23;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-decoration: underline;
+    cursor: pointer;
+}

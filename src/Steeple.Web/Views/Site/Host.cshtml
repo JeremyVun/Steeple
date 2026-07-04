@@ -1,5 +1,10 @@
+@inject Steeple.Web.Services.IFeatureFlags Flags
 @{
     var area = ViewData["AreaName"] as string;
+    // Self-service listing (Phase 5) routes straight into /manage when the flag is on;
+    // otherwise the concierge sign-in CTA stands.
+    var manageEnabled = Flags.IsEnabled("web.manage_enabled");
+    var signedIn = User.Identity?.IsAuthenticated == true;
 }
 
 <section class="host-hero wrap">
@@ -12,7 +17,18 @@
             own terms.
         </p>
         <div class="host-cta-row">
-            <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Sign in to list your space</a>
+            @if (manageEnabled && signedIn)
+            {
+                <a class="btn btn-primary" href="~/manage/venues/new">List your space</a>
+            }
+            else if (manageEnabled)
+            {
+                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Content("~/manage/venues/new") })">Sign in to list your space</a>
+            }
+            else
+            {
+                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Sign in to list your space</a>
+            }
             <a class="btn btn-ghost" href="~/">Browse the listings</a>
         </div>
         <p class="host-cta-note">

@@ -1,0 +1,180 @@
+@model ApplicationThreadViewModel
+@{
+    var app = Model.Application;
+    var spaceUrl = Url.Content($"~/space/{app.VenueSlug}/{app.RoomSlug}");
+    var backUrl = Model.ViewerIsOrganizer ? Url.Content("~/inbox") : Url.Content("~/manage/applications");
+    var replyUrl = Model.ViewerIsOrganizer
+        ? Url.Content($"~/inbox/applications/{app.Id}/reply")
+        : Url.Content($"~/manage/applications/{app.Id}/reply");
+}
+
+<section class="thread-page wrap">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="@backUrl">← All requests</a>
+    </nav>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+    @if (Model.Error is not null)
+    {
+        <p class="auth-error" role="alert">@Model.Error</p>
+    }
+
+    <header class="thread-head">
+        <div class="thread-head-main">
+            <h1 class="thread-title">
+                @if (Model.ViewerIsOrganizer)
+                {
+                    <a href="@spaceUrl">@app.RoomName</a>
+                }
+                else
+                {
+                    @app.Organizer.DisplayName
+                }
+            </h1>
+            <p class="thread-sub">
+                @if (Model.ViewerIsOrganizer)
+                {
+                    <text>@app.VenueName</text>
+                }
+                else
+                {
+                    <text>asking for <a href="@spaceUrl">@app.RoomName</a></text>
+                }
+            </p>
+        </div>
+        <partial name="_StatusChip" model="app.Status" />
+    </header>
+
+    <div class="thread-grid">
+        <div class="thread-main">
+            <div class="request-card">
+                <p class="request-card-heading">The request</p>
+                <dl class="request-facts">
+                    <div>
+                        <dt>Activity</dt>
+                        <dd>@DiscoveryViewModel.Humanize(app.ActivityType) · @app.GroupSize people</dd>
+                    </div>
+                    <div>
+                        <dt>When</dt>
+                        <dd>@ApplicationDisplay.DescribeSchedule(app.Schedule)</dd>
+                    </div>
+                </dl>
+                <blockquote class="request-intent">@app.IntentText</blockquote>
+                <p class="request-meta">
+                    Asked @ApplicationDisplay.RelativeTime(app.CreatedAtUtc)
+                    @if (Model.IsUndecided)
+                    {
+                        <text>· expires @app.ExpiresAtUtc.ToString("MMM d") if undecided</text>
+                    }
+                    else if (app.DecidedAtUtc is { } decided)
+                    {
+                        <text>· decided @ApplicationDisplay.RelativeTime(decided)</text>
+                    }
+                </p>
+            </div>
+
+            @if (app.Messages.Count > 0)
+            {
+                <ol class="thread-messages" role="list" aria-label="Messages">
+                    @foreach (var message in app.Messages)
+                    {
+                        var mine = message.SenderId == Model.ViewerId;
+                        <li class="thread-message @(mine ? "is-mine" : "")">
+                            <p class="thread-message-body">@message.Body</p>
+                            <p class="thread-message-meta">
+                                @(mine ? "You" : Model.SenderName(message.SenderId)) · @ApplicationDisplay.RelativeTime(message.SentAtUtc)
+                            </p>
+                        </li>
+                    }
+                </ol>
+            }
+
+            @if (Model.IsUndecided)
+            {
+                <form method="post" action="@replyUrl" class="thread-reply">
+                    @Html.AntiForgeryToken()
+                    <label class="field-label" for="thread-reply-body">
+                        @(Model.ViewerIsOrganizer ? $"Message {app.VenueName}" : $"Ask {app.Organizer.DisplayName} a question")
+                    </label>
+                    <textarea class="form-input" id="thread-reply-body" name="body" rows="3" maxlength="2000" required
+                              placeholder="@(Model.ViewerIsOrganizer ? "Anything else they should know…" : "Anything you need to know before deciding…")"></textarea>
+                    <div class="thread-reply-actions">
+                        <button type="submit" class="btn @(Model.ViewerIsOrganizer ? "btn-primary" : "btn-ghost")">
+                            @(Model.ViewerIsOrganizer ? "Send answer" : "Send question")
+                        </button>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <p class="thread-closed">This request is closed — the thread is kept for your records.</p>
+            }
+        </div>
+
+        <aside class="thread-aside">
+            @if (!Model.ViewerIsOrganizer && Model.IsUndecided)
+            {
+                <div class="decision-card">
+                    <p class="decision-heading">Your decision</p>
+                    <p class="decision-note">
+                        @app.Organizer.DisplayName gets notified either way. A question first is always fine.
+                    </p>
+                    <form method="post" action="@Url.Content($"~/manage/applications/{app.Id}/decision")" class="decision-form">
+                        @Html.AntiForgeryToken()
+                        <label class="field-label" for="decision-message">Add a note (optional)</label>
+                        <textarea class="form-input" id="decision-message" name="message" rows="2" maxlength="2000"
+                                  placeholder="E.g. the side door will be unlocked from 8:45."></textarea>
+                        <div class="decision-actions">
+                            <button type="submit" class="btn btn-primary" name="decision" value="approve">Approve</button>
+                            <button type="submit" class="btn btn-danger" name="decision" value="decline">Decline</button>
+                        </div>
+                    </form>
+                </div>
+            }
+
+            @if (Model.ViewerIsOrganizer && Model.IsUndecided)
+            {
+                <div class="withdraw-card">
+                    <details class="account-confirm">
+                        <summary>Withdraw this request</summary>
+                        <p class="decision-note">@app.VenueName will simply see it disappear from their pending list.</p>
+                        <form method="post" action="@Url.Content($"~/inbox/applications/{app.Id}/withdraw")">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-danger">Withdraw request</button>
+                        </form>
+                    </details>
+                </div>
+            }
+
+            @if (app.Status == "approved" && Model.ViewerIsOrganizer)
+            {
+                <div class="approved-card">
+                    <p class="approved-heading">You're in 🎉</p>
+                    <p class="decision-note">
+                        @app.VenueName approved your request. Arrangements from here (keys, access, set-up)
+                        happen directly with the venue — use the thread above if anything's unclear.
+                    </p>
+                    @if (app.BookingId is { } bookingId)
+                    {
+                        <a class="btn btn-primary" href="@Url.Content($"~/bookings/{bookingId}")">View your booking</a>
+                    }
+                </div>
+            }
+
+            @if (app.Status == "approved" && !Model.ViewerIsOrganizer && app.BookingId is { } providerBookingId)
+            {
+                <div class="decision-card">
+                    <p class="decision-heading">Booking confirmed</p>
+                    <p class="decision-note">
+                        The approved dates are held for @app.Organizer.DisplayName — overlapping requests
+                        can no longer be approved.
+                    </p>
+                    <a class="btn btn-ghost" href="@Url.Content($"~/bookings/{providerBookingId}")">View the booking</a>
+                </div>
+            }
+        </aside>
+    </div>
+</section>

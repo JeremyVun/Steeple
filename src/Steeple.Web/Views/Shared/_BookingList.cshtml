@@ -1,0 +1,86 @@
+@model BookingsViewModel
+@{
+    // Shared between /bookings (organizer) and /manage/bookings (provider): same list anatomy,
+    // different headline emphasis (organizer sees the space; provider sees who's coming).
+    var listPath = Model.IsProviderView ? "~/manage/bookings" : "~/bookings";
+}
+
+<nav class="inbox-filters" aria-label="Filter by status">
+    @foreach (var option in BookingsViewModel.StatusOptions)
+    {
+        var active = (Model.StatusFilter ?? "") == option.Value;
+        var href = option.Value.Length == 0
+            ? Url.Content(listPath)
+            : $"{Url.Content(listPath)}?status={option.Value}";
+        <a class="inbox-filter @(active ? "is-active" : "")" href="@href"
+           aria-current="@(active ? "page" : null)">@option.Label</a>
+    }
+</nav>
+
+@if (Model.Result.Items.Count == 0)
+{
+    <div class="empty-state">
+        <p class="empty-emoji" aria-hidden="true">📅</p>
+        <h2 class="empty-title">@(Model.StatusFilter is null ? "No bookings yet" : "None with this status")</h2>
+        <p class="empty-body">
+            @if (Model.IsProviderView)
+            {
+                <text>When you approve a request, the booking lands here with every date it holds.</text>
+            }
+            else
+            {
+                <text>When a venue approves one of your requests, the confirmed booking lands here.</text>
+            }
+        </p>
+        @if (!Model.IsProviderView)
+        {
+            <a class="btn btn-ghost" href="~/">Browse spaces</a>
+        }
+    </div>
+}
+else
+{
+    <ul class="inbox-list" role="list">
+        @foreach (var booking in Model.Result.Items)
+        {
+            <li>
+                <a class="inbox-row" href="@Url.Content($"~/bookings/{booking.Id}")">
+                    <div class="inbox-row-main">
+                        <p class="inbox-row-title">
+                            @if (Model.IsProviderView)
+                            {
+                                <strong>@booking.OrganizerName</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @booking.RoomName
+                            }
+                            else
+                            {
+                                <strong>@booking.RoomName</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @booking.VenueName
+                            }
+                        </p>
+                        <p class="inbox-row-meta">@ApplicationDisplay.DescribeSchedule(booking.Schedule)</p>
+                    </div>
+                    <div class="inbox-row-side">
+                        <partial name="_StatusChip" model="booking.Status" />
+                        <span class="inbox-row-when">@BookingDisplay.NextLine(booking)</span>
+                    </div>
+                </a>
+            </li>
+        }
+    </ul>
+
+    @if (Model.Result.TotalCount > Model.Result.PageSize)
+    {
+        var totalPages = (Model.Result.TotalCount + Model.Result.PageSize - 1) / Model.Result.PageSize;
+        var statusQs = Model.StatusFilter is null ? "" : $"&status={Model.StatusFilter}";
+        <nav class="inbox-paging" aria-label="Pages">
+            @if (Model.Result.Page > 1)
+            {
+                <a class="btn btn-ghost btn-sm" href="@($"{Url.Content(listPath)}?page={Model.Result.Page - 1}{statusQs}")">← Newer</a>
+            }
+            <span class="inbox-paging-label">Page @Model.Result.Page of @totalPages</span>
+            @if (Model.Result.Page < totalPages)
+            {
+                <a class="btn btn-ghost btn-sm" href="@($"{Url.Content(listPath)}?page={Model.Result.Page + 1}{statusQs}")">Older →</a>
+            }
+        </nav>
+    }
+}

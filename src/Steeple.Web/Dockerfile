@@ -21,5 +21,11 @@ ENV ASPNETCORE_HTTP_PORTS=8080
 EXPOSE 8080
 
 COPY --from=build /app .
+
+# DataProtection__KeysPath (/keys) is a named volume mounted at runtime. Docker seeds a fresh
+# volume's ownership from whatever's on disk here at creation time — without this, the mount
+# point is root-owned and the non-root $APP_UID process below can't write the key ring.
+RUN mkdir -p /keys && chown $APP_UID:$APP_UID /keys
+
 USER $APP_UID
 ENTRYPOINT ["dotnet", "Steeple.Web.dll"]

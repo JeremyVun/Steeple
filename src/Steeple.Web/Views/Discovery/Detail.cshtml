@@ -292,7 +292,16 @@
                     <p class="apply-price"><strong>Enquire</strong> for pricing</p>
                 }
 
-                @if (hasContact)
+                @if ((ViewData["ApplyEnabled"] as bool?) == true)
+                {
+                    <a class="btn btn-primary btn-block" href="@Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/apply")">Ask to book</a>
+                    <p class="apply-note">@venue.Name reads every request and decides — most reply within a few days.</p>
+                    @if (hasContact)
+                    {
+                        <a class="btn btn-ghost btn-block" href="@mailtoHref">Or email the venue</a>
+                    }
+                }
+                else if (hasContact)
                 {
                     <a class="btn btn-primary btn-block" href="@mailtoHref">Contact the venue</a>
                     <p class="apply-note">Contact @venue.Name to arrange a booking directly.</p>

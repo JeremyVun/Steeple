@@ -1,0 +1,43 @@
+{
+  "roomId": "22222222-2222-4222-8222-222222222222",
+  "roomSlug": "fellowship-hall",
+  "roomName": "Fellowship Hall",
+  "description": "A bright, high-ceilinged hall with a small stage and adjoining kitchen — well suited to community gatherings, rehearsals, and larger meetups.",
+  "capacity": 80,
+  "isFree": false,
+  "pricePerHour": 45.0,
+  "currency": "USD",
+  "houseRules": "No open flames. Please stack chairs and wipe down tables before leaving. Kitchen use requires 24h notice.",
+  "amenities": ["parking", "kitchen", "restrooms", "wifi", "tables", "chairs", "stage"],
+  "accessibility": ["stepFreeAccess", "accessibleRestroom", "accessibleParking"],
+  "activities": ["community", "arts", "music"],
+  "photos": [
+    {
+      "url": "https://cdn.steeple.app/rooms/fellowship-hall/primary.jpg",
+      "caption": "Main hall, facing the stage",
+      "isPrimary": true,
+      "sortOrder": 0
+    },
+    {
+      "url": "https://cdn.steeple.app/rooms/fellowship-hall/kitchen.jpg",
+      "caption": "Adjoining kitchen",
+      "isPrimary": false,
+      "sortOrder": 1
+    }
+  ],
+  "venue": {
+    "venueId": "11111111-1111-4111-8111-111111111111",
+    "name": "Grace Community Church",
+    "slug": "grace-community-church",
+    "venueType": "church",
+    "addressLine": "217 Center St S",
+    "suburb": "Vienna",
+    "postcode": "22180",
+    "contactEmail": "spaces@gracecommunityvienna.org",
+    "parkingInfo": "Free lot behind the church, 40 spaces.",
+    "transitInfo": "Metrobus 1B stops at Church St & Center St, 2 min walk.",
+    "isIdentityVerified": true,
+    "latitude": 38.9012,
+    "longitude": -77.2653
+  }
+}

@@ -1,0 +1,10 @@
+@model string
+@* The provider area's section tabs; the model is the active key. *@
+<nav class="inbox-tabs" aria-label="Hosting sections">
+    <a class="inbox-tab@(Model == "spaces" ? " is-active" : "")" href="~/manage"
+       aria-current="@(Model == "spaces" ? "page" : null)">Your spaces</a>
+    <a class="inbox-tab@(Model == "requests" ? " is-active" : "")" href="~/manage/applications"
+       aria-current="@(Model == "requests" ? "page" : null)">Requests</a>
+    <a class="inbox-tab@(Model == "bookings" ? " is-active" : "")" href="~/manage/bookings"
+       aria-current="@(Model == "bookings" ? "page" : null)">Bookings</a>
+</nav>

@@ -1,0 +1,21 @@
+@model BookingsViewModel
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Your bookings</h1>
+        @if (Model.IsProvider)
+        {
+            <nav class="inbox-tabs" aria-label="Booking sections">
+                <a class="inbox-tab is-active" href="~/bookings" aria-current="page">Attending</a>
+                <a class="inbox-tab" href="~/manage/bookings">Hosting</a>
+            </nav>
+        }
+    </header>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    <partial name="_BookingList" model="Model" />
+</section>

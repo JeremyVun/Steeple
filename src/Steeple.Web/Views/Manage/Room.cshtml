@@ -1,0 +1,150 @@
+@model RoomEditorViewModel
+@{
+    var room = Model.Room;
+    var isLive = room.Status == "published";
+    var inReview = room.PublishRequestedAtUtc is not null;
+    var everPublished = room.FirstPublishedAtUtc is not null;
+}
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>@room.Name</h1>
+        <partial name="_ManageTabs" model="@("spaces")" />
+    </header>
+
+    <p class="manage-breadcrumb"><a href="~/manage/venues/@room.VenueId">← @room.VenueName</a></p>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    <div class="manage-editor-grid">
+        <div class="manage-editor-side">
+            <section class="card manage-card" aria-labelledby="room-status-heading">
+                <div class="card-body">
+                    <h2 id="room-status-heading">Visibility</h2>
+
+                    @if (isLive)
+                    {
+                        <p class="manage-status-line"><span class="status-chip status-success">Published</span>
+                            Live in search — <a href="~/space/@room.VenueSlug/@room.Slug">see the public page</a>.</p>
+                        <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/status")"
+                              onsubmit="return confirm('Take this room offline? Organizers won\'t find it in search until you publish it again.')">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="unlisted" />
+                            <button class="btn btn-ghost" type="submit">Take offline</button>
+                        </form>
+                        <p class="field-help">Unlisting hides it from search. Existing bookings stand — cancel those separately if you must.</p>
+                    }
+                    else if (inReview)
+                    {
+                        <p class="manage-status-line"><span class="status-chip status-warning">In review</span>
+                            We look at every new listing personally — usually within a day. You can keep editing meanwhile.</p>
+                        <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/status")">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="draft" />
+                            <button class="btn btn-ghost btn-sm" type="submit">Withdraw request</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="manage-status-line"><span class="status-chip status-neutral">@(room.Status == "unlisted" ? "Unlisted" : "Draft")</span>
+                            Only you can see this room.</p>
+                        @if (room.Photos.Count == 0)
+                        {
+                            <p class="field-help">Add at least one photo before publishing — listings with photos get far more requests.</p>
+                        }
+                        <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/status")">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="status" value="published" />
+                            <button class="btn btn-primary" type="submit">@(everPublished ? "Publish again" : "Request publish")</button>
+                        </form>
+                        @if (!everPublished)
+                        {
+                            <p class="field-help">First-time listings get a quick personal review before going live.</p>
+                        }
+                    }
+                </div>
+            </section>
+
+            <section class="card manage-card" aria-labelledby="room-photos-heading">
+                <div class="card-body">
+                    <h2 id="room-photos-heading">Photos</h2>
+                    @if (Model.PhotoError is not null)
+                    {
+                        <p class="auth-error" role="alert">@Model.PhotoError</p>
+                    }
+
+                    @if (room.Photos.Count == 0)
+                    {
+                        <p class="field-help">Bright, honest photos do the selling. Landscape works best; we handle the resizing.</p>
+                    }
+                    else
+                    {
+                        <ul class="manage-photo-grid" role="list">
+                            @foreach (var photo in room.Photos)
+                            {
+                                <li class="manage-photo @(photo.IsPrimary ? "is-cover" : "")">
+                                    <img src="@(photo.CardUrl ?? photo.Url)" alt="@(photo.Caption ?? room.Name)" loading="lazy" />
+                                    @if (photo.IsPrimary)
+                                    {
+                                        <span class="manage-photo-cover-tag">Cover</span>
+                                    }
+                                    <span class="manage-photo-actions">
+                                        @if (!photo.IsPrimary)
+                                        {
+                                            <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/photos/{photo.Id}/primary")">
+                                                @Html.AntiForgeryToken()
+                                                <button class="btn btn-ghost btn-sm" type="submit">Make cover</button>
+                                            </form>
+                                        }
+                                        <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/photos/{photo.Id}/delete")"
+                                              onsubmit="return confirm('Remove this photo? This can\'t be undone.')">
+                                            @Html.AntiForgeryToken()
+                                            <button class="btn btn-danger btn-sm" type="submit">Remove</button>
+                                        </form>
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/photos")"
+                          enctype="multipart/form-data" class="manage-upload-form">
+                        @Html.AntiForgeryToken()
+                        <div class="form-field">
+                            <label class="field-label" for="room-photo">Add a photo</label>
+                            <input class="form-input" id="room-photo" name="photo" type="file"
+                                   accept="image/jpeg,image/png,image/webp" required />
+                            <p class="field-help">JPEG, PNG, or WebP up to 10 MB. We strip location data automatically.</p>
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label" for="room-photo-caption">Caption <span class="field-optional">optional</span></label>
+                            <input class="form-input" id="room-photo-caption" name="caption" maxlength="500"
+                                   placeholder="The hall set up for a community dinner" />
+                        </div>
+                        <button class="btn btn-ghost" type="submit">Upload photo</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+
+        <section class="card manage-card" aria-labelledby="room-details-heading">
+            <div class="card-body">
+                <h2 id="room-details-heading">Room details</h2>
+                @if (isLive)
+                {
+                    <p class="field-help">This room is live — edits show up for organizers right away.</p>
+                }
+                <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}")" class="manage-form">
+                    @Html.AntiForgeryToken()
+                    <partial name="_RoomFields" model="Model.Form" />
+                    <div class="form-field manage-form-actions">
+                        <button class="btn btn-primary" type="submit">Save room details</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</section>

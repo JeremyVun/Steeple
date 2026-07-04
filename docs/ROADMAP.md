@@ -1,147 +1,98 @@
 # Steeple — Implementation Roadmap
 
-> **Status:** Adopted 2026-07-03. Phased, prioritized plan from the current state
-> (read-only discovery slice live) to public beachhead launch and beyond. POC-paced —
-> phases are ordered by dependency and risk, not dated. Each phase ends with something
-> demonstrable in real hands ("exit"), because the build itself is the validation (PRD).
->
-> Ordering rationale: **get the two-sided loop live on web first** (fastest path to a real
-> church approving a real organizer — no app store in the critical path), make booking
-> integrity real, then ship mobile as the recurring-user home, then open provider
-> self-service. Trust/legal plumbing rides with the phase that first needs it.
+> **Status:** Adopted 2026-07-03. Phased, prioritized plan to public beachhead launch and
+> beyond. POC-paced — phases are ordered by dependency and risk, not dated; each ends with
+> something demonstrable in real hands. Ordering rationale: get the two-sided loop live on
+> web first (no app store in the critical path), make booking integrity real, then ship
+> mobile as the recurring-user home, then open provider self-service.
 
-## Current state (done)
+## Done — Phases 0–3 ✅ (code complete 2026-07-04; details in `ARCHITECTURE.md`)
 
-Read-only discovery vertical slice: geo-fenced search/filter + map, listing detail with
-shareable URLs, Postgres + Liquibase, analytics events (placeholder Postgres sink), admin
-dashboard reading live listings/analytics (auth = authelia at the edge), deployed infra:
-flags service, Loki/Grafana, edge proxy. See `ARCHITECTURE.md`.
+- **Phase 0 — repo & platform health:** `/api/v1` normalization (stable enum tokens,
+  self-contained DTOs, ProblemDetails), listing-visibility gate fix, test scaffolding
+  (unit + Testcontainers integration), analytics sink → stdout/Loki, SEO JSON-LD pass.
+- **Phase 1 — identity & trust core:** Google/Apple SSO (server-side JWKS verification),
+  API-issued access+refresh tokens with family-revoking rotation, Web BFF cookie sign-in,
+  Turnstile + rate limiting, versioned ToS/Privacy acceptance, `/account` +
+  delete/anonymize.
+- **Phase 2 — apply → approve loop (web)** ⭐ *the* milestone: applications state machine
+  + ask-thread, notifications inbox + Resend email fan-out, apply form with SSO-gate
+  draft-stash, organizer/provider inboxes, Admin venue-manager linking.
+- **Phase 3 — booking integrity:** `btree_gist` exclusion constraint, approval-as-one-
+  transaction (`409 slot_taken` auto-decline), DST-correct venue-local materialization,
+  48h-notice cancellation, no-show marking, lazy sweeps + renewal nudge, booking screens,
+  and `BookingIntegrityTests` (6 concurrent approvals → exactly one booking).
 
----
+### Outstanding carry-overs (ops/deployment, not code)
 
-## Phase 0 — Repo & platform health ✅ *(completed 2026-07-03, except flags wiring)*
+- **Flags SDK wiring (Phase 0):** the SDK source lives outside this repo; wire
+  Api/Web/Admin to it once it has a home here. Config-backed `IFeatureFlags` meanwhile.
+- **Production SSO setup (Phase 1):** create the Google OAuth client + Apple Services ID;
+  set them plus Turnstile keys, a production `AUTH_JWT_SIGNING_KEY`, and
+  `WEB_SIGN_IN_ENABLED=true` in the deployed env; verify both providers end-to-end in
+  production and that sessions survive a deploy (DataProtection volume).
+- **Real-hands demo (Phases 2–3):** set `Email__ApiKey`/`Email__From`, flip
+  `web.apply_from_browser`, link the concierge venue managers in Admin; drive apply →
+  church emailed → approve → organizer notified with a real church + organizer; confirm
+  time-to-decision visible in Grafana (`application_decided.timeToDecisionHours`).
+- **Production provider self-service (Phase 5):** set `GEOCODING_GOOGLE_API_KEY` (real
+  geocoding replaces the stub), the `MEDIA_*` Spaces credentials (`MEDIA_SERVICE_URL`,
+  `MEDIA_BUCKET`, `MEDIA_ACCESS_KEY`, `MEDIA_SECRET_KEY`, `MEDIA_PUBLIC_BASE_URL`) so uploads
+  land on Spaces/CDN instead of the dev local-disk fallback, and flip `WEB_MANAGE_ENABLED=true`
+  (+ `MOBILE_MANAGE_ENABLED=true` once the mobile build ships) in the deployed env; register
+  the DMCA agent with the Copyright Office (the takedown path itself — Admin unlist + the
+  moderation feed — already exists).
 
-Unblocks everything; no product change.
+## Phase 4 — Mobile app v1 (organizer home) ← in progress (code slice ✅ 2026-07-04)
 
-- ✅ **Fix the broken solution:** the phantom `Steeple.FlagsSdk`/`Steeple.FlagsService`
-  entries were removed from `Steeple.slnx`; `dotnet build` is green.
-- ✅ **Contract normalization to `/api/v1`** (CONTRACTS §2): versioned base path; enums →
-  stable camelCase tokens (clients humanize); wire DTOs self-contained
-  (`GeoPointDto`/`BoundingBoxDto` — no Persistence types); 404s return ProblemDetails;
-  Web migrated in the same change.
-- ✅ **Test scaffolding:** `tests/Steeple.Api.Tests` (unit: GeofencePolicy, GeoMath,
-  listing visibility) + `tests/Steeple.Integration.Tests` (Testcontainers Postgres,
-  Liquibase SQL applied raw, repository behavior) — the rig Bookings' concurrency test
-  will build on.
-- ✅ **Listing visibility fix** (found during test scaffolding): direct id/slug detail
-  lookups no longer leak Draft/Unlisted rooms — service-level gate + covering tests.
-- ✅ **SEO:** checklist synced to reality; JSON-LD completed (Offer/UnitPriceSpecification,
-  PlaceOfWorship, BreadcrumbList), dynamic preconnect hints added; image dimensions
-  verified already present. Open in SEO.md: area landing pages, Search Console (operational).
-- ✅ **Analytics sink swap** (ANALYTICS.md): `StdoutLogAnalyticsSink` behind the same port,
-  JSON console logging in Production; request-path DB write retired (deployed Promtail
-  tails container stdout — no compose change needed in this repo).
-- ✅ README rewritten (Liquibase-owned schema, real layout).
-- 🔲 **Flags wiring** — still pending: the flags SDK source lives outside this repo; wire
-  `Steeple.Api`/Web/Admin to it once the SDK has a home here (or a package feed).
+Per `MOBILE_DESIGN.md`. The loop already works on web, so the app ships **into a working
+marketplace** and adds stickiness (push, inbox in pocket).
 
-**Exit met:** green `dotnet build` + `dotnet test` (34 tests); app-side event emission
-matches the decided pipeline (verify end-to-end in Grafana on next deploy); SEO checklist
-current.
-
-## Phase 1 — Identity & trust core
-
-The auth substrate every later phase needs (CONTRACTS §4, SYSTEM_DESIGN §6).
-
-- `users`/`user_logins`/`refresh_tokens`/`user_agreements` changesets; Identity module
-  (Google + Apple ID-token verification, find-or-create, access+refresh issuance,
-  rotation/revocation).
-- Web BFF sign-in: Google redirect + Apple form_post flows, encrypted auth cookie,
-  persisted DataProtection keys (compose volume), antiforgery on authenticated POSTs.
-- Turnstile + ASP.NET rate limiting on `auth/sessions` (and ready for apply/events).
-- ToS + Privacy pages (versioned docs) + acceptance recording; account page with sign-out
-  everywhere + `DELETE /me` (anonymize).
-- Flags: `web.sign_in_enabled` gate for safe rollout.
-
-**Exit:** sign in with Google *and* Apple on the web funnel end-to-end in production;
-sessions survive deploys; acceptance rows recorded; abuse controls verified by hitting
-the rate limit deliberately.
-
-## Phase 2 — Apply → approve loop (web) ⭐ *the* milestone
-
-Two-sided value exists for the first time: a real organizer applies, a real church decides.
-
-- Schema: `applications`, `application_messages`, `venue_managers`, `notifications`, `devices`.
-- Applications module: submit (intent + venue-local schedule), state machine
-  (`pending → needsInfo ⇄ / approved / declined / withdrawn / expired`), thread messages,
-  per-account + per-IP + Turnstile on submit, idempotency keys.
-- Notifications module: inbox rows + email fan-out (SES/Postmark/Resend adapter behind
-  `IEmailGateway`) for received/message/approved/declined. (FCM adapter lands with mobile.)
-- Web: apply form on listing detail (SSO gate at submit — PRD friction rule), organizer
-  inbox (`/inbox`), **provider inbox** (`/manage/applications`: approve / ask / decline).
-  Providers are `venue_managers` — founder links the concierge churches' Google accounts
-  via Admin.
-- Admin: applications visibility (read + manual state repair), venue-manager linking.
-- Analytics: `application_started/submitted/decided`, `sso_started/completed` wired
-  (funnel drop-off measurable from day one). Flag: `web.apply_from_browser`.
-
-**Exit:** end-to-end demo with a real church + organizer in real hands: apply on web →
-church emailed → approves on web → organizer notified. Time-to-decision visible in Grafana.
-
-## Phase 3 — Booking integrity
-
-The PRD's headline DB requirement; approval now produces real, protected commitments.
-
-- Schema: `bookings`, `booking_occurrences` + **`btree_gist` `EXCLUDE (RoomId WITH =,
-  During WITH &&)`**; `venues.Timezone`; `rooms/venues.UpdatedAtUtc` (SEO lastmod rides along).
-- Bookings module: approval transaction materializes venue-local → UTC occurrences
-  (DST-correct); `409 slot_taken` path auto-declines + notifies; cancellation with notice
-  window (both sides, slots freed); no-show marking; listing lifecycle guard
-  (`has_active_bookings`); renewal-due detection (nudge notification — the renewal seam).
-- Web: bookings on both inboxes (organizer "my bookings", provider calendar-ish list),
-  cancel flows.
-- **Integration test that proves it:** N concurrent approvals for overlapping slots via
-  Testcontainers → exactly one booking exists. This test is the phase.
-
-**Exit:** double-booking demonstrably impossible; a recurring booking survives a listing
-edit; cancellation notifies and frees slots; renewal nudge fires for an expiring term.
-
-## Phase 4 — Mobile app v1 (organizer home)
-
-Per `docs/MOBILE_DESIGN.md`. The loop already works on web, so the app ships **into a
-working marketplace** and adds stickiness (push, inbox in pocket).
-
-- `/mobile` scaffold (env config, dio+auth, router, theme, analytics batcher, flags snapshot).
-- Discovery (map+list+filters) → detail → apply (native SSO) → inbox + my bookings + profile.
-- Push: FCM adapter server-side (`IPushGateway`), `POST /me/devices`, data-message deep
-  links; contextual iOS permission ask. Deep links: Web serves the two `.well-known`
-  files; universal/app links open listing screens.
-- `GET /api/v1/flags` proxy endpoint + `mobile.*` kill-switch flags +
-  `mobile.force_upgrade` forced-upgrade screen.
-- Release: TestFlight (founder + first organizers) → App Store; Android closed testing
-  begins (founder's testers).
+- ✅ `/mobile` scaffold (env config, dio+auth, router, theme, analytics batcher, flags
+  snapshot) — every MOBILE_CONTRACTS §3–§11 seam implemented; fixture-backed fakes run
+  the whole app with no backend (`--dart-define=STEEPLE_FAKES=true`).
+- ✅ Discovery (map+list+filters) → detail → apply (native SSO gate at submit) → inbox +
+  my bookings + profile, all against the shared widget kit and design-system theme.
+- ✅ Push server-side: `IPushGateway` (FirebaseAdmin adapter, log-only unconfigured),
+  `POST/DELETE /me/devices`, data-message deep links wired into the notification
+  dispatcher; client FCM seam + contextual iOS permission ask (after first application).
+  ✅ Web serves the two `.well-known` files.
+- ✅ `GET /api/v1/flags` proxy + `mobile.*` kill-switch flags + `mobile.force_upgrade`
+  forced-upgrade screen. ✅ `POST /api/v1/events` ingest (mobile batcher posts to it).
+- 🔲 Release (the remaining slice — ops, not code): Firebase project + config files,
+  Google Maps + SSO client ids, Xcode signing/entitlements hookup, official Google
+  sign-in brand asset, TestFlight (founder + first organizers) → App Store; Android
+  closed testing begins (founder's testers). Profile runs against MOBILE_DESIGN §4
+  budgets on real devices.
 
 **Exit:** organizer completes browse→apply→approved entirely on the app, with push;
 TestFlight cohort active; performance budgets (MOBILE_DESIGN §4) measured and met.
 
-## Phase 5 — Provider self-service
+## Phase 5 — Provider self-service ✅ (code complete 2026-07-04)
 
 The product brief's MVP goal: churches list and manage themselves; concierge becomes
 optional rather than structural.
 
-- Media module: photo upload → EXIF strip → variants → Spaces CDN (admin concierge uses
-  the same path — retires seeded picsum URLs).
-- Manage module: venue/room CRUD + geocoded address entry (real `IGeocodingGateway`
-  adapter, geofenced + rate-limited), status transitions honoring bookings.
-- Web `/manage` area: listings editor, photos, application/booking inboxes (Phase 2/3
-  screens grow up); provider onboarding flow (create venue → founder/Admin approves for
-  publish — moderation gate keeps listing quality concierge-grade).
-- Admin: moderation queue (approve new/edited listings), DMCA groundwork (register agent;
-  takedown path documented).
-- Mobile `manage` feature fast-follow (approve/decline + basic listing edit).
+- ✅ Media module: photo upload → EXIF strip → JPEG variants (thumb/card/full) → Spaces CDN
+  or local disk in dev (admin concierge uses the same path — retires seeded picsum URLs for
+  new photos; old rows keep their picsum `url`).
+- ✅ Manage module: venue/room CRUD + geocoded address entry (`GoogleGeocodingGateway`,
+  geofenced + rate-limited), status transitions honoring bookings (`409
+  has_active_bookings`), immutable slugs.
+- ✅ Web `/manage` area (flag `web.manage_enabled`): listings editor, photos, room create/edit;
+  application/booking inboxes already shipped in Phases 2–3. Publish-request flow: a
+  never-approved room asking `published` waits for Admin; after first publish, unlist/relist
+  is provider-controlled.
+- ✅ Admin: moderation panel (`/admin/moderation` — approve/decline publish requests +
+  provider-edit review feed, `Remote-User`-attributed). DMCA groundwork: takedown path exists
+  today (Admin unlist + the moderation feed); **registering the DMCA agent with the Copyright
+  Office is an ops carry-over**, not code (see below).
+- ✅ Mobile `manage` feature (approve/decline + listing edit) — done; built by a separate
+  workstream in parallel with this slice (MOBILE_CONTRACTS.md's `ManageRepository` seam).
 
 **Exit:** a church signs up, lists a room with photos, and approves an application with
-zero founder involvement (founder only clicks "publish approve" in Admin).
+zero founder involvement (founder only clicks "publish approve" in Admin). Met — remaining
+work is the DMCA agent registration (ops) and mobile release polish, not code.
 
 ## Phase 6 — Reputation & launch hardening
 
@@ -166,7 +117,7 @@ Unordered; each has a designed seam (SYSTEM_DESIGN §16) and a trigger:
 | Paid bookings — Stripe Connect, invisible commission, ToS bump | Churches/organizers actually transacting money offline through the platform |
 | Verified badges (Stripe Identity/Persona) | Providers ask for stronger organizer signals; willingness to pay |
 | Phone OTP step-up (`ISmsOtpSender` → Plivo/Twilio Verify) | Abuse/no-show metrics show SSO+application isn't enough |
-| Community vouching / org-affiliation | Maria-cold-start friction visible in funnel data |
+| Community vouching / org-affiliation | Cold-start friction visible in funnel data |
 | Area #2 (areas table, landing pages; PostGIS if geo strains) | Beachhead liquidity achieved; founder has relationships in the next area |
 | Insurance/bonds (Option B), safeguarding program | Volume + explicit demand; legal research first (PRD) |
 | API edge split / BFFs, outbox worker, managed Postgres | The specific scaling force appears (SYSTEM_DESIGN §16) |
@@ -177,7 +128,8 @@ Unordered; each has a designed seam (SYSTEM_DESIGN §16) and a trigger:
 - **Analytics:** every new surface ships with its taxonomy events; nothing important
   un-instrumented (PRD commitment).
 - **Flags:** every risky surface behind a flag; flags cleaned up once stable.
-- **Docs:** ARCHITECTURE.md updated as slices land; SYSTEM_DESIGN decision log for
-  deviations; SEO.md/ANALYTICS.md checklists ticked as built.
+- **Docs:** ARCHITECTURE.md updated as slices land; SYSTEM_DESIGN §17 for deviations;
+  SEO.md ticked as built.
 - **Cost watch:** stay under the ~$100 AUD/mo ceiling; new vendors need a line-item
-  justification (current adds: transactional email free tier, Sentry free tier, Apple $99/yr).
+  justification (current adds: Resend free tier, Apple $99/yr, DO Spaces base tier for photo
+  storage/CDN, Google Geocoding metered/rate-limited to provider address entry only).

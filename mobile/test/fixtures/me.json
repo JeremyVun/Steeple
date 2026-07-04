@@ -1,0 +1,18 @@
+{
+  "id": "99999999-9999-4999-8999-999999999999",
+  "displayName": "Priya Patel",
+  "email": "priya.patel@example.com",
+  "createdAtUtc": "2026-06-15T14:32:00Z",
+  "agreements": [
+    {
+      "docType": "tos",
+      "version": "2026-05-01",
+      "acceptedAtUtc": "2026-06-15T14:32:05Z"
+    },
+    {
+      "docType": "privacy",
+      "version": "2026-05-01",
+      "acceptedAtUtc": "2026-06-15T14:32:05Z"
+    }
+  ]
+}

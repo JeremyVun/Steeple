@@ -1,0 +1,46 @@
+import 'package:dio/dio.dart';
+
+import '../../../../core/fixtures/fixture_loader.dart';
+import '../../../../core/models/models.dart';
+import '../discovery_repository.dart';
+
+/// Fixture-backed discovery (MOBILE_CONTRACTS §11). Applies the real filter
+/// semantics (freeOnly, minCapacity, AND-matching on activities/accessibility
+/// — CONTRACTS §3) over `listing_search.json` so filter UX is exercisable
+/// offline.
+class FakeDiscoveryRepository implements DiscoveryRepository {
+  FakeDiscoveryRepository({FixtureLoader? fixtures})
+      : fixtures = fixtures ?? FixtureLoader();
+
+  final FixtureLoader fixtures;
+
+  @override
+  Future<ListingSearchResult> search(SearchQuery query, {CancelToken? cancel}) async {
+    final all = await fixtures.load('listing_search', ListingSearchResult.fromJson);
+    final items = all.items.where((room) {
+      if (query.freeOnly && !room.isFree) return false;
+      final minCapacity = query.minCapacity;
+      if (minCapacity != null && room.capacity < minCapacity) return false;
+      // AND semantics: the room must accept/provide every requested token.
+      if (!query.activities.every(room.activities.contains)) return false;
+      if (!query.accessibility.every(room.accessibility.contains)) return false;
+      return true;
+    }).toList();
+    return ListingSearchResult(
+      items: items,
+      totalCount: items.length,
+      isZeroResult: items.isEmpty,
+      appliedBounds: all.appliedBounds,
+      center: all.center,
+      page: 1,
+      pageSize: query.pageSize,
+    );
+  }
+
+  @override
+  Future<List<String>> suburbs() async => const ['Vienna', 'Oakton', 'Dunn Loring'];
+
+  @override
+  Future<GeofenceContext> geofence() =>
+      fixtures.load('geofence', GeofenceContext.fromJson);
+}

@@ -1,0 +1,92 @@
+@model InboxViewModel
+@{
+    // Shared between /inbox (organizer) and /manage/applications (provider): same list anatomy,
+    // different link target and headline emphasis (organizer sees the space; provider sees who's asking).
+    var basePath = Model.IsProviderView ? "~/manage/applications" : "~/inbox/applications";
+    var listPath = Model.IsProviderView ? "~/manage/applications" : "~/inbox";
+}
+
+<nav class="inbox-filters" aria-label="Filter by status">
+    @foreach (var option in InboxViewModel.StatusOptions)
+    {
+        var active = (Model.StatusFilter ?? "") == option.Value;
+        var href = option.Value.Length == 0
+            ? Url.Content(listPath)
+            : $"{Url.Content(listPath)}?status={option.Value}";
+        <a class="inbox-filter @(active ? "is-active" : "")" href="@href"
+           aria-current="@(active ? "page" : null)">@option.Label</a>
+    }
+</nav>
+
+@if (Model.Result.Items.Count == 0)
+{
+    <div class="empty-state">
+        <p class="empty-emoji" aria-hidden="true">🕊️</p>
+        <h2 class="empty-title">@(Model.StatusFilter is null ? "Nothing here yet" : "None with this status")</h2>
+        <p class="empty-body">
+            @if (Model.IsProviderView)
+            {
+                <text>When someone asks to use one of your spaces, their request lands here — and you'll get an email too.</text>
+            }
+            else
+            {
+                <text>Find a space you like and ask to book it — your requests and the venue's replies live here.</text>
+            }
+        </p>
+        @if (!Model.IsProviderView)
+        {
+            <a class="btn btn-ghost" href="~/">Browse spaces</a>
+        }
+    </div>
+}
+else
+{
+    <ul class="inbox-list" role="list">
+        @foreach (var app in Model.Result.Items)
+        {
+            <li>
+                <a class="inbox-row" href="@Url.Content($"{basePath}/{app.Id}")">
+                    <div class="inbox-row-main">
+                        <p class="inbox-row-title">
+                            @if (Model.IsProviderView)
+                            {
+                                <strong>@app.Organizer.DisplayName</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @app.RoomName
+                            }
+                            else
+                            {
+                                <strong>@app.RoomName</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @app.VenueName
+                            }
+                        </p>
+                        <p class="inbox-row-meta">
+                            @DiscoveryViewModel.Humanize(app.ActivityType) · @app.GroupSize people ·
+                            @ApplicationDisplay.DescribeSchedule(app.Schedule)
+                        </p>
+                    </div>
+                    <div class="inbox-row-side">
+                        <partial name="_StatusChip" model="app.Status" />
+                        <span class="inbox-row-when">
+                            @ApplicationDisplay.RelativeTime(app.CreatedAtUtc)@(app.MessageCount > 0 ? $" · {app.MessageCount} message{(app.MessageCount == 1 ? "" : "s")}" : "")
+                        </span>
+                    </div>
+                </a>
+            </li>
+        }
+    </ul>
+
+    @if (Model.Result.TotalCount > Model.Result.PageSize)
+    {
+        var totalPages = (Model.Result.TotalCount + Model.Result.PageSize - 1) / Model.Result.PageSize;
+        var statusQs = Model.StatusFilter is null ? "" : $"&status={Model.StatusFilter}";
+        <nav class="inbox-paging" aria-label="Pages">
+            @if (Model.Result.Page > 1)
+            {
+                <a class="btn btn-ghost btn-sm" href="@($"{Url.Content(listPath)}?page={Model.Result.Page - 1}{statusQs}")">← Newer</a>
+            }
+            <span class="inbox-paging-label">Page @Model.Result.Page of @totalPages</span>
+            @if (Model.Result.Page < totalPages)
+            {
+                <a class="btn btn-ghost btn-sm" href="@($"{Url.Content(listPath)}?page={Model.Result.Page + 1}{statusQs}")">Older →</a>
+            }
+        </nav>
+    }
+}

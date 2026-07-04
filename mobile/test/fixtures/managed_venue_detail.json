@@ -1,0 +1,47 @@
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "name": "Grace Community Church",
+  "slug": "grace-community-church",
+  "description": "A welcoming, spirit-filled church in the heart of Vienna offering our fellowship hall and annex to the community when they're not in use.",
+  "venueType": "church",
+  "addressLine": "217 Center St S",
+  "suburb": "Vienna",
+  "postcode": "22180",
+  "contactEmail": "spaces@gracecommunityvienna.org",
+  "parkingInfo": "Free lot behind the church, 40 spaces.",
+  "transitInfo": "Metrobus 1B stops at Church St & Center St, 2 min walk.",
+  "latitude": 38.9012,
+  "longitude": -77.2653,
+  "timezone": "America/New_York",
+  "isIdentityVerified": true,
+  "rooms": [
+    {
+      "id": "22222222-2222-4222-8222-222222222222",
+      "name": "Fellowship Hall",
+      "slug": "fellowship-hall",
+      "status": "published",
+      "publishRequestedAtUtc": null,
+      "capacity": 80,
+      "isFree": false,
+      "pricePerHour": 45.0,
+      "currency": "USD",
+      "primaryPhotoUrl": "https://cdn.steeple.app/rooms/fellowship-hall/primary.jpg",
+      "photoCount": 2,
+      "updatedAtUtc": "2026-06-20T14:00:00Z"
+    },
+    {
+      "id": "33333333-3333-4333-8333-333333333333",
+      "name": "Sunday School Annex",
+      "slug": "sunday-school-annex",
+      "status": "draft",
+      "publishRequestedAtUtc": "2026-07-02T10:00:00Z",
+      "capacity": 20,
+      "isFree": true,
+      "pricePerHour": null,
+      "currency": "USD",
+      "primaryPhotoUrl": null,
+      "photoCount": 0,
+      "updatedAtUtc": "2026-07-02T10:00:00Z"
+    }
+  ]
+}

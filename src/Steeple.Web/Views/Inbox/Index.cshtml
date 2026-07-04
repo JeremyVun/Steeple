@@ -1,0 +1,16 @@
+@model InboxViewModel
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Your requests</h1>
+        @if (Model.IsProvider)
+        {
+            <nav class="inbox-tabs" aria-label="Inbox sections">
+                <a class="inbox-tab is-active" href="~/inbox" aria-current="page">Asking</a>
+                <a class="inbox-tab" href="~/manage/applications">Hosting</a>
+            </nav>
+        }
+    </header>
+
+    <partial name="_ApplicationList" model="Model" />
+</section>

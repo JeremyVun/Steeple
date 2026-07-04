@@ -1,0 +1,52 @@
+@model RoomFormViewModel
+@* Shared room fields for create + edit. The parent form supplies the antiforgery token. *@
+
+@if (Model.Error is not null)
+{
+    <p class="auth-error" role="alert">@Model.Error</p>
+}
+
+<div class="form-field">
+    <label class="field-label" for="room-name">Room name</label>
+    <input class="form-input" id="room-name" name="Name" value="@Model.Name" required maxlength="200"
+           placeholder="Fellowship Hall" />
+</div>
+
+<div class="form-field form-field-hero">
+    <label class="field-label" for="room-description">Describe the room</label>
+    <textarea class="form-input" id="room-description" name="Description" rows="5" required maxlength="4000"
+              placeholder="A bright open hall with a stage, kitchen access, and seating for community dinners…">@Model.Description</textarea>
+    <p class="field-help">What's the light like? What does it work well for? This is what organizers read first.</p>
+</div>
+
+<div class="form-row">
+    <div class="form-field">
+        <label class="field-label" for="room-capacity">Capacity</label>
+        <input class="form-input form-input-sm" id="room-capacity" name="Capacity" type="number" min="1" max="10000"
+               value="@(Model.Capacity?.ToString() ?? "")" required placeholder="60" />
+        <p class="field-help">How many people fit comfortably.</p>
+    </div>
+    <div class="form-field">
+        <label class="field-label" for="room-price">Price per hour</label>
+        <input class="form-input form-input-sm" id="room-price" name="PricePerHour" inputmode="decimal"
+               value="@Model.PricePerHour" placeholder="0" />
+        <p class="field-help">Leave blank or 0 for free — free listings get a badge organizers love.</p>
+    </div>
+</div>
+
+<partial name="_FlagGroupFields" model="@(new FlagGroupViewModel(
+    "Open to", "Activities", RoomFormViewModel.ActivityOptions, Model.Activities,
+    "Pick everything you'd welcome — organizers filter by these."))" />
+
+<partial name="_FlagGroupFields" model="@(new FlagGroupViewModel(
+    "Amenities", "Amenities", RoomFormViewModel.AmenityOptions, Model.Amenities, null))" />
+
+<partial name="_FlagGroupFields" model="@(new FlagGroupViewModel(
+    "Accessibility", "Accessibility", RoomFormViewModel.AccessibilityOptions, Model.Accessibility,
+    "Only tick what's genuinely there — people plan around these."))" />
+
+<div class="form-field">
+    <label class="field-label" for="room-rules">House rules <span class="field-optional">optional</span></label>
+    <textarea class="form-input" id="room-rules" name="HouseRules" rows="3" maxlength="4000"
+              placeholder="No alcohol. Clean up before departure. Amplified music until 9pm…">@Model.HouseRules</textarea>
+</div>

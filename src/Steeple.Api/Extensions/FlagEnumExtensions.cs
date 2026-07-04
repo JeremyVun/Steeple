@@ -48,4 +48,52 @@ public static class FlagEnumExtensions
 
         return char.ToLowerInvariant(name[0]) + name[1..];
     }
+
+    /// <summary>
+    /// Parses one camelCase wire token back to its enum member (the inverse of
+    /// <see cref="ToCamelCaseToken"/>); <c>null</c> when the token is unknown.
+    /// </summary>
+    public static TEnum? ParseToken<TEnum>(string? token) where TEnum : struct, Enum
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        foreach (var member in Enum.GetValues<TEnum>())
+        {
+            if (string.Equals(ToCamelCaseToken(member.ToString()), token.Trim(), StringComparison.Ordinal))
+            {
+                return member;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Combines a list of camelCase wire tokens into a flags value (manage write inputs).
+    /// Unknown tokens land in <paramref name="unknown"/> so callers can reject them —
+    /// silently dropping a provider's amenity would corrupt the listing.
+    /// </summary>
+    public static TEnum CombineTokens<TEnum>(IEnumerable<string> tokens, out List<string> unknown)
+        where TEnum : struct, Enum
+    {
+        long acc = 0;
+        unknown = [];
+
+        foreach (var token in tokens)
+        {
+            if (ParseToken<TEnum>(token) is { } member)
+            {
+                acc |= Convert.ToInt64(member);
+            }
+            else if (!string.IsNullOrWhiteSpace(token))
+            {
+                unknown.Add(token);
+            }
+        }
+
+        return (TEnum)Enum.ToObject(typeof(TEnum), acc);
+    }
 }

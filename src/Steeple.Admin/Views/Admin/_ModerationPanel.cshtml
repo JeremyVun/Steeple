@@ -1,0 +1,121 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    var moderationError = ViewData["ModerationError"] as string;
+    var queue = Model.Moderation;
+}
+
+<div id="admin-moderation-panel" class="admin-stack">
+    @if (moderationError is not null)
+    {
+        <p class="admin-error" role="alert">@moderationError</p>
+    }
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-publish-requests-heading">
+        <h3 id="admin-publish-requests-heading">Publish requests</h3>
+        @if (queue.PublishRequests.Count == 0)
+        {
+            <p class="admin-empty">No rooms are waiting for a publish decision.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Listing</th>
+                            <th>Area</th>
+                            <th>Capacity</th>
+                            <th>Price</th>
+                            <th>Photos</th>
+                            <th>Requested</th>
+                            <th>Decision</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var request in queue.PublishRequests)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@request.Venue</strong>
+                                <span>@request.Room</span>
+                                <details class="admin-preview">
+                                    <summary>Preview</summary>
+                                    <p class="admin-preview-description">@request.Description</p>
+                                    @if (request.PhotoThumbUrls.Count > 0)
+                                    {
+                                        <div class="admin-preview-photos">
+                                            @foreach (var thumb in request.PhotoThumbUrls)
+                                            {
+                                                <img src="@thumb" alt="" loading="lazy" />
+                                            }
+                                        </div>
+                                    }
+                                </details>
+                            </td>
+                            <td>@request.Suburb</td>
+                            <td>@request.Capacity</td>
+                            <td>@request.Price</td>
+                            <td>@(request.PhotoCount == 0 ? "none ⚠" : request.PhotoCount.ToString())</td>
+                            <td>@request.RequestedAt.ToString("MMM d, HH:mm")</td>
+                            <td>
+                                <form class="admin-inline-form"
+                                      hx-post="@Url.Content($"~/admin/moderation/{request.RoomId}/decide")"
+                                      hx-target="#admin-moderation-panel" hx-swap="outerHTML">
+                                    <input type="text" name="note" placeholder="Note to the church (optional)"
+                                           aria-label="Note to the church for @request.Venue @request.Room" />
+                                    <button type="submit" name="decision" value="approve">Approve &amp; publish</button>
+                                    <button type="submit" name="decision" value="decline" class="admin-link-danger">Decline</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-edited-listings-heading">
+        <h3 id="admin-edited-listings-heading">Edited live listings</h3>
+        <p class="admin-hint">Provider edits apply immediately — this feed is the after-the-fact quality check. Bad edits: unlist the room from Listings, then mark reviewed.</p>
+        @if (queue.EditedListings.Count == 0)
+        {
+            <p class="admin-empty">Nothing has been edited since the last review.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>What changed</th>
+                            <th>Edited</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var edited in queue.EditedListings)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@edited.Venue</strong>
+                                <span>@(edited.IsVenue ? "venue details" : edited.Room)</span>
+                            </td>
+                            <td>@edited.EditedAt.ToString("MMM d, HH:mm")</td>
+                            <td>
+                                <form class="admin-inline-form"
+                                      hx-post="@Url.Content("~/admin/moderation/reviewed")"
+                                      hx-target="#admin-moderation-panel" hx-swap="outerHTML">
+                                    <input type="hidden" name="id" value="@edited.Id" />
+                                    <input type="hidden" name="kind" value="@(edited.IsVenue ? "venue" : "room")" />
+                                    <button type="submit">Mark reviewed</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

@@ -1,0 +1,73 @@
+{
+  "items": [
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee04",
+      "type": "renewalDue",
+      "createdAtUtc": "2026-07-03T08:00:00Z",
+      "readAt": null,
+      "payload": {
+        "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "roomId": "33333333-3333-4333-8333-333333333333",
+        "roomName": "Sunday School Annex",
+        "venueName": "Grace Community Church",
+        "venueSlug": "grace-community-church",
+        "roomSlug": "sunday-school-annex",
+        "organizerName": "Priya Patel",
+        "status": "confirmed",
+        "deepLink": "/bookings/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+      }
+    },
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03",
+      "type": "bookingCancelled",
+      "createdAtUtc": "2026-07-02T19:10:00Z",
+      "readAt": "2026-07-02T20:00:00Z",
+      "payload": {
+        "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "roomId": "33333333-3333-4333-8333-333333333333",
+        "roomName": "Sunday School Annex",
+        "venueName": "Grace Community Church",
+        "venueSlug": "grace-community-church",
+        "roomSlug": "sunday-school-annex",
+        "organizerName": "Priya Patel",
+        "status": "cancelled",
+        "deepLink": "/bookings/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+      }
+    },
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02",
+      "type": "applicationApproved",
+      "createdAtUtc": "2026-07-02T18:40:00Z",
+      "readAt": "2026-07-02T18:45:00Z",
+      "payload": {
+        "applicationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "roomId": "33333333-3333-4333-8333-333333333333",
+        "roomName": "Sunday School Annex",
+        "venueName": "Grace Community Church",
+        "venueSlug": "grace-community-church",
+        "roomSlug": "sunday-school-annex",
+        "organizerName": "Priya Patel",
+        "status": "approved",
+        "deepLink": "/inbox/applications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      }
+    },
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01",
+      "type": "applicationMessage",
+      "createdAtUtc": "2026-07-01T20:15:00Z",
+      "readAt": null,
+      "payload": {
+        "applicationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "roomId": "33333333-3333-4333-8333-333333333333",
+        "roomName": "Sunday School Annex",
+        "venueName": "Grace Community Church",
+        "venueSlug": "grace-community-church",
+        "roomSlug": "sunday-school-annex",
+        "organizerName": "Priya Patel",
+        "status": "pending",
+        "deepLink": "/inbox/applications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+      }
+    }
+  ],
+  "nextCursor": "opaque-cursor-2026-07-01T20:15:00Z"
+}

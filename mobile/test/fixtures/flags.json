@@ -1,0 +1,5 @@
+{
+  "mobile.apply_enabled": true,
+  "mobile.manage_enabled": false,
+  "mobile.force_upgrade": false
+}

@@ -1,0 +1,175 @@
+@model ApplyViewModel
+@{
+    var room = Model.Room;
+    var venue = room.Venue;
+    var spaceUrl = Url.Content($"~/space/{venue.Slug}/{room.RoomSlug}");
+    var primaryPhoto = room.Photos.OrderByDescending(p => p.IsPrimary).ThenBy(p => p.SortOrder).FirstOrDefault();
+    var form = Model.Form;
+    var isWeekly = form.Frequency == "recurringWeekly";
+}
+
+<section class="apply-page wrap">
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+        <a href="@spaceUrl">← Back to @room.RoomName</a>
+    </nav>
+
+    <div class="apply-grid">
+        <div class="apply-main">
+            <header class="apply-head">
+                <p class="content-eyebrow">Ask to book</p>
+                <h1>@room.RoomName</h1>
+                <p class="apply-head-venue">@venue.Name · @venue.Suburb</p>
+            </header>
+
+            @if (Model.Restored)
+            {
+                <p class="apply-restored" role="status">
+                    Welcome back — your request is still here. Give it a once-over and send it.
+                </p>
+            }
+
+            @if (Model.Error is not null)
+            {
+                <p class="auth-error" role="alert">@Model.Error</p>
+            }
+
+            @* No action: posts back to this same URL (keeps the reverse-proxy PathBase intact). *@
+            <form method="post" class="apply-form" id="apply-form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="IdempotencyKey" value="@form.IdempotencyKey" />
+
+                <div class="form-field">
+                    <label class="field-label" for="apply-activity">What kind of activity</label>
+                    <select class="form-input" id="apply-activity" name="ActivityType" required>
+                        @foreach (var option in Model.ActivityOptions)
+                        {
+                            <option value="@option.Value" selected="@(option.Value == form.ActivityType)">@option.Label</option>
+                        }
+                    </select>
+                    <p class="field-help">This space welcomes: @string.Join(", ", Model.ActivityOptions.Select(o => o.Label.ToLowerInvariant())).</p>
+                </div>
+
+                <div class="form-field">
+                    <label class="field-label" for="apply-groupsize">How many people</label>
+                    <input class="form-input form-input-sm" id="apply-groupsize" name="GroupSize" type="number"
+                           min="1" max="1000" value="@form.GroupSize" required />
+                    <p class="field-help">@room.RoomName seats up to @room.Capacity.</p>
+                </div>
+
+                <fieldset class="form-field form-fieldset">
+                    <legend class="field-label">How often</legend>
+                    <div class="freq-toggle" role="radiogroup">
+                        <label class="toggle-pill">
+                            <input type="radio" name="Frequency" value="oneOff" checked="@(!isWeekly)"
+                                   data-freq-radio /> Just once
+                        </label>
+                        <label class="toggle-pill">
+                            <input type="radio" name="Frequency" value="recurringWeekly" checked="@isWeekly"
+                                   data-freq-radio /> Weekly
+                        </label>
+                    </div>
+                </fieldset>
+
+                <div class="form-row">
+                    <div class="form-field" data-when-freq="oneOff recurringWeekly">
+                        <label class="field-label" for="apply-startdate" data-label-oneoff="Date" data-label-weekly="First date">@(isWeekly ? "First date" : "Date")</label>
+                        <input class="form-input" id="apply-startdate" name="StartDate" type="date"
+                               value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required />
+                    </div>
+                    <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
+                        <label class="field-label" for="apply-enddate">Until</label>
+                        <input class="form-input" id="apply-enddate" name="EndDate" type="date"
+                               value="@(form.EndDate?.ToString("yyyy-MM-dd"))" />
+                        <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
+                    </div>
+                    <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
+                        <label class="field-label" for="apply-dayofweek">Day of the week</label>
+                        <select class="form-input" id="apply-dayofweek" name="DayOfWeek">
+                            @foreach (var option in ApplyViewModel.DayOptions)
+                            {
+                                <option value="@option.Value" selected="@(option.Value == form.DayOfWeek)">@option.Label</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-field">
+                        <label class="field-label" for="apply-starttime">From</label>
+                        <input class="form-input" id="apply-starttime" name="StartTime" type="time"
+                               value="@form.StartTime" required />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label" for="apply-endtime">To</label>
+                        <input class="form-input" id="apply-endtime" name="EndTime" type="time"
+                               value="@form.EndTime" required />
+                    </div>
+                </div>
+                <p class="field-help">Times are local to @venue.Name.</p>
+
+                <div class="form-field form-field-hero">
+                    <label class="field-label" for="apply-intent">Tell @venue.Name what you're planning</label>
+                    <textarea class="form-input apply-intent" id="apply-intent" name="IntentText" rows="6"
+                              maxlength="2000" required
+                              placeholder="Toddler playgroup, about 15 of us, Tuesday mornings. We bring our own mats and snacks and leave the room as we found it.">@form.IntentText</textarea>
+                    <p class="field-help">This is what they'll decide on — a couple of friendly sentences go a long way.</p>
+                </div>
+
+                @if (Model.TurnstileSiteKey.Length > 0)
+                {
+                    <div class="cf-turnstile"
+                         data-sitekey="@Model.TurnstileSiteKey"
+                         data-callback="steepleApplyTurnstileDone"
+                         data-appearance="interaction-only"></div>
+                }
+                <input type="hidden" name="TurnstileToken" class="turnstile-token" value="" />
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg">Send request</button>
+
+                @if (User.Identity?.IsAuthenticated != true)
+                {
+                    <p class="apply-gate-note">
+                        You'll sign in before this sends — so @venue.Name knows who's asking. Your words will be kept.
+                    </p>
+                }
+                <p class="apply-legal-note">
+                    Sending a request doesn't book the space — @venue.Name decides. No payment is taken through @Brand.Name.
+                </p>
+            </form>
+        </div>
+
+        <aside class="apply-aside" aria-label="The space you're asking about">
+            <div class="apply-summary">
+                @if (primaryPhoto is not null)
+                {
+                    <img class="apply-summary-photo" src="@primaryPhoto.Url" alt="@(primaryPhoto.Caption ?? room.RoomName)"
+                         width="800" height="600" loading="lazy" decoding="async" />
+                }
+                <div class="apply-summary-body">
+                    <p class="apply-summary-title">@room.RoomName</p>
+                    <p class="apply-summary-venue">@venue.Name</p>
+                    <p class="apply-summary-meta">
+                        @if (room.IsFree)
+                        {
+                            <span class="badge badge-free">Free to use</span>
+                        }
+                        else if (room.PricePerHour is decimal price)
+                        {
+                            <span class="badge badge-price">$@price.ToString("0.##")/hr</span>
+                        }
+                        <span class="keyfact">Up to @room.Capacity people</span>
+                    </p>
+                    <a class="apply-summary-link" href="@spaceUrl">View the full listing</a>
+                </div>
+            </div>
+        </aside>
+    </div>
+</section>
+
+@section scripts {
+    <script src="~/js/apply.js" asp-append-version="true"></script>
+    @if (Model.TurnstileSiteKey.Length > 0)
+    {
+        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    }
+}

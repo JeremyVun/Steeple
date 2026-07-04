@@ -1,0 +1,22 @@
+@model RoomFormViewModel
+
+<section class="wrap manage-form-page">
+    <header class="manage-form-head">
+        <p class="content-eyebrow">@Model.VenueName</p>
+        <h1>Add a room</h1>
+        <p class="content-lead">
+            The room is what organizers find and book. It starts as a draft — add photos next,
+            then request publish when it's ready.
+        </p>
+    </header>
+
+    @* Posts back to the same URL so the reverse-proxy PathBase survives. *@
+    <form method="post" class="manage-form">
+        @Html.AntiForgeryToken()
+        <partial name="_RoomFields" model="Model" />
+        <div class="form-field manage-form-actions">
+            <button class="btn btn-primary" type="submit">Save draft</button>
+            <a class="btn btn-ghost" href="~/manage/venues/@Model.VenueId">Cancel</a>
+        </div>
+    </form>
+</section>

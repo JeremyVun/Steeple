@@ -104,7 +104,10 @@ public class RoomRepository : IRoomRepository
             .Where(r => r.Status == RoomStatus.Published)
             .OrderBy(r => r.Venue!.Slug)
             .ThenBy(r => r.Slug)
-            .Select(r => new SitemapEntry(r.Venue!.Slug, r.Slug, r.CreatedAtUtc))
+            // The listing page renders venue fields too, so lastmod is whichever changed last.
+            .Select(r => new SitemapEntry(
+                r.Venue!.Slug, r.Slug,
+                r.UpdatedAtUtc > r.Venue!.UpdatedAtUtc ? r.UpdatedAtUtc : r.Venue!.UpdatedAtUtc))
             .ToListAsync(ct);
     }
 

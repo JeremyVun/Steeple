@@ -1,0 +1,22 @@
+@model VenueFormViewModel
+
+<section class="wrap manage-form-page">
+    <header class="manage-form-head">
+        <p class="content-eyebrow">Become a host</p>
+        <h1>List your venue</h1>
+        <p class="content-lead">
+            Start with the place itself — you'll add rooms and photos next. Nothing goes live
+            until you ask us to publish it.
+        </p>
+    </header>
+
+    @* Posts back to the same URL so the reverse-proxy PathBase survives. *@
+    <form method="post" class="manage-form">
+        @Html.AntiForgeryToken()
+        <partial name="_VenueFields" model="Model" />
+        <div class="form-field manage-form-actions">
+            <button class="btn btn-primary" type="submit">Save and add rooms</button>
+            <a class="btn btn-ghost" href="~/manage">Cancel</a>
+        </div>
+    </form>
+</section>

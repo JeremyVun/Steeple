@@ -1,0 +1,18 @@
+@model BookingsViewModel
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Bookings at your spaces</h1>
+        <nav class="inbox-tabs" aria-label="Booking sections">
+            <a class="inbox-tab" href="~/bookings">Attending</a>
+            <a class="inbox-tab is-active" href="~/manage/bookings" aria-current="page">Hosting</a>
+        </nav>
+    </header>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    <partial name="_BookingList" model="Model" />
+</section>

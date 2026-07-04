@@ -1,3 +1,11 @@
 .env
+.secrets.env
 obj/
 bin/
+build/
+.idea/
+.dart_tool/
+.flutter-plugins-dependencies
+
+# Local-disk media store (dev-only; Spaces in prod)
+media-store/

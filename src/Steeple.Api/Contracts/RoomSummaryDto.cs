@@ -3,9 +3,11 @@ namespace Steeple.Api.Contracts;
 /// A room projected as a search-result card.
 /// </summary>
 /// <param name="RoomId">Room identifier.</param>
+/// <param name="VenueId">Owning venue identifier.</param>
 /// <param name="RoomSlug">URL-friendly room identifier.</param>
 /// <param name="VenueSlug">URL-friendly venue identifier.</param>
 /// <param name="VenueName">Owning venue name.</param>
+/// <param name="Suburb">Venue suburb, for card display.</param>
 /// <param name="RoomName">Room display name.</param>
 /// <param name="PrimaryPhotoUrl">URL of the primary photo, if any.</param>
 /// <param name="Capacity">Maximum occupancy.</param>
@@ -19,9 +21,11 @@ namespace Steeple.Api.Contracts;
 /// <param name="DistanceMeters">Distance from the search center in metres, if computed.</param>
 public record RoomSummaryDto(
     Guid RoomId,
+    Guid VenueId,
     string RoomSlug,
     string VenueSlug,
     string VenueName,
+    string Suburb,
     string RoomName,
     string? PrimaryPhotoUrl,
     int Capacity,

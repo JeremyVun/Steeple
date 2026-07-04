@@ -38,6 +38,52 @@ public sealed record AdminBookingRow(
     string Status,
     string Intent);
 
+public sealed record AdminApplicationRow(
+    Guid Id,
+    string Venue,
+    string Room,
+    string Organizer,
+    string Activity,
+    int GroupSize,
+    string When,
+    string Status,
+    int Messages,
+    DateTimeOffset CreatedAt);
+
+/// <summary>A room awaiting the founder's publish decision (Phase 5 moderation gate).</summary>
+public sealed record AdminPublishRequestRow(
+    Guid RoomId,
+    string Venue,
+    string Room,
+    string Suburb,
+    int Capacity,
+    string Price,
+    int PhotoCount,
+    DateTimeOffset RequestedAt,
+    string Description,
+    IReadOnlyList<string> PhotoThumbUrls);
+
+/// <summary>A live listing (room) or venue edited by its provider since the last operator review.</summary>
+public sealed record AdminEditedListingRow(
+    Guid Id,
+    bool IsVenue,
+    string Venue,
+    string? Room,
+    DateTimeOffset EditedAt);
+
+public sealed record AdminModerationViewModel(
+    IReadOnlyList<AdminPublishRequestRow> PublishRequests,
+    IReadOnlyList<AdminEditedListingRow> EditedListings);
+
+public sealed record AdminVenueManagerRow(
+    Guid Id,
+    string Venue,
+    string UserName,
+    string UserEmail,
+    DateTimeOffset CreatedAt);
+
+public sealed record AdminVenueOption(Guid Id, string Name);
+
 public sealed record AdminAnalyticsRow(
     DateTimeOffset At,
     string Event,
@@ -73,6 +119,10 @@ public sealed record AdminWorkspaceViewModel(
     IReadOnlyList<AdminUserRow> Users,
     IReadOnlyList<AdminListingRow> Listings,
     IReadOnlyList<AdminBookingRow> Bookings,
+    IReadOnlyList<AdminApplicationRow> Applications,
+    AdminModerationViewModel Moderation,
+    IReadOnlyList<AdminVenueManagerRow> VenueManagers,
+    IReadOnlyList<AdminVenueOption> VenueOptions,
     IReadOnlyList<AdminAnalyticsRow> Analytics,
     IReadOnlyList<AdminFeatureFlagRow> FeatureFlags,
     AdminAccountViewModel Account);

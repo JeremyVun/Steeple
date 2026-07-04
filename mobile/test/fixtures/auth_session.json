@@ -1,0 +1,11 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake-access-token-payload.signature",
+  "refreshToken": "rft_9f8c2a3b6d4e4f7a9b1c2d3e4f5a6b7c",
+  "user": {
+    "id": "99999999-9999-4999-8999-999999999999",
+    "displayName": "Priya Patel",
+    "email": "priya.patel@example.com",
+    "createdAtUtc": "2026-06-15T14:32:00Z"
+  },
+  "isNewUser": false
+}

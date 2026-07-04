@@ -25,7 +25,7 @@ anonymous; sign-in happens only at apply. v1 app scope (organizer-first):
 | Concern | Choice | Why (and what was rejected) |
 |---|---|---|
 | Framework | Flutter stable, Dart 3 | PRD-decided; Impeller default kills shader jank |
-| State | **Riverpod 3** (`riverpod_annotation` codegen) | Compile-safe DI + async caching primitives (`AsyncNotifier`) suit read-heavy screens; far less ceremony than Bloc for a solo dev; testable overrides |
+| State | **Riverpod 3** (plain `Notifier`/`AsyncNotifier`, **no codegen**) | Compile-safe DI + async caching primitives (`AsyncNotifier`) suit read-heavy screens; far less ceremony than Bloc for a solo dev; testable overrides. *Deviation (2026-07-04): `riverpod_generator` was dropped — its analyzer pin conflicts with the current Flutter SDK + `json_serializable`; the plain Riverpod 3 API is fully supported and one less codegen chain. Family notifiers take their arg via constructor (see any `providers.dart`).* |
 | Navigation | **go_router** (+ typed routes) | Deep links are load-bearing (universal links, push taps); official-adjacent, declarative redirects for the auth gate |
 | HTTP | **dio** | Interceptors for auth refresh, retry/backoff, logging |
 | Models | **freezed + json_serializable** | Immutable DTOs mirroring `CONTRACTS.md`; unions for sealed states (e.g. `ApplicationStatus`) |
@@ -161,7 +161,7 @@ Rules that keep the budgets:
   start apply (mock SSO) — run on iOS simulator + Android emulator before release.
 - **Golden tests:** listing card + detail header only (high-churn visuals); don't
   golden-test everything.
-- **CI (later, per CICD.md ethos):** `flutter analyze` + `flutter test` on every PR
+- **CI (later):** `flutter analyze` + `flutter test` on every PR
   touching `/mobile`; store builds stay manual/laptop (`flutter build ipa/appbundle`)
   until release cadence justifies Fastlane.
 

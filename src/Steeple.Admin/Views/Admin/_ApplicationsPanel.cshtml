@@ -1,0 +1,69 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+
+@* Read + manual state repair only (ROADMAP Phase 2): decisions belong to venue managers on the
+   web surface; this override exists for phone-call decisions and stuck rows. No notifications fire. *@
+<div id="admin-applications-panel" class="admin-stack">
+    <form hx-post="@Url.Content("~/admin/applications/status")" hx-target="#admin-applications-panel" hx-swap="outerHTML">
+        <div class="admin-bulkbar">
+            <label class="admin-bulkbar-all">
+                <input type="checkbox" class="admin-select-all" onclick="hsBulkAll(this)" aria-label="Select all applications" />
+                Select all
+            </label>
+            <span class="admin-bulkbar-count" data-selected-count>0 selected</span>
+            <span class="admin-bulkbar-apply">
+                <label class="sr-only" for="admin-app-status">Status to apply</label>
+                <select id="admin-app-status" name="status">
+                    @foreach (var status in new[] { "Pending", "Needs info", "Approved", "Declined", "Withdrawn", "Expired" })
+                    {
+                        <option value="@status">@status</option>
+                    }
+                </select>
+                <button type="submit" disabled>Force status</button>
+            </span>
+        </div>
+
+        @if (Model.Applications.Count == 0)
+        {
+            <p class="admin-empty">No applications yet — they appear here the moment an organizer asks to book.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th class="admin-col-check"><span class="sr-only">Select</span></th>
+                            <th>Space</th>
+                            <th>Organizer</th>
+                            <th>Intent</th>
+                            <th>When</th>
+                            <th>Thread</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var app in Model.Applications)
+                    {
+                        <tr>
+                            <td class="admin-col-check">
+                                <input type="checkbox" class="admin-row-check" name="ids" value="@app.Id"
+                                       onclick="hsBulkRow(this)"
+                                       aria-label="Select application from @app.Organizer for @app.Room" />
+                            </td>
+                            <td>
+                                <strong>@app.Venue</strong>
+                                <span>@app.Room</span>
+                            </td>
+                            <td>@app.Organizer</td>
+                            <td>@app.Activity · @app.GroupSize ppl</td>
+                            <td>@app.When</td>
+                            <td>@(app.Messages == 0 ? "—" : $"{app.Messages} msg")</td>
+                            <td><span class="admin-status">@app.Status</span></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </form>
+</div>

@@ -120,10 +120,13 @@ class SignedIn extends SessionState { final UserProfile user; }
 
 abstract class SessionManager {
   ValueListenable<SessionState> get state;      // exposed as sessionProvider
+  Future<void> restore();                       // storage → state at bootstrap (resolves SessionUnknown)
   Future<SignInResult> signIn(SsoProvider provider);   // native sheet → POST /auth/sessions
-  Future<void> signOut();                       // revoke + unregister device + wipe storage
+  Future<void> signOut();                       // hooks (device unregister) → revoke → wipe storage
   Future<void> forceSignOut();                  // token_reuse/401 path — no network calls
   Future<String?> validAccessToken();           // used by the auth interceptor only
+  Future<bool> refreshAfter401();               // single-flight; failure forces sign-out
+  void addSignOutHandler(Future<void> Function() handler); // runs during signOut while still authed
 }
 ```
 
@@ -136,6 +139,8 @@ draft lives in a provider keyed outside the auth state).
 
 `StatefulShellRoute` with 4 tabs. Route **names are the contract** — features navigate by
 name (`context.goNamed(RouteNames.listing, pathParameters: …)`), never by literal path.
+`RouteNames` + the deep-link sanitizer live in `core/navigation/route_names.dart` so
+features can import them without touching `app/router.dart` (§2 dependency contract).
 
 | Name | Path | Tab | Auth | Notes |
 |---|---|---|---|---|
@@ -149,11 +154,16 @@ name (`context.goNamed(RouteNames.listing, pathParameters: …)`), never by lite
 | `profile` | `/profile` | Profile | – | Signed-out: sign-in CTA + legal links; signed-in: account, agreements, delete |
 | `signIn` | `/signin` | (modal) | – | Query `from` = post-auth redirect |
 | `forceUpgrade` | `/upgrade` | (blocking) | – | Unskippable when `mobile.force_upgrade` is on |
+| `manage` | `/manage` | (pushed, root navigator) | ✔ | Provider dashboard (Phase 5); entry point is the "Your spaces" section on `profile`, behind `mobile.manage_enabled` |
+| `manageRequest` | `/manage/requests/:id` | (pushed, root navigator) | ✔ | Approve/decline one application |
+| `manageRoom` | `/manage/rooms/:id` | (pushed, root navigator) | ✔ | Basic room edit + publish-state actions |
 
 Redirect logic (in order): `forceUpgrade` flag → `/upgrade`; guarded route while
 `SignedOut` → `/signin?from=…`; while `SessionUnknown` → hold on splash (must resolve
 under the cold-start budget). Unknown/out-of-area deep links → `/explore` (never an
-error screen).
+error screen). `manage*` routes are guarded the same way `inbox`/`bookings` are (path
+prefix match in the redirect) — they're not a fifth tab, just a top-level route pushed
+off `profile`.
 
 **Deep-link registry** (universal links and FCM `deepLink` values — CONTRACTS §9): the
 path-only forms of `listing`, `applicationThread`, `bookingDetail`, `inbox`. Anything
@@ -200,9 +210,18 @@ abstract class BookingsRepository {
 }
 // features/profile/data
 abstract class ProfileRepository {
-  Future<UserProfile> me();                                              // GET /me
+  Future<MeResponse> me();                                               // GET /me (profile + agreements)
   Future<void> acceptAgreement(String docType, String version);          // POST /me/agreements
   Future<void> deleteAccount();                                          // DELETE /me
+}
+// features/manage/data (provider self-service, Phase 5)
+abstract class ManageRepository {
+  Future<List<ManagedVenue>> venues();                                   // GET /manage/venues
+  Future<ManagedVenueDetail> venue(String id);                           // GET /manage/venues/{id}
+  Future<ManagedRoom> room(String id);                                   // GET /manage/rooms/{id}
+  Future<ManagedRoom> saveRoom(String id, ManagedRoomPatch patch);       // PATCH /manage/rooms/{id}
+  Future<Paged<Application>> applications({String? status, int page = 1}); // GET /manage/applications
+  Future<Application> decide(String id, {required bool approve, String? message}); // POST /applications/{id}/decision
 }
 // core/push
 abstract class DevicesRepository {
@@ -216,7 +235,7 @@ feature/agent may touch; everything else is private):
 
 | Feature | Exposes | Type / semantics |
 |---|---|---|
-| core | `envProvider`, `dioProvider`, `sessionProvider`, `flagsProvider`, `analyticsProvider`, `connectivityProvider` | Session is `SessionState`; flags is snapshot map |
+| core | `envProvider`, `dioProvider`, `apiClientProvider`, `sessionProvider`, `sessionManagerProvider`, `flagsProvider`, `analyticsProvider`, `connectivityProvider`/`isOnlineProvider`, `pushServiceProvider` | Session is `SessionState`; flags is snapshot map; repos inject `ApiClient` |
 | discovery | `searchFiltersProvider` | `Notifier<SearchFilters>` — the one filter state |
 | | `searchResultsProvider` | `AsyncNotifier<ListingSearchResult>`; debounces 350ms, cancels in-flight, caches last result (stale-while-revalidate) |
 | listing | `listingDetailProvider(slugPair)` | family `AsyncNotifier<RoomDetail>`; in-memory cache for back-nav |
@@ -225,6 +244,7 @@ feature/agent may touch; everything else is private):
 | | `unreadCountProvider` | drives the tab badge |
 | bookings | `myBookingsProvider`, `bookingDetailProvider(id)` | `AsyncNotifier` families |
 | profile | `meProvider` | `AsyncNotifier<UserProfile>` |
+| manage | `manageRepositoryProvider`, `manageVenuesProvider` | `manageVenuesProvider` is `AsyncNotifier<List<ManagedVenue>>` — public because `profile`'s "Your spaces" section watches it (behind `mobile.manage_enabled`) to decide whether to show the entry point at all. Screen-local family notifiers (requests list, one request, one venue's rooms, one room) live under `features/manage/application/` and aren't public |
 
 Conventions: screen state is always `AsyncValue<T>` rendered through `AsyncValueView`
 (§9); widgets watch with `select()` for sub-fields; no provider outside `core` may be
@@ -288,7 +308,10 @@ flag read is **never** a network call (SYSTEM_DESIGN §11).
 
 - `test/fixtures/<name>.json` — copied **verbatim from CONTRACTS.md examples** (fixture
   names: `listing_search.json`, `room_detail.json`, `auth_session.json`,
-  `application.json`, `booking.json`, `notifications_page.json`, `flags.json`).
+  `application.json`, `booking.json`, `notifications_page.json`, `flags.json`,
+  `managed_venues.json`, `managed_venue_detail.json`, `managed_room.json`,
+  `manage_applications_page.json`). `FixtureLoader.loadList` covers array-rooted
+  fixtures (`managed_venues.json`'s `[{id, name, slug}]`).
   One test per fixture asserts `fromJson` round-trips — this is the drift alarm
   (MOBILE_DESIGN §7); when CONTRACTS.md changes, the failing fixture test is the to-do list.
 - Every repository has a `Fake*Repository` (in `features/X/data/fake/`) that serves

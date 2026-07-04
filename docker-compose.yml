@@ -59,8 +59,27 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
-    expose:
-      - "8080"
+      # Dev-only default signing key — production MUST override via .env (AUTH_JWT_SIGNING_KEY).
+      Auth__Jwt__SigningKey: "${AUTH_JWT_SIGNING_KEY:-4kdPT0yylVMLDzUyD9BXXtDNbjM01xd1Cx3BgDMHo9Q=}"
+      Auth__Google__ClientIds__0: "${GOOGLE_CLIENT_ID:-}"
+      Auth__Apple__ClientIds__0: "${APPLE_SERVICES_ID:-}"
+      Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
+      # Media (ROADMAP Phase 5): without Spaces settings (MEDIA_* below) uploads land on the
+      # local-disk store and the API serves them itself at /media — which is why the api
+      # publishes a loopback port here (browsers must reach the photo URLs). Production
+      # supplies the Spaces/CDN settings and needs no published api port.
+      Media__PublicBaseUrl: "${MEDIA_PUBLIC_BASE_URL:-http://localhost:8081}"
+      Media__ServiceUrl: "${MEDIA_SERVICE_URL:-}"
+      Media__Bucket: "${MEDIA_BUCKET:-}"
+      Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
+      Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
+      Geocoding__GoogleApiKey: "${GEOCODING_GOOGLE_API_KEY:-}"
+      Flags__mobile.manage_enabled: "${MOBILE_MANAGE_ENABLED:-false}"
+    # Loopback-only, for the local-disk media loop above; compose-internal otherwise.
+    ports:
+      - "127.0.0.1:${API_PORT:-8081}:8080"
+    volumes:
+      - steeple_api_media:/app/media-store
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,8 +105,19 @@ services:
       # Pure frontend — no database. It calls the API for all data.
       ASPNETCORE_ENVIRONMENT: Production
       Api__BaseUrl: "http://api:8080"
+      # Persisted so the encrypted auth cookie survives redeploys.
+      DataProtection__KeysPath: /keys
+      Auth__Google__ClientId: "${GOOGLE_CLIENT_ID:-}"
+      Auth__Apple__ServicesId: "${APPLE_SERVICES_ID:-}"
+      Turnstile__SiteKey: "${TURNSTILE_SITE_KEY:-}"
+      # Config-backed flag until the flags SDK is wired — ROADMAP Phase 0 leftover.
+      Flags__web.sign_in_enabled: "${WEB_SIGN_IN_ENABLED:-false}"
+      Flags__web.apply_from_browser: "${WEB_APPLY_FROM_BROWSER:-false}"
+      Flags__web.manage_enabled: "${WEB_MANAGE_ENABLED:-false}"
     ports:
       - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - steeple_web_keys:/keys
     depends_on:
       api:
         condition: service_healthy
@@ -133,3 +163,5 @@ networks:
 
 volumes:
   steeple_pgdata:
+  steeple_web_keys:
+  steeple_api_media:

@@ -1,0 +1,75 @@
+@model VenueFormViewModel
+@* Shared venue fields for create + edit. The parent form supplies the antiforgery token. *@
+
+@if (Model.Error is not null)
+{
+    <p class="auth-error" role="alert">@Model.Error</p>
+}
+
+<div class="form-field">
+    <label class="field-label" for="venue-name">Venue name</label>
+    <input class="form-input" id="venue-name" name="Name" value="@Model.Name" required maxlength="200"
+           placeholder="St. Andrew's Community Church" />
+</div>
+
+<div class="form-field">
+    <label class="field-label" for="venue-description">About the venue</label>
+    <textarea class="form-input" id="venue-description" name="Description" rows="4" required maxlength="4000"
+              placeholder="A welcoming congregation with a fellowship hall and meeting rooms available to local groups during the week…">@Model.Description</textarea>
+    <p class="field-help">This appears on every room's public page — a sentence or two is plenty.</p>
+</div>
+
+<div class="form-field">
+    <span class="field-label">Type of place</span>
+    <div class="chip-set">
+        @foreach (var opt in VenueFormViewModel.VenueTypeOptions)
+        {
+            <label class="chip">
+                <input type="radio" name="VenueType" value="@opt.Value" @(Model.VenueType == opt.Value ? "checked" : "") />
+                <span class="chip-text">@opt.Label</span>
+            </label>
+        }
+    </div>
+</div>
+
+<fieldset class="form-fieldset">
+    <legend class="field-label">Address</legend>
+    <p class="field-help">We place your venue on the map from this — organizers only see the neighborhood detail you write below.</p>
+    <div class="form-field">
+        <label class="field-label" for="venue-address">Street address</label>
+        <input class="form-input" id="venue-address" name="AddressLine" value="@Model.AddressLine" required maxlength="300"
+               placeholder="120 Maple Avenue East" />
+    </div>
+    <div class="form-row">
+        <div class="form-field">
+            <label class="field-label" for="venue-suburb">Town</label>
+            <input class="form-input" id="venue-suburb" name="Suburb" value="@Model.Suburb" required maxlength="200"
+                   placeholder="Vienna" />
+        </div>
+        <div class="form-field">
+            <label class="field-label" for="venue-postcode">ZIP</label>
+            <input class="form-input form-input-sm" id="venue-postcode" name="Postcode" value="@Model.Postcode" required maxlength="20"
+                   placeholder="22180" />
+        </div>
+    </div>
+</fieldset>
+
+<div class="form-field">
+    <label class="field-label" for="venue-email">Contact email <span class="field-optional">optional</span></label>
+    <input class="form-input" id="venue-email" name="ContactEmail" type="email" value="@Model.ContactEmail" maxlength="320"
+           placeholder="hall@standrews.org" />
+    <p class="field-help">Shown publicly on your listings. Leave blank to keep contact inside Steeple.</p>
+</div>
+
+<div class="form-row">
+    <div class="form-field">
+        <label class="field-label" for="venue-parking">Parking notes <span class="field-optional">optional</span></label>
+        <textarea class="form-input" id="venue-parking" name="ParkingInfo" rows="2" maxlength="1000"
+                  placeholder="Free on-site lot with 40 spaces, plus street parking…">@Model.ParkingInfo</textarea>
+    </div>
+    <div class="form-field">
+        <label class="field-label" for="venue-transit">Getting here <span class="field-optional">optional</span></label>
+        <textarea class="form-input" id="venue-transit" name="TransitInfo" rows="2" maxlength="1000"
+                  placeholder="5 min walk from the Metro; the 1C bus stops outside…">@Model.TransitInfo</textarea>
+    </div>
+</div>

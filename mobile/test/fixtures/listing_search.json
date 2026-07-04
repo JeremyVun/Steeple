@@ -1,0 +1,96 @@
+{
+  "items": [
+    {
+      "roomId": "22222222-2222-4222-8222-222222222222",
+      "roomSlug": "fellowship-hall",
+      "venueSlug": "grace-community-church",
+      "venueName": "Grace Community Church",
+      "roomName": "Fellowship Hall",
+      "primaryPhotoUrl": "https://cdn.steeple.app/rooms/fellowship-hall/primary.jpg",
+      "capacity": 80,
+      "isFree": false,
+      "pricePerHour": 45.0,
+      "currency": "USD",
+      "latitude": 38.9012,
+      "longitude": -77.2653,
+      "activities": [
+        "community",
+        "arts",
+        "music"
+      ],
+      "accessibility": [
+        "stepFreeAccess",
+        "accessibleRestroom",
+        "accessibleParking"
+      ],
+      "distanceMeters": 420.5,
+      "venueId": "11111111-1111-4111-8111-111111111111",
+      "suburb": "Vienna"
+    },
+    {
+      "roomId": "33333333-3333-4333-8333-333333333333",
+      "roomSlug": "sunday-school-annex",
+      "venueSlug": "grace-community-church",
+      "venueName": "Grace Community Church",
+      "roomName": "Sunday School Annex",
+      "primaryPhotoUrl": "https://cdn.steeple.app/rooms/sunday-school-annex/primary.jpg",
+      "capacity": 20,
+      "isFree": true,
+      "pricePerHour": null,
+      "currency": "USD",
+      "latitude": 38.9015,
+      "longitude": -77.2649,
+      "activities": [
+        "children",
+        "education"
+      ],
+      "accessibility": [
+        "stepFreeAccess"
+      ],
+      "distanceMeters": 460.1,
+      "venueId": "11111111-1111-4111-8111-111111111111",
+      "suburb": "Vienna"
+    },
+    {
+      "roomId": "44444444-4444-4444-8444-444444444444",
+      "roomSlug": "parish-hall",
+      "venueSlug": "vienna-presbyterian-church",
+      "venueName": "Vienna Presbyterian Church",
+      "roomName": "Parish Hall",
+      "primaryPhotoUrl": null,
+      "capacity": 120,
+      "isFree": false,
+      "pricePerHour": 60.0,
+      "currency": "USD",
+      "latitude": 38.9041,
+      "longitude": -77.2622,
+      "activities": [
+        "community",
+        "sports",
+        "arts"
+      ],
+      "accessibility": [
+        "stepFreeAccess",
+        "hearingLoop",
+        "liftAccess"
+      ],
+      "distanceMeters": 1120.8,
+      "venueId": "b2c3d4e5-2222-4b5c-8d9e-000000000002",
+      "suburb": "Vienna"
+    }
+  ],
+  "totalCount": 3,
+  "isZeroResult": false,
+  "appliedBounds": {
+    "minLat": 38.85,
+    "maxLat": 38.95,
+    "minLng": -77.32,
+    "maxLng": -77.21
+  },
+  "center": {
+    "latitude": 38.9012,
+    "longitude": -77.2653
+  },
+  "page": 1,
+  "pageSize": 24
+}

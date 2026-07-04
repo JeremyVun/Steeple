@@ -1,0 +1,43 @@
+@model ManageHomeViewModel
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Your spaces</h1>
+        <partial name="_ManageTabs" model="@("spaces")" />
+    </header>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    @if (Model.Venues.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>Open your hall to the neighborhood</h2>
+            <p>
+                List your venue and its rooms here. New listings get a quick personal review
+                before they go live, and you decide who uses the space — every booking starts
+                as a request you approve.
+            </p>
+            <a class="btn btn-primary" href="~/manage/venues/new">List your venue</a>
+        </div>
+    }
+    else
+    {
+        <div class="manage-venue-list">
+            @foreach (var venue in Model.Venues)
+            {
+                <a class="card manage-venue-card" href="~/manage/venues/@venue.Id">
+                    <div class="card-body">
+                        <h2 class="card-title">@venue.Name</h2>
+                        <p class="card-meta">Edit details, rooms, and photos</p>
+                    </div>
+                </a>
+            }
+        </div>
+        <p class="manage-add-row">
+            <a class="btn btn-ghost" href="~/manage/venues/new">Add another venue</a>
+        </p>
+    }
+</section>

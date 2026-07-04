@@ -1,0 +1,43 @@
+{
+  "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "roomId": "33333333-3333-4333-8333-333333333333",
+  "roomName": "Sunday School Annex",
+  "venueName": "Grace Community Church",
+  "venueSlug": "grace-community-church",
+  "roomSlug": "sunday-school-annex",
+  "organizer": {
+    "id": "99999999-9999-4999-8999-999999999999",
+    "displayName": "Priya Patel"
+  },
+  "activityType": "children",
+  "groupSize": 15,
+  "schedule": {
+    "frequency": "recurringWeekly",
+    "startDate": "2026-09-01",
+    "endDate": "2026-12-15",
+    "dayOfWeek": "tuesday",
+    "startTime": "09:00",
+    "endTime": "11:30"
+  },
+  "intentText": "Toddler playgroup, ~15 people, ages 1-3 with parents/caregivers. Free-play with soft toys and a short singalong; we'd bring our own mats and put everything away afterward.",
+  "status": "approved",
+  "createdAtUtc": "2026-07-01T13:05:00Z",
+  "decidedAtUtc": "2026-07-02T18:40:00Z",
+  "expiresAtUtc": "2026-07-15T13:05:00Z",
+  "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "messageCount": 2,
+  "messages": [
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "senderId": "88888888-8888-4888-8888-888888888888",
+      "body": "Thanks for applying! Quick question — will you need access to the annex's storage cupboard, or just floor space?",
+      "sentAtUtc": "2026-07-01T20:15:00Z"
+    },
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccd",
+      "senderId": "99999999-9999-4999-8999-999999999999",
+      "body": "Just floor space is perfect, we bring everything with us each week.",
+      "sentAtUtc": "2026-07-02T09:22:00Z"
+    }
+  ]
+}

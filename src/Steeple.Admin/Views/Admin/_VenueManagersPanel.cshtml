@@ -1,0 +1,70 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    var error = ViewData["VenueManagerError"] as string;
+}
+
+@* The concierge step that turns a church's SSO account into a provider: they sign in on the web
+   once, the founder links that email to their venue here, and /manage/applications lights up. *@
+<div id="admin-vm-panel" class="admin-stack">
+    @if (error is not null)
+    {
+        <p class="admin-error" role="alert">@error</p>
+    }
+
+    <form class="admin-inline-form" hx-post="@Url.Content("~/admin/venue-managers/link")"
+          hx-target="#admin-vm-panel" hx-swap="outerHTML">
+        <label>
+            <span class="sr-only">Venue</span>
+            <select name="venueId" required>
+                <option value="" disabled selected>Pick a venue…</option>
+                @foreach (var venue in Model.VenueOptions)
+                {
+                    <option value="@venue.Id">@venue.Name</option>
+                }
+            </select>
+        </label>
+        <label>
+            <span class="sr-only">Account email</span>
+            <input type="email" name="email" placeholder="Their sign-in email" required />
+        </label>
+        <button type="submit">Link as manager</button>
+    </form>
+
+    @if (Model.VenueManagers.Count == 0)
+    {
+        <p class="admin-empty">No venue managers linked yet — link the concierge churches' Google accounts here so they can approve requests.</p>
+    }
+    else
+    {
+        <div class="admin-table-wrap">
+            <table class="admin-table">
+                <thead>
+                    <tr>
+                        <th>Venue</th>
+                        <th>Manager</th>
+                        <th>Email</th>
+                        <th>Linked</th>
+                        <th><span class="sr-only">Actions</span></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var link in Model.VenueManagers)
+                {
+                    <tr>
+                        <td><strong>@link.Venue</strong></td>
+                        <td>@link.UserName</td>
+                        <td>@link.UserEmail</td>
+                        <td>@link.CreatedAt.ToString("MMM d, yyyy")</td>
+                        <td>
+                            <button type="button" class="admin-link-danger"
+                                    hx-post="@Url.Content($"~/admin/venue-managers/{link.Id}/unlink")"
+                                    hx-target="#admin-vm-panel" hx-swap="outerHTML"
+                                    hx-confirm="Unlink @link.UserName from @link.Venue?">Unlink</button>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

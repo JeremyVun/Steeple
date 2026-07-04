@@ -53,8 +53,23 @@ public class Venue
     /// <summary>Whether the operator's identity has been verified.</summary>
     public bool IsIdentityVerified { get; set; }
 
+    /// <summary>
+    /// IANA timezone (e.g. <c>America/New_York</c>) that venue-local schedules resolve against.
+    /// Occurrence materialization is per-date in this zone so DST lands correctly (SYSTEM_DESIGN §5).
+    /// </summary>
+    public string Timezone { get; set; } = "America/New_York";
+
     /// <summary>Creation timestamp (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
+
+    /// <summary>Last modification timestamp (UTC) — feeds the SEO sitemap's lastmod.</summary>
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+
+    /// <summary>
+    /// When a provider last edited this venue while it had Published rooms. Non-null rows feed
+    /// the Admin edited-listings review feed; cleared when an operator marks them reviewed.
+    /// </summary>
+    public DateTimeOffset? ProviderEditedAtUtc { get; set; }
 
     /// <summary>Rooms belonging to this venue.</summary>
     public ICollection<Room> Rooms { get; set; } = new List<Room>();

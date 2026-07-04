@@ -4,10 +4,10 @@ using Testcontainers.PostgreSql;
 namespace Steeple.Integration.Tests.Fixtures;
 /// <summary>
 /// Starts a single <c>postgres:18-alpine</c> Testcontainer for the whole collection, then applies
-/// the Liquibase-owned schema + seed (<c>db/changelog/001-schema.sql</c>, <c>002-seed.sql</c>) by
-/// executing each file's full contents as a raw script. Both files are Liquibase *formatted SQL*
-/// — every Liquibase directive is a <c>--</c> line comment — so running them verbatim through
-/// Npgsql is valid and keeps this project from having to depend on Liquibase itself.
+/// every Liquibase-owned changelog file (<c>db/changelog/001…006</c>, in master-changelog order)
+/// by executing each file's full contents as a raw script. All files are Liquibase *formatted SQL* — every Liquibase directive is a
+/// <c>--</c> line comment — so running them verbatim through Npgsql is valid and keeps this
+/// project from having to depend on Liquibase itself.
 /// </summary>
 public sealed class PostgresDatabaseFixture : IAsyncLifetime
 {
@@ -31,20 +31,20 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
     private async Task ApplyChangelogAsync()
     {
         var changelogDir = Path.Combine(FindRepoRoot(), "db", "changelog");
-        var schemaSql = await File.ReadAllTextAsync(Path.Combine(changelogDir, "001-schema.sql"));
-        var seedSql = await File.ReadAllTextAsync(Path.Combine(changelogDir, "002-seed.sql"));
 
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
 
-        await using (var schemaCommand = new NpgsqlCommand(schemaSql, connection))
+        // In master-changelog order (db.changelog-master.yaml).
+        foreach (var file in new[]
+                 {
+                     "001-schema.sql", "002-seed.sql", "003-identity.sql",
+                     "004-applications.sql", "005-bookings.sql", "006-manage.sql",
+                 })
         {
-            await schemaCommand.ExecuteNonQueryAsync();
-        }
-
-        await using (var seedCommand = new NpgsqlCommand(seedSql, connection))
-        {
-            await seedCommand.ExecuteNonQueryAsync();
+            var sql = await File.ReadAllTextAsync(Path.Combine(changelogDir, file));
+            await using var command = new NpgsqlCommand(sql, connection);
+            await command.ExecuteNonQueryAsync();
         }
     }
 

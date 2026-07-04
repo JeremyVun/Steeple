@@ -1,0 +1,67 @@
+{
+  "items": [
+    {
+      "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "roomId": "33333333-3333-4333-8333-333333333333",
+      "roomName": "Sunday School Annex",
+      "venueName": "Grace Community Church",
+      "venueSlug": "grace-community-church",
+      "roomSlug": "sunday-school-annex",
+      "organizer": {
+        "id": "99999999-9999-4999-8999-999999999999",
+        "displayName": "Priya Patel"
+      },
+      "activityType": "children",
+      "groupSize": 15,
+      "schedule": {
+        "frequency": "recurringWeekly",
+        "startDate": "2026-09-01",
+        "endDate": "2026-12-15",
+        "dayOfWeek": "tuesday",
+        "startTime": "09:00",
+        "endTime": "11:30"
+      },
+      "intentText": "Toddler playgroup, ~15 people, ages 1-3 with parents/caregivers. Free-play with soft toys and a short singalong; we'd bring our own mats and put everything away afterward.",
+      "status": "approved",
+      "createdAtUtc": "2026-07-01T13:05:00Z",
+      "decidedAtUtc": "2026-07-02T18:40:00Z",
+      "expiresAtUtc": "2026-07-15T13:05:00Z",
+      "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "messageCount": 2,
+      "messages": []
+    },
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "roomId": "22222222-2222-4222-8222-222222222222",
+      "roomName": "Fellowship Hall",
+      "venueName": "Grace Community Church",
+      "venueSlug": "grace-community-church",
+      "roomSlug": "fellowship-hall",
+      "organizer": {
+        "id": "77777777-7777-4777-8777-777777777777",
+        "displayName": "Marcus Lee"
+      },
+      "activityType": "community",
+      "groupSize": 40,
+      "schedule": {
+        "frequency": "oneOff",
+        "startDate": "2026-07-18",
+        "endDate": null,
+        "dayOfWeek": null,
+        "startTime": "18:00",
+        "endTime": "21:00"
+      },
+      "intentText": "Neighborhood association potluck and quarterly meeting, ~40 people.",
+      "status": "pending",
+      "createdAtUtc": "2026-07-03T15:30:00Z",
+      "decidedAtUtc": null,
+      "expiresAtUtc": "2026-07-17T15:30:00Z",
+      "bookingId": null,
+      "messageCount": 0,
+      "messages": []
+    }
+  ],
+  "totalCount": 2,
+  "page": 1,
+  "pageSize": 24
+}

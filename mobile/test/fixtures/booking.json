@@ -1,0 +1,62 @@
+{
+  "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "applicationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "roomId": "33333333-3333-4333-8333-333333333333",
+  "roomName": "Sunday School Annex",
+  "venueName": "Grace Community Church",
+  "venueSlug": "grace-community-church",
+  "roomSlug": "sunday-school-annex",
+  "venueTimezone": "America/New_York",
+  "organizerId": "99999999-9999-4999-8999-999999999999",
+  "organizerName": "Priya Patel",
+  "type": "recurring",
+  "startDate": "2026-09-01",
+  "endDate": "2026-12-15",
+  "schedule": {
+    "frequency": "recurringWeekly",
+    "startDate": "2026-09-01",
+    "endDate": "2026-12-15",
+    "dayOfWeek": "tuesday",
+    "startTime": "09:00",
+    "endTime": "11:30"
+  },
+  "status": "confirmed",
+  "createdAtUtc": "2026-07-02T18:40:00Z",
+  "cancelledBy": null,
+  "cancelledAtUtc": null,
+  "cancelReason": null,
+  "nextOccurrence": {
+    "id": "dddddddd-dddd-4ddd-8ddd-dddddddddd03",
+    "startUtc": "2026-09-15T13:00:00Z",
+    "endUtc": "2026-09-15T15:30:00Z",
+    "localDate": "2026-09-15",
+    "status": "scheduled",
+    "noShowMarkedBy": null
+  },
+  "occurrences": [
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddd01",
+      "startUtc": "2026-09-01T13:00:00Z",
+      "endUtc": "2026-09-01T15:30:00Z",
+      "localDate": "2026-09-01",
+      "status": "occurred",
+      "noShowMarkedBy": null
+    },
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddd02",
+      "startUtc": "2026-09-08T13:00:00Z",
+      "endUtc": "2026-09-08T15:30:00Z",
+      "localDate": "2026-09-08",
+      "status": "occurred",
+      "noShowMarkedBy": null
+    },
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddd03",
+      "startUtc": "2026-09-15T13:00:00Z",
+      "endUtc": "2026-09-15T15:30:00Z",
+      "localDate": "2026-09-15",
+      "status": "scheduled",
+      "noShowMarkedBy": null
+    }
+  ]
+}

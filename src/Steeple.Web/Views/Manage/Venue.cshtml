@@ -1,0 +1,84 @@
+@model VenueEditorViewModel
+@{
+    var venue = Model.Venue;
+}
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>@venue.Name</h1>
+        <partial name="_ManageTabs" model="@("spaces")" />
+    </header>
+
+    <p class="manage-breadcrumb"><a href="~/manage">← Your spaces</a></p>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    <div class="manage-editor-grid">
+        <section class="card manage-card" aria-labelledby="venue-rooms-heading">
+            <div class="card-body">
+                <h2 id="venue-rooms-heading">Rooms</h2>
+                @if (venue.Rooms.Count == 0)
+                {
+                    <div class="empty-state">
+                        <p>No rooms yet — the room is what organizers actually find and book.</p>
+                        <a class="btn btn-primary" href="~/manage/venues/@venue.Id/rooms/new">Add your first room</a>
+                    </div>
+                }
+                else
+                {
+                    <ul class="manage-room-list" role="list">
+                        @foreach (var room in venue.Rooms)
+                        {
+                            <li class="manage-room-row">
+                                <a class="manage-room-link" href="~/manage/rooms/@room.Id">
+                                    @if (room.PrimaryPhotoUrl is not null)
+                                    {
+                                        <img class="manage-room-thumb" src="@room.PrimaryPhotoUrl" alt="" loading="lazy" />
+                                    }
+                                    else
+                                    {
+                                        <span class="manage-room-thumb manage-room-thumb-empty" aria-hidden="true">@(room.Name.Length > 0 ? room.Name[..1] : "•")</span>
+                                    }
+                                    <span class="manage-room-name">
+                                        <strong>@room.Name</strong>
+                                        <span class="card-meta">Up to @room.Capacity · @(room.IsFree ? "Free" : $"${room.PricePerHour:0.##}/hr") · @room.PhotoCount photo@(room.PhotoCount == 1 ? "" : "s")</span>
+                                    </span>
+                                    @{ var (role, label) = RoomStatusChip(room); }
+                                    <span class="status-chip status-@role">@label</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                    <p class="manage-add-row"><a class="btn btn-ghost" href="~/manage/venues/@venue.Id/rooms/new">Add another room</a></p>
+                }
+            </div>
+        </section>
+
+        <section class="card manage-card" aria-labelledby="venue-details-heading">
+            <div class="card-body">
+                <h2 id="venue-details-heading">Venue details</h2>
+                <form method="post" action="@Url.Content($"~/manage/venues/{venue.Id}")" class="manage-form">
+                    @Html.AntiForgeryToken()
+                    <partial name="_VenueFields" model="Model.Form" />
+                    <div class="form-field manage-form-actions">
+                        <button class="btn btn-primary" type="submit">Save venue details</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+</section>
+
+@functions {
+    // Manage-only status tokens (CONTRACTS §2.1) — public surfaces never see these.
+    private static (string Role, string Label) RoomStatusChip(ManagedRoomSummaryDto room) => room switch
+    {
+        { PublishRequestedAtUtc: not null } => ("warning", "In review"),
+        { Status: "published" } => ("success", "Published"),
+        { Status: "unlisted" } => ("neutral", "Unlisted"),
+        _ => ("neutral", "Draft"),
+    };
+}

@@ -1,0 +1,19 @@
+@model FlagGroupViewModel
+@* One flags checkbox group (activities / amenities / accessibility) for the room form. *@
+
+<fieldset class="form-fieldset">
+    <legend class="field-label">@Model.Legend</legend>
+    <div class="chip-set">
+        @foreach (var opt in Model.Options)
+        {
+            <label class="chip">
+                <input type="checkbox" name="@Model.InputName" value="@opt.Value" @(Model.Selected.Contains(opt.Value) ? "checked" : "") />
+                <span class="chip-text">@opt.Label</span>
+            </label>
+        }
+    </div>
+    @if (Model.HelpText is not null)
+    {
+        <p class="field-help">@Model.HelpText</p>
+    }
+</fieldset>

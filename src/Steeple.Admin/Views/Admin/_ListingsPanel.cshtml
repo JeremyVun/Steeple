@@ -1,6 +1,13 @@
 @model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    var listingsError = ViewData["ListingsError"] as string;
+}
 
 <div id="admin-listings-panel" class="admin-stack">
+    @if (listingsError is not null)
+    {
+        <p class="admin-error" role="alert">@listingsError</p>
+    }
     <form hx-post="@Url.Content("~/admin/listings/status")" hx-target="#admin-listings-panel" hx-swap="outerHTML">
         <div class="admin-bulkbar">
             <label class="admin-bulkbar-all">

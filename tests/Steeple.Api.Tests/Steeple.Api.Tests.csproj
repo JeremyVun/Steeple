@@ -16,6 +16,9 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.4" />
+    <!-- Pinned to match src/Steeple.Api exactly (CLAUDE.md gotcha) — used only to synthesize a
+         small EXIF-bearing test JPEG for ImageSharpImageProcessorTests. -->
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,8 +32,21 @@
     <Using Include="Steeple.Persistence.Constants" />
     <Using Include="Steeple.Api.Configuration" />
     <Using Include="Steeple.Api.Services" />
+    <Using Include="Steeple.Api.Services.Identity" />
+    <Using Include="Steeple.Api.Services.Applications" />
+    <Using Include="Steeple.Api.Services.Bookings" />
+    <Using Include="Steeple.Api.Services.Notifications" />
+    <Using Include="Steeple.Api.Services.Manage" />
+    <Using Include="Steeple.Api.Services.Media" />
     <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Contracts.Identity" />
+    <Using Include="Steeple.Api.Contracts.Applications" />
+    <Using Include="Steeple.Api.Contracts.Bookings" />
+    <Using Include="Steeple.Api.Contracts.Notifications" />
+    <Using Include="Steeple.Api.Contracts.Manage" />
     <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Proxies.Media" />
+    <Using Include="Steeple.Api.Extensions" />
     <Using Include="Steeple.Api.Utils" />
   </ItemGroup>
 

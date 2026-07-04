@@ -29,6 +29,10 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
         // Discovery filters by publication state.
         builder.HasIndex(r => r.Status);
 
+        // Moderation-queue scans touch only flagged rows (partial indexes in 006-manage.sql).
+        builder.HasIndex(r => r.PublishRequestedAtUtc).HasFilter("\"PublishRequestedAtUtc\" IS NOT NULL");
+        builder.HasIndex(r => r.ProviderEditedAtUtc).HasFilter("\"ProviderEditedAtUtc\" IS NOT NULL");
+
         // Slugs are unique within a venue (venueSlug + roomSlug forms the public URL).
         builder.HasIndex(r => new { r.VenueId, r.Slug }).IsUnique();
 

@@ -50,6 +50,27 @@ public class Room
     /// <summary>Creation timestamp (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 
+    /// <summary>Last modification timestamp (UTC) — feeds the SEO sitemap's lastmod.</summary>
+    public DateTimeOffset UpdatedAtUtc { get; set; }
+
+    /// <summary>
+    /// When the provider asked for this room to be published. Non-null rows form the Admin
+    /// moderation queue; cleared by the founder's approve/decline decision.
+    /// </summary>
+    public DateTimeOffset? PublishRequestedAtUtc { get; set; }
+
+    /// <summary>
+    /// When the room first passed moderation. Once set, unlist/relist is provider-controlled
+    /// (re-publishing needs no second review).
+    /// </summary>
+    public DateTimeOffset? FirstPublishedAtUtc { get; set; }
+
+    /// <summary>
+    /// When a provider last edited this room while it was Published. Non-null rows feed the
+    /// Admin edited-listings review feed; cleared when an operator marks them reviewed.
+    /// </summary>
+    public DateTimeOffset? ProviderEditedAtUtc { get; set; }
+
     /// <summary>Photos for this room.</summary>
     public ICollection<RoomPhoto> Photos { get; set; } = new List<RoomPhoto>();
 

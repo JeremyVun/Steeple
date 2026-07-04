@@ -86,9 +86,11 @@
   `object-fit: cover` on the `<img>` so the crop is preserved either way — belt and suspenders
   against layout shift.
 - **`preconnect`/`dns-prefetch` to the image origin:** `SteepleControllerBase.SetPreconnectOrigins`
-  derives up to 2 distinct scheme+host origins from the page's actual photo URLs (dynamic — not
-  hardcoded, since photos are picsum.photos today and will move to a DO Spaces CDN origin later),
-  stashed in `ViewData["PreconnectOrigins"]` and emitted as `<link rel="preconnect">` +
+  derives up to 2 distinct scheme+host origins from the page's actual photo URLs (dynamic, not
+  hardcoded — legacy seeded rooms still serve picsum.photos, provider-uploaded photos now serve
+  from DO Spaces/CDN or the dev local-disk fallback per `ARCHITECTURE.md`'s Media module; the
+  dynamic derivation covers all of them without a code change), stashed in
+  `ViewData["PreconnectOrigins"]` and emitted as `<link rel="preconnect">` +
   `<link rel="dns-prefetch">` in `_Layout.cshtml`. Wired on the discovery home/search pages and
   the listing detail page.
 - Long cache headers on static assets and gzip/brotli compression are **edge-proxy concerns**

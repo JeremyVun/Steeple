@@ -1,0 +1,37 @@
+# Steeple mobile — lint contract (MOBILE_DESIGN §4 rebuild discipline, DESIGN_SYSTEM §11).
+# `flutter analyze` clean is part of the definition of done for every PR (MOBILE_CONTRACTS §12).
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  language:
+    strict-casts: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    # Rebuild discipline (MOBILE_DESIGN §4 rule 1)
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_final_locals: true
+    # Hygiene
+    always_declare_return_types: true
+    avoid_print: true
+    cancel_subscriptions: true
+    directives_ordering: true
+    require_trailing_commas: true
+    unawaited_futures: true
+    use_super_parameters: true
+
+# Review rules the analyzer can't express (enforced by grep in PR review — MOBILE_CONTRACTS §2, DESIGN_SYSTEM §11):
+#   1. No `import '../../features/` from another feature unless it ends in `/providers.dart`.
+#   2. No raw `Color(0x…)`, `Colors.*`, or `TextStyle(fontSize: …)` outside lib/app/theme/.
+#      Allowed exceptions: `Colors.white` where DESIGN_SYSTEM specifies white-on-fill
+#      (FREE badge, filled-button labels, pin center dots), and provider-brand colors
+#      inside the SSO sheet (§8.1: compliance beats palette).
+#   3. Repositories are the only classes that touch Dio; widgets never import dio or decode JSON.

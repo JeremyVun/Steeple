@@ -17,9 +17,11 @@ public static class ListingMappings
         var venue = room.Venue;
         return new RoomSummaryDto(
             RoomId: room.Id,
+            VenueId: venue?.Id ?? Guid.Empty,
             RoomSlug: room.Slug,
             VenueSlug: venue?.Slug ?? "",
             VenueName: venue?.Name ?? "",
+            Suburb: venue?.Suburb ?? "",
             RoomName: room.Name,
             PrimaryPhotoUrl: ResolvePrimaryPhotoUrl(room.Photos),
             Capacity: room.Capacity,
@@ -79,16 +81,30 @@ public static class ListingMappings
     /// <summary>Maps a <see cref="RoomPhoto"/> to its presentation DTO.</summary>
     public static RoomPhotoDto ToDto(this RoomPhoto photo) =>
         new(
+            Id: photo.Id,
             Url: photo.Url,
+            ThumbUrl: photo.ThumbUrl,
+            CardUrl: photo.CardUrl,
             Caption: photo.Caption,
             IsPrimary: photo.IsPrimary,
             SortOrder: photo.SortOrder);
 
     /// <summary>
-    /// Resolves the cover image URL: the <see cref="RoomPhoto.IsPrimary"/> photo when present,
-    /// otherwise the photo with the lowest <see cref="RoomPhoto.SortOrder"/>, otherwise <c>null</c>.
+    /// Resolves the cover image URL: the cover per <see cref="CoverPhoto"/>, at card size
+    /// (~800w) when the pipeline produced a variant.
     /// </summary>
     private static string? ResolvePrimaryPhotoUrl(IEnumerable<RoomPhoto> photos)
+    {
+        var cover = photos.CoverPhoto();
+        return cover?.CardUrl ?? cover?.Url;
+    }
+
+    /// <summary>
+    /// The one cover-selection rule (public listings and manage surfaces): the
+    /// <see cref="RoomPhoto.IsPrimary"/> photo when present, otherwise the lowest
+    /// <see cref="RoomPhoto.SortOrder"/>, otherwise <c>null</c>. Callers pick the variant size.
+    /// </summary>
+    internal static RoomPhoto? CoverPhoto(this IEnumerable<RoomPhoto> photos)
     {
         RoomPhoto? best = null;
 
@@ -96,7 +112,7 @@ public static class ListingMappings
         {
             if (photo.IsPrimary)
             {
-                return photo.Url;
+                return photo;
             }
 
             if (best is null || photo.SortOrder < best.SortOrder)
@@ -105,6 +121,6 @@ public static class ListingMappings
             }
         }
 
-        return best?.Url;
+        return best;
     }
 }
