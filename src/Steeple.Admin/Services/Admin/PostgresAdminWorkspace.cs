@@ -691,7 +691,7 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
     {
         var times = $"{a.StartTime:h\\:mm tt}–{a.EndTime:h\\:mm tt}";
         return a.Frequency == ScheduleFrequency.RecurringWeekly
-            ? $"{a.DayOfWeek}s {times}, {a.StartDate:MMM d} – {a.EndDate:MMM d, yyyy}"
+            ? $"{DescribeDays(a.DaysOfWeek)} {times}, {a.StartDate:MMM d} – {a.EndDate:MMM d, yyyy}"
             : $"{a.StartDate:ddd, MMM d yyyy}, {times}";
     }
 
@@ -699,9 +699,17 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
     {
         var times = $"{b.StartTime:h\\:mm tt}–{b.EndTime:h\\:mm tt}";
         return b.Type == BookingType.Recurring
-            ? $"{b.DayOfWeek}s {times}, {b.StartDate:MMM d} – {b.EndDate:MMM d, yyyy}"
+            ? $"{DescribeDays(b.DaysOfWeek)} {times}, {b.StartDate:MMM d} – {b.EndDate:MMM d, yyyy}"
             : $"{b.StartDate:ddd, MMM d yyyy}, {times}";
     }
+
+    /// <summary>"Tuesdays & Thursdays" for the operator dashboard's schedule prose.</summary>
+    private static string DescribeDays(Weekdays? days) =>
+        days is { } set && set != Weekdays.None
+            ? string.Join(" & ", Enum.GetValues<Weekdays>()
+                .Where(day => day != Weekdays.None && set.HasFlag(day))
+                .Select(day => $"{day}s"))
+            : "";
 
     private static string DisplayBookingStatus(BookingStatus status) => status.ToString();
 }

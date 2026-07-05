@@ -49,13 +49,11 @@ public static class ApplicationDisplay
 
         if (schedule.Frequency == "recurringWeekly")
         {
-            var day = string.IsNullOrEmpty(schedule.DayOfWeek)
-                ? "Weekly"
-                : DiscoveryViewModel.Humanize(schedule.DayOfWeek) + "s";
+            var days = DescribeDays(schedule.DaysOfWeek);
             var term = schedule.EndDate is { } end
                 ? $"{FormatDate(schedule.StartDate)} – {FormatDate(end)}"
                 : $"from {FormatDate(schedule.StartDate)}";
-            return $"{day} {times} · {term}";
+            return $"{days} {times} · {term}";
         }
 
         return $"{schedule.StartDate.ToString("ddd, MMM d, yyyy", CultureInfo.InvariantCulture)} · {times}";
@@ -72,6 +70,26 @@ public static class ApplicationDisplay
             { TotalDays: < 1 } => $"{(int)elapsed.TotalHours}h ago",
             { TotalDays: < 7 } => $"{(int)elapsed.TotalDays}d ago",
             _ => FormatDate(DateOnly.FromDateTime(momentUtc.UtcDateTime)),
+        };
+    }
+
+    /// <summary>
+    /// Wire weekday tokens → "Tuesdays and Thursdays" (§10 voice: full day names, never
+    /// abbreviated in schedule summaries). Empty/null → "Weekly".
+    /// </summary>
+    public static string DescribeDays(IReadOnlyList<string>? dayTokens)
+    {
+        if (dayTokens is not { Count: > 0 })
+        {
+            return "Weekly";
+        }
+
+        var names = dayTokens.Select(t => DiscoveryViewModel.Humanize(t) + "s").ToList();
+        return names.Count switch
+        {
+            1 => names[0],
+            2 => $"{names[0]} and {names[1]}",
+            _ => $"{string.Join(", ", names[..^1])} and {names[^1]}",
         };
     }
 
@@ -99,7 +117,26 @@ public sealed class ApplyFormModel
     public string Frequency { get; set; } = "oneOff";
     public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
-    public string? DayOfWeek { get; set; }
+
+    /// <summary>Weekday wire tokens for a weekly request (checkbox chips; one or more).</summary>
+    public List<string> DaysOfWeek { get; set; } = [];
+
+    /// <summary>
+    /// Legacy single-day shim: pre-uplift session stashes round-trip <c>DayOfWeek</c>; the setter
+    /// folds it into <see cref="DaysOfWeek"/> so a draft parked across the wire break survives.
+    /// </summary>
+    public string? DayOfWeek
+    {
+        get => null;
+        set
+        {
+            if (!string.IsNullOrEmpty(value) && !DaysOfWeek.Contains(value))
+            {
+                DaysOfWeek.Add(value);
+            }
+        }
+    }
+
     public string StartTime { get; set; } = "";
     public string EndTime { get; set; } = "";
     public string IntentText { get; set; } = "";

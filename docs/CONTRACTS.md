@@ -58,6 +58,7 @@ humanize for display:
 | `activities` (flags) | `children, sports, community, religious, arts, education, music` |
 | `amenities` (flags) | `parking, kitchen, restrooms, wifi, audioVisual, tables, chairs, heating, airConditioning, stage, piano` |
 | `accessibility` (flags) | `stepFreeAccess, accessibleRestroom, accessibleParking, hearingLoop, liftAccess` |
+| `daysOfWeek` (flags, `Weekdays`) | `sunday, monday, tuesday, wednesday, thursday, friday, saturday` — emitted sorted Sunday-first |
 | `venueType` | `church, publicSpace, other` |
 | `status` (room, Manage §6 only — never on public reads) | `draft, published, unlisted` |
 
@@ -150,9 +151,15 @@ verified email already belongs to an account on the other provider — no auto-l
 { "activityType": "children", "groupSize": 15,
   "schedule": { "frequency": "recurringWeekly" | "oneOff",
                 "startDate": "2026-09-01", "endDate": "2026-12-15",   // endDate mandatory when recurring
-                "dayOfWeek": "tuesday", "startTime": "09:00", "endTime": "11:30" },
+                "daysOfWeek": ["tuesday", "thursday"], "startTime": "09:00", "endTime": "11:30" },
   "intentText": "Toddler playgroup, ~15 people…", "turnstileToken": "…" }
 ```
+`schedule.daysOfWeek` *(replaced `dayOfWeek: string` 2026-07-05 — clean break, no released
+clients)*: array of §2.1 weekday tokens (`"sunday"`…`"saturday"`), **one or more, distinct,
+emitted sorted Sunday-first**; required when `frequency` is `recurringWeekly`, must be
+null/absent for `oneOff`. Multi-day = one application/booking (e.g. Tue+Thu weekly is a
+single request materializing occurrences on both days).
+
 → `201 Application` (an `Idempotency-Key` replay returns the original as `200`). Errors:
 `400 invalid_application` (bad token / malformed or unbounded schedule / past start date),
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer

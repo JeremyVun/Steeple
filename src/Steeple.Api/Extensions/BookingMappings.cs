@@ -68,7 +68,7 @@ public static class BookingMappings
         Frequency: booking.Type == BookingType.Recurring ? "recurringWeekly" : "oneOff",
         StartDate: booking.StartDate,
         EndDate: booking.EndDate,
-        DayOfWeek: booking.DayOfWeek is { } day ? FlagEnumExtensions.ToCamelCaseToken(day.ToString()) : null,
+        DaysOfWeek: booking.DaysOfWeek is { } days && days != Weekdays.None ? days.ToNameList() : null,
         StartTime: booking.StartTime.ToString("HH\\:mm"),
         EndTime: booking.EndTime.ToString("HH\\:mm"));
 }

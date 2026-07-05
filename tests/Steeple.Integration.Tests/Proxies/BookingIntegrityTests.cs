@@ -95,11 +95,60 @@ public class BookingIntegrityTests
     }
 
     [Fact]
+    public async Task ConcurrentApprovals_OfRecurringSchedulesOverlappingOnOneWeekday_ExactlyOneWinsTheWholeTerm()
+    {
+        // Tue+Thu vs Wed+Thu over the same term/time: the sets only collide on Thursdays, but the
+        // exclusion constraint must reject the whole losing application's term, not just the
+        // colliding Thursday occurrences.
+        var (tueThuApp, _) = await SeedApplicationAsync(
+            ClassroomBId, ScheduleFrequency.RecurringWeekly,
+            new DateOnly(2027, 1, 5), new DateOnly(2027, 1, 19), Weekdays.Tuesday | Weekdays.Thursday,
+            new TimeOnly(18, 0), new TimeOnly(20, 0));
+        var (wedThuApp, _) = await SeedApplicationAsync(
+            ClassroomBId, ScheduleFrequency.RecurringWeekly,
+            new DateOnly(2027, 1, 5), new DateOnly(2027, 1, 19), Weekdays.Wednesday | Weekdays.Thursday,
+            new TimeOnly(18, 0), new TimeOnly(20, 0));
+
+        using var gate = new Barrier(2);
+        var results = await Task.WhenAll(new[] { tueThuApp, wedThuApp }.Select(applicationId => Task.Run(async () =>
+        {
+            await using var db = CreateContext();
+            var repository = new EfApplicationRepository(db);
+            var application = await repository.GetAsync(applicationId)
+                ?? throw new InvalidOperationException("Seeded application vanished.");
+
+            application.Status = ApplicationStatus.Approved;
+            application.DecidedAtUtc = FixedNow;
+
+            var service = CreateBookingService(db);
+            gate.SignalAndWait();
+            return await service.ConfirmFromApplicationAsync(application);
+        })));
+
+        Assert.Equal(1, results.Count(r => !r.SlotTaken));
+        Assert.Equal(1, results.Count(r => r.SlotTaken));
+
+        await using var verifyDb = CreateContext();
+        var bookings = await verifyDb.Bookings
+            .Include(b => b.Occurrences)
+            .Where(b => b.ApplicationId == tueThuApp || b.ApplicationId == wedThuApp)
+            .ToListAsync();
+
+        // The loser's entire term is rejected — not partially booked around the Thursday clash.
+        var winner = Assert.Single(bookings);
+        Assert.Equal(BookingStatus.Confirmed, winner.Status);
+
+        var approvedCount = await verifyDb.Applications
+            .CountAsync(a => (a.Id == tueThuApp || a.Id == wedThuApp) && a.Status == ApplicationStatus.Approved);
+        Assert.Equal(1, approvedCount);
+    }
+
+    [Fact]
     public async Task RecurringApproval_BlocksPartiallyOverlappingOneOff_AndMaterializesDstCorrectly()
     {
         var (recurringApp, _) = await SeedApplicationAsync(
             MusicRoomId, ScheduleFrequency.RecurringWeekly,
-            new DateOnly(2026, 10, 27), new DateOnly(2026, 11, 10), DayOfWeek.Tuesday,
+            new DateOnly(2026, 10, 27), new DateOnly(2026, 11, 10), Weekdays.Tuesday,
             new TimeOnly(9, 0), new TimeOnly(11, 0));
 
         await using (var db = CreateContext())
@@ -122,7 +171,7 @@ public class BookingIntegrityTests
         // A one-off overlapping just one of those Tuesdays (10:00–12:00 on Nov 3) must lose.
         var (oneOffApp, _) = await SeedApplicationAsync(
             MusicRoomId, ScheduleFrequency.OneOff,
-            new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 3), dayOfWeek: null,
+            new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 3), daysOfWeek: null,
             new TimeOnly(10, 0), new TimeOnly(12, 0));
 
         await using (var db = CreateContext())
@@ -213,7 +262,7 @@ public class BookingIntegrityTests
 
     private async Task<(Guid ApplicationId, Guid OrganizerId)> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly startDate, DateOnly endDate,
-        DayOfWeek? dayOfWeek, TimeOnly startTime, TimeOnly endTime)
+        Weekdays? daysOfWeek, TimeOnly startTime, TimeOnly endTime)
     {
         await using var db = CreateContext();
         var organizer = NewUser("Organizer");
@@ -227,7 +276,7 @@ public class BookingIntegrityTests
             Frequency = frequency,
             StartDate = startDate,
             EndDate = frequency == ScheduleFrequency.RecurringWeekly ? endDate : null,
-            DayOfWeek = dayOfWeek,
+            DaysOfWeek = daysOfWeek,
             StartTime = startTime,
             EndTime = endTime,
             IntentText = "Weekly community gathering.",
@@ -260,7 +309,7 @@ public class BookingIntegrityTests
         Frequency = ScheduleFrequency.OneOff,
         StartDate = date,
         EndDate = null,
-        DayOfWeek = null,
+        DaysOfWeek = null,
         StartTime = startTime,
         EndTime = endTime,
         IntentText = "A community gathering.",

@@ -31,8 +31,8 @@ public class Application
     /// <summary>Venue-local wall-clock end date; mandatory when recurring (bounded recurrence).</summary>
     public DateOnly? EndDate { get; set; }
 
-    /// <summary>Weekday of the recurring schedule; null for one-off applications.</summary>
-    public DayOfWeek? DayOfWeek { get; set; }
+    /// <summary>Weekdays of the recurring schedule ("Tuesdays and Thursdays"); null for one-offs.</summary>
+    public Weekdays? DaysOfWeek { get; set; }
 
     /// <summary>Venue-local wall-clock start time.</summary>
     public TimeOnly StartTime { get; set; }

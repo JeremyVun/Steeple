@@ -62,7 +62,7 @@ public sealed class BookingService : IBookingService
         var endDate = application.EndDate ?? application.StartDate;
         var instants = ScheduleMaterializer.Materialize(
             application.Frequency, application.StartDate, endDate,
-            application.DayOfWeek, application.StartTime, application.EndTime, venueZone);
+            application.DaysOfWeek, application.StartTime, application.EndTime, venueZone);
 
         var booking = new Booking
         {
@@ -73,7 +73,7 @@ public sealed class BookingService : IBookingService
             Type = application.Frequency == ScheduleFrequency.RecurringWeekly ? BookingType.Recurring : BookingType.OneOff,
             StartDate = application.StartDate,
             EndDate = endDate,
-            DayOfWeek = application.DayOfWeek,
+            DaysOfWeek = application.DaysOfWeek,
             StartTime = application.StartTime,
             EndTime = application.EndTime,
             Status = BookingStatus.Confirmed,
@@ -505,7 +505,7 @@ public sealed class BookingService : IBookingService
         var end = FormatTime(booking.EndTime);
 
         return booking.Type == BookingType.Recurring
-            ? $"{booking.DayOfWeek}s {start}–{end}, {FormatDate(booking.StartDate)} – {FormatDate(booking.EndDate)}"
+            ? $"{ScheduleText.DescribeDays(booking.DaysOfWeek ?? Weekdays.None)} {start}–{end}, {FormatDate(booking.StartDate)} – {FormatDate(booking.EndDate)}"
             : $"{booking.StartDate.ToString("ddd, MMM d", CultureInfo.InvariantCulture)}, {start}–{end}";
     }
 

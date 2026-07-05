@@ -54,6 +54,25 @@ CROSS JOIN generate_series(0, 6) AS d(dow)
 WHERE r."Status" = 1; -- Published
 --rollback DELETE FROM room_open_hours;
 
+--changeset steeple:009-multi-weekday
+-- Recurring schedules grow from one weekday to a set ("Tuesdays and Thursdays") as a single
+-- application/booking. Bit n = .NET DayOfWeek n (Sunday = bit 0) — the flags-as-int idiom the
+-- schema already uses for amenities/activities. Wire change (dayOfWeek → daysOfWeek) is a clean
+-- break inside /api/v1; all clients update in the same commit (SYSTEM_DESIGN §17).
+ALTER TABLE applications ADD COLUMN "DaysOfWeekMask" integer;
+UPDATE applications SET "DaysOfWeekMask" = 1 << "DayOfWeek" WHERE "DayOfWeek" IS NOT NULL;
+ALTER TABLE applications DROP COLUMN "DayOfWeek";
+
+ALTER TABLE bookings ADD COLUMN "DaysOfWeekMask" integer;
+UPDATE bookings SET "DaysOfWeekMask" = 1 << "DayOfWeek" WHERE "DayOfWeek" IS NOT NULL;
+ALTER TABLE bookings DROP COLUMN "DayOfWeek";
+--rollback ALTER TABLE bookings ADD COLUMN "DayOfWeek" integer;
+--rollback UPDATE bookings SET "DayOfWeek" = floor(log(2, "DaysOfWeekMask"))::int WHERE "DaysOfWeekMask" IS NOT NULL;
+--rollback ALTER TABLE bookings DROP COLUMN "DaysOfWeekMask";
+--rollback ALTER TABLE applications ADD COLUMN "DayOfWeek" integer;
+--rollback UPDATE applications SET "DayOfWeek" = floor(log(2, "DaysOfWeekMask"))::int WHERE "DaysOfWeekMask" IS NOT NULL;
+--rollback ALTER TABLE applications DROP COLUMN "DaysOfWeekMask";
+
 --changeset steeple:009-counter-offers
 -- A venue manager's alternative schedule proposed on a pending application. A separate table
 -- (not columns on applications) because counters can be superseded and the thread wants

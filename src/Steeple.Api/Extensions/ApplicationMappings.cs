@@ -50,7 +50,7 @@ public static class ApplicationMappings
         Frequency: FlagEnumExtensions.ToCamelCaseToken(application.Frequency.ToString()),
         StartDate: application.StartDate,
         EndDate: application.EndDate,
-        DayOfWeek: application.DayOfWeek is { } day ? FlagEnumExtensions.ToCamelCaseToken(day.ToString()) : null,
+        DaysOfWeek: application.DaysOfWeek is { } days && days != Weekdays.None ? days.ToNameList() : null,
         StartTime: application.StartTime.ToString("HH\\:mm"),
         EndTime: application.EndTime.ToString("HH\\:mm"));
 }

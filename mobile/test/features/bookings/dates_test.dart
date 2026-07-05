@@ -79,11 +79,40 @@ void main() {
         frequency: 'recurringWeekly',
         startDate: '2026-09-01',
         endDate: '2026-12-15',
-        dayOfWeek: 'tuesday',
+        daysOfWeek: ['tuesday'],
         startTime: '09:00',
         endTime: '11:30',
       );
       expect(scheduleSummary(schedule), 'Tuesdays 9:00–11:30 AM');
+    });
+
+    test('recurring weekly with two days joins with "and"', () {
+      const schedule = ProposedSchedule(
+        frequency: 'recurringWeekly',
+        startDate: '2026-09-01',
+        endDate: '2026-12-15',
+        daysOfWeek: ['tuesday', 'thursday'],
+        startTime: '09:00',
+        endTime: '11:30',
+      );
+      expect(scheduleSummary(schedule), 'Tuesdays and Thursdays 9:00–11:30 AM');
+    });
+
+    test('recurring weekly with three+ days uses commas + final "and", '
+        'Sunday-first', () {
+      const schedule = ProposedSchedule(
+        frequency: 'recurringWeekly',
+        startDate: '2026-09-01',
+        endDate: '2026-12-15',
+        // Deliberately out of order to prove the summary re-sorts Sunday-first.
+        daysOfWeek: ['friday', 'monday', 'wednesday'],
+        startTime: '09:00',
+        endTime: '11:30',
+      );
+      expect(
+        scheduleSummary(schedule),
+        'Mondays, Wednesdays and Fridays 9:00–11:30 AM',
+      );
     });
 
     test('one-off shows the weekday, date, and time', () {

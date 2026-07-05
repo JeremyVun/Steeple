@@ -10,14 +10,15 @@ public static class ScheduleMaterializer
 {
     /// <summary>
     /// Materializes every occurrence of the schedule, in date order. One-off schedules yield the
-    /// single start date; recurring-weekly schedules yield each matching weekday from the first
-    /// on/after <paramref name="startDate"/> through <paramref name="endDate"/> inclusive.
+    /// single start date; recurring-weekly schedules yield each date whose weekday is in
+    /// <paramref name="daysOfWeek"/> from <paramref name="startDate"/> through
+    /// <paramref name="endDate"/> inclusive ("Tuesdays and Thursdays" is one schedule).
     /// </summary>
     public static IReadOnlyList<OccurrenceInstant> Materialize(
         ScheduleFrequency frequency,
         DateOnly startDate,
         DateOnly endDate,
-        DayOfWeek? dayOfWeek,
+        Weekdays? daysOfWeek,
         TimeOnly startTime,
         TimeOnly endTime,
         TimeZoneInfo venueZone)
@@ -26,7 +27,9 @@ public static class ScheduleMaterializer
             ? WeeklyDates(
                 startDate,
                 endDate,
-                dayOfWeek ?? throw new ArgumentNullException(nameof(dayOfWeek), "A recurring schedule needs a weekday."))
+                daysOfWeek is { } days && days != Weekdays.None
+                    ? days
+                    : throw new ArgumentNullException(nameof(daysOfWeek), "A recurring schedule needs at least one weekday."))
             : [startDate];
 
         return dates
@@ -37,12 +40,19 @@ public static class ScheduleMaterializer
             .ToList();
     }
 
-    private static IEnumerable<DateOnly> WeeklyDates(DateOnly startDate, DateOnly endDate, DayOfWeek dayOfWeek)
+    /// <summary>The bit <see cref="Weekdays"/> uses for a date's weekday (Sunday = bit 0).</summary>
+    public static Weekdays WeekdayBit(DateOnly date) => (Weekdays)(1 << (int)date.DayOfWeek);
+
+    private static IEnumerable<DateOnly> WeeklyDates(DateOnly startDate, DateOnly endDate, Weekdays daysOfWeek)
     {
-        var offsetToFirst = ((int)dayOfWeek - (int)startDate.DayOfWeek + 7) % 7;
-        for (var date = startDate.AddDays(offsetToFirst); date <= endDate; date = date.AddDays(7))
+        // Day-by-day scan (≤ 366 iterations — terms are bounded) keeps multi-weekday output
+        // provably date-ordered without merging per-weekday arithmetic sequences.
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
         {
-            yield return date;
+            if (daysOfWeek.HasFlag(WeekdayBit(date)))
+            {
+                yield return date;
+            }
         }
     }
 

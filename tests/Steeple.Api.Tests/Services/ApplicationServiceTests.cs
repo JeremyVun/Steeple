@@ -61,12 +61,39 @@ public class ApplicationServiceTests
     [Fact]
     public async Task SubmitAsync_RecurringWithoutEndDate_ReturnsInvalidApplication() =>
         await AssertInvalidSubmissionAsync(NewSubmitRequest(
-            schedule: NewSchedule(frequency: "recurringWeekly", endDate: null, dayOfWeek: "monday")));
+            schedule: NewSchedule(frequency: "recurringWeekly", endDate: null, daysOfWeek: ["monday"])));
 
     [Fact]
     public async Task SubmitAsync_RecurringWithoutDayOfWeek_ReturnsInvalidApplication() =>
         await AssertInvalidSubmissionAsync(NewSubmitRequest(
-            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(30), dayOfWeek: null)));
+            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(30), daysOfWeek: null)));
+
+    [Fact]
+    public async Task SubmitAsync_RecurringWithUnknownDayToken_ReturnsInvalidApplication() =>
+        await AssertInvalidSubmissionAsync(NewSubmitRequest(
+            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(30), daysOfWeek: ["notaday"])));
+
+    [Fact]
+    public async Task SubmitAsync_RecurringWithEmptyDayList_ReturnsInvalidApplication() =>
+        await AssertInvalidSubmissionAsync(NewSubmitRequest(
+            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(30), daysOfWeek: [])));
+
+    [Fact]
+    public async Task SubmitAsync_RecurringWithMultipleDays_CreatesPendingApplication()
+    {
+        var (repo, managers, venue, room, organizer, manager) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.SubmitAsync(
+            room.Id, organizer.Id,
+            NewSubmitRequest(schedule: NewSchedule(
+                frequency: "recurringWeekly", endDate: Today().AddDays(30), daysOfWeek: ["tuesday", "thursday"])),
+            idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        var created = Assert.Single(repo.Applications);
+        Assert.Equal(Weekdays.Tuesday | Weekdays.Thursday, created.DaysOfWeek);
+    }
 
     [Fact]
     public async Task SubmitAsync_EndTimeNotAfterStartTime_ReturnsInvalidApplication() =>
@@ -90,7 +117,7 @@ public class ApplicationServiceTests
     [Fact]
     public async Task SubmitAsync_RecurringTermLongerThanAYear_ReturnsInvalidApplication() =>
         await AssertInvalidSubmissionAsync(NewSubmitRequest(
-            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(400), dayOfWeek: "monday")));
+            schedule: NewSchedule(frequency: "recurringWeekly", endDate: Today().AddDays(400), daysOfWeek: ["monday"])));
 
     [Fact]
     public async Task SubmitAsync_UnknownRoom_ReturnsRoomNotBookable()
@@ -464,7 +491,7 @@ public class ApplicationServiceTests
             Frequency = ScheduleFrequency.OneOff,
             StartDate = Today().AddDays(2),
             EndDate = null,
-            DayOfWeek = null,
+            DaysOfWeek = null,
             StartTime = new TimeOnly(9, 0),
             EndTime = new TimeOnly(11, 0),
             IntentText = "We'd like to host a community meetup.",
@@ -481,13 +508,13 @@ public class ApplicationServiceTests
         string frequency = "oneOff",
         DateOnly? startDate = null,
         DateOnly? endDate = null,
-        string? dayOfWeek = null,
+        IReadOnlyList<string>? daysOfWeek = null,
         string startTime = "09:00",
         string endTime = "11:00") => new(
         Frequency: frequency,
         StartDate: startDate ?? Today().AddDays(2),
         EndDate: endDate,
-        DayOfWeek: dayOfWeek,
+        DaysOfWeek: daysOfWeek,
         StartTime: startTime,
         EndTime: endTime);
 

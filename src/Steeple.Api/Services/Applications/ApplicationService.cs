@@ -96,7 +96,7 @@ public sealed class ApplicationService : IApplicationService
             Frequency = schedule.Frequency,
             StartDate = schedule.StartDate,
             EndDate = schedule.EndDate,
-            DayOfWeek = schedule.DayOfWeek,
+            DaysOfWeek = schedule.DaysOfWeek,
             StartTime = schedule.StartTime,
             EndTime = schedule.EndTime,
             IntentText = request.IntentText.Trim(),
@@ -562,9 +562,20 @@ public sealed class ApplicationService : IApplicationService
                 return "A recurring term can run at most a year — renew it when it ends.";
             }
 
-            if (schedule.DayOfWeek is null || !Enum.TryParse<DayOfWeek>(schedule.DayOfWeek, ignoreCase: true, out _))
+            if (schedule.DaysOfWeek is not { Count: > 0 } dayTokens)
             {
-                return "A recurring schedule needs a day of the week.";
+                return "A recurring schedule needs at least one day of the week.";
+            }
+
+            var days = FlagEnumExtensions.CombineTokens<Weekdays>(dayTokens, out var unknownDays);
+            if (unknownDays.Count > 0)
+            {
+                return $"Unknown day of the week '{unknownDays[0]}'.";
+            }
+
+            if (days == Weekdays.None)
+            {
+                return "A recurring schedule needs at least one day of the week.";
             }
         }
         else if (schedule.EndDate is { } endDate && endDate != schedule.StartDate)
@@ -576,7 +587,7 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <summary>Parses a validated schedule into its stored (venue-local) representation.</summary>
-    private static (ScheduleFrequency Frequency, DateOnly StartDate, DateOnly? EndDate, DayOfWeek? DayOfWeek, TimeOnly StartTime, TimeOnly EndTime)
+    private static (ScheduleFrequency Frequency, DateOnly StartDate, DateOnly? EndDate, Weekdays? DaysOfWeek, TimeOnly StartTime, TimeOnly EndTime)
         ParseSchedule(ScheduleDto schedule)
     {
         var frequency = Enum.Parse<ScheduleFrequency>(schedule.Frequency, ignoreCase: true);
@@ -585,7 +596,7 @@ public sealed class ApplicationService : IApplicationService
             schedule.StartDate,
             frequency == ScheduleFrequency.RecurringWeekly ? schedule.EndDate : schedule.StartDate,
             frequency == ScheduleFrequency.RecurringWeekly
-                ? Enum.Parse<DayOfWeek>(schedule.DayOfWeek!, ignoreCase: true)
+                ? FlagEnumExtensions.CombineTokens<Weekdays>(schedule.DaysOfWeek!, out _)
                 : null,
             TimeOnly.ParseExact(schedule.StartTime, "HH:mm", CultureInfo.InvariantCulture),
             TimeOnly.ParseExact(schedule.EndTime, "HH:mm", CultureInfo.InvariantCulture));
@@ -677,7 +688,7 @@ public sealed class ApplicationService : IApplicationService
         var end = FormatTime(application.EndTime);
 
         return application.Frequency == ScheduleFrequency.RecurringWeekly
-            ? $"{application.DayOfWeek}s {start}–{end}, {FormatDate(application.StartDate)} – {FormatDate(application.EndDate ?? application.StartDate)}"
+            ? $"{ScheduleText.DescribeDays(application.DaysOfWeek ?? Weekdays.None)} {start}–{end}, {FormatDate(application.StartDate)} – {FormatDate(application.EndDate ?? application.StartDate)}"
             : $"{application.StartDate.ToString("ddd, MMM d", CultureInfo.InvariantCulture)}, {start}–{end}";
     }
 

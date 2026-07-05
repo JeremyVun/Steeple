@@ -51,7 +51,7 @@ public class EfApplicationRepositoryTests
         Frequency = ScheduleFrequency.OneOff,
         StartDate = new DateOnly(2026, 8, 1),
         EndDate = null,
-        DayOfWeek = null,
+        DaysOfWeek = null,
         StartTime = new TimeOnly(9, 0),
         EndTime = new TimeOnly(11, 0),
         IntentText = "A community potluck for local families.",

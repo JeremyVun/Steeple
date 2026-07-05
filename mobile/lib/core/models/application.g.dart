@@ -11,7 +11,9 @@ _ProposedSchedule _$ProposedScheduleFromJson(Map<String, dynamic> json) =>
       frequency: json['frequency'] as String,
       startDate: json['startDate'] as String,
       endDate: json['endDate'] as String?,
-      dayOfWeek: json['dayOfWeek'] as String?,
+      daysOfWeek: (json['daysOfWeek'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList(),
       startTime: json['startTime'] as String,
       endTime: json['endTime'] as String,
     );
@@ -21,7 +23,7 @@ Map<String, dynamic> _$ProposedScheduleToJson(_ProposedSchedule instance) =>
       'frequency': instance.frequency,
       'startDate': instance.startDate,
       'endDate': instance.endDate,
-      'dayOfWeek': instance.dayOfWeek,
+      'daysOfWeek': instance.daysOfWeek,
       'startTime': instance.startTime,
       'endTime': instance.endTime,
     };

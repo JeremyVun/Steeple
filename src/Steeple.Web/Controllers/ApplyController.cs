@@ -122,7 +122,7 @@ public sealed class ApplyController : SteepleControllerBase
                 Frequency: form.Frequency,
                 StartDate: form.StartDate!.Value,
                 EndDate: form.Frequency == "recurringWeekly" ? form.EndDate : null,
-                DayOfWeek: form.Frequency == "recurringWeekly" ? form.DayOfWeek : null,
+                DaysOfWeek: form.Frequency == "recurringWeekly" && form.DaysOfWeek.Count > 0 ? form.DaysOfWeek : null,
                 StartTime: form.StartTime,
                 EndTime: form.EndTime),
             IntentText: form.IntentText,
@@ -187,9 +187,9 @@ public sealed class ApplyController : SteepleControllerBase
             return "Pick a start and end time.";
         }
 
-        if (form.Frequency == "recurringWeekly" && (form.EndDate is null || string.IsNullOrEmpty(form.DayOfWeek)))
+        if (form.Frequency == "recurringWeekly" && (form.EndDate is null || form.DaysOfWeek.Count == 0))
         {
-            return "A weekly booking needs a day of the week and an end date.";
+            return "A weekly booking needs at least one day of the week and an end date.";
         }
 
         if (string.IsNullOrWhiteSpace(form.IntentText))

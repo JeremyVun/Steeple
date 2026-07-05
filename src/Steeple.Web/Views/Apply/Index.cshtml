@@ -82,16 +82,22 @@
                                value="@(form.EndDate?.ToString("yyyy-MM-dd"))" />
                         <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
                     </div>
-                    <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
-                        <label class="field-label" for="apply-dayofweek">Day of the week</label>
-                        <select class="form-input" id="apply-dayofweek" name="DayOfWeek">
-                            @foreach (var option in ApplyViewModel.DayOptions)
-                            {
-                                <option value="@option.Value" selected="@(option.Value == form.DayOfWeek)">@option.Label</option>
-                            }
-                        </select>
-                    </div>
                 </div>
+
+                <fieldset class="form-field form-fieldset" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
+                    <legend class="field-label">On these days</legend>
+                    <div class="chip-set">
+                        @foreach (var option in ApplyViewModel.DayOptions)
+                        {
+                            <label class="chip">
+                                <input type="checkbox" name="DaysOfWeek" value="@option.Value"
+                                       @(form.DaysOfWeek.Contains(option.Value) ? "checked" : "") />
+                                <span class="chip-text">@option.Label</span>
+                            </label>
+                        }
+                    </div>
+                    <p class="field-help">Pick one or more — "Tuesdays and Thursdays" is one request.</p>
+                </fieldset>
 
                 <div class="form-row">
                     <div class="form-field">

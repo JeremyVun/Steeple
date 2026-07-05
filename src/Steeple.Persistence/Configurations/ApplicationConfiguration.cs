@@ -18,6 +18,7 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
         builder.Property(a => a.ActivityType).HasConversion<int>();
         builder.Property(a => a.Frequency).HasConversion<int>();
         builder.Property(a => a.Status).HasConversion<int>();
+        builder.Property(a => a.DaysOfWeek).HasColumnName("DaysOfWeekMask").HasConversion<int?>();
 
         // Provider inbox (applications for a room) and organizer inbox (my applications), newest first.
         builder.HasIndex(a => new { a.RoomId, a.CreatedAtUtc });

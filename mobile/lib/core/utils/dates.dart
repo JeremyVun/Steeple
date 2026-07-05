@@ -17,6 +17,15 @@ const _monthNames = [
 
 const _weekdayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const _weekdayFull = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', //
+];
+
+const _weekdayIndex = <String, int>{
+  'sunday': 0, 'monday': 1, 'tuesday': 2, 'wednesday': 3, //
+  'thursday': 4, 'friday': 5, 'saturday': 6,
+};
+
 /// Relative timestamp for inbox rows (DESIGN_SYSTEM §10): "just now" / "5m
 /// ago" / "2h ago" / "3d ago", then an absolute "Jun 12" for anything older
 /// than a week ("Jun 12, 2025" once it's a different calendar year).
@@ -92,12 +101,29 @@ int _daysSinceEpoch(String yyyyMmDd) {
 String scheduleSummary(ProposedSchedule s) {
   final timeRange = _timeRange(s.startTime, s.endTime);
   if (s.frequencyValue == ScheduleFrequency.recurringWeekly) {
-    final day = s.dayOfWeek;
-    final label = (day == null || day.isEmpty) ? 'Weekly' : '${_capitalize(day)}s';
+    final label = describeWeekdays(s.daysOfWeek);
     return '$label $timeRange';
   }
   final weekday = _weekdayAbbrev[_dayOfWeek(s.startDate)];
   return '$weekday, ${monthDay(s.startDate)} · $timeRange';
+}
+
+/// Pluralized weekday-set label matching the server's email style
+/// (Steeple.Api ScheduleText.DescribeDays): "Tuesdays", "Tuesdays and
+/// Thursdays", "Mondays, Wednesdays and Fridays" — always Sunday-first
+/// regardless of wire order. Empty/null falls back to "Weekly".
+String describeWeekdays(List<String>? days) {
+  if (days == null || days.isEmpty) return 'Weekly';
+  final ordered = [...days]..sort(
+      (a, b) => (_weekdayIndex[a] ?? 7).compareTo(_weekdayIndex[b] ?? 7),
+    );
+  final names = ordered.map((d) {
+    final i = _weekdayIndex[d];
+    return i == null ? '${_capitalize(d)}s' : '${_weekdayFull[i]}s';
+  }).toList();
+  if (names.length == 1) return names[0];
+  if (names.length == 2) return '${names[0]} and ${names[1]}';
+  return '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
 }
 
 String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';

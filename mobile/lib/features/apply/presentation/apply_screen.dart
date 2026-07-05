@@ -14,6 +14,7 @@ import '../../../core/auth/session_state.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/push/push_service.dart';
+import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../listing/providers.dart';
 import '../providers.dart';
@@ -206,7 +207,8 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     if (s == null || s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) {
       return false;
     }
-    if (s.frequency == 'recurringWeekly' && (s.endDate == null || s.dayOfWeek == null)) {
+    if (s.frequency == 'recurringWeekly' &&
+        (s.endDate == null || s.daysOfWeek == null || s.daysOfWeek!.isEmpty)) {
       return false;
     }
     return true;
@@ -304,9 +306,24 @@ class _ScheduleFields extends StatelessWidget {
   final bool recurring;
   final ValueChanged<ProposedSchedule> onChanged;
 
+  /// Weekday wire tokens in the Sunday-first order the API expects on the wire.
   static const _days = [
-    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', //
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
   ];
+
+  static const _dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  /// `DateTime.weekday` (Mon=1…Sun=7) → Sunday-first token.
+  String _tokenForDate(DateTime d) => _days[d.weekday % 7];
+
+  /// Toggle a day in/out, keeping the list sorted Sunday-first for the wire.
+  List<String> _toggleDay(List<String> current, String token) {
+    final next = current.contains(token)
+        ? current.where((d) => d != token).toList()
+        : [...current, token];
+    next.sort((a, b) => _days.indexOf(a).compareTo(_days.indexOf(b)));
+    return next;
+  }
 
   ProposedSchedule get _current =>
       schedule ??
@@ -330,10 +347,14 @@ class _ScheduleFields extends StatelessWidget {
     if (isEnd) {
       onChanged(_current.copyWith(endDate: _fmtDate(picked)));
     } else {
+      // Weekly slots seed the start date's weekday when no days are chosen
+      // yet; an existing selection is left untouched.
+      final days = _current.daysOfWeek;
       onChanged(_current.copyWith(
         startDate: _fmtDate(picked),
-        // Weekly slots recur on the start date's weekday unless changed.
-        dayOfWeek: recurring ? _days[picked.weekday - 1] : _current.dayOfWeek,
+        daysOfWeek: recurring && (days == null || days.isEmpty)
+            ? [_tokenForDate(picked)]
+            : days,
       ));
     }
   }
@@ -414,12 +435,36 @@ class _ScheduleFields extends StatelessWidget {
             pickerTile('To', s.endTime, () => _pickTime(context, isEnd: true)),
           ],
         ),
-        if (recurring && s.dayOfWeek != null) ...[
-          const SizedBox(height: SteepleTokens.space2),
+        if (recurring) ...[
+          const SizedBox(height: SteepleTokens.space3),
           Text(
-            'Every ${humanizeWireToken(s.dayOfWeek!)} until ${s.endDate ?? '…'}',
+            'Which days',
             style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
           ),
+          const SizedBox(height: SteepleTokens.space2),
+          Wrap(
+            spacing: SteepleTokens.space2,
+            runSpacing: SteepleTokens.space2,
+            children: [
+              for (var i = 0; i < _days.length; i++)
+                FilterChipPill(
+                  label: _dayAbbrev[i],
+                  selected: (s.daysOfWeek ?? const []).contains(_days[i]),
+                  onTap: () => onChanged(
+                    s.copyWith(
+                      daysOfWeek: _toggleDay(s.daysOfWeek ?? const [], _days[i]),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if ((s.daysOfWeek ?? const []).isNotEmpty) ...[
+            const SizedBox(height: SteepleTokens.space2),
+            Text(
+              '${describeWeekdays(s.daysOfWeek)} until ${s.endDate ?? '…'}',
+              style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+            ),
+          ],
         ],
       ],
     );

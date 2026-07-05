@@ -23,7 +23,7 @@
         "frequency": "recurringWeekly",
         "startDate": "2026-09-01",
         "endDate": "2026-12-15",
-        "dayOfWeek": "tuesday",
+        "daysOfWeek": ["tuesday"],
         "startTime": "09:00",
         "endTime": "11:30"
       },
@@ -54,7 +54,7 @@
         "frequency": "oneOff",
         "startDate": "2026-07-18",
         "endDate": null,
-        "dayOfWeek": null,
+        "daysOfWeek": null,
         "startTime": "18:00",
         "endTime": "21:00"
       },

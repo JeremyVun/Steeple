@@ -245,7 +245,7 @@ public class ManageServiceIntegrationTests
                 Frequency = ScheduleFrequency.OneOff,
                 StartDate = new DateOnly(2026, 12, 1),
                 EndDate = null,
-                DayOfWeek = null,
+                DaysOfWeek = null,
                 StartTime = new TimeOnly(9, 0),
                 EndTime = new TimeOnly(11, 0),
                 IntentText = "A future community gathering.",

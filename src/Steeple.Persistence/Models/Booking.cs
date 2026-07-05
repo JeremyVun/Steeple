@@ -28,8 +28,8 @@ public class Booking
     /// <summary>Venue-local last date — always set (bounded recurrence).</summary>
     public DateOnly EndDate { get; set; }
 
-    /// <summary>Weekday of a recurring booking; null for one-offs.</summary>
-    public DayOfWeek? DayOfWeek { get; set; }
+    /// <summary>Weekdays of a recurring booking ("Tuesdays and Thursdays"); null for one-offs.</summary>
+    public Weekdays? DaysOfWeek { get; set; }
 
     /// <summary>Venue-local wall-clock start time.</summary>
     public TimeOnly StartTime { get; set; }

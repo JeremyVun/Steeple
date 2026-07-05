@@ -361,7 +361,7 @@ public class BookingServiceTests
             Type = type,
             StartDate = today,
             EndDate = endDate ?? today.AddDays(1),
-            DayOfWeek = type == BookingType.Recurring ? FixedNow.DayOfWeek : null,
+            DaysOfWeek = type == BookingType.Recurring ? (Weekdays?)(1 << (int)FixedNow.DayOfWeek) : null,
             StartTime = new TimeOnly(9, 0),
             EndTime = new TimeOnly(11, 0),
             Status = BookingStatus.Confirmed,

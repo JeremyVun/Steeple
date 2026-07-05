@@ -27,8 +27,9 @@ abstract class ProposedSchedule with _$ProposedSchedule {
     /// `yyyy-MM-dd` — mandatory when recurring.
     String? endDate,
 
-    /// Wire token (`monday`…`sunday`) — required when recurring.
-    String? dayOfWeek,
+    /// Wire tokens (`sunday`…`saturday`), sorted Sunday-first — one or more
+    /// when recurring, null/absent for one-off.
+    List<String>? daysOfWeek,
 
     /// Venue-local start, `HH:mm` (24h).
     required String startTime,

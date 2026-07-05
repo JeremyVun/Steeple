@@ -14,6 +14,7 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.Property(b => b.Type).HasConversion<int>();
         builder.Property(b => b.Status).HasConversion<int>();
+        builder.Property(b => b.DaysOfWeek).HasColumnName("DaysOfWeekMask").HasConversion<int?>();
         builder.Property(b => b.CancelReason).HasMaxLength(500);
 
         // One booking per application, ever.

@@ -18,8 +18,9 @@ mixin _$ProposedSchedule {
 /// Wire token: `oneOff` or `recurringWeekly`.
  String get frequency;/// `yyyy-MM-dd`.
  String get startDate;/// `yyyy-MM-dd` — mandatory when recurring.
- String? get endDate;/// Wire token (`monday`…`sunday`) — required when recurring.
- String? get dayOfWeek;/// Venue-local start, `HH:mm` (24h).
+ String? get endDate;/// Wire tokens (`sunday`…`saturday`), sorted Sunday-first — one or more
+/// when recurring, null/absent for one-off.
+ List<String>? get daysOfWeek;/// Venue-local start, `HH:mm` (24h).
  String get startTime;/// Venue-local end, `HH:mm` (24h), after [startTime].
  String get endTime;
 /// Create a copy of ProposedSchedule
@@ -34,16 +35,16 @@ $ProposedScheduleCopyWith<ProposedSchedule> get copyWith => _$ProposedScheduleCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProposedSchedule&&(identical(other.frequency, frequency) || other.frequency == frequency)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ProposedSchedule&&(identical(other.frequency, frequency) || other.frequency == frequency)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&const DeepCollectionEquality().equals(other.daysOfWeek, daysOfWeek)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,frequency,startDate,endDate,dayOfWeek,startTime,endTime);
+int get hashCode => Object.hash(runtimeType,frequency,startDate,endDate,const DeepCollectionEquality().hash(daysOfWeek),startTime,endTime);
 
 @override
 String toString() {
-  return 'ProposedSchedule(frequency: $frequency, startDate: $startDate, endDate: $endDate, dayOfWeek: $dayOfWeek, startTime: $startTime, endTime: $endTime)';
+  return 'ProposedSchedule(frequency: $frequency, startDate: $startDate, endDate: $endDate, daysOfWeek: $daysOfWeek, startTime: $startTime, endTime: $endTime)';
 }
 
 
@@ -54,7 +55,7 @@ abstract mixin class $ProposedScheduleCopyWith<$Res>  {
   factory $ProposedScheduleCopyWith(ProposedSchedule value, $Res Function(ProposedSchedule) _then) = _$ProposedScheduleCopyWithImpl;
 @useResult
 $Res call({
- String frequency, String startDate, String? endDate, String? dayOfWeek, String startTime, String endTime
+ String frequency, String startDate, String? endDate, List<String>? daysOfWeek, String startTime, String endTime
 });
 
 
@@ -71,13 +72,13 @@ class _$ProposedScheduleCopyWithImpl<$Res>
 
 /// Create a copy of ProposedSchedule
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? frequency = null,Object? startDate = null,Object? endDate = freezed,Object? dayOfWeek = freezed,Object? startTime = null,Object? endTime = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? frequency = null,Object? startDate = null,Object? endDate = freezed,Object? daysOfWeek = freezed,Object? startTime = null,Object? endTime = null,}) {
   return _then(_self.copyWith(
 frequency: null == frequency ? _self.frequency : frequency // ignore: cast_nullable_to_non_nullable
 as String,startDate: null == startDate ? _self.startDate : startDate // ignore: cast_nullable_to_non_nullable
 as String,endDate: freezed == endDate ? _self.endDate : endDate // ignore: cast_nullable_to_non_nullable
-as String?,dayOfWeek: freezed == dayOfWeek ? _self.dayOfWeek : dayOfWeek // ignore: cast_nullable_to_non_nullable
-as String?,startTime: null == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
+as String?,daysOfWeek: freezed == daysOfWeek ? _self.daysOfWeek : daysOfWeek // ignore: cast_nullable_to_non_nullable
+as List<String>?,startTime: null == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
 as String,endTime: null == endTime ? _self.endTime : endTime // ignore: cast_nullable_to_non_nullable
 as String,
   ));
@@ -164,10 +165,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String frequency,  String startDate,  String? endDate,  String? dayOfWeek,  String startTime,  String endTime)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String frequency,  String startDate,  String? endDate,  List<String>? daysOfWeek,  String startTime,  String endTime)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ProposedSchedule() when $default != null:
-return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_that.startTime,_that.endTime);case _:
+return $default(_that.frequency,_that.startDate,_that.endDate,_that.daysOfWeek,_that.startTime,_that.endTime);case _:
   return orElse();
 
 }
@@ -185,10 +186,10 @@ return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String frequency,  String startDate,  String? endDate,  String? dayOfWeek,  String startTime,  String endTime)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String frequency,  String startDate,  String? endDate,  List<String>? daysOfWeek,  String startTime,  String endTime)  $default,) {final _that = this;
 switch (_that) {
 case _ProposedSchedule():
-return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_that.startTime,_that.endTime);case _:
+return $default(_that.frequency,_that.startDate,_that.endDate,_that.daysOfWeek,_that.startTime,_that.endTime);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -205,10 +206,10 @@ return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_t
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String frequency,  String startDate,  String? endDate,  String? dayOfWeek,  String startTime,  String endTime)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String frequency,  String startDate,  String? endDate,  List<String>? daysOfWeek,  String startTime,  String endTime)?  $default,) {final _that = this;
 switch (_that) {
 case _ProposedSchedule() when $default != null:
-return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_that.startTime,_that.endTime);case _:
+return $default(_that.frequency,_that.startDate,_that.endDate,_that.daysOfWeek,_that.startTime,_that.endTime);case _:
   return null;
 
 }
@@ -220,7 +221,7 @@ return $default(_that.frequency,_that.startDate,_that.endDate,_that.dayOfWeek,_t
 @JsonSerializable()
 
 class _ProposedSchedule extends ProposedSchedule {
-  const _ProposedSchedule({required this.frequency, required this.startDate, this.endDate, this.dayOfWeek, required this.startTime, required this.endTime}): super._();
+  const _ProposedSchedule({required this.frequency, required this.startDate, this.endDate, final  List<String>? daysOfWeek, required this.startTime, required this.endTime}): _daysOfWeek = daysOfWeek,super._();
   factory _ProposedSchedule.fromJson(Map<String, dynamic> json) => _$ProposedScheduleFromJson(json);
 
 /// Wire token: `oneOff` or `recurringWeekly`.
@@ -229,8 +230,19 @@ class _ProposedSchedule extends ProposedSchedule {
 @override final  String startDate;
 /// `yyyy-MM-dd` — mandatory when recurring.
 @override final  String? endDate;
-/// Wire token (`monday`…`sunday`) — required when recurring.
-@override final  String? dayOfWeek;
+/// Wire tokens (`sunday`…`saturday`), sorted Sunday-first — one or more
+/// when recurring, null/absent for one-off.
+ final  List<String>? _daysOfWeek;
+/// Wire tokens (`sunday`…`saturday`), sorted Sunday-first — one or more
+/// when recurring, null/absent for one-off.
+@override List<String>? get daysOfWeek {
+  final value = _daysOfWeek;
+  if (value == null) return null;
+  if (_daysOfWeek is EqualUnmodifiableListView) return _daysOfWeek;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(value);
+}
+
 /// Venue-local start, `HH:mm` (24h).
 @override final  String startTime;
 /// Venue-local end, `HH:mm` (24h), after [startTime].
@@ -249,16 +261,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProposedSchedule&&(identical(other.frequency, frequency) || other.frequency == frequency)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.dayOfWeek, dayOfWeek) || other.dayOfWeek == dayOfWeek)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ProposedSchedule&&(identical(other.frequency, frequency) || other.frequency == frequency)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&const DeepCollectionEquality().equals(other._daysOfWeek, _daysOfWeek)&&(identical(other.startTime, startTime) || other.startTime == startTime)&&(identical(other.endTime, endTime) || other.endTime == endTime));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,frequency,startDate,endDate,dayOfWeek,startTime,endTime);
+int get hashCode => Object.hash(runtimeType,frequency,startDate,endDate,const DeepCollectionEquality().hash(_daysOfWeek),startTime,endTime);
 
 @override
 String toString() {
-  return 'ProposedSchedule(frequency: $frequency, startDate: $startDate, endDate: $endDate, dayOfWeek: $dayOfWeek, startTime: $startTime, endTime: $endTime)';
+  return 'ProposedSchedule(frequency: $frequency, startDate: $startDate, endDate: $endDate, daysOfWeek: $daysOfWeek, startTime: $startTime, endTime: $endTime)';
 }
 
 
@@ -269,7 +281,7 @@ abstract mixin class _$ProposedScheduleCopyWith<$Res> implements $ProposedSchedu
   factory _$ProposedScheduleCopyWith(_ProposedSchedule value, $Res Function(_ProposedSchedule) _then) = __$ProposedScheduleCopyWithImpl;
 @override @useResult
 $Res call({
- String frequency, String startDate, String? endDate, String? dayOfWeek, String startTime, String endTime
+ String frequency, String startDate, String? endDate, List<String>? daysOfWeek, String startTime, String endTime
 });
 
 
@@ -286,13 +298,13 @@ class __$ProposedScheduleCopyWithImpl<$Res>
 
 /// Create a copy of ProposedSchedule
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? frequency = null,Object? startDate = null,Object? endDate = freezed,Object? dayOfWeek = freezed,Object? startTime = null,Object? endTime = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? frequency = null,Object? startDate = null,Object? endDate = freezed,Object? daysOfWeek = freezed,Object? startTime = null,Object? endTime = null,}) {
   return _then(_ProposedSchedule(
 frequency: null == frequency ? _self.frequency : frequency // ignore: cast_nullable_to_non_nullable
 as String,startDate: null == startDate ? _self.startDate : startDate // ignore: cast_nullable_to_non_nullable
 as String,endDate: freezed == endDate ? _self.endDate : endDate // ignore: cast_nullable_to_non_nullable
-as String?,dayOfWeek: freezed == dayOfWeek ? _self.dayOfWeek : dayOfWeek // ignore: cast_nullable_to_non_nullable
-as String?,startTime: null == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
+as String?,daysOfWeek: freezed == daysOfWeek ? _self._daysOfWeek : daysOfWeek // ignore: cast_nullable_to_non_nullable
+as List<String>?,startTime: null == startTime ? _self.startTime : startTime // ignore: cast_nullable_to_non_nullable
 as String,endTime: null == endTime ? _self.endTime : endTime // ignore: cast_nullable_to_non_nullable
 as String,
   ));
