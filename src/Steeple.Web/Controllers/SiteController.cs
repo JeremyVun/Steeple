@@ -102,8 +102,13 @@ public sealed class SiteController : SteepleControllerBase
         return View();
     }
 
-    /// <summary>Generic error page — the target of the production exception handler.</summary>
-    [HttpGet("/error")]
+    /// <summary>
+    /// Generic error page — the target of the production exception handler. Verb-agnostic route
+    /// (not <c>[HttpGet]</c>): the handler re-executes with the original request's method, so a
+    /// failed POST must still reach this action or the user sees a bare 405 instead of the page.
+    /// </summary>
+    [Route("/error")]
+    [IgnoreAntiforgeryToken]
     public IActionResult Error()
     {
         ViewData["Title"] = "Something went wrong";

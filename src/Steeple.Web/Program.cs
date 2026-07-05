@@ -6,7 +6,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Every authenticated POST carries the antiforgery token (CSRF). The SSO callbacks that can't
 // (Apple's cross-site form_post) opt out explicitly and validate a signed state cookie instead.
 var mvc = builder.Services.AddControllersWithViews(options =>
-    options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute()));
+{
+    options.Filters.Add(new Microsoft.AspNetCore.Mvc.AutoValidateAntiforgeryTokenAttribute());
+    // Form view models default string properties to "" — keep a blank input bound as "" instead
+    // of the binder's default null, so payload builders (ToRequest) never trip on an empty field.
+    options.ModelMetadataDetailsProviders.Add(new KeepEmptyStringsMetadataProvider());
+});
 if (builder.Environment.IsDevelopment())
 {
     mvc.AddRazorRuntimeCompilation();
