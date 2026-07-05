@@ -69,6 +69,15 @@ public class SteepleDbContext : DbContext
     /// <summary>Immutable two-way booking ratings.</summary>
     public DbSet<Rating> Ratings => Set<Rating>();
 
+    /// <summary>Weekly open windows rooms advertise (venue-local, advisory).</summary>
+    public DbSet<RoomOpenHours> RoomOpenHours => Set<RoomOpenHours>();
+
+    /// <summary>Whole dates rooms are closed regardless of open hours.</summary>
+    public DbSet<RoomBlackoutDate> RoomBlackoutDates => Set<RoomBlackoutDate>();
+
+    /// <summary>Host counter-offers proposed on pending applications.</summary>
+    public DbSet<ApplicationCounterOffer> ApplicationCounterOffers => Set<ApplicationCounterOffer>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

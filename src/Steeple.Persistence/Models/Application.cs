@@ -72,4 +72,7 @@ public class Application
 
     /// <summary>The booking created when this application was approved; null otherwise.</summary>
     public Booking? Booking { get; set; }
+
+    /// <summary>Host counter-offers on this application (at most one open; the rest history).</summary>
+    public ICollection<ApplicationCounterOffer> CounterOffers { get; set; } = new List<ApplicationCounterOffer>();
 }

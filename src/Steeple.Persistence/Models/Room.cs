@@ -74,6 +74,12 @@ public class Room
     /// <summary>Photos for this room.</summary>
     public ICollection<RoomPhoto> Photos { get; set; } = new List<RoomPhoto>();
 
+    /// <summary>Weekly open windows (venue-local); required non-empty to publish.</summary>
+    public ICollection<RoomOpenHours> OpenHours { get; set; } = new List<RoomOpenHours>();
+
+    /// <summary>Whole dates the room is closed regardless of open hours.</summary>
+    public ICollection<RoomBlackoutDate> BlackoutDates { get; set; } = new List<RoomBlackoutDate>();
+
     /// <summary>
     /// Whether the room is free to use. Not persisted — the EF configuration ignores this property.
     /// </summary>
