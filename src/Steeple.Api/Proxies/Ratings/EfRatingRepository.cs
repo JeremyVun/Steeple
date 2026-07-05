@@ -84,8 +84,10 @@ public class EfRatingRepository : IRatingRepository
     public async Task<IReadOnlyList<Rating>> GetVisibleCommentedForVenueAsync(
         Guid venueId, CancellationToken ct = default)
     {
+        // Identity resolution (not plain no-tracking): the reveal rule reads back through
+        // Booking.Ratings, and EF rejects that Include cycle under AsNoTracking().
         return await _db.Ratings
-            .AsNoTracking()
+            .AsNoTrackingWithIdentityResolution()
             .Where(r =>
                 r.VenueId == venueId
                 && r.RateeType == RatingRateeType.Venue
@@ -136,8 +138,9 @@ public class EfRatingRepository : IRatingRepository
     private static async Task<IReadOnlyList<Rating>> GetVisibleAggregateCandidatesAsync(
         IQueryable<Rating> query, CancellationToken ct)
     {
+        // Same cycle constraint as GetVisibleCommentedForVenueAsync.
         return await query
-            .AsNoTracking()
+            .AsNoTrackingWithIdentityResolution()
             .Where(r => r.HiddenAtUtc == null)
             .Include(r => r.Booking!).ThenInclude(b => b.Occurrences)
             .Include(r => r.Booking!).ThenInclude(b => b.Ratings)

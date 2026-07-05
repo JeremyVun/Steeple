@@ -78,9 +78,16 @@ public sealed class NotificationDispatcher : INotificationDispatcher
 
         // Push, one send per recipient's own inbox row (notificationId = that row's id) — the
         // client fetches/renders from the inbox, this only ever points at it (CONTRACTS §9).
+        // Token lookup is awaited here: the device registry shares this request's scoped
+        // DbContext, which must never be touched from an unawaited task. Only the gateway
+        // send (singleton over HttpClient) is safe to outlive the request.
         foreach (var row in rows)
         {
-            _ = SendPushSafelyAsync(row, type, deepLink);
+            var tokens = await _devices.GetTokensAsync(row.UserId, ct).ConfigureAwait(false);
+            if (tokens.Count > 0)
+            {
+                _ = SendPushSafelyAsync(tokens, row, type, deepLink);
+            }
         }
 
         await TrackSafelyAsync(type, recipients.Count, email is not null).ConfigureAwait(false);
@@ -98,16 +105,11 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         }
     }
 
-    private async Task SendPushSafelyAsync(Notification row, NotificationType type, string? deepLink)
+    private async Task SendPushSafelyAsync(
+        IReadOnlyList<string> tokens, Notification row, NotificationType type, string? deepLink)
     {
         try
         {
-            var tokens = await _devices.GetTokensAsync(row.UserId, CancellationToken.None).ConfigureAwait(false);
-            if (tokens.Count == 0)
-            {
-                return;
-            }
-
             var message = new PushMessage(
                 NotificationId: row.Id.ToString(),
                 Type: FlagEnumExtensions.ToCamelCaseToken(type.ToString()),
