@@ -1,0 +1,33 @@
+@model ConflictSummaryViewModel
+@using System.Globalization
+@{
+    var result = Model.Result;
+}
+@* Shared availability verdict card (§8.13): advisory language, colour never alone (icon + text). *@
+<div class="verdict-card verdict-@Model.Role" role="status" aria-live="polite">
+    <p class="verdict-headline">
+        <span class="verdict-icon" aria-hidden="true">@Model.Icon</span>
+        <span>@Model.Headline</span>
+    </p>
+
+    @if (result.Conflicts.Count > 0)
+    {
+        <details class="verdict-detail" open="@Model.HardBlock">
+            <summary>See which date@(result.Conflicts.Count == 1 ? "" : "s")</summary>
+            <ul class="verdict-list" role="list">
+                @foreach (var clash in result.Conflicts)
+                {
+                    <li>
+                        <span class="verdict-date">@clash.Date.ToString("ddd, MMM d", CultureInfo.InvariantCulture)</span>
+                        <span class="verdict-reason">@AvailabilityDisplay.ConflictReason(clash.Reason)</span>
+                    </li>
+                }
+            </ul>
+        </details>
+    }
+
+    @if (Model.NextAction is { } next)
+    {
+        <p class="verdict-next">@next</p>
+    }
+</div>

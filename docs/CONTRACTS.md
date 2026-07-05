@@ -164,7 +164,9 @@ single request materializing occurrences on both days).
 `400 invalid_application` (bad token / malformed or unbounded schedule / past start date),
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer
 identically — no existence leak), `404 geofence_rejected` (reserved, defense in depth),
-`429 rate_limited` (per-account `apply` policy, shared with messages).
+`409 schedule_unavailable` (any occurrence outside open hours / on a blackout / already booked —
+body carries the per-date conflict list, §6 "Guest availability reads"; skipped for rooms with
+no availability rules), `429 rate_limited` (per-account `apply` policy, shared with messages).
 
 `Application` ✅: `{ id, roomId, roomName, venueName, venueSlug, roomSlug,
 organizer{id, displayName, ratingSummary?{averageStars, ratingCount, noShowCount,
@@ -327,8 +329,23 @@ All times are venue-local wall-clock `HH:mm` (24h) strings; weekday tokens per �
   009 backfill seeded every already-published room, so nothing unpublishes when the flag turns on).
 - Public `RoomDetailDto` gains additive `openHours?` (same `days` shape, null when the room has
   no rules rows) on the listing detail reads.
-- Advisory availability reads and schedule checks for guests are the **next** commit (🔲):
-  `GET /listings/{roomId}/availability`, `POST /listings/{roomId}/availability/check`.
+**Guest availability reads ✅ *(built 2026-07-05 — availability plan commit 5)*:**
+
+- `GET /api/v1/listings/{roomId}/availability?from&to` ✅ (anonymous; published-gated — Draft/
+  Unlisted answer 404 like every public listing read) → `RoomAvailabilityDto`: `{roomId,
+  timezone, from, to, days: [{date, isBlackout, freeWindows: [{startTime, endTime}]}]}`.
+  `freeWindows` = open hours − blackouts − **confirmed** booked time (pending demand is never
+  leaked), `[)` venue-local intervals. Limits: `from` ≥ today (venue-local), `to` ≥ `from`,
+  range ≤ 92 days → `400 invalid_range`.
+- `POST /api/v1/listings/{roomId}/availability/check` ✅ (anonymous, per-IP `availability`
+  policy 30/min) — `{schedule: ScheduleDto}` (same shape the apply form submits) →
+  `ScheduleCheckResultDto`: `{available, totalOccurrences, conflicts: [{date, reason}]}` with
+  `reason` ∈ `outsideOpenHours | blackout | booked`. Advisory dry-run of the submit-time block.
+- **Submit hard block** ✅: `POST /listings/{roomId}/applications` now rejects schedules with
+  any conflicting occurrence → `409 schedule_unavailable`; the problem body carries the same
+  `{available, totalOccurrences, conflicts[]}` payload. Rooms with **no** availability rules
+  (legacy, pre-gate) skip the block entirely. The `booking_occurrences` exclusion constraint
+  remains the final race authority (`slot_taken` on approval is unchanged).
 
 ### Photos
 - `POST /api/v1/manage/rooms/{id}/photos` ✅ — multipart `file` (≤10 MB, enforced by Kestrel
@@ -383,6 +400,8 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `listing_publish_requested` ✅ | server | roomId, venueId |
 | `photo_uploaded` ✅ | server | roomId, photoId |
 | `open_hours_updated` ✅ | server | roomId, windowCount, blackoutCount |
+| `availability_viewed` ✅ | server | roomId, dayCount |
+| `availability_checked` ✅ | server | roomId, available, conflictCount |
 | `listing_moderated` ✅ | Admin (stdout only — not `IAnalyticsSink`; same log-line shape) | roomId, outcome (approved/declined), actor |
 
 ¹ Interim: these client-ish funnel events are still emitted server-side by the Web BFF

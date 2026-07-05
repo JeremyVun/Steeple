@@ -187,7 +187,16 @@ abstract class ListingRepository {
   Future<RoomDetail> bySlug(String venueSlug, String roomSlug);  // GET /listings/by-slug/…
   Future<RoomDetail> byId(String id);                            // GET /listings/{id}
   Future<VenueReviewPage> reviews(String venueId, {int page = 1, int pageSize = 10}); // GET /venues/{id}/ratings
+  Future<RoomAvailability> availability(String roomId, {required String from, required String to}); // GET /listings/{id}/availability?from&to
+  Future<ScheduleCheckResult> checkSchedule(String roomId, ProposedSchedule schedule); // POST /listings/{id}/availability/check
 }
+// RoomDetail additionally carries `openHours: List<DayOpenHours>?` (additive; null for
+// legacy rooms). Guest availability shapes live in core/models/availability.dart:
+// RoomAvailability{roomId,timezone,from,to,days:[AvailabilityDay{date,isBlackout,
+// freeWindows:[OpenWindow]}]} and ScheduleCheckResult{available,totalOccurrences,
+// conflicts:[ScheduleConflict{date,reason}]} — the latter is also the `409
+// schedule_unavailable` problem body (surfaced via `AppError.problem`, the raw
+// ProblemDetails map). Dates `yyyy-MM-dd`, times `HH:mm`, weekday tokens sunday..saturday.
 // features/apply/data + features/inbox/data
 abstract class ApplicationsRepository {
   Future<Application> submit(String roomId, ApplicationDraft draft,
@@ -243,6 +252,7 @@ feature/agent may touch; everything else is private):
 | discovery | `searchFiltersProvider` | `Notifier<SearchFilters>` — the one filter state |
 | | `searchResultsProvider` | `AsyncNotifier<ListingSearchResult>`; debounces 350ms, cancels in-flight, caches last result (stale-while-revalidate) |
 | listing | `listingDetailProvider(slugPair)` | family `AsyncNotifier<RoomDetail>`; in-memory cache for back-nav |
+| | `roomAvailabilityProvider(roomId)` | family `AsyncNotifier<RoomAvailability>`; fetches today..+`availabilityWindowDays` (42) once, kept alive; feeds both the detail "When it's open" strip and the apply calendar |
 | apply | `applyDraftProvider(roomId)` | family `Notifier<ApplicationDraft>` — survives the SSO gate; cleared on submit success |
 | inbox | `inboxProvider` | cursor-paged `AsyncNotifier`; `refresh()` on foreground/push |
 | | `unreadCountProvider` | drives the tab badge |
@@ -268,6 +278,15 @@ FreeBadge() / PriceBadge(price, currency)
 ListingCard(summary: RoomSummary, {VoidCallback? onTap})       // the one card, list + map popup
 SkeletonListingCard() / SkeletonList(itemCount)
 OfflineBanner()                                                // listens connectivityProvider
+// Availability primitives (DESIGN_SYSTEM §8.10/§8.13) — shared by the listing detail
+// "When it's open" strip and the apply calendar:
+AvailabilityLegend()                                           // mandatory 4-state legend
+AvailabilityVerdictCard({required ScheduleCheckResult result, bool hardBlock})  // §8.13 card
+// + availability_day_state.dart: enum DayState; deriveDayState({date, day, openWindows, today});
+//   dayStateVisual(DayState, SteepleColors) → {background, foreground, dot, cross};
+//   openWindowsForDate(openHours, date); dayStateSemantics(state, freeWindows).
+// The month grid itself is AvailabilityCalendar (apply-only, in
+// features/apply/presentation/availability_calendar.dart — hand-rolled, no calendar pkg).
 ```
 
 Any feature rendering a status, an error, an empty result, or a listing summary uses
@@ -321,8 +340,12 @@ provider and render a placeholder when it is false; channel errors count as fals
   names: `listing_search.json`, `room_detail.json`, `auth_session.json`,
   `application.json`, `booking.json`, `notifications_page.json`, `flags.json`,
   `managed_venues.json`, `managed_venue_detail.json`, `managed_room.json`,
-  `manage_applications_page.json`, `room_open_hours.json`). `FixtureLoader.loadList` covers array-rooted
-  fixtures (`managed_venues.json`'s `[{id, name, slug}]`).
+  `manage_applications_page.json`, `room_open_hours.json`, `availability.json`,
+  `conflict_check.json`). `FixtureLoader.loadList` covers array-rooted
+  fixtures (`managed_venues.json`'s `[{id, name, slug}]`). `FakeListingRepository.availability`
+  re-dates `availability.json` to start at the requested `from` so the fake reads as "live"
+  regardless of the calendar date (states/order preserved); `checkSchedule` serves
+  `conflict_check.json`.
   One test per fixture asserts `fromJson` round-trips — this is the drift alarm
   (MOBILE_DESIGN §7); when CONTRACTS.md changes, the failing fixture test is the to-do list.
 - Every repository has a `Fake*Repository` (in `features/X/data/fake/`) that serves

@@ -43,5 +43,14 @@
     "isIdentityVerified": true,
     "latitude": 38.9012,
     "longitude": -77.2653
-  }
+  },
+  "openHours": [
+    { "dayOfWeek": "sunday", "windows": [] },
+    { "dayOfWeek": "monday", "windows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "dayOfWeek": "tuesday", "windows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "dayOfWeek": "wednesday", "windows": [{ "startTime": "09:00", "endTime": "12:00" }, { "startTime": "18:00", "endTime": "21:00" }] },
+    { "dayOfWeek": "thursday", "windows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "dayOfWeek": "friday", "windows": [] },
+    { "dayOfWeek": "saturday", "windows": [{ "startTime": "09:00", "endTime": "17:00" }] }
+  ]
 }

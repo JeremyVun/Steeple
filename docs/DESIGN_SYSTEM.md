@@ -296,7 +296,71 @@ focus = `focus` ring + sage border. Labels above inputs (`label` style), helper/
 below (`caption`; error in `danger` fg + icon — color never alone). The intent textarea
 is the apply flow's hero: give it room (min 5 lines), placeholder written as a friendly
 example ("Toddler playgroup, about 15 of us, Tuesday mornings…"), live character guidance
-only if a server limit exists. Group size / schedule pickers use native platform pickers.
+only if a server limit exists. ~~Group size / schedule pickers use native platform pickers~~
+**Superseded (availability plan, 2026-07-05):** date/time selection uses the availability
+calendar family below (§8.10–8.13); native pickers remain only as the no-JS fallback and
+for group size. The underlying form inputs stay real `<input>`/`<select>` elements the
+picker writes into — never JS-only state.
+
+### 8.10 Availability calendar (guest slot picker + previews)
+
+One month grid, Sunday-first columns (the wire's canonical order), weekday initials as
+column heads. Day cells are **real links/buttons** (no-JS reloads the page with the date
+applied). States, all styled from §2.3 tokens — never raw hex:
+
+| State | Look | Interactive? |
+|---|---|---|
+| `open` | `surfaceRaised` bg, ink text | yes |
+| `partly-booked` | open look + a small `warning`-bg dot under the number | yes |
+| `booked-out` | `neutral` bg pair, strikethrough-free (never strike dates) | no |
+| `closed` / `blackout` | `surface` bg, `textTertiary` number; blackout adds a `neutral` "×" glyph | no |
+| `past` | `textTertiary`, no bg | no |
+| `today` | 1px `sage` outline (combines with any state) | per state |
+| `selected` | `sage` bg, white 700 text (combines: selected wins the bg) | yes |
+
+The **legend is mandatory** wherever the calendar renders (compact single line, chips of
+the four meaningful states: Open, Partly booked, Booked out, Closed). Month nav = prev/next
+buttons + "Month yyyy" heading (`aria-live="polite"`). Keyboard: cells are focusable in DOM
+order, arrow keys move by day/week where JS is present (roving tabindex), Enter/Space
+selects; disabled states are real `disabled`/no-href, not CSS-only. Screen readers get the
+full state in the accessible name ("Tuesday, September 8 — open, 2 free windows").
+Booked-out vs closed must never rely on color alone (the dot / × glyph carry the meaning).
+
+### 8.11 Time-range control
+
+Selection order: day → free window → range inside it. Free windows render as filter chips
+(§8.2) labelled with their span ("6:00 PM – 9:00 PM"); tapping one seeds the range to the
+window and reveals the range controls: duration preset pills (1h / 2h / 3h / Custom —
+default 2h) plus start-time stepper constrained to the window. The canonical inputs are two
+30-minute-step `<select>`s (start/end) that every enhancement writes into; a dual-handle
+slider is progressive enhancement only. A live plain-language readout confirms the result
+("Tuesday, Sep 8 · 6:00–8:00 PM · 2 hours") in `body` style under the controls, and updates
+`aria-live="polite"`. Out-of-window selections are prevented, not error-messaged.
+
+### 8.12 Weekday chips
+
+The Mo–Su multi-select used in apply (weekly mode), search ("Weekly on…"), and hours
+editors: seven filter chips (§8.2 selected/unselected states), **Sunday-first order, always
+all seven**, min touch target 44px, each a real checkbox inside a `<label>` (web) /
+`FilterChip` (mobile). Selecting a calendar day pre-checks that day's weekday chip if
+nothing is selected yet; it never unchecks user choices. At least one chip required in
+weekly mode — enforce at submit with `danger` helper text, not by disabling chips.
+
+### 8.13 Availability & conflict feedback
+
+One shared verdict card, used by the apply live check, the submit hard-block re-render, and
+host review badges:
+
+- **All clear:** `success` pair banner, check icon, "All 14 dates are free."
+- **Partial conflict:** `warning` pair banner, "3 of 14 dates clash", followed by an
+  expandable per-date list (date + humanized reason: `outsideOpenHours` → "outside open
+  hours", `blackout` → "closed that day", `booked` → "already booked").
+- **Fully unavailable / hard-block 409:** `danger` pair banner, same list, plus the next
+  action in words ("Pick another time — the calendar shows what's free.").
+
+The card is advisory language ("looks free right now"), never a promise — approval and the
+DB constraint decide. Debounce live checks (500ms web / mobile alike); never re-derive
+availability client-side; the card always renders exactly what the server returned.
 
 ## 9. Accessibility contract (hard rules, all surfaces)
 

@@ -47,6 +47,34 @@ public sealed class SteepleApiClient : ISteepleApiClient
             ?? new VenueReviewPageDto([], 0, safePage, safePageSize);
     }
 
+    public async Task<RoomAvailabilityDto?> GetListingAvailabilityAsync(
+        Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var path = $"api/v1/listings/{roomId}/availability?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}";
+        using var response = await _http.GetAsync(path, ct);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<RoomAvailabilityDto>(ct);
+    }
+
+    public async Task<ScheduleCheckResultDto?> CheckListingScheduleAsync(
+        Guid roomId, ScheduleDto schedule, CancellationToken ct = default)
+    {
+        using var response = await _http.PostAsJsonAsync(
+            $"api/v1/listings/{roomId}/availability/check", new { schedule }, ct);
+        // 404 (not readable) and 400 (uncheckable schedule) both mean "render no verdict card".
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        return await response.Content.ReadFromJsonAsync<ScheduleCheckResultDto>(ct);
+    }
+
     public async Task<(SessionResponse? Session, string? ErrorCode)> CreateSessionAsync(
         CreateSessionRequest request, CancellationToken ct = default)
     {
@@ -89,13 +117,25 @@ public sealed class SteepleApiClient : ISteepleApiClient
     public Task AcceptAgreementAsync(string accessToken, AcceptAgreementRequest request, CancellationToken ct = default) =>
         SendAuthorizedAsync(HttpMethod.Post, "api/v1/me/agreements", accessToken, request, ct);
 
-    public async Task<(ApplicationDto? Application, string? ErrorCode)> SubmitApplicationAsync(
+    public async Task<(ApplicationDto? Application, string? ErrorCode, ScheduleCheckResultDto? Conflict)> SubmitApplicationAsync(
         string accessToken, Guid roomId, SubmitApplicationRequest request, Guid idempotencyKey, CancellationToken ct = default)
     {
         using var httpRequest = AuthorizedRequest(HttpMethod.Post, $"api/v1/listings/{roomId}/applications", accessToken, request);
         httpRequest.Headers.Add("Idempotency-Key", idempotencyKey.ToString());
         using var response = await _http.SendAsync(httpRequest, ct);
-        return await ReadApplicationResultAsync(response, ct);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var application = await response.Content.ReadFromJsonAsync<ApplicationDto>(ct);
+            return application is null ? (null, "empty_response", null) : (application, null, null);
+        }
+
+        // 409 schedule_unavailable carries the same {available, totalOccurrences, conflicts[]}
+        // payload the check endpoint returns — parse it once so the caller can re-render the card.
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var errorCode = ReadProblemCode(body) ?? "api_error";
+        var conflict = errorCode == "schedule_unavailable" ? ReadScheduleCheckResult(body) : null;
+        return (null, errorCode, conflict);
     }
 
     public async Task<ApplicationListResult> GetMyApplicationsAsync(string accessToken, string? status, int page, CancellationToken ct = default) =>
@@ -393,12 +433,32 @@ public sealed class SteepleApiClient : ISteepleApiClient
     }
 
     /// <summary>Extracts the stable ProblemDetails <c>code</c> extension (CONTRACTS §2), if present.</summary>
-    private static async Task<string?> ReadProblemCodeAsync(HttpResponseMessage response, CancellationToken ct)
+    private static async Task<string?> ReadProblemCodeAsync(HttpResponseMessage response, CancellationToken ct) =>
+        ReadProblemCode(await response.Content.ReadAsStringAsync(ct));
+
+    /// <summary>Extracts the stable ProblemDetails <c>code</c> extension from an already-read body.</summary>
+    private static string? ReadProblemCode(string body)
     {
         try
         {
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            using var doc = JsonDocument.Parse(body);
             return doc.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Reads the <c>{available, totalOccurrences, conflicts[]}</c> payload the API embeds in the
+    /// <c>409 schedule_unavailable</c> problem body (same shape the check endpoint returns).
+    /// </summary>
+    private static ScheduleCheckResultDto? ReadScheduleCheckResult(string body)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<ScheduleCheckResultDto>(body, JsonSerializerOptions.Web);
         }
         catch (JsonException)
         {

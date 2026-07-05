@@ -3,6 +3,7 @@
 library;
 
 export 'application.dart';
+export 'availability.dart';
 export 'booking.dart';
 export 'geo.dart';
 export 'listing_search.dart';

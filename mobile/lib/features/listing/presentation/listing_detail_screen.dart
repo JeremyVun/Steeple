@@ -7,6 +7,7 @@ import '../../../app/theme/theme.dart';
 import '../../../core/flags/flags_service.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
+import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../providers.dart';
 
@@ -173,6 +174,10 @@ class _Detail extends ConsumerWidget {
                         ),
                       ),
                     section(
+                      "When it's open",
+                      _AvailabilitySection(room: room),
+                    ),
+                    section(
                       'Getting there',
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,6 +325,236 @@ class _VerifiedBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// "When it's open": the room's weekly open-hours summary (rendered from the
+/// detail payload synchronously) plus a deferred 14-day availability strip that
+/// loads when this section first builds (MOBILE_DESIGN §4 — deferred, kept
+/// alive by `roomAvailabilityProvider`). The strip is a read-only preview;
+/// picking a slot happens in the apply flow's calendar.
+class _AvailabilitySection extends ConsumerWidget {
+  const _AvailabilitySection({required this.room});
+
+  final RoomDetail room;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.steepleColors;
+    final availability = ref.watch(roomAvailabilityProvider(room.roomId));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _OpenHoursSummary(openHours: room.openHours),
+        const SizedBox(height: SteepleTokens.space4),
+        availability.when(
+          loading: () => const SkeletonBlock(height: 72),
+          error: (_, _) => Text(
+            "We couldn't load open times right now.",
+            style: SteepleTypography.bodySm.copyWith(color: colors.textTertiary),
+          ),
+          data: (data) => _StripAndNextFree(room: room, availability: data),
+        ),
+      ],
+    );
+  }
+}
+
+class _StripAndNextFree extends StatelessWidget {
+  const _StripAndNextFree({required this.room, required this.availability});
+
+  final RoomDetail room;
+  final RoomAvailability availability;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    final today = todayLocalIso();
+    final days = availability.days.take(14).toList();
+
+    // Earliest day with a bookable window, for the "next free" line.
+    AvailabilityDay? nextFree;
+    for (final day in days) {
+      final state = deriveDayState(
+        date: day.date,
+        day: day,
+        openWindows: openWindowsForDate(room.openHours, day.date),
+        today: today,
+      );
+      if (state.isSelectable && day.freeWindows.isNotEmpty) {
+        nextFree = day;
+        break;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 62,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: days.length,
+            separatorBuilder: (_, _) => const SizedBox(width: SteepleTokens.space2),
+            itemBuilder: (context, i) => _StripCell(
+              day: days[i],
+              openWindows: openWindowsForDate(room.openHours, days[i].date),
+              today: today,
+            ),
+          ),
+        ),
+        const SizedBox(height: SteepleTokens.space3),
+        Text(
+          nextFree == null
+              ? 'No open times in the next two weeks.'
+              : 'Next free: ${weekdayMonthDay(nextFree.date)} · '
+                  '${timeRange12(nextFree.freeWindows.first.startTime, nextFree.freeWindows.first.endTime)}',
+          style: SteepleTypography.bodySm.copyWith(
+            color: nextFree == null ? colors.textTertiary : colors.selectedFg,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: SteepleTokens.space3),
+        const AvailabilityLegend(),
+      ],
+    );
+  }
+}
+
+class _StripCell extends StatelessWidget {
+  const _StripCell({required this.day, required this.openWindows, required this.today});
+
+  final AvailabilityDay day;
+  final List<OpenWindow> openWindows;
+  final String today;
+
+  static const _abbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    final state = deriveDayState(
+      date: day.date,
+      day: day,
+      openWindows: openWindows,
+      today: today,
+    );
+    final visual = dayStateVisual(state, colors);
+    final weekday = _abbrev[weekdayOf(day.date)];
+    final dayNumber = int.parse(day.date.split('-')[2]).toString();
+
+    return Semantics(
+      label: '$weekday ${monthDay(day.date)}, ${dayStateSemantics(state, day.freeWindows.length)}',
+      child: Container(
+        width: 44,
+        decoration: BoxDecoration(
+          color: visual.background,
+          borderRadius: BorderRadius.circular(SteepleTokens.radiusSm),
+          border: Border.all(color: colors.border),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              weekday,
+              style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              visual.cross ? '×' : dayNumber,
+              style: SteepleTypography.bodySm.copyWith(
+                color: visual.foreground,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(
+              height: 6,
+              child: visual.dot
+                  ? Container(
+                      width: 5,
+                      height: 5,
+                      decoration:
+                          BoxDecoration(color: colors.warning.fg, shape: BoxShape.circle),
+                    )
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OpenHoursSummary extends StatelessWidget {
+  const _OpenHoursSummary({required this.openHours});
+
+  final List<DayOpenHours>? openHours;
+
+  static const _abbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  static const _order = [
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    final hours = openHours;
+    if (hours == null || hours.every((d) => d.windows.isEmpty)) {
+      return Text(
+        'Open hours vary — ask the space when you apply.',
+        style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+      );
+    }
+
+    final byToken = {for (final d in hours) d.dayOfWeek: d};
+    final closed = <String>[];
+    final rows = <Widget>[];
+    for (var i = 0; i < _order.length; i++) {
+      final windows = byToken[_order[i]]?.windows ?? const <OpenWindow>[];
+      if (windows.isEmpty) {
+        closed.add(_abbrev[i]);
+        continue;
+      }
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: SteepleTokens.space1),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 40,
+                child: Text(
+                  _abbrev[i],
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  [for (final w in windows) timeRange12(w.startTime, w.endTime)].join(', '),
+                  style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...rows,
+        if (closed.isNotEmpty)
+          Text(
+            'Closed ${closed.join(', ')}',
+            style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+          ),
+      ],
     );
   }
 }

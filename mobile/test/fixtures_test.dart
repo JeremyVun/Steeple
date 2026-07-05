@@ -40,6 +40,57 @@ void main() {
       expect(detail.rating?.count, 4);
       expect(detail.amenities, contains('kitchen'));
       expect(detail.photos, hasLength(2));
+      // Additive open-hours (CONTRACTS §3): all seven days, Sunday-first.
+      expect(detail.openHours, hasLength(7));
+      expect(detail.openHours!.first.dayOfWeek, 'sunday');
+      expect(detail.openHours!.first.windows, isEmpty);
+      final wed = detail.openHours!.firstWhere((d) => d.dayOfWeek == 'wednesday');
+      expect(wed.windows, hasLength(2));
+    });
+
+    test('tolerates a legacy payload with no openHours', () {
+      final json = _loadJson('room_detail.json');
+      json.remove('openHours');
+
+      final detail = RoomDetail.fromJson(json);
+
+      expect(detail.openHours, isNull);
+    });
+  });
+
+  group('availability.json', () {
+    test('round-trips RoomAvailability', () {
+      final availability =
+          RoomAvailability.fromJson(_loadJson('availability.json'));
+
+      expect(availability.timezone, 'America/New_York');
+      expect(availability.days, hasLength(14));
+      expect(availability.days.first.date, '2026-07-06');
+      // A fully-free day carries its window.
+      expect(availability.days.first.freeWindows, hasLength(1));
+      expect(availability.days.first.freeWindows.first.startTime, '18:00');
+      // A blackout day: flagged, no free windows.
+      final blackout = availability.days.firstWhere((d) => d.isBlackout);
+      expect(blackout.date, '2026-07-13');
+      expect(blackout.freeWindows, isEmpty);
+      // A booked-out / closed day: no free windows, not a blackout.
+      expect(availability.dayFor('2026-07-09')?.freeWindows, isEmpty);
+      expect(availability.dayFor('2026-07-09')?.isBlackout, isFalse);
+    });
+  });
+
+  group('conflict_check.json', () {
+    test('round-trips ScheduleCheckResult with all three reasons', () {
+      final result =
+          ScheduleCheckResult.fromJson(_loadJson('conflict_check.json'));
+
+      expect(result.available, isFalse);
+      expect(result.totalOccurrences, 8);
+      expect(result.conflicts, hasLength(3));
+      expect(
+        result.conflicts.map((c) => c.reason),
+        containsAll(<String>['booked', 'blackout', 'outsideOpenHours']),
+      );
     });
   });
 

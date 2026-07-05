@@ -1,4 +1,5 @@
 using System.Globalization;
+using Steeple.Api.Contracts.Applications;
 
 namespace Steeple.Api.Services.Availability;
 /// <summary>
@@ -89,6 +90,224 @@ public sealed class AvailabilityService : IAvailabilityService
         var hours = await _repository.GetOpenHoursAsync(roomId, ct).ConfigureAwait(false);
         return hours.Count == 0 ? null : BuildDays(hours);
     }
+
+    /// <summary>Max days a single calendar-feed request may span (CONTRACTS §6).</summary>
+    private const int MaxRangeDays = 92;
+
+    /// <summary>Recurring terms are always bounded and never absurdly long (mirrors ApplicationService).</summary>
+    private const int MaxTermDays = 366;
+
+    /// <inheritdoc />
+    public async Task<AvailabilityReadResult<RoomAvailabilityDto>> GetPublicAvailabilityAsync(
+        Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default)
+    {
+        var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
+        if (room?.Venue is null || room.Status != RoomStatus.Published)
+        {
+            return AvailabilityReadResult<RoomAvailabilityDto>.NotFound();
+        }
+
+        var timezone = room.Venue.Timezone;
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+        var todayLocal = VenueLocalToday(timezone, _clock.GetUtcNow());
+
+        if (from < todayLocal || to < from || to.DayNumber - from.DayNumber > MaxRangeDays)
+        {
+            return AvailabilityReadResult<RoomAvailabilityDto>.Fail(
+                AvailabilityErrorCodes.InvalidRange,
+                $"'from' must be today or later (venue-local), 'to' on or after 'from', and the range at most {MaxRangeDays} days.");
+        }
+
+        var hours = await _repository.GetOpenHoursAsync(roomId, ct).ConfigureAwait(false);
+        var blackouts = await _repository.GetBlackoutsAsync(roomId, ct).ConfigureAwait(false);
+        var blackoutDates = blackouts.Select(b => b.Date).ToHashSet();
+        var openByWeekday = OpenHoursByWeekday(hours);
+
+        // Confirmed busy time across the whole window, grouped to venue-local date (per-occurrence
+        // conversion — DST-safe, occurrences never cross midnight).
+        var fromUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(from.ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+        var toUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(to.AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+        var occurrences = await _repository.GetConfirmedOccurrencesAsync(roomId, fromUtc, toUtc, ct).ConfigureAwait(false);
+        var busyByDate = BusyByDate(occurrences, tz);
+
+        var days = new List<AvailabilityDayDto>(to.DayNumber - from.DayNumber + 1);
+        for (var date = from; date <= to; date = date.AddDays(1))
+        {
+            if (blackoutDates.Contains(date))
+            {
+                days.Add(new AvailabilityDayDto(date, IsBlackout: true, FreeWindows: []));
+                continue;
+            }
+
+            var open = openByWeekday.GetValueOrDefault(date.DayOfWeek) ?? [];
+            var busy = busyByDate.GetValueOrDefault(date) ?? [];
+            var free = AvailabilityCalculator.SubtractWindows(open, busy);
+            days.Add(new AvailabilityDayDto(
+                date,
+                IsBlackout: false,
+                FreeWindows: free.Select(w => new OpenWindowDto(Format(w.Start), Format(w.End))).ToList()));
+        }
+
+        return AvailabilityReadResult<RoomAvailabilityDto>.Ok(new RoomAvailabilityDto(roomId, timezone, from, to, days));
+    }
+
+    /// <inheritdoc />
+    public async Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(
+        Guid roomId, ScheduleDto? schedule, CancellationToken ct = default)
+    {
+        var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
+        if (room?.Venue is null || room.Status != RoomStatus.Published)
+        {
+            return AvailabilityReadResult<ScheduleCheckResultDto>.NotFound();
+        }
+
+        var timezone = room.Venue.Timezone;
+        var todayLocal = VenueLocalToday(timezone, _clock.GetUtcNow());
+        var (parsed, invalid) = ValidateSchedule(schedule, todayLocal);
+        if (invalid is not null)
+        {
+            return AvailabilityReadResult<ScheduleCheckResultDto>.Fail(AvailabilityErrorCodes.InvalidApplication, invalid);
+        }
+
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+        var instants = ScheduleMaterializer.Materialize(
+            parsed.Frequency, parsed.StartDate, parsed.EndDate, parsed.DaysOfWeek, parsed.StartTime, parsed.EndTime, tz);
+
+        var hours = await _repository.GetOpenHoursAsync(roomId, ct).ConfigureAwait(false);
+        var blackouts = await _repository.GetBlackoutsAsync(roomId, ct).ConfigureAwait(false);
+        var rules = new AvailabilityRules(blackouts.Select(b => b.Date).ToHashSet(), OpenHoursByWeekday(hours));
+
+        // Legacy room with no declared availability: every occurrence is available (no classification).
+        if (!rules.HasRules)
+        {
+            return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
+                new ScheduleCheckResultDto(Available: true, TotalOccurrences: instants.Count, Conflicts: []));
+        }
+
+        var fromUtc = instants.Min(i => i.StartUtc);
+        var toUtc = instants.Max(i => i.EndUtc);
+        var occurrences = await _repository.GetConfirmedOccurrencesAsync(roomId, fromUtc, toUtc, ct).ConfigureAwait(false);
+        var busyByDate = BusyByDate(occurrences, tz);
+
+        var conflicts = new List<ScheduleConflictDto>();
+        foreach (var instant in instants)
+        {
+            var busy = busyByDate.GetValueOrDefault(instant.LocalDate) ?? [];
+            var reason = AvailabilityCalculator.ClassifyOccurrence(
+                instant.LocalDate, parsed.StartTime, parsed.EndTime, rules, busy);
+            if (reason is not null)
+            {
+                conflicts.Add(new ScheduleConflictDto(instant.LocalDate, reason));
+            }
+        }
+
+        return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
+            new ScheduleCheckResultDto(Available: conflicts.Count == 0, TotalOccurrences: instants.Count, Conflicts: conflicts));
+    }
+
+    /// <summary>Open windows keyed by weekday, each day's list ordered by start time.</summary>
+    private static IReadOnlyDictionary<DayOfWeek, IReadOnlyList<(TimeOnly Start, TimeOnly End)>> OpenHoursByWeekday(
+        IReadOnlyList<RoomOpenHours> hours) =>
+        hours
+            .GroupBy(h => h.DayOfWeek)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<(TimeOnly, TimeOnly)>)g.OrderBy(h => h.StartTime).Select(h => (h.StartTime, h.EndTime)).ToList());
+
+    /// <summary>
+    /// Confirmed busy intervals grouped by the venue-local date they render on. Each occurrence's
+    /// UTC bounds are converted per-occurrence (DST-correct); occurrences never cross midnight.
+    /// </summary>
+    private static IReadOnlyDictionary<DateOnly, IReadOnlyList<(TimeOnly Start, TimeOnly End)>> BusyByDate(
+        IReadOnlyList<BookingOccurrence> occurrences, TimeZoneInfo tz) =>
+        occurrences
+            .GroupBy(o => o.LocalDate)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<(TimeOnly, TimeOnly)>)g
+                    .Select(o => (
+                        TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(o.StartUtc, tz).DateTime),
+                        TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(o.EndUtc, tz).DateTime)))
+                    .ToList());
+
+    /// <summary>
+    /// Validates a proposed schedule with the same rules as apply (CONTRACTS §5) so the check
+    /// endpoint's 400s match submit's, and parses it into venue-local fields on success.
+    /// </summary>
+    private static (ParsedSchedule Parsed, string? Invalid) ValidateSchedule(ScheduleDto? schedule, DateOnly todayLocal)
+    {
+        if (schedule is null)
+        {
+            return (default, "A proposed schedule is required.");
+        }
+
+        if (!Enum.TryParse<ScheduleFrequency>(schedule.Frequency, ignoreCase: true, out var frequency) || !Enum.IsDefined(frequency))
+        {
+            return (default, $"Unknown frequency '{schedule.Frequency}'.");
+        }
+
+        if (!TryParseTime(schedule.StartTime, out var start) || !TryParseTime(schedule.EndTime, out var end))
+        {
+            return (default, "Times must be HH:mm (24-hour), e.g. \"09:00\".");
+        }
+
+        if (end <= start)
+        {
+            return (default, "The end time must be after the start time.");
+        }
+
+        if (schedule.StartDate < todayLocal)
+        {
+            return (default, "The start date can't be in the past.");
+        }
+
+        if (frequency == ScheduleFrequency.RecurringWeekly)
+        {
+            if (schedule.EndDate is not { } endDate)
+            {
+                return (default, "A recurring schedule needs an end date (recurring terms are always bounded).");
+            }
+
+            if (endDate < schedule.StartDate)
+            {
+                return (default, "The end date can't be before the start date.");
+            }
+
+            if (endDate.DayNumber - schedule.StartDate.DayNumber > MaxTermDays)
+            {
+                return (default, "A recurring term can run at most a year — renew it when it ends.");
+            }
+
+            if (schedule.DaysOfWeek is not { Count: > 0 } dayTokens)
+            {
+                return (default, "A recurring schedule needs at least one day of the week.");
+            }
+
+            var days = FlagEnumExtensions.CombineTokens<Weekdays>(dayTokens, out var unknownDays);
+            if (unknownDays.Count > 0)
+            {
+                return (default, $"Unknown day of the week '{unknownDays[0]}'.");
+            }
+
+            if (days == Weekdays.None)
+            {
+                return (default, "A recurring schedule needs at least one day of the week.");
+            }
+
+            return (new ParsedSchedule(frequency, schedule.StartDate, endDate, days, start, end), null);
+        }
+
+        if (schedule.EndDate is { } oneOffEnd && oneOffEnd != schedule.StartDate)
+        {
+            return (default, "A one-off request has a single date — leave the end date empty.");
+        }
+
+        return (new ParsedSchedule(frequency, schedule.StartDate, schedule.StartDate, null, start, end), null);
+    }
+
+    /// <summary>A validated, venue-local schedule ready to materialize.</summary>
+    private readonly record struct ParsedSchedule(
+        ScheduleFrequency Frequency, DateOnly StartDate, DateOnly EndDate, Weekdays? DaysOfWeek, TimeOnly StartTime, TimeOnly EndTime);
 
     private async Task<(Room? Room, ManageError? Error)> LoadScopedRoomAsync(Guid callerId, Guid roomId, CancellationToken ct)
     {

@@ -59,10 +59,17 @@ public sealed record ApplicationResult<T>(T? Value, ApplicationError? Error) whe
 
     /// <summary>Failed outcome carrying the wire error code.</summary>
     public static ApplicationResult<T> Fail(string code, string detail) => new(null, new ApplicationError(code, detail));
+
+    /// <summary>Failed outcome carrying the wire error code plus extra ProblemDetails fields.</summary>
+    public static ApplicationResult<T> Fail(string code, string detail, IReadOnlyDictionary<string, object?> extensions) =>
+        new(null, new ApplicationError(code, detail, extensions));
 }
 
-/// <summary>A stable wire error code plus a human-readable detail.</summary>
-public sealed record ApplicationError(string Code, string Detail);
+/// <summary>
+/// A stable wire error code plus a human-readable detail and optional extra fields the controller
+/// spreads onto the ProblemDetails envelope (e.g. the <c>schedule_unavailable</c> conflict payload).
+/// </summary>
+public sealed record ApplicationError(string Code, string Detail, IReadOnlyDictionary<string, object?>? Extensions = null);
 
 /// <summary>The stable applications error codes documented in CONTRACTS §5.</summary>
 public static class ApplicationErrorCodes
@@ -93,4 +100,11 @@ public static class ApplicationErrorCodes
     /// application was auto-declined (Phase 3 — the exclusion constraint fired).
     /// </summary>
     public const string SlotTaken = "slot_taken";
+
+    /// <summary>
+    /// The proposed schedule has an occurrence outside open hours, on a blackout, or already
+    /// booked — the submit-time hard block (CONTRACTS §6). The ProblemDetails body carries the
+    /// <c>available</c>/<c>totalOccurrences</c>/<c>conflicts</c> payload.
+    /// </summary>
+    public const string ScheduleUnavailable = "schedule_unavailable";
 }

@@ -28,6 +28,21 @@ public interface ISteepleApiClient
     /// <summary>Public, revealed review comments for a venue.</summary>
     Task<VenueReviewPageDto> GetVenueReviewsAsync(Guid venueId, int page = 1, int pageSize = 10, CancellationToken ct = default);
 
+    // --- Guest availability reads (anonymous; CONTRACTS §6) ---
+
+    /// <summary>
+    /// A room's free windows over a venue-local date range (anonymous). <c>null</c> when the room
+    /// isn't publicly readable (404) — Draft/Unlisted answer the same as an unknown id.
+    /// </summary>
+    Task<RoomAvailabilityDto?> GetListingAvailabilityAsync(Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default);
+
+    /// <summary>
+    /// Advisory dry-run of the submit-time block for a proposed schedule (anonymous). Returns the
+    /// verdict, or <c>null</c> when the room isn't readable (404) or the schedule can't be checked
+    /// (400) — the caller renders no verdict card in either case.
+    /// </summary>
+    Task<ScheduleCheckResultDto?> CheckListingScheduleAsync(Guid roomId, ScheduleDto schedule, CancellationToken ct = default);
+
     // --- Identity (the BFF's server-side calls; the browser never sees API tokens) ---
 
     /// <summary>
@@ -59,8 +74,10 @@ public interface ISteepleApiClient
     /// <summary>
     /// Submits an intent-first application for a room. Returns the created application, or the
     /// stable error code on failure. <paramref name="idempotencyKey"/> guards against double-submit.
+    /// A <c>409 schedule_unavailable</c> surfaces its per-date conflict payload in <c>Conflict</c>
+    /// (error code <c>schedule_unavailable</c>) so the caller can re-render the verdict card.
     /// </summary>
-    Task<(ApplicationDto? Application, string? ErrorCode)> SubmitApplicationAsync(
+    Task<(ApplicationDto? Application, string? ErrorCode, ScheduleCheckResultDto? Conflict)> SubmitApplicationAsync(
         string accessToken, Guid roomId, SubmitApplicationRequest request, Guid idempotencyKey, CancellationToken ct = default);
 
     /// <summary>The signed-in organizer's own applications, optionally filtered by status.</summary>

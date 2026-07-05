@@ -4,6 +4,7 @@
 // fixed API-side in this same change per CONTRACTS §1 rule 3.)
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'room_availability.dart';
 import 'wire_enums.dart';
 import 'wire_tokens.dart';
 
@@ -148,6 +149,11 @@ abstract class RoomDetail with _$RoomDetail {
     @Default(<RoomPhoto>[]) List<RoomPhoto> photos,
     required VenueSummary venue,
     RatingSummary? rating,
+
+    /// The room's weekly open windows (all seven days, Sunday-first; closed
+    /// days have empty windows), venue-local wall-clock. Null for pre-gate
+    /// legacy rooms with no declared hours (CONTRACTS §3). Additive field.
+    List<DayOpenHours>? openHours,
   }) = _RoomDetail;
 
   factory RoomDetail.fromJson(Map<String, dynamic> json) =>

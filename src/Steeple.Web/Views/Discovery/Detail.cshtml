@@ -229,6 +229,22 @@
                 </section>
             }
 
+            @if ((ViewData["AvailabilityPickerEnabled"] as bool?) == true)
+            {
+                <section class="detail-section">
+                    <h2>When it's open</h2>
+                    @* Lazy-loaded on reveal (§8.10). No-JS falls back to the apply page link below. *@
+                    <div class="avail-preview-slot"
+                         hx-get="@Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/availability-preview")"
+                         hx-trigger="revealed" hx-swap="innerHTML">
+                        <p class="avail-preview-loading" role="status">Loading availability…</p>
+                    </div>
+                    <noscript>
+                        <p><a href="@Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/apply")">See available dates and ask to book</a></p>
+                    </noscript>
+                </section>
+            }
+
             @if (reviews.TotalCount > 0)
             {
                 <section class="detail-section" id="reviews">

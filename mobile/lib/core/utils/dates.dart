@@ -81,6 +81,24 @@ int daysUntil(String yyyyMmDd) {
   return _daysSinceEpoch(yyyyMmDd) - _daysSinceEpoch(todayIso);
 }
 
+/// Device-local calendar date as `yyyy-MM-dd` — the "today" the availability
+/// window and the calendar's past/today logic are anchored to.
+String todayLocalIso() {
+  final now = DateTime.now();
+  return '${now.year}-${now.month.toString().padLeft(2, '0')}-'
+      '${now.day.toString().padLeft(2, '0')}';
+}
+
+/// `yyyy-MM-dd` shifted by [delta] calendar days → `yyyy-MM-dd`. Pure civil-day
+/// arithmetic (Howard Hinnant), so a venue-local date is never routed through a
+/// [DateTime]/timezone to be advanced.
+String addDays(String yyyyMmDd, int delta) =>
+    _civilFromDays(_daysSinceEpoch(yyyyMmDd) + delta);
+
+/// 0 = Sunday … 6 = Saturday for a `yyyy-MM-dd` — public wrapper over the
+/// timezone-free weekday computation.
+int weekdayOf(String yyyyMmDd) => _dayOfWeek(yyyyMmDd);
+
 int _daysSinceEpoch(String yyyyMmDd) {
   final parts = yyyyMmDd.split('-');
   final y = int.parse(parts[0]);
@@ -94,6 +112,27 @@ int _daysSinceEpoch(String yyyyMmDd) {
   final doe = yoe * 365 + yoe ~/ 4 - yoe ~/ 100 + doy;
   return era * 146097 + doe - 719468;
 }
+
+/// Inverse of [_daysSinceEpoch] (Hinnant's civil_from_days): days-since-epoch →
+/// `yyyy-MM-dd`.
+String _civilFromDays(int days) {
+  final z = days + 719468;
+  final era = (z >= 0 ? z : z - 146096) ~/ 146097;
+  final doe = z - era * 146097;
+  final yoe = (doe - doe ~/ 1460 + doe ~/ 36524 - doe ~/ 146096) ~/ 365;
+  final y = yoe + era * 400;
+  final doy = doe - (365 * yoe + yoe ~/ 4 - yoe ~/ 100);
+  final mp = (5 * doy + 2) ~/ 153;
+  final d = doy - (153 * mp + 2) ~/ 5 + 1;
+  final m = mp < 10 ? mp + 3 : mp - 9;
+  final year = m <= 2 ? y + 1 : y;
+  return '${year.toString().padLeft(4, '0')}-${m.toString().padLeft(2, '0')}-'
+      '${d.toString().padLeft(2, '0')}';
+}
+
+/// "6:00–9:00 PM" — a venue-local `HH:mm`–`HH:mm` window formatted to 12-hour,
+/// sharing one AM/PM suffix when both ends match. Never parsed into [DateTime].
+String timeRange12(String start, String end) => _timeRange(start, end);
 
 /// One-line schedule summary (MOBILE_CONTRACTS §5 — times are venue-local
 /// `HH:mm` strings, formatted to 12-hour here, never parsed into [DateTime]):

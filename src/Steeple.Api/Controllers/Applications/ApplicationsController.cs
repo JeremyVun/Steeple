@@ -108,13 +108,22 @@ public sealed class ApplicationsController : ControllerBase
             ApplicationErrorCodes.NotVenueManager => StatusCodes.Status403Forbidden,
             ApplicationErrorCodes.InvalidState => StatusCodes.Status409Conflict,
             ApplicationErrorCodes.SlotTaken => StatusCodes.Status409Conflict,
+            ApplicationErrorCodes.ScheduleUnavailable => StatusCodes.Status409Conflict,
             ApplicationErrorCodes.InvalidApplication => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status404NotFound,
         };
 
-        return Problem(detail: error.Detail, statusCode: status, extensions: new Dictionary<string, object?>
+        // The stable code always rides on `code`; a coded error may carry extra payload fields
+        // (e.g. schedule_unavailable's available/totalOccurrences/conflicts) that ride alongside.
+        var extensions = new Dictionary<string, object?> { ["code"] = error.Code };
+        if (error.Extensions is not null)
         {
-            ["code"] = error.Code,
-        });
+            foreach (var (key, value) in error.Extensions)
+            {
+                extensions[key] = value;
+            }
+        }
+
+        return Problem(detail: error.Detail, statusCode: status, extensions: extensions);
     }
 }

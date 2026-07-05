@@ -1,5 +1,7 @@
 using System.Globalization;
 using Steeple.Api.Contracts.Applications;
+using Steeple.Api.Services.Availability;
+using Steeple.Api.Services.Flags;
 using Steeple.Api.Services.Manage;
 using Steeple.Api.Services.Notifications;
 
@@ -21,10 +23,15 @@ public sealed class ApplicationService : IApplicationService
     private const int MaxGroupSize = 1000;
     private const int MaxTextLength = 2000;
 
+    /// <summary>Feature flag gating the submit-time availability hard block (CONTRACTS §6).</summary>
+    private const string AvailabilityFlag = "listing.availability";
+
     private readonly IApplicationRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IBookingService _bookings;
     private readonly IRatingService _ratings;
+    private readonly IAvailabilityService _availability;
+    private readonly IFeatureFlags _flags;
     private readonly INotificationDispatcher _notifications;
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
@@ -36,6 +43,8 @@ public sealed class ApplicationService : IApplicationService
         IVenueManagerRepository venueManagers,
         IBookingService bookings,
         IRatingService ratings,
+        IAvailabilityService availability,
+        IFeatureFlags flags,
         INotificationDispatcher notifications,
         ITurnstileVerifier turnstile,
         IAnalyticsSink analytics,
@@ -45,6 +54,8 @@ public sealed class ApplicationService : IApplicationService
         _venueManagers = venueManagers;
         _bookings = bookings;
         _ratings = ratings;
+        _availability = availability;
+        _flags = flags;
         _notifications = notifications;
         _turnstile = turnstile;
         _analytics = analytics;
@@ -82,6 +93,28 @@ public sealed class ApplicationService : IApplicationService
             // distinguish a Draft room from no room (same stance as the listing visibility gate).
             return ApplicationResult<SubmitOutcome>.Fail(
                 ApplicationErrorCodes.RoomNotBookable, "This space isn't taking requests.");
+        }
+
+        // Submit-time hard block (CONTRACTS §6): when the flag is on, reject a schedule that lands
+        // outside open hours / on a blackout / on already-booked time. Rooms with no availability
+        // rules report available and pass. Reuses the same materialization + classification math as
+        // the advisory check endpoint (no duplicated logic). The booking_occurrences exclusion
+        // constraint remains the final race authority at approval time.
+        if (_flags.IsEnabled(AvailabilityFlag))
+        {
+            var check = await _availability.CheckScheduleAsync(room.Id, request.Schedule, ct).ConfigureAwait(false);
+            if (check.Value is { Available: false } verdict)
+            {
+                return ApplicationResult<SubmitOutcome>.Fail(
+                    ApplicationErrorCodes.ScheduleUnavailable,
+                    "The proposed schedule isn't available — some dates fall outside the room's open hours, on a blackout, or are already booked.",
+                    new Dictionary<string, object?>
+                    {
+                        ["available"] = verdict.Available,
+                        ["totalOccurrences"] = verdict.TotalOccurrences,
+                        ["conflicts"] = verdict.Conflicts,
+                    });
+            }
         }
 
         var now = _clock.GetUtcNow();

@@ -113,7 +113,11 @@ public record RoomDetailDto(
     IReadOnlyList<string> Activities,
     IReadOnlyList<RoomPhotoDto> Photos,
     VenueSummaryDto Venue,
-    RatingSummaryDto? Rating);
+    RatingSummaryDto? Rating,
+    // Additive (availability plan, CONTRACTS §6): the room's open-hours rules (same `days` shape
+    // as the manage read), or null when the room has no availability rules rows. Powers the
+    // "when it's open" preview and the day-state classification in the guest slot picker.
+    IReadOnlyList<DayOpenHoursDto>? OpenHours = null);
 
 /// <summary>A single sitemap URL: a published listing's slug path plus a last-modified stamp.</summary>
 public record SitemapEntry(string VenueSlug, string RoomSlug, DateTimeOffset LastModifiedUtc);
@@ -327,6 +331,36 @@ public record RoomAvailabilityRulesDto(
 public record SaveAvailabilityRulesRequest(
     IReadOnlyList<DayOpenHoursDto>? Days,
     IReadOnlyList<BlackoutDateDto>? Blackouts);
+
+// --- Guest availability reads (CONTRACTS §6, anonymous) ---
+
+/// <summary>
+/// One date in a guest availability window (<c>GET /api/v1/listings/{roomId}/availability</c>).
+/// <see cref="FreeWindows"/> = open hours − blackouts − <b>confirmed</b> bookings, venue-local
+/// <c>[start, end)</c>. Empty free windows on a non-blackout day means either closed that weekday
+/// or fully booked — the day-state classifier disambiguates against the room's open hours.
+/// </summary>
+public record AvailabilityDayDto(DateOnly Date, bool IsBlackout, IReadOnlyList<OpenWindowDto> FreeWindows);
+
+/// <summary>
+/// <c>GET /api/v1/listings/{roomId}/availability?from&amp;to</c> — free windows per date across a
+/// bounded, venue-local range (≤92 days). Anonymous; Draft/Unlisted rooms answer 404.
+/// </summary>
+public record RoomAvailabilityDto(
+    Guid RoomId,
+    string Timezone,
+    DateOnly From,
+    DateOnly To,
+    IReadOnlyList<AvailabilityDayDto> Days);
+
+/// <summary>One clashing occurrence in a schedule check. <c>Reason</c> ∈ <c>outsideOpenHours | blackout | booked</c>.</summary>
+public record ScheduleConflictDto(DateOnly Date, string Reason);
+
+/// <summary>
+/// <c>POST /api/v1/listings/{roomId}/availability/check</c> result — an advisory dry-run of the
+/// submit-time hard block. The same payload rides the <c>409 schedule_unavailable</c> problem body.
+/// </summary>
+public record ScheduleCheckResultDto(bool Available, int TotalOccurrences, IReadOnlyList<ScheduleConflictDto> Conflicts);
 
 /// <summary>Full room detail for the provider's manage screens.</summary>
 public record ManagedRoomDto(

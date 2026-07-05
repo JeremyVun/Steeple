@@ -159,6 +159,23 @@ public sealed class ApplyViewModel
     /// <summary>Turnstile widget site key; empty = widget not rendered.</summary>
     public string TurnstileSiteKey { get; init; } = "";
 
+    /// <summary>
+    /// True when <c>web.availability_picker</c> is on: the calendar slot picker enhances the form
+    /// (the native date/time inputs stay the canonical fields). Off → today's plain form, no picker.
+    /// </summary>
+    public bool PickerEnabled { get; init; }
+
+    /// <summary>
+    /// Conflict payload from a submit-time <c>409 schedule_unavailable</c>, rendered as the danger
+    /// verdict card at the top of the form (§8.13). Null unless the submit was hard-blocked.
+    /// </summary>
+    public ScheduleCheckResultDto? Conflict { get; init; }
+
+    /// <summary>The month the calendar opens on: the drafted start date's month, else the current month.</summary>
+    public DateOnly InitialMonth =>
+        new DateOnly((Form.StartDate ?? DateOnly.FromDateTime(DateTime.Today)).Year,
+                     (Form.StartDate ?? DateOnly.FromDateTime(DateTime.Today)).Month, 1);
+
     /// <summary>Activity options limited to what this room accepts (wire token + label).</summary>
     public IReadOnlyList<FilterOption> ActivityOptions =>
         Room.Activities.Select(t => new FilterOption(t, DiscoveryViewModel.Humanize(t))).ToList();
@@ -220,4 +237,337 @@ public sealed class ApplicationThreadViewModel
     /// <summary>Display name for a thread message's sender.</summary>
     public string SenderName(Guid senderId) =>
         senderId == Application.Organizer.Id ? Application.Organizer.DisplayName : Application.VenueName;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Availability slot picker (DESIGN_SYSTEM §8.10–8.13) — the web binding of the guest availability
+// reads. Day-state classification, open-hours summarizing and next-free are computed here (and in
+// the controller), never re-derived in client JS (§8.13): the calendar always shows the server's
+// answer. The picker calendar/day/check partials are HTMX-loaded fragments of the apply form.
+// ------------------------------------------------------------------------------------------------
+
+/// <summary>A calendar day's availability state (§8.10 table), most-open last.</summary>
+public enum AvailabilityDayState { Past, Closed, Blackout, BookedOut, PartlyBooked, Open }
+
+/// <summary>One rendered calendar/strip cell: its date, classified state and free-window count.</summary>
+public sealed record AvailabilityDayCell(DateOnly Date, AvailabilityDayState State, int FreeWindowCount)
+{
+    /// <summary>Only open / partly-booked days are pickable (§8.10 "Interactive?").</summary>
+    public bool IsInteractive => State is AvailabilityDayState.Open or AvailabilityDayState.PartlyBooked;
+
+    /// <summary>The §8.10 state class (colours resolve from the §2.3 status tokens in site.css).</summary>
+    public string CssClass => State switch
+    {
+        AvailabilityDayState.Open => "avail-open",
+        AvailabilityDayState.PartlyBooked => "avail-partly",
+        AvailabilityDayState.BookedOut => "avail-booked",
+        AvailabilityDayState.Blackout => "avail-blackout",
+        AvailabilityDayState.Closed => "avail-closed",
+        _ => "avail-past",
+    };
+
+    /// <summary>Plain-language state, carried in the accessible name (colour never alone, §9.5).</summary>
+    public string StateLabel => State switch
+    {
+        AvailabilityDayState.Open => "open",
+        AvailabilityDayState.PartlyBooked => "partly booked",
+        AvailabilityDayState.BookedOut => "booked out",
+        AvailabilityDayState.Blackout => "closed",
+        AvailabilityDayState.Closed => "closed",
+        _ => "in the past",
+    };
+
+    /// <summary>"Tuesday, September 8 — open, 2 free windows" (§8.10 screen-reader name).</summary>
+    public string AccessibleName
+    {
+        get
+        {
+            var day = Date.ToString("dddd, MMMM d", CultureInfo.InvariantCulture);
+            if (FreeWindowCount > 0)
+            {
+                return $"{day} — {StateLabel}, {FreeWindowCount} free window{(FreeWindowCount == 1 ? "" : "s")}";
+            }
+
+            return $"{day} — {StateLabel}";
+        }
+    }
+}
+
+/// <summary>Shared availability computations (day-state, open-hours summary, next-free).</summary>
+public static class AvailabilityDisplay
+{
+    /// <summary>Furthest ahead a guest can browse/apply — mirrors the API's 92-day range cap.</summary>
+    public const int MaxHorizonDays = 92;
+
+    /// <summary>
+    /// Classifies each day in <c>[start, end]</c> from the guest availability read plus the room's
+    /// open hours: a non-blackout day with no free windows is <em>booked out</em> if its weekday has
+    /// open hours, otherwise <em>closed</em>; free windows narrower than the weekday's open hours mean
+    /// <em>partly booked</em> (§8.10).
+    /// </summary>
+    public static IReadOnlyList<AvailabilityDayCell> BuildCells(
+        DateOnly start, DateOnly end, DateOnly today,
+        RoomAvailabilityDto? availability, IReadOnlyList<DayOpenHoursDto>? openHours)
+    {
+        var byDate = (availability?.Days ?? []).ToDictionary(d => d.Date);
+        var openByWeekday = OpenHoursByWeekday(openHours);
+
+        var cells = new List<AvailabilityDayCell>();
+        for (var date = start; date <= end; date = date.AddDays(1))
+        {
+            cells.Add(Classify(date, today, byDate.GetValueOrDefault(date), openByWeekday));
+        }
+
+        return cells;
+    }
+
+    private static AvailabilityDayCell Classify(
+        DateOnly date, DateOnly today, AvailabilityDayDto? day,
+        IReadOnlyDictionary<DayOfWeek, IReadOnlyList<OpenWindowDto>> openByWeekday)
+    {
+        if (date < today)
+        {
+            return new AvailabilityDayCell(date, AvailabilityDayState.Past, 0);
+        }
+
+        if (day is null)
+        {
+            // Outside the fetched window / room has no rules → treat as closed (not pickable).
+            return new AvailabilityDayCell(date, AvailabilityDayState.Closed, 0);
+        }
+
+        if (day.IsBlackout)
+        {
+            return new AvailabilityDayCell(date, AvailabilityDayState.Blackout, 0);
+        }
+
+        var openWindows = openByWeekday.GetValueOrDefault(date.DayOfWeek) ?? [];
+        if (day.FreeWindows.Count == 0)
+        {
+            var state = openWindows.Count > 0 ? AvailabilityDayState.BookedOut : AvailabilityDayState.Closed;
+            return new AvailabilityDayCell(date, state, 0);
+        }
+
+        var partly = openWindows.Count > 0 && !SameWindows(day.FreeWindows, openWindows);
+        var open = partly ? AvailabilityDayState.PartlyBooked : AvailabilityDayState.Open;
+        return new AvailabilityDayCell(date, open, day.FreeWindows.Count);
+    }
+
+    private static bool SameWindows(IReadOnlyList<OpenWindowDto> a, IReadOnlyList<OpenWindowDto> b)
+    {
+        if (a.Count != b.Count)
+        {
+            return false;
+        }
+
+        static IEnumerable<string> Keys(IReadOnlyList<OpenWindowDto> w) =>
+            w.Select(x => $"{x.StartTime}-{x.EndTime}").OrderBy(x => x, StringComparer.Ordinal);
+        return Keys(a).SequenceEqual(Keys(b));
+    }
+
+    private static Dictionary<DayOfWeek, IReadOnlyList<OpenWindowDto>> OpenHoursByWeekday(
+        IReadOnlyList<DayOpenHoursDto>? openHours)
+    {
+        var map = new Dictionary<DayOfWeek, IReadOnlyList<OpenWindowDto>>();
+        foreach (var d in openHours ?? [])
+        {
+            if (d.Windows.Count > 0 && Enum.TryParse<DayOfWeek>(d.DayOfWeek, ignoreCase: true, out var dow))
+            {
+                map[dow] = d.Windows;
+            }
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// Compresses open hours into a one-line summary, grouping consecutive identical days
+    /// Monday-first: "Mon–Fri 8 AM–10 PM · Sat 9 AM–5 PM". Null/empty rules → a gentle fallback.
+    /// </summary>
+    public static string OpenHoursSummary(IReadOnlyList<DayOpenHoursDto>? openHours)
+    {
+        var openByWeekday = OpenHoursByWeekday(openHours);
+        if (openByWeekday.Count == 0)
+        {
+            return "Open hours aren't listed yet — send a request and ask.";
+        }
+
+        // Monday-first reading order for the summary sentence.
+        DayOfWeek[] order = [DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+            DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday];
+
+        var groups = new List<string>();
+        var i = 0;
+        while (i < order.Length)
+        {
+            if (!openByWeekday.TryGetValue(order[i], out var windows))
+            {
+                i++;
+                continue;
+            }
+
+            var signature = string.Join(", ", windows.Select(w => $"{ShortTime(w.StartTime)}–{ShortTime(w.EndTime)}"));
+            var runStart = i;
+            while (i + 1 < order.Length
+                   && openByWeekday.TryGetValue(order[i + 1], out var next)
+                   && SameWindows(next, windows))
+            {
+                i++;
+            }
+
+            var dayLabel = runStart == i
+                ? Abbrev(order[runStart])
+                : $"{Abbrev(order[runStart])}–{Abbrev(order[i])}";
+            groups.Add($"{dayLabel} {signature}");
+            i++;
+        }
+
+        return string.Join(" · ", groups);
+    }
+
+    /// <summary>"Next free" line from a fetched window: "Tuesday 6:00–9:00 PM", or null when none.</summary>
+    public static string? NextFree(RoomAvailabilityDto? availability)
+    {
+        foreach (var day in (availability?.Days ?? []).OrderBy(d => d.Date))
+        {
+            if (day.FreeWindows.Count > 0)
+            {
+                var w = day.FreeWindows[0];
+                var when = day.Date.ToString("dddd", CultureInfo.InvariantCulture);
+                return $"{when} {ApplicationDisplay.FormatTime(w.StartTime)}–{ApplicationDisplay.FormatTime(w.EndTime)}";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>"08:00" → "8 AM"; "08:30" → "8:30 AM" (drops :00 minutes for a tighter summary).</summary>
+    public static string ShortTime(string wireTime)
+    {
+        if (!TimeOnly.TryParseExact(wireTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t))
+        {
+            return wireTime;
+        }
+
+        return t.Minute == 0
+            ? t.ToString("h tt", CultureInfo.InvariantCulture)
+            : t.ToString("h:mm tt", CultureInfo.InvariantCulture);
+    }
+
+    private static string Abbrev(DayOfWeek d) => d switch
+    {
+        DayOfWeek.Sunday => "Sun",
+        DayOfWeek.Monday => "Mon",
+        DayOfWeek.Tuesday => "Tue",
+        DayOfWeek.Wednesday => "Wed",
+        DayOfWeek.Thursday => "Thu",
+        DayOfWeek.Friday => "Fri",
+        _ => "Sat",
+    };
+
+    /// <summary>Conflict reason wire token → plain language (§8.13).</summary>
+    public static string ConflictReason(string reason) => reason switch
+    {
+        "outsideOpenHours" => "outside open hours",
+        "blackout" => "closed that day",
+        "booked" => "already booked",
+        _ => DiscoveryViewModel.Humanize(reason),
+    };
+}
+
+/// <summary>Model for the "when it's open" listing-detail preview (§8.10 mini strip + legend).</summary>
+public sealed class AvailabilityPreviewViewModel
+{
+    public required string OpenHoursSummary { get; init; }
+    public required IReadOnlyList<AvailabilityDayCell> Strip { get; init; }
+
+    /// <summary>"Tuesday 6:00–9:00 PM", or null when nothing is free in the fetched horizon.</summary>
+    public string? NextFree { get; init; }
+
+    /// <summary>Deep link to the apply page (the no-JS/next-step CTA).</summary>
+    public required string ApplyUrl { get; init; }
+}
+
+/// <summary>Model for one month of the apply calendar grid (§8.10).</summary>
+public sealed class AvailabilityCalendarViewModel
+{
+    public required string VenueSlug { get; init; }
+    public required string RoomSlug { get; init; }
+
+    /// <summary>First day of the rendered month.</summary>
+    public required DateOnly Month { get; init; }
+    public required DateOnly Today { get; init; }
+
+    /// <summary>The day currently selected in the form (highlighted), if any.</summary>
+    public DateOnly? Selected { get; init; }
+
+    /// <summary>Cells for every day of <see cref="Month"/> (state pre-classified).</summary>
+    public required IReadOnlyList<AvailabilityDayCell> Days { get; init; }
+
+    /// <summary>Earliest / latest month a guest can browse (clamps prev/next nav).</summary>
+    public required DateOnly MinMonth { get; init; }
+    public required DateOnly MaxMonth { get; init; }
+
+    public DateOnly PrevMonth => Month.AddMonths(-1);
+    public DateOnly NextMonth => Month.AddMonths(1);
+    public bool HasPrev => PrevMonth >= MinMonth;
+    public bool HasNext => NextMonth <= MaxMonth;
+
+    /// <summary>Leading blank cells before the 1st so columns align Sunday-first (§8.10).</summary>
+    public int LeadingBlanks => (int)Month.DayOfWeek; // Sunday = 0
+    public string MonthHeading => Month.ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+}
+
+/// <summary>Model for the day time-range control (§8.11): free windows + range selects.</summary>
+public sealed class DayWindowsViewModel
+{
+    public required DateOnly Date { get; init; }
+    public required IReadOnlyList<OpenWindowDto> FreeWindows { get; init; }
+
+    /// <summary>Human date for the readout ("Tuesday, Sep 8").</summary>
+    public string DateLabel => Date.ToString("dddd, MMM d", CultureInfo.InvariantCulture);
+
+    /// <summary>Wire date the picker writes into the canonical StartDate input.</summary>
+    public string WireDate => Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+}
+
+/// <summary>Model for the verdict card (§8.13), shared by the live check and the submit hard-block.</summary>
+public sealed class ConflictSummaryViewModel
+{
+    public required ScheduleCheckResultDto Result { get; init; }
+
+    /// <summary>True for the submit-time 409 re-render: forces the danger variant + next-action copy.</summary>
+    public bool HardBlock { get; init; }
+
+    private int ClashCount => Result.Conflicts.Count;
+    private bool FullyBlocked => ClashCount > 0 && (HardBlock || ClashCount >= Result.TotalOccurrences);
+
+    /// <summary>success | warning | danger — the §2.3 status role driving the banner colours.</summary>
+    public string Role => Result.Available ? "success" : FullyBlocked ? "danger" : "warning";
+
+    public string Icon => Result.Available ? "✓" : FullyBlocked ? "✕" : "!";
+
+    /// <summary>The banner headline (§8.13 language: advisory, not a promise).</summary>
+    public string Headline
+    {
+        get
+        {
+            var total = Result.TotalOccurrences;
+            if (Result.Available)
+            {
+                return total == 1 ? "That time looks free." : $"All {total} dates look free.";
+            }
+
+            if (FullyBlocked && ClashCount >= total)
+            {
+                return total == 1 ? "That time isn't available." : $"None of those {total} dates are free.";
+            }
+
+            return $"{ClashCount} of {total} dates clash.";
+        }
+    }
+
+    /// <summary>Next-action line, shown for the danger variant (§8.13).</summary>
+    public string? NextAction =>
+        Role == "danger" ? "Pick another time — the calendar shows what's free." : null;
 }

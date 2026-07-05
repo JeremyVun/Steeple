@@ -20,6 +20,15 @@ public interface IAvailabilityRepository
     Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default);
 
     /// <summary>
+    /// The room's <b>confirmed</b> busy occurrences overlapping <c>[fromUtc, toUtc)</c>:
+    /// <c>Scheduled</c> occurrences of <c>Confirmed</c> bookings (pending demand is never counted).
+    /// Read-only — the Availability module reads <c>booking_occurrences</c> to subtract booked time
+    /// but never mutates it; the exclusion constraint stays the sole double-booking authority.
+    /// </summary>
+    Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesAsync(
+        Guid roomId, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
+
+    /// <summary>
     /// Replaces the room's entire rule set (delete existing rows, insert the supplied ones) in one
     /// SaveChanges — a single implicit transaction, so a partial write is never visible.
     /// </summary>

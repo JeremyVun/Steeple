@@ -276,7 +276,207 @@ public class AvailabilityServiceTests
         Assert.Single(days[0].Windows); // sunday
     }
 
+    // ----- Public availability feed ------------------------------------------------------------
+
+    [Theory]
+    [InlineData(-1, 5)]   // from before venue-local today
+    [InlineData(5, 2)]    // to before from
+    [InlineData(0, 93)]   // span over 92 days
+    public async Task GetPublicAvailabilityAsync_OutOfRange_ReturnsInvalidRange(int fromOffset, int toOffset)
+    {
+        var (repo, managers, room, _) = NewScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(
+            room.Id, TodayLocal.AddDays(fromOffset), TodayLocal.AddDays(toOffset));
+
+        Assert.Null(result.Value);
+        Assert.False(result.IsNotFound);
+        Assert.Equal(AvailabilityErrorCodes.InvalidRange, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_SpanExactly92Days_IsValid()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal.AddDays(92));
+
+        Assert.Null(result.ErrorCode);
+        Assert.Equal(93, result.Value!.Days.Count);
+    }
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_DraftRoom_ReturnsNotFound()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        room.Status = RoomStatus.Draft;
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal.AddDays(5));
+
+        Assert.True(result.IsNotFound);
+        Assert.Null(result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_BlackoutDay_IsBlackoutWithNoFreeWindows()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00")); // TodayLocal is a Sunday
+        repo.Blackouts.Add(Blackout(room.Id, TodayLocal));
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal);
+
+        var day = Assert.Single(result.Value!.Days);
+        Assert.True(day.IsBlackout);
+        Assert.Empty(day.FreeWindows);
+    }
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_ConfirmedBookingSubtracted_PendingAndCancelledDoNot()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
+
+        // A confirmed, scheduled occurrence 10:00–12:00 local reduces the free window.
+        repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "10:00", "12:00"));
+        // A cancelled booking's occurrence 13:00–14:00 must NOT reduce it (pending demand never leaks).
+        repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "13:00", "14:00", bookingStatus: BookingStatus.Cancelled));
+        // A cancelled *occurrence* of a confirmed booking must NOT reduce it either.
+        repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "15:00", "16:00", occStatus: OccurrenceStatus.Cancelled));
+
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal);
+
+        var day = Assert.Single(result.Value!.Days);
+        Assert.False(day.IsBlackout);
+        Assert.Equal(2, day.FreeWindows.Count);
+        Assert.Equal(("09:00", "10:00"), (day.FreeWindows[0].StartTime, day.FreeWindows[0].EndTime));
+        Assert.Equal(("12:00", "17:00"), (day.FreeWindows[1].StartTime, day.FreeWindows[1].EndTime));
+    }
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_DstFallBackDate_ConvertsBusyPerOccurrence()
+    {
+        // 2026-11-01 is the America/New_York fall-back (clocks 02:00→01:00). A confirmed 10:00–12:00
+        // local booking must subtract exactly 10:00–12:00 wall-clock on that date, proving the busy
+        // interval is derived per-occurrence in venue-local time (never fixed UTC arithmetic).
+        var fallBack = new DateOnly(2026, 11, 1); // a Sunday
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
+        repo.Occurrences.Add(Occurrence(room.Id, fallBack, "10:00", "12:00"));
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetPublicAvailabilityAsync(room.Id, fallBack, fallBack);
+
+        var day = Assert.Single(result.Value!.Days);
+        Assert.Equal(2, day.FreeWindows.Count);
+        Assert.Equal(("09:00", "10:00"), (day.FreeWindows[0].StartTime, day.FreeWindows[0].EndTime));
+        Assert.Equal(("12:00", "17:00"), (day.FreeWindows[1].StartTime, day.FreeWindows[1].EndTime));
+    }
+
+    // ----- Schedule check ----------------------------------------------------------------------
+
+    [Fact]
+    public async Task CheckScheduleAsync_NoRulesRoom_IsAvailableWithoutClassification()
+    {
+        var (repo, managers, room, _) = NewScenario(); // no open hours, no blackouts
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.CheckScheduleAsync(
+            room.Id, NewSchedule("oneOff", TodayLocal.AddDays(2), "10:00", "12:00"));
+
+        Assert.True(result.Value!.Available);
+        Assert.Equal(1, result.Value.TotalOccurrences);
+        Assert.Empty(result.Value.Conflicts);
+    }
+
+    [Fact]
+    public async Task CheckScheduleAsync_InvalidSchedule_ReturnsInvalidApplication()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
+        var service = CreateService(repo, managers, out _);
+
+        // End before start — same rule apply enforces.
+        var result = await service.CheckScheduleAsync(
+            room.Id, NewSchedule("oneOff", TodayLocal.AddDays(2), "12:00", "10:00"));
+
+        Assert.Null(result.Value);
+        Assert.Equal(AvailabilityErrorCodes.InvalidApplication, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CheckScheduleAsync_MixedConflicts_ClassifiesEachOccurrence()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "12:00"));
+        // A confirmed booking on the first Sunday 10:00–11:00 → that occurrence is "booked".
+        var firstSunday = TodayLocal; // 2026-07-05
+        repo.Occurrences.Add(Occurrence(room.Id, firstSunday, "10:00", "11:00"));
+        var service = CreateService(repo, managers, out _);
+
+        // Weekly Sundays 10:00–11:00 for three weeks: first is booked, others fit open hours (available).
+        var result = await service.CheckScheduleAsync(
+            room.Id,
+            new ScheduleDto("recurringWeekly", firstSunday, firstSunday.AddDays(14), ["sunday"], "10:00", "11:00"));
+
+        Assert.Equal(3, result.Value!.TotalOccurrences);
+        Assert.False(result.Value.Available);
+        var conflict = Assert.Single(result.Value.Conflicts);
+        Assert.Equal(firstSunday, conflict.Date);
+        Assert.Equal("booked", conflict.Reason);
+    }
+
+    [Fact]
+    public async Task CheckScheduleAsync_OutsideOpenHours_ClassifiesOutsideOpenHours()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "11:00"));
+        var service = CreateService(repo, managers, out _);
+
+        // 10:00–12:00 doesn't fit inside the single 09:00–11:00 window.
+        var result = await service.CheckScheduleAsync(
+            room.Id, NewSchedule("oneOff", TodayLocal, "10:00", "12:00"));
+
+        Assert.False(result.Value!.Available);
+        Assert.Equal("outsideOpenHours", Assert.Single(result.Value.Conflicts).Reason);
+    }
+
     // ----- Helpers -----------------------------------------------------------------------------
+
+    private static ScheduleDto NewSchedule(string frequency, DateOnly startDate, string startTime, string endTime) =>
+        new(frequency, startDate, frequency == "recurringWeekly" ? startDate : null, null, startTime, endTime);
+
+    private BookingOccurrence Occurrence(
+        Guid roomId,
+        DateOnly localDate,
+        string localStart,
+        string localEnd,
+        OccurrenceStatus occStatus = OccurrenceStatus.Scheduled,
+        BookingStatus bookingStatus = BookingStatus.Confirmed)
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        DateTimeOffset ToUtc(string time) =>
+            new(TimeZoneInfo.ConvertTimeToUtc(localDate.ToDateTime(TimeOnly.Parse(time)), tz), TimeSpan.Zero);
+
+        var booking = new Booking { Id = Guid.NewGuid(), RoomId = roomId, Status = bookingStatus };
+        return new BookingOccurrence
+        {
+            Id = Guid.NewGuid(),
+            BookingId = booking.Id,
+            RoomId = roomId,
+            StartUtc = ToUtc(localStart),
+            EndUtc = ToUtc(localEnd),
+            LocalDate = localDate,
+            Status = occStatus,
+            Booking = booking,
+        };
+    }
 
     private static async Task AssertInvalid(SaveAvailabilityRulesRequest request)
     {
@@ -392,6 +592,8 @@ public class AvailabilityServiceTests
 
         public List<RoomBlackoutDate> Blackouts { get; } = [];
 
+        public List<BookingOccurrence> Occurrences { get; } = [];
+
         public Task<Room?> GetRoomWithVenueAsync(Guid roomId, CancellationToken ct = default) =>
             Task.FromResult<Room?>(roomId == _room.Id ? _room : null);
 
@@ -405,6 +607,17 @@ public class AvailabilityServiceTests
 
         public Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
             Task.FromResult(OpenHours.Any(h => h.RoomId == roomId));
+
+        public Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesAsync(
+            Guid roomId, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<BookingOccurrence>>(
+                Occurrences
+                    .Where(o => o.RoomId == roomId
+                        && o.Status == OccurrenceStatus.Scheduled
+                        && o.Booking!.Status == BookingStatus.Confirmed
+                        && o.StartUtc < toUtc
+                        && o.EndUtc > fromUtc)
+                    .ToList());
 
         public Task ReplaceRulesAsync(
             Guid roomId,

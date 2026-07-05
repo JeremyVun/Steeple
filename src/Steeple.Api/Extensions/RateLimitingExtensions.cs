@@ -24,6 +24,9 @@ public static class RateLimitPolicies
 
     /// <summary>Per-account limiter for photo uploads — the expensive image pipeline (SYSTEM_DESIGN §9).</summary>
     public const string Media = "media";
+
+    /// <summary>Per-IP limiter for the anonymous guest availability reads (CONTRACTS §6).</summary>
+    public const string Availability = "availability";
 }
 
 /// <summary>
@@ -37,6 +40,7 @@ public static class RateLimitingExtensions
     private const int EventsPermitLimit = 60;
     private const int ManagePermitLimit = 30;
     private const int MediaPermitLimit = 12;
+    private const int AvailabilityPermitLimit = 30;
 
     // Both policies share a 1-minute window, which keeps the single OnRejected Retry-After honest.
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
@@ -98,6 +102,17 @@ public static class RateLimitingExtensions
                     _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = MediaPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.Availability, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    // Anonymous public reads — always per-IP.
+                    partitionKey: ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = AvailabilityPermitLimit,
                         Window = Window,
                         QueueLimit = 0,
                     }));

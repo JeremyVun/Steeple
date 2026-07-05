@@ -78,6 +78,9 @@ public sealed class DiscoveryController : SteepleControllerBase
         ViewData["Description"] = BuildListingDescription(dto);
         // The in-product apply flow supersedes the mailto CTA when its flag is on (ROADMAP Phase 2).
         ViewData["ApplyEnabled"] = _flags.IsEnabled("web.apply_from_browser");
+        // The "when it's open" preview (lazy hx-get) rides its own flag alongside the apply flow.
+        ViewData["AvailabilityPickerEnabled"] =
+            _flags.IsEnabled("web.availability_picker") && _flags.IsEnabled("web.apply_from_browser");
         var primaryPhoto = dto.Photos.FirstOrDefault(p => p.IsPrimary)?.Url ?? dto.Photos.FirstOrDefault()?.Url;
         if (primaryPhoto is not null)
         {
@@ -89,6 +92,38 @@ public sealed class DiscoveryController : SteepleControllerBase
         SetPreconnectOrigins(dto.Photos.Select(p => p.Url));
 
         return View(dto);
+    }
+
+    /// <summary>
+    /// Lazy-loaded "when it's open" preview fragment for the detail page (§8.10): an open-hours
+    /// summary, a 14-day mini strip, and a computed "next free" line. HTMX-revealed; the next-free
+    /// and states are server-computed (never re-derived client-side, §8.13).
+    /// </summary>
+    [HttpGet("space/{venueSlug}/{roomSlug}/availability-preview")]
+    public async Task<IActionResult> AvailabilityPreview(string venueSlug, string roomSlug, CancellationToken ct)
+    {
+        if (!(_flags.IsEnabled("web.availability_picker") && _flags.IsEnabled("web.apply_from_browser")))
+        {
+            return NotFound();
+        }
+
+        var room = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var to = today.AddDays(13);
+        var availability = await _api.GetListingAvailabilityAsync(room.RoomId, today, to, ct);
+
+        return PartialView("_AvailabilityPreview", new AvailabilityPreviewViewModel
+        {
+            OpenHoursSummary = AvailabilityDisplay.OpenHoursSummary(room.OpenHours),
+            Strip = AvailabilityDisplay.BuildCells(today, to, today, availability, room.OpenHours),
+            NextFree = AvailabilityDisplay.NextFree(availability),
+            ApplyUrl = Url.Content($"~/space/{venueSlug}/{roomSlug}/apply"),
+        });
     }
 
     /// <summary>

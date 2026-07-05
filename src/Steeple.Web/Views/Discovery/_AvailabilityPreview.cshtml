@@ -1,0 +1,40 @@
+@model AvailabilityPreviewViewModel
+@using System.Globalization
+@* Lazy "when it's open" preview (§8.10). Server-computed states + next-free — no client re-derivation. *@
+<div class="avail-preview">
+    <p class="avail-hours-summary">@Model.OpenHoursSummary</p>
+
+    <ul class="avail-strip" role="list" aria-label="Availability over the next two weeks">
+        @foreach (var cell in Model.Strip)
+        {
+            <li class="avail-strip-cell @cell.CssClass" aria-label="@cell.AccessibleName">
+                <span class="avail-strip-dow" aria-hidden="true">@(cell.Date.ToString("ddd", CultureInfo.InvariantCulture)[..1])</span>
+                <span class="avail-strip-num" aria-hidden="true">@cell.Date.Day</span>
+                @if (cell.State == AvailabilityDayState.PartlyBooked)
+                {
+                    <span class="avail-dot" aria-hidden="true"></span>
+                }
+                else if (cell.State == AvailabilityDayState.Blackout)
+                {
+                    <span class="avail-x" aria-hidden="true">×</span>
+                }
+            </li>
+        }
+    </ul>
+
+    <ul class="avail-legend" role="list" aria-label="Calendar key">
+        <li class="avail-legend-item"><span class="avail-swatch avail-open" aria-hidden="true"></span> Open</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-partly" aria-hidden="true"></span> Partly booked</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-booked" aria-hidden="true"></span> Booked out</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-closed" aria-hidden="true"></span> Closed</li>
+    </ul>
+
+    @if (Model.NextFree is { } next)
+    {
+        <p class="avail-nextfree"><span class="avail-nextfree-label">Next free:</span> @next</p>
+    }
+    else
+    {
+        <p class="avail-nextfree avail-nextfree-none">No free time in the next two weeks — send a request and ask.</p>
+    }
+</div>

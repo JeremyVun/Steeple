@@ -4,6 +4,9 @@
 library;
 
 export 'async_value_view.dart';
+export 'availability_day_state.dart';
+export 'availability_legend.dart';
+export 'availability_verdict_card.dart';
 export 'badges.dart';
 export 'chips.dart';
 export 'empty_state.dart';

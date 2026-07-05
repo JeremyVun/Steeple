@@ -37,6 +37,18 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         _db.RoomOpenHours.AnyAsync(h => h.RoomId == roomId, ct);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesAsync(
+        Guid roomId, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+        await _db.BookingOccurrences
+            .Where(o => o.RoomId == roomId
+                && o.Status == OccurrenceStatus.Scheduled
+                && o.Booking!.Status == BookingStatus.Confirmed
+                && o.StartUtc < toUtc
+                && o.EndUtc > fromUtc)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public async Task ReplaceRulesAsync(
         Guid roomId,
         IReadOnlyList<RoomOpenHours> openHours,

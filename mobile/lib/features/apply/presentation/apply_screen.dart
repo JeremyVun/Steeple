@@ -18,6 +18,7 @@ import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../listing/providers.dart';
 import '../providers.dart';
+import 'availability_calendar.dart';
 
 /// The apply flow (PRD: friction only at commitment). The whole form is
 /// drafted anonymously; the SSO sheet appears at submit and the draft
@@ -42,11 +43,66 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   bool _submitting = false;
   bool _tracked = false;
 
+  /// The advisory conflict check (DESIGN_SYSTEM §8.13): debounced 500ms after
+  /// the schedule changes, re-rendered from the submit-time 409 when it blocks.
+  Timer? _checkDebounce;
+  ScheduleCheckResult? _checkResult;
+  bool _checking = false;
+
+  /// True when [_checkResult] is the submit-time hard block, not the live
+  /// advisory check — the card gets the danger + next-action treatment.
+  bool _hardBlock = false;
+
   @override
   void dispose() {
+    _checkDebounce?.cancel();
     _groupSizeController.dispose();
     _intentController.dispose();
     super.dispose();
+  }
+
+  bool _scheduleCheckable(ProposedSchedule? s) {
+    if (s == null || s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) {
+      return false;
+    }
+    if (s.frequency == 'recurringWeekly' &&
+        (s.endDate == null || s.daysOfWeek == null || s.daysOfWeek!.isEmpty)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Debounced advisory dry-run. Clears any prior verdict immediately (the
+  /// schedule changed), then checks 500ms later; a verdict is dropped if the
+  /// schedule moved on again before it returned.
+  void _onScheduleChanged(RoomDetail room, ProposedSchedule? schedule) {
+    _checkDebounce?.cancel();
+    if (_checkResult != null || _hardBlock) {
+      setState(() {
+        _checkResult = null;
+        _hardBlock = false;
+      });
+    }
+    if (!_scheduleCheckable(schedule)) return;
+    _checkDebounce = Timer(const Duration(milliseconds: 500), () async {
+      if (!mounted) return;
+      setState(() => _checking = true);
+      try {
+        final result =
+            await ref.read(listingRepositoryProvider).checkSchedule(room.roomId, schedule!);
+        // Drop a stale verdict if the schedule changed while in flight.
+        final current = ref.read(applyDraftProvider(room.roomId)).schedule;
+        if (!mounted || current != schedule) return;
+        setState(() {
+          _checkResult = result;
+          _hardBlock = false;
+          _checking = false;
+        });
+      } on AppError {
+        if (!mounted) return;
+        setState(() => _checking = false); // advisory only — never blocks on error
+      }
+    });
   }
 
   @override
@@ -82,6 +138,13 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     final notifier = ref.read(applyDraftProvider(room.roomId).notifier);
     final schedule = draft.schedule;
     final recurring = schedule?.frequency == 'recurringWeekly';
+    final availability = ref.watch(roomAvailabilityProvider(room.roomId));
+
+    // Debounced advisory check whenever the schedule changes.
+    ref.listen(
+      applyDraftProvider(room.roomId).select((d) => d.schedule),
+      (_, next) => _onScheduleChanged(room, next),
+    );
 
     // Keep controllers in sync with a draft restored from an earlier visit.
     if (_groupSizeController.text.isEmpty && draft.groupSize > 0) {
@@ -149,8 +212,30 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
               _ScheduleFields(
                 schedule: schedule,
                 recurring: recurring,
+                availability: availability,
+                openHours: room.openHours,
                 onChanged: (s) => notifier.update(draft.copyWith(schedule: s)),
               ),
+              if (_checking) ...[
+                const SizedBox(height: SteepleTokens.space3),
+                Row(
+                  children: [
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: SteepleTokens.space2),
+                    Text(
+                      'Checking these dates…',
+                      style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ] else if (_checkResult != null) ...[
+                const SizedBox(height: SteepleTokens.space3),
+                AvailabilityVerdictCard(result: _checkResult!, hardBlock: _hardBlock),
+              ],
 
               legend('Tell them about your group'),
               TextField(
@@ -185,7 +270,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
           child: SafeArea(
             top: false,
             child: FilledButton(
-              onPressed: _isComplete(draft) && !_submitting ? () => _submit(room) : null,
+              onPressed: _canSubmit(draft) ? () => _submit(room) : null,
               child: _submitting
                   ? const SizedBox(
                       width: 20,
@@ -198,6 +283,16 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
         ),
       ],
     );
+  }
+
+  /// Submit is enabled when the form is complete, not mid-submit, and the last
+  /// advisory check didn't come back unavailable (DESIGN_SYSTEM §8.13 — the
+  /// button disables while a check says the schedule clashes).
+  bool _canSubmit(ApplicationDraft draft) {
+    if (!_isComplete(draft) || _submitting) return false;
+    if (_checking) return false;
+    if (_checkResult != null && !_checkResult!.available) return false;
+    return true;
   }
 
   bool _isComplete(ApplicationDraft draft) {
@@ -242,6 +337,18 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       await _showSubmitted(room, application);
     } on AppError catch (error) {
       if (!mounted) return;
+      // The submit-time hard block: re-render the conflict list in the shared
+      // verdict card (danger treatment) rather than a snackbar.
+      if (error.kind == AppErrorKind.conflict &&
+          error.code == 'schedule_unavailable' &&
+          error.problem != null) {
+        setState(() {
+          _submitting = false;
+          _checkResult = ScheduleCheckResult.fromJson(error.problem!);
+          _hardBlock = true;
+        });
+        return;
+      }
       setState(() => _submitting = false);
       final message = switch (error.kind) {
         AppErrorKind.validation =>
@@ -292,18 +399,28 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   }
 }
 
-/// Native pickers for the venue-local schedule. Dates/times stay Strings
-/// end-to-end (`yyyy-MM-dd` / `HH:mm`) — wall-clock in the venue's timezone,
-/// never a device-local DateTime (MOBILE_CONTRACTS §5).
+/// The venue-local "when" step. A hand-rolled month calendar fed by the guest
+/// availability feed drives date selection (day states + mandatory legend;
+/// past / booked-out / closed / blackout days are disabled — DESIGN_SYSTEM
+/// §8.10). Tapping a bookable day surfaces its free windows as chips that seed
+/// the time range (§8.11); the existing time pickers then refine it, clamped
+/// inside the chosen window. Weekly mode keeps the weekday multi-select (§8.12)
+/// and pre-checks the tapped day's weekday. Dates/times stay Strings
+/// end-to-end (`yyyy-MM-dd` / `HH:mm`), never device-local DateTimes
+/// (MOBILE_CONTRACTS §5).
 class _ScheduleFields extends StatelessWidget {
   const _ScheduleFields({
     required this.schedule,
     required this.recurring,
+    required this.availability,
+    required this.openHours,
     required this.onChanged,
   });
 
   final ProposedSchedule? schedule;
   final bool recurring;
+  final AsyncValue<RoomAvailability> availability;
+  final List<DayOpenHours>? openHours;
   final ValueChanged<ProposedSchedule> onChanged;
 
   /// Weekday wire tokens in the Sunday-first order the API expects on the wire.
@@ -312,18 +429,6 @@ class _ScheduleFields extends StatelessWidget {
   ];
 
   static const _dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-  /// `DateTime.weekday` (Mon=1…Sun=7) → Sunday-first token.
-  String _tokenForDate(DateTime d) => _days[d.weekday % 7];
-
-  /// Toggle a day in/out, keeping the list sorted Sunday-first for the wire.
-  List<String> _toggleDay(List<String> current, String token) {
-    final next = current.contains(token)
-        ? current.where((d) => d != token).toList()
-        : [...current, token];
-    next.sort((a, b) => _days.indexOf(a).compareTo(_days.indexOf(b)));
-    return next;
-  }
 
   ProposedSchedule get _current =>
       schedule ??
@@ -335,7 +440,88 @@ class _ScheduleFields extends StatelessWidget {
   String _fmtTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
-  Future<void> _pickDate(BuildContext context, {required bool isEnd}) async {
+  /// Toggle a day in/out, keeping the list sorted Sunday-first for the wire.
+  List<String> _toggleDay(List<String> current, String token) {
+    final next = current.contains(token)
+        ? current.where((d) => d != token).toList()
+        : [...current, token];
+    next.sort((a, b) => _days.indexOf(a).compareTo(_days.indexOf(b)));
+    return next;
+  }
+
+  /// A calendar-day tap: set the (first) date; weekly mode pre-checks that
+  /// day's weekday when nothing is chosen yet (never unchecks user picks).
+  void _selectDay(String date) {
+    final s = _current;
+    if (recurring) {
+      final days = s.daysOfWeek;
+      onChanged(s.copyWith(
+        startDate: date,
+        daysOfWeek:
+            (days == null || days.isEmpty) ? [_days[weekdayOf(date)]] : days,
+      ));
+    } else {
+      onChanged(s.copyWith(startDate: date));
+    }
+  }
+
+  /// The free window the current start time sits in (or the first) — the range
+  /// the time pickers are constrained to.
+  OpenWindow? _activeWindow(List<OpenWindow> windows) {
+    if (windows.isEmpty) return null;
+    final start = _current.startTime;
+    for (final w in windows) {
+      if (start.compareTo(w.startTime) >= 0 && start.compareTo(w.endTime) < 0) {
+        return w;
+      }
+    }
+    return windows.first;
+  }
+
+  // `HH:mm` strings compare lexicographically (zero-padded 24h) — no DateTime.
+  String _clamp(String hhmm, String lo, String hi) =>
+      hhmm.compareTo(lo) < 0 ? lo : (hhmm.compareTo(hi) > 0 ? hi : hhmm);
+
+  TimeOfDay _timeOfDay(String hhmm, String fallback) {
+    final src = hhmm.isNotEmpty ? hhmm : fallback;
+    final parts = src.split(':');
+    return TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+  }
+
+  Future<void> _pickTime(
+    BuildContext context, {
+    required bool isEnd,
+    required List<OpenWindow> windows,
+  }) async {
+    final w = _activeWindow(windows);
+    final current = isEnd ? _current.endTime : _current.startTime;
+    final fallback = w == null ? '09:00' : (isEnd ? w.endTime : w.startTime);
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _timeOfDay(current, fallback),
+    );
+    if (picked == null) return;
+    var hhmm = _fmtTime(picked);
+    if (w != null) hhmm = _clamp(hhmm, w.startTime, w.endTime);
+    onChanged(
+      isEnd ? _current.copyWith(endTime: hhmm) : _current.copyWith(startTime: hhmm),
+    );
+  }
+
+  /// Native pickers stay as the no-calendar fallback (feed failed to load) and
+  /// for the recurring "Until" bound (DESIGN_SYSTEM §8.10 note).
+  Future<void> _pickStartDate(BuildContext context) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      initialDate: now,
+    );
+    if (picked != null) _selectDay(_fmtDate(picked));
+  }
+
+  Future<void> _pickEndDate(BuildContext context) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
@@ -344,38 +530,20 @@ class _ScheduleFields extends StatelessWidget {
       initialDate: now,
     );
     if (picked == null) return;
-    if (isEnd) {
-      onChanged(_current.copyWith(endDate: _fmtDate(picked)));
-    } else {
-      // Weekly slots seed the start date's weekday when no days are chosen
-      // yet; an existing selection is left untouched.
-      final days = _current.daysOfWeek;
-      onChanged(_current.copyWith(
-        startDate: _fmtDate(picked),
-        daysOfWeek: recurring && (days == null || days.isEmpty)
-            ? [_tokenForDate(picked)]
-            : days,
-      ));
-    }
-  }
-
-  Future<void> _pickTime(BuildContext context, {required bool isEnd}) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: const TimeOfDay(hour: 9, minute: 0),
-    );
-    if (picked == null) return;
-    onChanged(
-      isEnd
-          ? _current.copyWith(endTime: _fmtTime(picked))
-          : _current.copyWith(startTime: _fmtTime(picked)),
-    );
+    onChanged(_current.copyWith(endDate: _fmtDate(picked)));
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = context.steepleColors;
     final s = _current;
+    final data = switch (availability) {
+      AsyncData(:final value) => value,
+      _ => null,
+    };
+    final selectedWindows = (data != null && s.startDate.isNotEmpty)
+        ? (data.dayFor(s.startDate)?.freeWindows ?? const <OpenWindow>[])
+        : const <OpenWindow>[];
 
     Widget pickerTile(String label, String value, VoidCallback onTap) => Expanded(
           child: OutlinedButton(
@@ -413,29 +581,85 @@ class _ScheduleFields extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: SteepleTokens.space4),
+
+        // Calendar (or graceful fallback while loading / on feed error).
+        switch (availability) {
+          AsyncData(:final value) => AvailabilityCalendar(
+              availability: value,
+              openHours: openHours,
+              selectedDate: s.startDate.isEmpty ? null : s.startDate,
+              onSelectDay: _selectDay,
+            ),
+          AsyncError() => Row(
+              children: [
+                pickerTile(
+                  recurring ? 'First date' : 'Date',
+                  s.startDate,
+                  () => _pickStartDate(context),
+                ),
+              ],
+            ),
+          _ => const SkeletonBlock(height: 300, radius: SteepleTokens.radiusMd),
+        },
+
+        if (data != null) ...[
+          const SizedBox(height: SteepleTokens.space3),
+          const AvailabilityLegend(),
+        ],
+
+        // The tapped day's free windows, as range-seeding chips.
+        if (data != null && s.startDate.isNotEmpty) ...[
+          const SizedBox(height: SteepleTokens.space4),
+          Text(
+            selectedWindows.isEmpty
+                ? 'No free windows on ${weekdayMonthDay(s.startDate)} — pick another day.'
+                : 'Free on ${weekdayMonthDay(s.startDate)}',
+            style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+          ),
+          if (selectedWindows.isNotEmpty) ...[
+            const SizedBox(height: SteepleTokens.space2),
+            Wrap(
+              spacing: SteepleTokens.space2,
+              runSpacing: SteepleTokens.space2,
+              children: [
+                for (final w in selectedWindows)
+                  FilterChipPill(
+                    label: timeRange12(w.startTime, w.endTime),
+                    selected: s.startTime == w.startTime && s.endTime == w.endTime,
+                    onTap: () => onChanged(
+                      s.copyWith(startTime: w.startTime, endTime: w.endTime),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+
         const SizedBox(height: SteepleTokens.space3),
         Row(
           children: [
             pickerTile(
-              recurring ? 'First date' : 'Date',
-              s.startDate,
-              () => _pickDate(context, isEnd: false),
+              'From',
+              s.startTime,
+              () => _pickTime(context, isEnd: false, windows: selectedWindows),
             ),
-            if (recurring) ...[
-              const SizedBox(width: SteepleTokens.space2),
-              pickerTile('Until', s.endDate ?? '', () => _pickDate(context, isEnd: true)),
-            ],
-          ],
-        ),
-        const SizedBox(height: SteepleTokens.space2),
-        Row(
-          children: [
-            pickerTile('From', s.startTime, () => _pickTime(context, isEnd: false)),
             const SizedBox(width: SteepleTokens.space2),
-            pickerTile('To', s.endTime, () => _pickTime(context, isEnd: true)),
+            pickerTile(
+              'To',
+              s.endTime,
+              () => _pickTime(context, isEnd: true, windows: selectedWindows),
+            ),
           ],
         ),
+
         if (recurring) ...[
+          const SizedBox(height: SteepleTokens.space3),
+          Row(
+            children: [
+              pickerTile('Until', s.endDate ?? '', () => _pickEndDate(context)),
+            ],
+          ),
           const SizedBox(height: SteepleTokens.space3),
           Text(
             'Which days',
@@ -458,13 +682,15 @@ class _ScheduleFields extends StatelessWidget {
                 ),
             ],
           ),
-          if ((s.daysOfWeek ?? const []).isNotEmpty) ...[
-            const SizedBox(height: SteepleTokens.space2),
-            Text(
-              '${describeWeekdays(s.daysOfWeek)} until ${s.endDate ?? '…'}',
-              style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
-            ),
-          ],
+        ],
+
+        // Plain-language readout of the chosen slot (DESIGN_SYSTEM §8.11).
+        if (s.startDate.isNotEmpty && s.startTime.isNotEmpty && s.endTime.isNotEmpty) ...[
+          const SizedBox(height: SteepleTokens.space3),
+          Text(
+            scheduleSummary(s),
+            style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+          ),
         ],
       ],
     );

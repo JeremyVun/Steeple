@@ -1615,3 +1615,120 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 @media (max-width: 640px) {
     .hours-day-actions { flex-wrap: wrap; }
 }
+
+/* ---------- Availability slot picker (§8.10-8.13) ---------- */
+/* Interactive pill chip/button (§8.2): unselected = card + strong border; selected = sage. */
+.chip-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 44px; padding: 0.4rem 0.9rem;
+    border: 1px solid var(--line-strong); border-radius: var(--radius-pill, 999px);
+    background: var(--card); color: var(--ink); font: inherit; font-weight: 600;
+    cursor: pointer;
+}
+.chip-btn:hover { border-color: var(--sage); }
+.chip-btn:focus-visible { box-shadow: var(--focus); outline: none; border-color: var(--sage); }
+.chip-btn.is-selected {
+    background: var(--sage-tint); border-color: var(--sage); color: var(--sage-deep);
+}
+
+/* Calendar */
+.avail-calendar { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); padding: 1rem; margin-bottom: 1rem; }
+.avail-calendar-nav { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem; }
+.avail-calendar-heading { font-size: 1.05rem; margin: 0; }
+.avail-nav-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--card); color: var(--ink); font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.avail-nav-btn:hover { border-color: var(--sage); }
+.avail-nav-btn:focus-visible { box-shadow: var(--focus); outline: none; }
+.avail-nav-btn.is-disabled { opacity: 0.35; cursor: default; }
+.avail-weekhead, .avail-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.avail-weekhead { margin-bottom: 4px; }
+.avail-weekday { text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--ink-faint); text-decoration: none; }
+.avail-day {
+    position: relative; aspect-ratio: 1 / 1; min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid transparent; border-radius: var(--radius-sm);
+    background: transparent; color: var(--ink); font: inherit; font-size: 0.95rem; cursor: pointer;
+    padding: 0;
+}
+.avail-day.avail-blank { border: 0; background: transparent; cursor: default; }
+button.avail-day { -webkit-appearance: none; appearance: none; }
+button.avail-day:focus-visible { box-shadow: var(--focus); outline: none; }
+/* States (§8.10) — colours from the §2.3 status tokens, never raw hex. */
+.avail-open { background: var(--card); border-color: var(--line); }
+.avail-open:hover { border-color: var(--sage); }
+.avail-partly { background: var(--card); border-color: var(--line); }
+.avail-partly:hover { border-color: var(--sage); }
+.avail-booked { background: var(--neutral-tint); color: var(--neutral); cursor: default; }
+.avail-closed { background: var(--paper-deep); color: var(--ink-faint); cursor: default; }
+.avail-blackout { background: var(--paper-deep); color: var(--ink-faint); cursor: default; }
+.avail-past { color: var(--ink-faint); background: transparent; cursor: default; }
+.avail-day.is-today { outline: 1px solid var(--sage); outline-offset: -1px; }
+.avail-day.is-selected { background: var(--sage); border-color: var(--sage); color: #fff; font-weight: 700; }
+.avail-day[disabled] { cursor: default; }
+.avail-dot { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); width: 5px; height: 5px; border-radius: 50%; background: var(--warning); }
+.avail-x { position: absolute; bottom: 3px; right: 5px; font-size: 0.7rem; color: var(--neutral); }
+.avail-num { line-height: 1; }
+
+/* Legend (mandatory, §8.10) */
+.avail-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 0.85rem 0 0; padding: 0; font-size: 0.8rem; color: var(--ink-soft); }
+.avail-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+.avail-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+.avail-swatch.avail-open { background: var(--card); border-color: var(--line-strong); }
+.avail-swatch.avail-partly { background: var(--card); border-color: var(--line-strong); position: relative; }
+.avail-swatch.avail-partly::after { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; border-radius: 50%; background: var(--warning); }
+.avail-swatch.avail-booked { background: var(--neutral-tint); border-color: var(--neutral-tint); }
+.avail-swatch.avail-closed { background: var(--paper-deep); }
+
+/* Day windows / time-range control (§8.11) */
+.apply-day-windows { margin-bottom: 1rem; }
+.apply-day-hint, .day-windows-empty { font-size: 0.9rem; color: var(--ink-faint); margin: 0.25rem 0; }
+.day-windows-lead { font-size: 0.95rem; margin: 0 0 0.6rem; }
+.day-window-chips, .until-presets { gap: 0.5rem; margin-bottom: 0.75rem; }
+.day-range { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.day-duration .field-label { display: block; margin-bottom: 0.35rem; }
+.day-range-selects { display: flex; gap: 1rem; flex-wrap: wrap; }
+.day-range-field { display: flex; flex-direction: column; gap: 0.3rem; flex: 1 1 8rem; }
+.day-range-readout { font-size: 0.95rem; color: var(--ink); font-weight: 600; margin: 0; }
+
+/* Native inputs stay canonical but sit quieter once the picker is active. */
+.apply-native-schedule { margin-top: 0.5rem; }
+
+/* Verdict / conflict card (§8.13) — status pairs from §2.3. */
+.apply-conflict, .apply-conflict-block { margin: 0 0 1rem; }
+.verdict-card { border-radius: var(--radius-sm); padding: 0.8rem 1rem; border: 1px solid transparent; }
+.verdict-success { background: var(--success-tint); color: var(--success); border-color: var(--success); }
+.verdict-warning { background: var(--warning-tint); color: var(--warning); border-color: var(--warning); }
+.verdict-danger { background: var(--danger-tint); color: var(--danger); border-color: var(--danger); }
+.verdict-headline { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-weight: 700; }
+.verdict-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: currentColor; color: var(--card); font-size: 0.85rem; flex: none; }
+.verdict-detail { margin-top: 0.5rem; }
+.verdict-detail > summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+.verdict-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; }
+.verdict-list li { display: flex; justify-content: space-between; gap: 0.75rem; }
+.verdict-date { font-weight: 600; }
+.verdict-reason { color: inherit; opacity: 0.9; }
+.verdict-next { margin: 0.6rem 0 0; font-size: 0.9rem; font-weight: 600; }
+
+/* Listing-detail "when it's open" preview (§8.10) */
+.avail-preview-loading { color: var(--ink-faint); font-size: 0.9rem; }
+.avail-hours-summary { font-weight: 600; margin: 0 0 0.75rem; }
+.avail-strip { list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 0 0 0.5rem; padding: 0; }
+.avail-strip-cell {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 0.4rem 0; border-radius: var(--radius-sm); border: 1px solid var(--line);
+    background: var(--card); font-size: 0.85rem;
+}
+.avail-strip-cell.avail-booked { background: var(--neutral-tint); color: var(--neutral); border-color: var(--neutral-tint); }
+.avail-strip-cell.avail-closed, .avail-strip-cell.avail-blackout { background: var(--paper-deep); color: var(--ink-faint); }
+.avail-strip-cell.avail-past { color: var(--ink-faint); background: transparent; }
+.avail-strip-dow { font-size: 0.7rem; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.avail-strip-num { font-weight: 600; }
+.avail-nextfree { margin: 0.75rem 0 0; font-weight: 600; }
+.avail-nextfree-label { color: var(--sage-deep); }
+.avail-nextfree-none { color: var(--ink-faint); font-weight: 400; }
+@media (max-width: 640px) {
+    .day-range-selects { flex-direction: column; }
+}

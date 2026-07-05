@@ -193,6 +193,9 @@ _RoomDetail _$RoomDetailFromJson(Map<String, dynamic> json) => _RoomDetail(
   rating: json['rating'] == null
       ? null
       : RatingSummary.fromJson(json['rating'] as Map<String, dynamic>),
+  openHours: (json['openHours'] as List<dynamic>?)
+      ?.map((e) => DayOpenHours.fromJson(e as Map<String, dynamic>))
+      .toList(),
 );
 
 Map<String, dynamic> _$RoomDetailToJson(_RoomDetail instance) =>
@@ -212,4 +215,5 @@ Map<String, dynamic> _$RoomDetailToJson(_RoomDetail instance) =>
       'photos': instance.photos,
       'venue': instance.venue,
       'rating': instance.rating,
+      'openHours': instance.openHours,
     };

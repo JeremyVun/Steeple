@@ -1,0 +1,67 @@
+@model DayWindowsViewModel
+@using System.Globalization
+@{
+    // 30-minute options for the enhancement range selects (§8.11). slot-picker.js constrains the
+    // visible options to the chosen free window; the native StartTime/EndTime inputs stay canonical.
+    var slots = new List<(string Wire, string Label)>();
+    for (var t = new TimeOnly(0, 0); ; t = t.AddMinutes(30))
+    {
+        slots.Add((t.ToString("HH:mm", CultureInfo.InvariantCulture), t.ToString("h:mm tt", CultureInfo.InvariantCulture)));
+        if (t.Hour == 23 && t.Minute == 30) { break; }
+    }
+}
+<div class="day-windows" data-day-windows data-date="@Model.WireDate">
+    @if (Model.FreeWindows.Count == 0)
+    {
+        <p class="day-windows-empty">No free time on @Model.DateLabel — pick another day on the calendar.</p>
+    }
+    else
+    {
+        <p class="day-windows-lead">Free on <strong>@Model.DateLabel</strong> — pick a window, then a time:</p>
+
+        <div class="chip-set day-window-chips" role="group" aria-label="Free windows on @Model.DateLabel">
+            @foreach (var w in Model.FreeWindows)
+            {
+                <button type="button" class="chip-btn" data-window
+                        data-start="@w.StartTime" data-end="@w.EndTime">
+                    @ApplicationDisplay.FormatTime(w.StartTime) – @ApplicationDisplay.FormatTime(w.EndTime)
+                </button>
+            }
+        </div>
+
+        <div class="day-range" data-range hidden>
+            <div class="day-duration" role="group" aria-label="How long">
+                <span class="field-label">For how long</span>
+                <div class="chip-set">
+                    <button type="button" class="chip-btn" data-duration="60">1 hour</button>
+                    <button type="button" class="chip-btn is-selected" data-duration="120">2 hours</button>
+                    <button type="button" class="chip-btn" data-duration="180">3 hours</button>
+                    <button type="button" class="chip-btn" data-duration="0">Custom</button>
+                </div>
+            </div>
+
+            <div class="day-range-selects">
+                <label class="day-range-field">
+                    <span class="field-label">From</span>
+                    <select class="form-input" data-range-start>
+                        @foreach (var s in slots)
+                        {
+                            <option value="@s.Wire">@s.Label</option>
+                        }
+                    </select>
+                </label>
+                <label class="day-range-field">
+                    <span class="field-label">To</span>
+                    <select class="form-input" data-range-end>
+                        @foreach (var s in slots)
+                        {
+                            <option value="@s.Wire">@s.Label</option>
+                        }
+                    </select>
+                </label>
+            </div>
+
+            <p class="day-range-readout body" data-range-readout aria-live="polite"></p>
+        </div>
+    }
+</div>

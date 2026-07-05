@@ -33,8 +33,19 @@
                 <p class="auth-error" role="alert">@Model.Error</p>
             }
 
+            @if (Model.Conflict is not null)
+            {
+                @* Submit-time hard block (409 schedule_unavailable): the verdict card as the top-of-form
+                   error region (§8.13 danger variant). *@
+                <div class="apply-conflict-block">
+                    @await Html.PartialAsync("_ConflictSummary", new ConflictSummaryViewModel { Result = Model.Conflict!, HardBlock = true })
+                </div>
+            }
+
             @* No action: posts back to this same URL (keeps the reverse-proxy PathBase intact). *@
-            <form method="post" class="apply-form" id="apply-form">
+            <form method="post" class="apply-form" id="apply-form"
+                  data-picker-enabled="@(Model.PickerEnabled ? "true" : "false")"
+                  data-calendar-slot="#apply-calendar-slot">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="IdempotencyKey" value="@form.IdempotencyKey" />
 
@@ -61,25 +72,51 @@
                     <div class="freq-toggle" role="radiogroup">
                         <label class="toggle-pill">
                             <input type="radio" name="Frequency" value="oneOff" checked="@(!isWeekly)"
-                                   data-freq-radio /> Just once
+                                   data-freq-radio data-schedule-field /> Just once
                         </label>
                         <label class="toggle-pill">
                             <input type="radio" name="Frequency" value="recurringWeekly" checked="@isWeekly"
-                                   data-freq-radio /> Weekly
+                                   data-freq-radio data-schedule-field /> Weekly
                         </label>
                     </div>
                 </fieldset>
 
-                <div class="form-row">
+                @if (Model.PickerEnabled)
+                {
+                    var calMonth = Model.InitialMonth.ToString("yyyy-MM");
+                    var calUrl = Url.Content($"~/space/{venue.Slug}/{room.RoomSlug}/apply/calendar?month={calMonth}")
+                        + (form.StartDate is { } sd ? $"&selected={sd:yyyy-MM-dd}" : "");
+                    <div class="apply-picker" data-apply-picker>
+                        <div id="apply-calendar-slot" class="apply-calendar-slot"
+                             hx-get="@calUrl" hx-trigger="load" hx-target="this" hx-swap="innerHTML">
+                            <p class="avail-preview-loading" role="status">Loading the calendar…</p>
+                        </div>
+                        <div id="apply-day-windows" class="apply-day-windows">
+                            <p class="apply-day-hint">Pick a date on the calendar to see its free times.</p>
+                        </div>
+                    </div>
+                }
+
+                <div class="form-row@(Model.PickerEnabled ? " apply-native-schedule" : "")">
                     <div class="form-field" data-when-freq="oneOff recurringWeekly">
                         <label class="field-label" for="apply-startdate" data-label-oneoff="Date" data-label-weekly="First date">@(isWeekly ? "First date" : "Date")</label>
                         <input class="form-input" id="apply-startdate" name="StartDate" type="date"
-                               value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required />
+                               value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required
+                               data-schedule-field data-start-date />
                     </div>
                     <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
                         <label class="field-label" for="apply-enddate">Until</label>
                         <input class="form-input" id="apply-enddate" name="EndDate" type="date"
-                               value="@(form.EndDate?.ToString("yyyy-MM-dd"))" />
+                               value="@(form.EndDate?.ToString("yyyy-MM-dd"))"
+                               data-schedule-field data-end-date />
+                        @if (Model.PickerEnabled)
+                        {
+                            <div class="chip-set until-presets" role="group" aria-label="How long the series runs">
+                                <button type="button" class="chip-btn" data-until="56">8 weeks</button>
+                                <button type="button" class="chip-btn" data-until="92">3 months</button>
+                                <button type="button" class="chip-btn" data-until="0">Custom</button>
+                            </div>
+                        }
                         <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
                     </div>
                 </div>
@@ -91,6 +128,7 @@
                         {
                             <label class="chip">
                                 <input type="checkbox" name="DaysOfWeek" value="@option.Value"
+                                       data-schedule-field data-weekday="@option.Value"
                                        @(form.DaysOfWeek.Contains(option.Value) ? "checked" : "") />
                                 <span class="chip-text">@option.Label</span>
                             </label>
@@ -103,15 +141,26 @@
                     <div class="form-field">
                         <label class="field-label" for="apply-starttime">From</label>
                         <input class="form-input" id="apply-starttime" name="StartTime" type="time"
-                               value="@form.StartTime" required />
+                               value="@form.StartTime" required data-schedule-field data-start-time />
                     </div>
                     <div class="form-field">
                         <label class="field-label" for="apply-endtime">To</label>
                         <input class="form-input" id="apply-endtime" name="EndTime" type="time"
-                               value="@form.EndTime" required />
+                               value="@form.EndTime" required data-schedule-field data-end-time />
                     </div>
                 </div>
                 <p class="field-help">Times are local to @venue.Name.</p>
+
+                @if (Model.PickerEnabled)
+                {
+                    @* Live availability check (§8.13): debounced 500ms, re-fetched on any schedule change,
+                       always rendering exactly what the server returned. *@
+                    <div id="apply-conflict" class="apply-conflict"
+                         hx-get="@Url.Content($"~/space/{venue.Slug}/{room.RoomSlug}/apply/check")"
+                         hx-trigger="change delay:500ms from:[data-schedule-field]"
+                         hx-include="[data-schedule-field]"
+                         hx-target="this" hx-swap="innerHTML"></div>
+                }
 
                 <div class="form-field form-field-hero">
                     <label class="field-label" for="apply-intent">Tell @venue.Name what you're planning</label>
@@ -174,6 +223,10 @@
 
 @section scripts {
     <script src="~/js/apply.js" asp-append-version="true"></script>
+    @if (Model.PickerEnabled)
+    {
+        <script src="~/js/slot-picker.js" asp-append-version="true"></script>
+    }
     @if (Model.TurnstileSiteKey.Length > 0)
     {
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>

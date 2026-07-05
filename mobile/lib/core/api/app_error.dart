@@ -24,6 +24,7 @@ class AppError implements Exception {
     this.code,
     this.detail,
     this.retryAfter,
+    this.problem,
   });
 
   final AppErrorKind kind;
@@ -40,6 +41,11 @@ class AppError implements Exception {
 
   /// Drives ErrorView's retry button.
   final bool retryable;
+
+  /// The raw ProblemDetails body, when the response carried one — for codes
+  /// whose extension payload the UI needs (e.g. `schedule_unavailable`'s
+  /// `{available, totalOccurrences, conflicts[]}`). Not for display.
+  final Map<String, dynamic>? problem;
 
   @override
   String toString() =>
@@ -66,6 +72,9 @@ class AppError implements Exception {
   static AppError _fromResponse(Response<dynamic>? response) {
     final status = response?.statusCode ?? 0;
     final (code, detail) = _problemDetails(response?.data);
+    final problem = response?.data is Map<String, dynamic>
+        ? response!.data as Map<String, dynamic>
+        : null;
     return switch (status) {
       400 || 422 => AppError(
           kind: AppErrorKind.validation, retryable: false, code: code, detail: detail),
@@ -73,7 +82,13 @@ class AppError implements Exception {
       // Unpublished/out-of-geofence listings land here — "no longer
       // available", not an error state.
       404 => AppError(kind: AppErrorKind.notFound, retryable: false, code: code, detail: detail),
-      409 => AppError(kind: AppErrorKind.conflict, retryable: false, code: code, detail: detail),
+      409 => AppError(
+          kind: AppErrorKind.conflict,
+          retryable: false,
+          code: code,
+          detail: detail,
+          problem: problem,
+        ),
       429 => AppError(
           kind: AppErrorKind.rateLimited,
           retryable: true,

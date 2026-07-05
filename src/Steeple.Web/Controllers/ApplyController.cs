@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,7 @@ namespace Steeple.Web.Controllers;
 public sealed class ApplyController : SteepleControllerBase
 {
     private const string ApplyFlag = "web.apply_from_browser";
+    private const string PickerFlag = "web.availability_picker";
 
     private readonly ISteepleApiClient _api;
     private readonly IFeatureFlags _flags;
@@ -69,6 +71,7 @@ public sealed class ApplyController : SteepleControllerBase
             Form = form,
             Restored = stashed is not null && User.Identity?.IsAuthenticated == true,
             TurnstileSiteKey = _turnstile.SiteKey,
+            PickerEnabled = PickerEnabled(),
         });
     }
 
@@ -128,10 +131,10 @@ public sealed class ApplyController : SteepleControllerBase
             IntentText: form.IntentText,
             TurnstileToken: form.TurnstileToken);
 
-        (ApplicationDto? application, string? errorCode) = (null, null);
+        (ApplicationDto? application, string? errorCode, ScheduleCheckResultDto? conflict) = (null, null, null);
         try
         {
-            (application, errorCode) = await _api.SubmitApplicationAsync(accessToken, room.RoomId, request, idempotencyKey, ct);
+            (application, errorCode, conflict) = await _api.SubmitApplicationAsync(accessToken, room.RoomId, request, idempotencyKey, ct);
         }
         catch (HttpRequestException ex)
         {
@@ -140,6 +143,13 @@ public sealed class ApplyController : SteepleControllerBase
 
         if (application is null)
         {
+            // A hard-blocked schedule (409) re-renders the verdict card (§8.13 danger variant)
+            // instead of a bare error line, so the person sees exactly which dates clash.
+            if (errorCode == "schedule_unavailable" && conflict is not null)
+            {
+                return ReRender(room, form, error: null, conflict);
+            }
+
             return ReRender(room, form, SubmitErrorMessage(errorCode));
         }
 
@@ -148,7 +158,7 @@ public sealed class ApplyController : SteepleControllerBase
         return Redirect(Url.Content($"~/inbox/applications/{application.Id}"));
     }
 
-    private IActionResult ReRender(RoomDetailDto room, ApplyFormModel form, string error)
+    private IActionResult ReRender(RoomDetailDto room, ApplyFormModel form, string? error, ScheduleCheckResultDto? conflict = null)
     {
         ViewData["Title"] = $"Ask to book {room.RoomName}";
         ViewData["Robots"] = "noindex,nofollow";
@@ -157,7 +167,9 @@ public sealed class ApplyController : SteepleControllerBase
             Room = room,
             Form = form,
             Error = error,
+            Conflict = conflict,
             TurnstileSiteKey = _turnstile.SiteKey,
+            PickerEnabled = PickerEnabled(),
         });
     }
 
@@ -207,8 +219,138 @@ public sealed class ApplyController : SteepleControllerBase
         "room_not_bookable" => "This space isn't taking requests right now.",
         "rate_limited" => "You're sending requests quickly — give it a minute and try again.",
         "invalid_application" => "Something about the schedule doesn't add up — check the dates and times and try again.",
+        "schedule_unavailable" => "Some of those dates aren't free — pick another time and try again.",
         _ => "Couldn't send your request. Check your connection and try again.",
     };
+
+    // ----- Slot picker BFF fragments (flag web.availability_picker; anonymous, no antiforgery) ----
+
+    /// <summary>One month of the availability calendar grid (§8.10), clamped to [today, today+92d).</summary>
+    [HttpGet("space/{venueSlug}/{roomSlug}/apply/calendar")]
+    public async Task<IActionResult> Calendar(string venueSlug, string roomSlug, string? month, DateOnly? selected, CancellationToken ct)
+    {
+        if (!PickerRoutesEnabled())
+        {
+            return NotFound();
+        }
+
+        var room = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var minMonth = new DateOnly(today.Year, today.Month, 1);
+        // The API caps the range at 92 days out; the last browsable month is the one that date lands in.
+        var horizon = today.AddDays(AvailabilityDisplay.MaxHorizonDays - 1);
+        var maxMonth = new DateOnly(horizon.Year, horizon.Month, 1);
+
+        var requested = DateOnly.TryParseExact($"{month}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var m)
+            ? new DateOnly(m.Year, m.Month, 1)
+            : minMonth;
+        var current = requested < minMonth ? minMonth : requested > maxMonth ? maxMonth : requested;
+
+        // Fetch only the visible month's days, still respecting the [today, today+92d) API window.
+        var from = current == minMonth ? today : current;
+        var to = current.AddMonths(1).AddDays(-1);
+        if (to > horizon)
+        {
+            to = horizon;
+        }
+
+        var availability = await _api.GetListingAvailabilityAsync(room.RoomId, from, to, ct);
+
+        return PartialView("_AvailabilityCalendar", new AvailabilityCalendarViewModel
+        {
+            VenueSlug = venueSlug,
+            RoomSlug = roomSlug,
+            Month = current,
+            Today = today,
+            Selected = selected,
+            Days = AvailabilityDisplay.BuildCells(current, to, today, availability, room.OpenHours),
+            MinMonth = minMonth,
+            MaxMonth = maxMonth,
+        });
+    }
+
+    /// <summary>The chosen day's free windows + range controls (§8.11).</summary>
+    [HttpGet("space/{venueSlug}/{roomSlug}/apply/day")]
+    public async Task<IActionResult> Day(string venueSlug, string roomSlug, DateOnly date, CancellationToken ct)
+    {
+        if (!PickerRoutesEnabled())
+        {
+            return NotFound();
+        }
+
+        var room = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
+        if (room is null)
+        {
+            return NotFound();
+        }
+
+        var availability = await _api.GetListingAvailabilityAsync(room.RoomId, date, date, ct);
+        var freeWindows = availability?.Days.FirstOrDefault(d => d.Date == date)?.FreeWindows ?? [];
+
+        return PartialView("_DayWindows", new DayWindowsViewModel
+        {
+            Date = date,
+            FreeWindows = freeWindows,
+        });
+    }
+
+    /// <summary>Advisory verdict card for the proposed schedule (§8.13); debounced live check.</summary>
+    [HttpGet("space/{venueSlug}/{roomSlug}/apply/check")]
+    public async Task<IActionResult> Check(string venueSlug, string roomSlug, ApplyFormModel form, CancellationToken ct)
+    {
+        if (!PickerRoutesEnabled())
+        {
+            return NotFound();
+        }
+
+        // Nothing to check yet (incomplete schedule) → render no card, exactly like a 400 would.
+        if (form.StartDate is null || string.IsNullOrEmpty(form.StartTime) || string.IsNullOrEmpty(form.EndTime))
+        {
+            return new EmptyResult();
+        }
+
+        if (form.Frequency == "recurringWeekly" && (form.EndDate is null || form.DaysOfWeek.Count == 0))
+        {
+            return new EmptyResult();
+        }
+
+        var room = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
+        if (room is null)
+        {
+            return new EmptyResult();
+        }
+
+        var schedule = new ScheduleDto(
+            Frequency: form.Frequency,
+            StartDate: form.StartDate.Value,
+            EndDate: form.Frequency == "recurringWeekly" ? form.EndDate : null,
+            DaysOfWeek: form.Frequency == "recurringWeekly" && form.DaysOfWeek.Count > 0 ? form.DaysOfWeek : null,
+            StartTime: form.StartTime,
+            EndTime: form.EndTime);
+
+        ScheduleCheckResultDto? result = null;
+        try
+        {
+            result = await _api.CheckListingScheduleAsync(room.RoomId, schedule, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Availability check failed: API unreachable.");
+        }
+
+        if (result is null)
+        {
+            // 404/400/unreachable → no verdict card (the submit remains the authority).
+            return new EmptyResult();
+        }
+
+        return PartialView("_ConflictSummary", new ConflictSummaryViewModel { Result = result });
+    }
 
     // ----- The pre-sign-in draft stash (session-scoped, per room) -------------------------------
 
@@ -238,6 +380,11 @@ public sealed class ApplyController : SteepleControllerBase
     private void ClearStash(Guid roomId) => HttpContext.Session.Remove(StashKey(roomId));
 
     private bool ApplyEnabled() => _flags.IsEnabled(ApplyFlag);
+
+    private bool PickerEnabled() => _flags.IsEnabled(PickerFlag);
+
+    /// <summary>The picker fragments only exist when both the apply flow and the picker are on.</summary>
+    private bool PickerRoutesEnabled() => ApplyEnabled() && PickerEnabled();
 
     private string? SessionId() => HttpContext.Session.GetString("sid");
 }

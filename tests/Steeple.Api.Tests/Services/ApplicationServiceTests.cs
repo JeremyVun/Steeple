@@ -162,6 +162,70 @@ public class ApplicationServiceTests
         Assert.Empty(repo.Applications);
     }
 
+    // ----- Submit-time availability hard block -----------------------------------------------
+
+    [Fact]
+    public async Task SubmitAsync_FlagOnAndScheduleUnavailable_FailsScheduleUnavailableWithConflicts()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var availability = new FakeAvailabilityService
+        {
+            Verdict = new ScheduleCheckResultDto(
+                Available: false,
+                TotalOccurrences: 3,
+                Conflicts: [new ScheduleConflictDto(Today().AddDays(2), "outsideOpenHours")]),
+        };
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), null, null);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.ScheduleUnavailable, result.Error!.Code);
+        Assert.Empty(repo.Applications); // blocked before creation
+        Assert.NotNull(result.Error.Extensions);
+        Assert.Equal(false, result.Error.Extensions!["available"]);
+        Assert.Equal(3, result.Error.Extensions["totalOccurrences"]);
+        var conflicts = Assert.IsAssignableFrom<IReadOnlyList<ScheduleConflictDto>>(result.Error.Extensions["conflicts"]);
+        Assert.Equal("outsideOpenHours", Assert.Single(conflicts).Reason);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_FlagOnButScheduleAvailable_CreatesApplication()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var availability = new FakeAvailabilityService
+        {
+            Verdict = new ScheduleCheckResultDto(Available: true, TotalOccurrences: 1, Conflicts: []),
+        };
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), null, null);
+
+        Assert.Null(result.Error);
+        Assert.Single(repo.Applications);
+        Assert.Equal(1, availability.CheckCalls);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_FlagOff_SkipsBlockEvenWhenAvailabilityWouldConflict()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var availability = new FakeAvailabilityService
+        {
+            Verdict = new ScheduleCheckResultDto(
+                Available: false, TotalOccurrences: 1, Conflicts: [new ScheduleConflictDto(Today().AddDays(2), "booked")]),
+        };
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability); // flag off by default
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), null, null);
+
+        Assert.Null(result.Error);
+        Assert.Single(repo.Applications);
+        Assert.Equal(0, availability.CheckCalls); // never consulted
+    }
+
     // ----- AddMessage ------------------------------------------------------------------------
 
     [Fact]
@@ -536,13 +600,17 @@ public class ApplicationServiceTests
         out FakeNotificationDispatcher notifications,
         out FakeTurnstileVerifier turnstile,
         out FakeAnalyticsSink analytics,
-        FakeBookingService? bookings = null)
+        FakeBookingService? bookings = null,
+        FakeAvailabilityService? availability = null,
+        FakeFeatureFlags? flags = null)
     {
         notifications = new FakeNotificationDispatcher();
         turnstile = new FakeTurnstileVerifier();
         analytics = new FakeAnalyticsSink();
         return new ApplicationService(
-            repo, managers, bookings ?? new FakeBookingService(), new FakeRatingService(), notifications, turnstile, analytics,
+            repo, managers, bookings ?? new FakeBookingService(), new FakeRatingService(),
+            availability ?? new FakeAvailabilityService(), flags ?? new FakeFeatureFlags(),
+            notifications, turnstile, analytics,
             new FixedTimeProvider(FixedNow));
     }
 
@@ -587,6 +655,56 @@ public class ApplicationServiceTests
         public Task<BookingResult<Steeple.Api.Contracts.Bookings.BookingDto>> MarkNoShowAsync(
             Guid occurrenceId, Guid callerId, CancellationToken ct = default) =>
             throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// Availability stub for the submit-time hard block: returns a canned schedule verdict. Only
+    /// <see cref="CheckScheduleAsync"/> is reachable from <see cref="ApplicationService"/>; the rest
+    /// throw if touched.
+    /// </summary>
+    private sealed class FakeAvailabilityService : IAvailabilityService
+    {
+        public ScheduleCheckResultDto Verdict { get; set; } = new(Available: true, TotalOccurrences: 1, Conflicts: []);
+
+        public int CheckCalls { get; private set; }
+
+        public Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(
+            Guid roomId, ScheduleDto? schedule, CancellationToken ct = default)
+        {
+            CheckCalls++;
+            return Task.FromResult(AvailabilityReadResult<ScheduleCheckResultDto>.Ok(Verdict));
+        }
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> GetRulesAsync(Guid callerId, Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> SaveRulesAsync(
+            Guid callerId, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<AvailabilityReadResult<RoomAvailabilityDto>> GetPublicAvailabilityAsync(
+            Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+    }
+
+    /// <summary>Config-free feature-flag stub: flags off unless explicitly enabled.</summary>
+    private sealed class FakeFeatureFlags : IFeatureFlags
+    {
+        private readonly HashSet<string> _enabled = [];
+
+        public FakeFeatureFlags Enable(string key)
+        {
+            _enabled.Add(key);
+            return this;
+        }
+
+        public bool IsEnabled(string key) => _enabled.Contains(key);
     }
 
     /// <summary>A clock frozen at a fixed instant, so tests can pin exact expiry/creation math.</summary>

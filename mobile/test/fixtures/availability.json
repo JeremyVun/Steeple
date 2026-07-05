@@ -1,0 +1,22 @@
+{
+  "roomId": "22222222-2222-4222-8222-222222222222",
+  "timezone": "America/New_York",
+  "from": "2026-07-06",
+  "to": "2026-07-19",
+  "days": [
+    { "date": "2026-07-06", "isBlackout": false, "freeWindows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "date": "2026-07-07", "isBlackout": false, "freeWindows": [{ "startTime": "19:00", "endTime": "21:00" }] },
+    { "date": "2026-07-08", "isBlackout": false, "freeWindows": [{ "startTime": "09:00", "endTime": "12:00" }] },
+    { "date": "2026-07-09", "isBlackout": false, "freeWindows": [] },
+    { "date": "2026-07-10", "isBlackout": false, "freeWindows": [] },
+    { "date": "2026-07-11", "isBlackout": false, "freeWindows": [{ "startTime": "09:00", "endTime": "17:00" }] },
+    { "date": "2026-07-12", "isBlackout": false, "freeWindows": [] },
+    { "date": "2026-07-13", "isBlackout": true, "freeWindows": [] },
+    { "date": "2026-07-14", "isBlackout": false, "freeWindows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "date": "2026-07-15", "isBlackout": false, "freeWindows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "date": "2026-07-16", "isBlackout": false, "freeWindows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "date": "2026-07-17", "isBlackout": false, "freeWindows": [] },
+    { "date": "2026-07-18", "isBlackout": false, "freeWindows": [] },
+    { "date": "2026-07-19", "isBlackout": false, "freeWindows": [] }
+  ]
+}

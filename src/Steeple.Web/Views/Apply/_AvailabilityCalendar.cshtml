@@ -1,0 +1,105 @@
+@model AvailabilityCalendarViewModel
+@using System.Globalization
+@{
+    // Sunday-first weekday heads (the wire's canonical order, §8.10).
+    var weekdayHeads = new[]
+    {
+        ("S", "Sunday"), ("M", "Monday"), ("T", "Tuesday"), ("W", "Wednesday"),
+        ("T", "Thursday"), ("F", "Friday"), ("S", "Saturday"),
+    };
+
+    // Roving tabindex root: the selected interactive day if any, else the first interactive day.
+    AvailabilityDayCell? roving = null;
+    if (Model.Selected is { } sel)
+    {
+        roving = Model.Days.FirstOrDefault(d => d.Date == sel && d.IsInteractive);
+    }
+    roving ??= Model.Days.FirstOrDefault(d => d.IsInteractive);
+
+    string CalendarUrl(DateOnly month)
+    {
+        var url = Url.Content($"~/space/{Model.VenueSlug}/{Model.RoomSlug}/apply/calendar?month={month:yyyy-MM}");
+        return Model.Selected is { } s ? $"{url}&selected={s:yyyy-MM-dd}" : url;
+    }
+}
+@* One month grid (§8.10). Swaps replace this whole element; nav re-fetches the month. *@
+<div id="apply-calendar" class="avail-calendar" data-avail-calendar>
+    <div class="avail-calendar-nav">
+        @if (Model.HasPrev)
+        {
+            <button type="button" class="avail-nav-btn"
+                    hx-get="@CalendarUrl(Model.PrevMonth)" hx-target="#apply-calendar" hx-swap="outerHTML"
+                    aria-label="Previous month">‹</button>
+        }
+        else
+        {
+            <span class="avail-nav-btn is-disabled" aria-hidden="true">‹</span>
+        }
+        <h3 class="avail-calendar-heading" aria-live="polite">@Model.MonthHeading</h3>
+        @if (Model.HasNext)
+        {
+            <button type="button" class="avail-nav-btn"
+                    hx-get="@CalendarUrl(Model.NextMonth)" hx-target="#apply-calendar" hx-swap="outerHTML"
+                    aria-label="Next month">›</button>
+        }
+        else
+        {
+            <span class="avail-nav-btn is-disabled" aria-hidden="true">›</span>
+        }
+    </div>
+
+    <div class="avail-grid" role="grid" aria-label="Available dates for @Model.MonthHeading">
+        <div class="avail-weekhead" role="row">
+            @foreach (var (initial, name) in weekdayHeads)
+            {
+                <abbr class="avail-weekday" role="columnheader" title="@name">@initial</abbr>
+            }
+        </div>
+        <div class="avail-days" role="rowgroup">
+            @for (var i = 0; i < Model.LeadingBlanks; i++)
+            {
+                <span class="avail-day avail-blank" aria-hidden="true"></span>
+            }
+            @foreach (var cell in Model.Days)
+            {
+                var isToday = cell.Date == Model.Today;
+                var isSelected = Model.Selected == cell.Date;
+                var classes = $"avail-day {cell.CssClass}" + (isToday ? " is-today" : "") + (isSelected ? " is-selected" : "");
+                var num = cell.Date.Day;
+                if (cell.IsInteractive)
+                {
+                    var tab = roving is not null && roving.Date == cell.Date ? "0" : "-1";
+                    <button type="button" class="@classes" role="gridcell"
+                            data-avail-day data-date="@cell.Date.ToString("yyyy-MM-dd")"
+                            tabindex="@tab"
+                            aria-label="@cell.AccessibleName" aria-pressed="@(isSelected ? "true" : "false")"
+                            hx-get="@Url.Content($"~/space/{Model.VenueSlug}/{Model.RoomSlug}/apply/day?date={cell.Date:yyyy-MM-dd}")"
+                            hx-target="#apply-day-windows" hx-swap="innerHTML">
+                        <span class="avail-num">@num</span>
+                        @if (cell.State == AvailabilityDayState.PartlyBooked)
+                        {
+                            <span class="avail-dot" aria-hidden="true"></span>
+                        }
+                    </button>
+                }
+                else
+                {
+                    <span class="@classes" role="gridcell" aria-label="@cell.AccessibleName">
+                        <span class="avail-num">@num</span>
+                        @if (cell.State == AvailabilityDayState.Blackout)
+                        {
+                            <span class="avail-x" aria-hidden="true">×</span>
+                        }
+                    </span>
+                }
+            }
+        </div>
+    </div>
+
+    <ul class="avail-legend" role="list" aria-label="Calendar key">
+        <li class="avail-legend-item"><span class="avail-swatch avail-open" aria-hidden="true"></span> Open</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-partly" aria-hidden="true"></span> Partly booked</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-booked" aria-hidden="true"></span> Booked out</li>
+        <li class="avail-legend-item"><span class="avail-swatch avail-closed" aria-hidden="true"></span> Closed</li>
+    </ul>
+</div>

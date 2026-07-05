@@ -157,8 +157,15 @@ Admin queue/feed scans stay cheap. Writes run behind the `manage` rate-limit pol
 `/manage/rooms/{id}/availability` (replace-all; validation rules in CONTRACTS §6). Other
 modules consume it only via `IAvailabilityService` — Manage's publish gate
 (`400 no_open_hours`, behind `manage.open_hours_required`) and Listings' additive public
-`openHours` both go through the port. Rules are **advisory shaping** for guests and hosts;
-the `booking_occurrences` exclusion constraint remains the only booking authority.
+`openHours` both go through the port. Guest-facing computation (commit 5): the pure
+`AvailabilityCalculator` does `[)` interval subtraction (open hours − blackouts −
+*confirmed* booked time; pending demand never leaks) and classifies occurrences
+(`blackout` > `outsideOpenHours` > `booked`); it feeds the anonymous
+`GET /listings/{id}/availability` + `POST …/availability/check` endpoints (per-IP
+`availability` policy, behind `listing.availability`) and the apply-time hard block
+(`409 schedule_unavailable`, skipped for rooms with no rules). Rules are **advisory
+shaping** for guests and hosts; the `booking_occurrences` exclusion constraint remains
+the only booking authority.
 
 **Media** (Phase 5) — photo upload for managed rooms, same venue-manager scoping. `Upload`
 decodes the file (failure → `400 invalid_image`, this *is* the content validation),
