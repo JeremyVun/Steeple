@@ -15,6 +15,7 @@ import '../features/inbox/presentation/inbox_screen.dart';
 import '../features/listing/presentation/listing_detail_screen.dart';
 import '../features/manage/presentation/manage_home_screen.dart';
 import '../features/manage/presentation/manage_request_screen.dart';
+import '../features/manage/presentation/manage_room_hours_screen.dart';
 import '../features/manage/presentation/manage_room_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/profile/presentation/sign_in_screen.dart';
@@ -123,6 +124,14 @@ GoRouter createRouter(Ref ref, RouterRefresh refresh) {
             path: 'rooms/:id',
             builder: (context, state) =>
                 ManageRoomScreen(roomId: state.pathParameters['id']!),
+            routes: [
+              GoRoute(
+                name: RouteNames.manageRoomHours,
+                path: 'hours',
+                builder: (context, state) =>
+                    ManageRoomHoursScreen(roomId: state.pathParameters['id']!),
+              ),
+            ],
           ),
         ],
       ),

@@ -115,6 +115,13 @@ public interface ISteepleApiClient
     Task<(ManagedRoomDto? Room, string? ErrorCode)> UpdateManagedRoomAsync(
         string accessToken, Guid roomId, SaveRoomRequest request, CancellationToken ct = default);
 
+    /// <summary>A room's availability rules (open hours + blackouts), or <c>null</c> when not found.</summary>
+    Task<RoomAvailabilityRulesDto?> GetRoomAvailabilityAsync(string accessToken, Guid roomId, CancellationToken ct = default);
+
+    /// <summary>Replace-all save of a room's availability rules. Returns the saved rules, or the stable error code on failure.</summary>
+    Task<(RoomAvailabilityRulesDto? Rules, string? ErrorCode)> SaveRoomAvailabilityAsync(
+        string accessToken, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default);
+
     /// <summary>Uploads a new photo for a room. Returns the created photo, or the stable error code on failure.</summary>
     Task<(RoomPhotoDto? Photo, string? ErrorCode)> UploadRoomPhotoAsync(
         string accessToken, Guid roomId, Stream content, string fileName, string contentType, string? caption, CancellationToken ct = default);

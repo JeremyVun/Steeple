@@ -18,6 +18,14 @@ abstract class ManageRepository {
   /// sent; returns the room as it now stands.
   Future<ManagedRoom> saveRoom(String id, ManagedRoomPatch patch);
 
+  /// `GET /api/v1/manage/rooms/{id}/availability` — the room's open hours +
+  /// blackouts; always all seven days Sunday-first, blackouts sorted ascending.
+  Future<RoomAvailabilityRules> openHours(String roomId);
+
+  /// `PUT /api/v1/manage/rooms/{id}/availability` — replace-all write; returns
+  /// the canonical rules as they now stand.
+  Future<RoomAvailabilityRules> saveOpenHours(String roomId, RoomAvailabilityRules rules);
+
   /// `GET /api/v1/manage/applications` — the provider inbox (empty list, not
   /// an error, for non-managers).
   Future<Paged<Application>> applications({String? status, int page = 1});
@@ -56,6 +64,23 @@ class ApiManageRepository implements ManageRepository {
         '/api/v1/manage/rooms/$id',
         body: patch.toJson(),
         decode: (data) => ManagedRoom.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<RoomAvailabilityRules> openHours(String roomId) => _api.get(
+        '/api/v1/manage/rooms/$roomId/availability',
+        decode: (data) => RoomAvailabilityRules.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<RoomAvailabilityRules> saveOpenHours(
+    String roomId,
+    RoomAvailabilityRules rules,
+  ) =>
+      _api.put(
+        '/api/v1/manage/rooms/$roomId/availability',
+        body: rules.toSavePayload(),
+        decode: (data) => RoomAvailabilityRules.fromJson(data as Map<String, dynamic>),
       );
 
   @override

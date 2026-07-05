@@ -13,20 +13,23 @@ public sealed class ListingService : IListingService
     private readonly IRoomRepository _rooms;
     private readonly IGeofencePolicy _geofence;
     private readonly IRatingService _ratings;
+    private readonly IAvailabilityService _availability;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
 
-    /// <summary>Creates the service from its repository, geofence, and analytics ports.</summary>
+    /// <summary>Creates the service from its repository, geofence, ratings, availability, and analytics ports.</summary>
     public ListingService(
         IRoomRepository rooms,
         IGeofencePolicy geofence,
         IRatingService ratings,
+        IAvailabilityService availability,
         IAnalyticsSink analytics,
         TimeProvider clock)
     {
         _rooms = rooms;
         _geofence = geofence;
         _ratings = ratings;
+        _availability = availability;
         _analytics = analytics;
         _clock = clock;
     }
@@ -167,7 +170,10 @@ public sealed class ListingService : IListingService
         var ratingSummaries = await _ratings
             .GetVenueSummariesAsync([venue.Id], _clock.GetUtcNow(), ct)
             .ConfigureAwait(false);
-        var dto = room.ToDetailDto(ratingSummaries.GetValueOrDefault(venue.Id));
+        // Cross-module read through the Availability port (never queries its tables directly);
+        // null for pre-gate legacy rooms with no declared hours.
+        var openHours = await _availability.GetPublicOpenHoursAsync(room.Id, ct).ConfigureAwait(false);
+        var dto = room.ToDetailDto(ratingSummaries.GetValueOrDefault(venue.Id), openHours);
 
         await TrackSafelyAsync(
             "listing_viewed",

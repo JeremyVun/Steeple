@@ -156,7 +156,8 @@ features can import them without touching `app/router.dart` (§2 dependency cont
 | `forceUpgrade` | `/upgrade` | (blocking) | – | Unskippable when `mobile.force_upgrade` is on |
 | `manage` | `/manage` | (pushed, root navigator) | ✔ | Provider dashboard (Phase 5); entry point is the "Your spaces" section on `profile`, behind `mobile.manage_enabled` |
 | `manageRequest` | `/manage/requests/:id` | (pushed, root navigator) | ✔ | Approve/decline one application |
-| `manageRoom` | `/manage/rooms/:id` | (pushed, root navigator) | ✔ | Basic room edit + publish-state actions |
+| `manageRoom` | `/manage/rooms/:id` | (pushed, root navigator) | ✔ | Basic room edit + publish-state actions; "Hours & blackouts" tile → `manageRoomHours` |
+| `manageRoomHours` | `/manage/rooms/:id/hours` | (pushed, root navigator) | ✔ | Open-hours (7 days Sunday-first) + blackout editor; one replace-all `PUT` (`saveOpenHours`) with local pre-validation (≤6 windows/day, end>start, no intra-day overlap) |
 
 Redirect logic (in order): `forceUpgrade` flag → `/upgrade`; guarded route while
 `SignedOut` → `/signin?from=…`; while `SessionUnknown` → hold on splash (must resolve
@@ -221,6 +222,8 @@ abstract class ManageRepository {
   Future<ManagedVenueDetail> venue(String id);                           // GET /manage/venues/{id}
   Future<ManagedRoom> room(String id);                                   // GET /manage/rooms/{id}
   Future<ManagedRoom> saveRoom(String id, ManagedRoomPatch patch);       // PATCH /manage/rooms/{id}
+  Future<RoomAvailabilityRules> openHours(String roomId);                // GET /manage/rooms/{id}/availability
+  Future<RoomAvailabilityRules> saveOpenHours(String roomId, RoomAvailabilityRules rules); // PUT (replace-all)
   Future<Paged<Application>> applications({String? status, int page = 1}); // GET /manage/applications
   Future<Application> decide(String id, {required bool approve, String? message}); // POST /applications/{id}/decision
 }
@@ -245,7 +248,7 @@ feature/agent may touch; everything else is private):
 | | `unreadCountProvider` | drives the tab badge |
 | bookings | `myBookingsProvider`, `bookingDetailProvider(id)` | `AsyncNotifier` families |
 | profile | `meProvider` | `AsyncNotifier<UserProfile>` |
-| manage | `manageRepositoryProvider`, `manageVenuesProvider` | `manageVenuesProvider` is `AsyncNotifier<List<ManagedVenue>>` — public because `profile`'s "Your spaces" section watches it (behind `mobile.manage_enabled`) to decide whether to show the entry point at all. Screen-local family notifiers (requests list, one request, one venue's rooms, one room) live under `features/manage/application/` and aren't public |
+| manage | `manageRepositoryProvider`, `manageVenuesProvider` | `manageVenuesProvider` is `AsyncNotifier<List<ManagedVenue>>` — public because `profile`'s "Your spaces" section watches it (behind `mobile.manage_enabled`) to decide whether to show the entry point at all. Screen-local family notifiers (requests list, one request, one venue's rooms, one room, one room's hours) live under `features/manage/application/` and aren't public |
 
 Conventions: screen state is always `AsyncValue<T>` rendered through `AsyncValueView`
 (§9); widgets watch with `select()` for sub-fields; no provider outside `core` may be
@@ -318,7 +321,7 @@ provider and render a placeholder when it is false; channel errors count as fals
   names: `listing_search.json`, `room_detail.json`, `auth_session.json`,
   `application.json`, `booking.json`, `notifications_page.json`, `flags.json`,
   `managed_venues.json`, `managed_venue_detail.json`, `managed_room.json`,
-  `manage_applications_page.json`). `FixtureLoader.loadList` covers array-rooted
+  `manage_applications_page.json`, `room_open_hours.json`). `FixtureLoader.loadList` covers array-rooted
   fixtures (`managed_venues.json`'s `[{id, name, slug}]`).
   One test per fixture asserts `fromJson` round-trips — this is the drift alarm
   (MOBILE_DESIGN §7); when CONTRACTS.md changes, the failing fixture test is the to-do list.

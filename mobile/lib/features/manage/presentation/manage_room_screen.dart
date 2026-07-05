@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/theme.dart';
 import '../../../core/api/app_error.dart';
 import '../../../core/models/models.dart';
+import '../../../core/navigation/route_names.dart';
 import '../../../core/widgets/widgets.dart';
 import '../application/manage_room_providers.dart';
 import 'widgets/in_review_badge.dart';
@@ -153,6 +155,8 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
               : const Text('Save changes'),
         ),
         const SizedBox(height: SteepleTokens.space8),
+        _HoursTile(roomId: room.id),
+        const SizedBox(height: SteepleTokens.space8),
         Text('Listing status', style: SteepleTypography.title.copyWith(color: colors.textPrimary)),
         const SizedBox(height: SteepleTokens.space3),
         _StatusActions(room: room, saving: _saving, onAction: _applyStatus),
@@ -237,6 +241,7 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
         'has_active_bookings' =>
           'This room has upcoming bookings and can\'t change status right now.',
         'no_photos' => 'Add at least one photo before requesting publish.',
+        'no_open_hours' => 'Add open hours before you publish.',
         _ => "Couldn't save that. Try again in a moment.",
       };
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -290,6 +295,68 @@ class _StatusActions extends StatelessWidget {
           child: const Text('Relist'),
         ),
     };
+  }
+}
+
+/// Entry point to the "Hours & blackouts" editor (MOBILE_CONTRACTS §7
+/// `manageRoomHours`).
+class _HoursTile extends StatelessWidget {
+  const _HoursTile({required this.roomId});
+
+  final String roomId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    return Semantics(
+      button: true,
+      label: 'Hours and blackouts',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceRaised,
+          borderRadius: BorderRadius.circular(SteepleTokens.radiusMd),
+          border: Border.all(color: colors.border),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(SteepleTokens.radiusMd),
+            onTap: () => context.pushNamed(
+              RouteNames.manageRoomHours,
+              pathParameters: {'id': roomId},
+            ),
+            child: ExcludeSemantics(
+              child: Padding(
+                padding: const EdgeInsets.all(SteepleTokens.space4),
+                child: Row(
+                  children: [
+                    Icon(Icons.schedule_rounded, color: colors.textSecondary),
+                    const SizedBox(width: SteepleTokens.space3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hours & blackouts',
+                            style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                          ),
+                          const SizedBox(height: SteepleTokens.space1),
+                          Text(
+                            'Set open hours and closed dates.',
+                            style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: colors.textTertiary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

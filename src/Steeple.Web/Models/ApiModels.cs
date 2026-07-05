@@ -307,6 +307,27 @@ public record ManagedVenueDetailDto(
     DateTimeOffset? VerificationRequestedAtUtc,
     IReadOnlyList<ManagedRoomSummaryDto> Rooms);
 
+/// <summary>One bookable window inside a day, venue-local <c>HH:mm</c> (24h) strings.</summary>
+public record OpenWindowDto(string StartTime, string EndTime);
+
+/// <summary>A weekday's open windows; empty = closed. <c>DayOfWeek</c> is a wire token (<c>sunday</c>…).</summary>
+public record DayOpenHoursDto(string DayOfWeek, IReadOnlyList<OpenWindowDto> Windows);
+
+/// <summary>A date the room is closed regardless of open hours.</summary>
+public record BlackoutDateDto(DateOnly Date, string? Reason);
+
+/// <summary><c>GET /api/v1/manage/rooms/{id}/availability</c> — all 7 days Sunday-first.</summary>
+public record RoomAvailabilityRulesDto(
+    Guid RoomId,
+    string Timezone,
+    IReadOnlyList<DayOpenHoursDto> Days,
+    IReadOnlyList<BlackoutDateDto> Blackouts);
+
+/// <summary><c>PUT /api/v1/manage/rooms/{id}/availability</c> body — replace-all.</summary>
+public record SaveAvailabilityRulesRequest(
+    IReadOnlyList<DayOpenHoursDto>? Days,
+    IReadOnlyList<BlackoutDateDto>? Blackouts);
+
 /// <summary>Full room detail for the provider's manage screens.</summary>
 public record ManagedRoomDto(
     Guid Id,

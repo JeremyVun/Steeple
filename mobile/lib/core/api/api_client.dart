@@ -76,6 +76,21 @@ class ApiClient {
         decode,
       );
 
+  Future<T> put<T>(
+    String path, {
+    Object? body,
+    Map<String, String>? headers,
+    required T Function(dynamic data) decode,
+  }) =>
+      _run(
+        () => _dio.put<dynamic>(
+          path,
+          data: body,
+          options: headers == null ? null : Options(headers: headers),
+        ),
+        decode,
+      );
+
   Future<void> delete(String path) => _run(() => _dio.delete<dynamic>(path), (_) {});
 
   Future<T> _run<T>(

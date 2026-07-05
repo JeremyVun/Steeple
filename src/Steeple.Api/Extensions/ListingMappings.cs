@@ -41,8 +41,14 @@ public static class ListingMappings
 
     /// <summary>
     /// Maps a <see cref="Room"/> (with its venue and photos loaded) to the full detail DTO.
+    /// <paramref name="openHours"/> is the venue-local weekly open-hours shape (null for legacy
+    /// rooms with none declared), sourced from the Availability module so Listings never queries
+    /// its tables.
     /// </summary>
-    public static RoomDetailDto ToDetailDto(this Room room, RatingSummaryDto? rating = null) =>
+    public static RoomDetailDto ToDetailDto(
+        this Room room,
+        RatingSummaryDto? rating = null,
+        IReadOnlyList<DayOpenHoursDto>? openHours = null) =>
         new(
             RoomId: room.Id,
             RoomSlug: room.Slug,
@@ -64,7 +70,8 @@ public static class ListingMappings
             Venue: room.Venue is { } venue
                 ? venue.ToSummaryDto()
                 : throw new InvalidOperationException($"Room {room.Id} has no loaded venue for detail mapping."),
-            Rating: rating);
+            Rating: rating,
+            OpenHours: openHours);
 
     /// <summary>Maps a <see cref="Venue"/> to its presentation summary (no rooms collection).</summary>
     public static VenueSummaryDto ToSummaryDto(this Venue venue) =>

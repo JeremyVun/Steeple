@@ -162,6 +162,63 @@ public class ManageServiceTests
         Assert.Equal(RoomStatus.Unlisted, repo.Rooms.Single().Status);
     }
 
+    // ----- Open-hours publish gate (flag-gated) -------------------------------------------------
+
+    [Fact]
+    public async Task UpdateRoomAsync_PublishWithFlagOnAndNoOpenHours_FailsWithNoOpenHours()
+    {
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        AddPhoto(room); // photo gate satisfied — isolate the open-hours gate
+        var service = CreateService(repo, managers, out _, openHoursRequired: true, roomHasOpenHours: false);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.NoOpenHours, result.Error!.Code);
+        Assert.Null(repo.Rooms.Single().PublishRequestedAtUtc);
+        Assert.Equal(RoomStatus.Draft, repo.Rooms.Single().Status);
+    }
+
+    [Fact]
+    public async Task UpdateRoomAsync_PublishWithFlagOnAndOpenHoursPresent_Succeeds()
+    {
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        AddPhoto(room);
+        var service = CreateService(repo, managers, out _, openHoursRequired: true, roomHasOpenHours: true);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
+
+        Assert.Null(result.Error);
+        Assert.NotNull(repo.Rooms.Single().PublishRequestedAtUtc);
+    }
+
+    [Fact]
+    public async Task UpdateRoomAsync_PublishWithFlagOffAndNoOpenHours_Succeeds()
+    {
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        AddPhoto(room);
+        var service = CreateService(repo, managers, out _, openHoursRequired: false, roomHasOpenHours: false);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
+
+        Assert.Null(result.Error);
+        Assert.NotNull(repo.Rooms.Single().PublishRequestedAtUtc);
+    }
+
+    [Fact]
+    public async Task UpdateRoomAsync_UnlistWithFlagOnAndNoOpenHours_StillSucceeds()
+    {
+        // The gate fires only on publish, exactly like no_photos.
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Published);
+        repo.HasFutureConfirmedOccurrences = false;
+        var service = CreateService(repo, managers, out _, openHoursRequired: true, roomHasOpenHours: false);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("unlisted"));
+
+        Assert.Null(result.Error);
+        Assert.Equal(RoomStatus.Unlisted, repo.Rooms.Single().Status);
+    }
+
     // ----- Unpublish guard ---------------------------------------------------------------------
 
     [Fact]
@@ -576,7 +633,9 @@ public class ManageServiceTests
         FakeVenueManagerRepository managers,
         out FakeAnalyticsSink analytics,
         IGeocodingGateway? geocoding = null,
-        IGeofencePolicy? geofence = null)
+        IGeofencePolicy? geofence = null,
+        bool openHoursRequired = false,
+        bool roomHasOpenHours = false)
     {
         analytics = new FakeAnalyticsSink();
         return new ManageService(
@@ -585,6 +644,8 @@ public class ManageServiceTests
             geocoding ?? new FakeGeocodingGateway { Point = new GeoPoint(38.9012, -77.2653) },
             geofence ?? new FakeGeofencePolicy { WithinBeachhead = true },
             analytics,
+            new FakeFeatureFlags(openHoursRequired ? new[] { "manage.open_hours_required" } : []),
+            new FakeAvailabilityService { RoomHasOpenHours = roomHasOpenHours },
             new FixedTimeProvider(FixedNow),
             Options.Create(new GeocodingOptions()));
     }
@@ -605,6 +666,29 @@ public class ManageServiceTests
             Events.Add((eventType, payload));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeFeatureFlags(IReadOnlyCollection<string> enabled) : IFeatureFlags
+    {
+        public bool IsEnabled(string key) => enabled.Contains(key);
+    }
+
+    private sealed class FakeAvailabilityService : IAvailabilityService
+    {
+        public bool RoomHasOpenHours { get; set; }
+
+        public Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
+            Task.FromResult(RoomHasOpenHours);
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> GetRulesAsync(Guid callerId, Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> SaveRulesAsync(
+            Guid callerId, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeGeocodingGateway : IGeocodingGateway

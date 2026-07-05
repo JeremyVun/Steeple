@@ -233,6 +233,37 @@ void main() {
     });
   });
 
+  group('room_open_hours.json', () {
+    test('round-trips RoomAvailabilityRules', () {
+      final rules = RoomAvailabilityRules.fromJson(_loadJson('room_open_hours.json'));
+
+      expect(rules.timezone, 'America/New_York');
+      // GET always emits all seven days Sunday-first.
+      expect(rules.days, hasLength(7));
+      expect(rules.days.first.dayOfWeek, 'sunday');
+      expect(rules.days.last.dayOfWeek, 'saturday');
+      // Closed days have empty windows.
+      expect(rules.days[0].windows, isEmpty);
+      // Wednesday has two windows.
+      final wednesday = rules.days.firstWhere((d) => d.dayOfWeek == 'wednesday');
+      expect(wednesday.windows, hasLength(2));
+      expect(wednesday.windows[0].startTime, '09:00');
+      expect(wednesday.windows[1].endTime, '21:00');
+      // Two future blackouts, each with a reason.
+      expect(rules.blackouts, hasLength(2));
+      expect(rules.blackouts[0].date, '2026-12-24');
+      expect(rules.blackouts[0].reason, 'Christmas Eve service');
+    });
+
+    test('toSavePayload emits days + blackouts only', () {
+      final rules = RoomAvailabilityRules.fromJson(_loadJson('room_open_hours.json'));
+      final payload = rules.toSavePayload();
+
+      expect(payload.keys, unorderedEquals(<String>['days', 'blackouts']));
+      expect(payload['days'], hasLength(7));
+    });
+  });
+
   group('flags.json', () {
     test('decodes as a platform flag snapshot', () {
       final raw = File('test/fixtures/flags.json').readAsStringSync();

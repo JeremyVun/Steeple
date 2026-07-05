@@ -1588,3 +1588,30 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
     background: var(--card);
 }
 .manage-upload-form { border-top: 1px dashed var(--line-strong); padding-top: 1rem; }
+
+/* --- Hours & blackouts editor (manage) --- */
+.hours-presets { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.75rem 0 1rem; }
+.hours-grid { display: grid; gap: 0.75rem; }
+.hours-day { border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.9rem 0.75rem; margin: 0; }
+.hours-windows { display: flex; flex-direction: column; gap: 0.4rem; }
+.hours-window { display: flex; align-items: center; gap: 0.4rem; }
+.hours-window-sep { color: var(--ink-faint); }
+.hours-closed { margin: 0.2rem 0 0; }
+.hours-day-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+.hours-copy { position: relative; }
+.hours-copy > summary { list-style: none; cursor: pointer; }
+.hours-copy > summary::-webkit-details-marker { display: none; }
+.hours-copy-panel {
+    position: absolute; z-index: 10; top: calc(100% + 0.25rem); left: 0; min-width: 11rem;
+    display: flex; flex-direction: column; gap: 0.3rem;
+    background: var(--card); border: 1px solid var(--line-strong); border-radius: 10px;
+    padding: 0.6rem 0.75rem; box-shadow: 0 6px 18px rgba(42, 38, 32, 0.12);
+}
+.hours-copy-day { display: flex; gap: 0.4rem; align-items: center; font-size: 0.9rem; }
+.hours-blackouts { margin-top: 1.25rem; }
+.blackout-list { list-style: none; margin: 0 0 0.6rem; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.blackout-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.blackout-row .form-input[type="text"] { flex: 1 1 12rem; }
+@media (max-width: 640px) {
+    .hours-day-actions { flex-wrap: wrap; }
+}

@@ -32,6 +32,8 @@
     <Using Include="Steeple.Persistence.Constants" />
     <Using Include="Steeple.Api.Configuration" />
     <Using Include="Steeple.Api.Services" />
+    <Using Include="Steeple.Api.Services.Availability" />
+    <Using Include="Steeple.Api.Services.Flags" />
     <Using Include="Steeple.Api.Services.Identity" />
     <Using Include="Steeple.Api.Services.Applications" />
     <Using Include="Steeple.Api.Services.Bookings" />
@@ -40,6 +42,7 @@
     <Using Include="Steeple.Api.Services.Manage" />
     <Using Include="Steeple.Api.Services.Media" />
     <Using Include="Steeple.Api.Contracts" />
+    <Using Include="Steeple.Api.Contracts.Availability" />
     <Using Include="Steeple.Api.Contracts.Identity" />
     <Using Include="Steeple.Api.Contracts.Applications" />
     <Using Include="Steeple.Api.Contracts.Bookings" />

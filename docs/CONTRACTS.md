@@ -308,6 +308,28 @@ Edits a provider makes to an already-published room apply immediately (never blo
 Slugs (`Utils/Slugs.cs`) are derived from the name at creation and **immutable** thereafter —
 renames never break a shared listing URL or SEO equity.
 
+### Room availability rules (open hours + blackouts) ✅ *(built 2026-07-05 — availability plan commit 4)*
+
+All times are venue-local wall-clock `HH:mm` (24h) strings; weekday tokens per §2.1
+(`sunday`…`saturday`). Windows are `[start, end)` — end after start, never crossing midnight.
+
+- `GET /api/v1/manage/rooms/{id}/availability` ✅ (manager-scoped) → `RoomAvailabilityRulesDto`:
+  `{roomId, timezone, days: [{dayOfWeek, windows: [{startTime, endTime}]}], blackouts:
+  [{date, reason?}]}`. Always emits all seven days Sunday-first (closed day = empty `windows`);
+  blackouts sorted ascending.
+- `PUT /api/v1/manage/rooms/{id}/availability` ✅ (manager-scoped) — `{days?, blackouts?}`,
+  **replace-all** (the saved state is exactly the payload; omitted weekday = closed). `200` with
+  the saved rules. `400 invalid_availability` when: unknown/duplicate weekday token, bad `HH:mm`,
+  end ≤ start, >6 windows in a day, overlapping windows within a day (touching endpoints are
+  fine), >200 blackouts, past blackout date, or `reason` >200 chars.
+- **Publish gate**: behind flag `manage.open_hours_required`, any transition to `published`
+  additionally requires ≥1 open-hours window → `400 no_open_hours` (mirrors `no_photos`; the
+  009 backfill seeded every already-published room, so nothing unpublishes when the flag turns on).
+- Public `RoomDetailDto` gains additive `openHours?` (same `days` shape, null when the room has
+  no rules rows) on the listing detail reads.
+- Advisory availability reads and schedule checks for guests are the **next** commit (🔲):
+  `GET /listings/{roomId}/availability`, `POST /listings/{roomId}/availability/check`.
+
 ### Photos
 - `POST /api/v1/manage/rooms/{id}/photos` ✅ — multipart `file` (≤10 MB, enforced by Kestrel
   before the pipeline runs) + optional `caption`. Server decodes (decode failure → `400
@@ -360,6 +382,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `venue_verification_decided` ✅ | Admin (stdout only) | venueId, requestId, outcome (approved/declined), actor |
 | `listing_publish_requested` ✅ | server | roomId, venueId |
 | `photo_uploaded` ✅ | server | roomId, photoId |
+| `open_hours_updated` ✅ | server | roomId, windowCount, blackoutCount |
 | `listing_moderated` ✅ | Admin (stdout only — not `IAnalyticsSink`; same log-line shape) | roomId, outcome (approved/declined), actor |
 
 ¹ Interim: these client-ish funnel events are still emitted server-side by the Web BFF

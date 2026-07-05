@@ -494,6 +494,79 @@ public sealed class ManageController : SteepleControllerBase
         }
     }
 
+    /// <summary>The hours &amp; blackouts editor for one room.</summary>
+    [RequireManageEnabled]
+    [HttpGet("/manage/rooms/{id:guid}/hours")]
+    public async Task<IActionResult> RoomHours(Guid id, CancellationToken ct)
+    {
+
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        try
+        {
+            var room = await _api.GetManagedRoomAsync(accessToken, id, ct);
+            var rules = room is null ? null : await _api.GetRoomAvailabilityAsync(accessToken, id, ct);
+            if (room is null || rules is null)
+            {
+                Response.StatusCode = StatusCodes.Status404NotFound;
+                return View("~/Views/Discovery/NotFound.cshtml");
+            }
+
+            ViewData["Title"] = $"Hours · {room.Name}";
+            ViewData["Robots"] = "noindex,nofollow";
+            return View("Hours", new RoomHoursViewModel
+            {
+                Room = room,
+                Form = RestoreHoursForm(rules),
+                Timezone = rules.Timezone,
+                Flash = TempData["ManageFlash"] as string,
+            });
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Hours editor fetch failed.");
+            return View("~/Views/Inbox/Unavailable.cshtml");
+        }
+    }
+
+    /// <summary>Replace-all save of a room's open hours and blackout dates.</summary>
+    [RequireManageEnabled]
+    [HttpPost("/manage/rooms/{id:guid}/hours")]
+    public async Task<IActionResult> SaveRoomHours(Guid id, HoursFormViewModel form, CancellationToken ct)
+    {
+
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        try
+        {
+            var (rules, errorCode) = await _api.SaveRoomAvailabilityAsync(accessToken, id, form.ToRequest(), ct);
+            if (rules is null)
+            {
+                TempData["ManageError"] = HoursErrorMessage(errorCode);
+                StashHoursForm(id, form);
+            }
+            else
+            {
+                TempData["ManageFlash"] = "Hours saved.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Hours save failed.");
+            TempData["ManageError"] = "Couldn't reach the server — try again in a moment.";
+        }
+
+        return Redirect(Url.Content($"~/manage/rooms/{id}/hours"));
+    }
+
     /// <summary>Saves room details (never touches status — that's the explicit action below).</summary>
     [RequireManageEnabled]
     [HttpPost("/manage/rooms/{id:guid}")]
@@ -702,8 +775,16 @@ public sealed class ManageController : SteepleControllerBase
         "invalid_room" => "Check the room details — a required field is missing or out of range.",
         "has_active_bookings" => "This room has upcoming confirmed bookings — cancel them before taking it offline.",
         "no_photos" => "Add at least one photo before publishing — bright, honest photos do the selling.",
+        "no_open_hours" => "Add open hours before you publish — organizers pick times from them.",
         "rate_limited" => "You're saving quickly — give it a minute.",
         _ => "Couldn't save the room. Try again in a moment.",
+    };
+
+    private static string HoursErrorMessage(string? errorCode) => errorCode switch
+    {
+        "invalid_availability" => "Check the hours — windows can't overlap, need an end after the start, and blackouts must be today or later.",
+        "rate_limited" => "You're saving quickly — give it a minute.",
+        _ => "Couldn't save the hours. Try again in a moment.",
     };
 
     // Failed saves round-trip the person's input through TempData so the editor re-renders with
@@ -723,6 +804,11 @@ public sealed class ManageController : SteepleControllerBase
             (f, _) => f.Error = TempData["VerificationError"] as string);
 
     private void StashRoomForm(Guid id, RoomFormViewModel form) => StashForm($"RoomForm:{id}", form);
+
+    private void StashHoursForm(Guid id, HoursFormViewModel form) => StashForm($"HoursForm:{id}", form);
+
+    private HoursFormViewModel RestoreHoursForm(RoomAvailabilityRulesDto rules) =>
+        RestoreForm($"HoursForm:{rules.RoomId}", () => HoursFormViewModel.From(rules), (f, e) => f.Error = e);
 
     private RoomFormViewModel RestoreRoomForm(ManagedRoomDto room) =>
         RestoreForm($"RoomForm:{room.Id}", () => RoomFormViewModel.From(room), (f, e) => f.Error = e);

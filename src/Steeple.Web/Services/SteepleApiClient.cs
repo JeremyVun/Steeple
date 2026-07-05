@@ -183,6 +183,17 @@ public sealed class SteepleApiClient : ISteepleApiClient
         return await ReadResultAsync<ManagedRoomDto>(response, ct);
     }
 
+    public Task<RoomAvailabilityRulesDto?> GetRoomAvailabilityAsync(string accessToken, Guid roomId, CancellationToken ct = default) =>
+        GetAuthorizedOrNullAsync<RoomAvailabilityRulesDto>($"api/v1/manage/rooms/{roomId}/availability", accessToken, ct);
+
+    public async Task<(RoomAvailabilityRulesDto? Rules, string? ErrorCode)> SaveRoomAvailabilityAsync(
+        string accessToken, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default)
+    {
+        using var httpRequest = AuthorizedRequest(HttpMethod.Put, $"api/v1/manage/rooms/{roomId}/availability", accessToken, request);
+        using var response = await _http.SendAsync(httpRequest, ct);
+        return await ReadResultAsync<RoomAvailabilityRulesDto>(response, ct);
+    }
+
     public async Task<(RoomPhotoDto? Photo, string? ErrorCode)> UploadRoomPhotoAsync(
         string accessToken, Guid roomId, Stream content, string fileName, string contentType, string? caption, CancellationToken ct = default)
     {

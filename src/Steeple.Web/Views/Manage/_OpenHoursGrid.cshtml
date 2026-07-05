@@ -1,0 +1,45 @@
+@model HoursFormViewModel
+@* Seven day rows, Sunday-first (the wire's canonical order). Indexed inputs; hours-editor.js
+   re-indexes names on add/remove so MVC list binding stays contiguous. *@
+
+<div class="hours-grid">
+    @for (var d = 0; d < Model.Days.Count; d++)
+    {
+        var day = Model.Days[d];
+        var label = HoursFormViewModel.DayOptions.First(o => o.Value == day.DayOfWeek).Label;
+        <fieldset class="hours-day" data-day-row data-day-index="@d" data-day-token="@day.DayOfWeek">
+            <legend class="field-label">@label</legend>
+            <input type="hidden" name="Days[@d].DayOfWeek" value="@day.DayOfWeek" />
+
+            <div class="hours-windows" data-windows>
+                @for (var w = 0; w < day.Windows.Count; w++)
+                {
+                    <div class="hours-window" data-window-row>
+                        <input class="form-input form-input-sm" type="time" name="Days[@d].Windows[@w].StartTime"
+                               value="@day.Windows[w].StartTime" required aria-label="Opens at" />
+                        <span class="hours-window-sep" aria-hidden="true">–</span>
+                        <input class="form-input form-input-sm" type="time" name="Days[@d].Windows[@w].EndTime"
+                               value="@day.Windows[w].EndTime" required aria-label="Closes at" />
+                        <button type="button" class="btn btn-ghost btn-sm" data-remove-row aria-label="Remove this window">✕</button>
+                    </div>
+                }
+            </div>
+
+            <p class="hours-closed field-help" data-closed-note hidden="@(day.Windows.Count > 0)">Closed</p>
+
+            <div class="hours-day-actions">
+                <button type="button" class="btn btn-ghost btn-sm" data-add-window>+ Add hours</button>
+                <details class="hours-copy" data-copy-popover>
+                    <summary class="btn btn-ghost btn-sm">Copy to…</summary>
+                    <div class="hours-copy-panel">
+                        @foreach (var other in HoursFormViewModel.DayOptions.Where(o => o.Value != day.DayOfWeek))
+                        {
+                            <label class="hours-copy-day"><input type="checkbox" value="@other.Value" /> @other.Label</label>
+                        }
+                        <button type="button" class="btn btn-primary btn-sm" data-copy-apply>Copy</button>
+                    </div>
+                </details>
+            </div>
+        </fieldset>
+    }
+</div>

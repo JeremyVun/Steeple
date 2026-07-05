@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddSteepleIdentity(configuration);
         services.AddSteepleApplications(configuration);
         services.AddSteepleManage(configuration);
+        services.AddSteepleAvailability();
         services.AddSteepleMedia(configuration);
         services.AddSteepleFlags(configuration);
         services.AddSteepleAnalyticsIngest();
@@ -71,6 +72,18 @@ public static class ServiceCollectionExtensions
             services.AddScoped<IGeocodingGateway, StubGeocodingGateway>();
         }
 
+        return services;
+    }
+
+    /// <summary>
+    /// Availability module (SYSTEM_DESIGN §17, CONTRACTS §6a): a room's weekly open hours and
+    /// blackout dates. Manager-scoped rule reads/writes plus the flag-gated publish check and the
+    /// public listing-detail read. EF-backed, DbContext-scoped.
+    /// </summary>
+    private static IServiceCollection AddSteepleAvailability(this IServiceCollection services)
+    {
+        services.AddScoped<IAvailabilityService, AvailabilityService>();
+        services.AddScoped<IAvailabilityRepository, EfAvailabilityRepository>();
         return services;
     }
 

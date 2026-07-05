@@ -17,6 +17,10 @@ namespace Steeple.Api.Contracts;
 /// <param name="Photos">Room photos.</param>
 /// <param name="Venue">The owning venue.</param>
 /// <param name="Rating">Venue-level visible star-rating aggregate, if any ratings are revealed.</param>
+/// <param name="OpenHours">
+/// The room's weekly open windows (all seven days, Sunday-first; closed days have empty windows),
+/// in venue-local wall-clock. Null for pre-gate legacy rooms with no declared hours.
+/// </param>
 public record RoomDetailDto(
     Guid RoomId,
     string RoomSlug,
@@ -32,4 +36,5 @@ public record RoomDetailDto(
     IReadOnlyList<string> Activities,
     IReadOnlyList<RoomPhotoDto> Photos,
     VenueSummaryDto Venue,
-    RatingSummaryDto? Rating);
+    RatingSummaryDto? Rating,
+    IReadOnlyList<DayOpenHoursDto>? OpenHours = null);

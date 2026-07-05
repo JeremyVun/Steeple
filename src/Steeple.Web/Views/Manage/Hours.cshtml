@@ -1,0 +1,77 @@
+@model RoomHoursViewModel
+@{
+    var room = Model.Room;
+}
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Hours &amp; blackouts</h1>
+        <partial name="_ManageTabs" model="@("spaces")" />
+    </header>
+
+    <p class="manage-breadcrumb"><a href="~/manage/rooms/@room.Id">← @room.Name</a></p>
+
+    @if (Model.Flash is not null)
+    {
+        <p class="thread-flash" role="status">@Model.Flash</p>
+    }
+
+    <section class="card manage-card">
+        <div class="card-body">
+            <p class="field-help">
+                Organizers pick booking times from these windows — times are in the venue's
+                timezone (@Model.Timezone). A day with no windows is closed.
+            </p>
+
+            <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/hours")" data-hours-editor>
+                @Html.AntiForgeryToken()
+
+                @if (Model.Form.Error is not null)
+                {
+                    <p class="auth-error" role="alert">@Model.Form.Error</p>
+                }
+
+                <div class="hours-presets" role="group" aria-label="Quick fills">
+                    <span class="field-label">Quick fill:</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-preset="weekday-evenings">Weekday evenings 6–9 PM</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-preset="weekend-days">Weekend days 9–5</button>
+                    <button type="button" class="btn btn-ghost btn-sm" data-preset="open-daily">Open daily 8 AM–9 PM</button>
+                </div>
+
+                <partial name="_OpenHoursGrid" model="Model.Form" />
+
+                <partial name="_BlackoutList" model="Model.Form" />
+
+                <div class="manage-form-actions">
+                    <button class="btn btn-primary" type="submit">Save hours</button>
+                </div>
+            </form>
+        </div>
+    </section>
+</section>
+
+@* Cloned by hours-editor.js; __DAY__ / __IDX__ / __ROW__ are re-indexed on insert. *@
+<template data-window-template>
+    <div class="hours-window" data-window-row>
+        <input class="form-input form-input-sm" type="time" name="Days[__DAY__].Windows[__IDX__].StartTime"
+               value="" required aria-label="Opens at" />
+        <span class="hours-window-sep" aria-hidden="true">–</span>
+        <input class="form-input form-input-sm" type="time" name="Days[__DAY__].Windows[__IDX__].EndTime"
+               value="" required aria-label="Closes at" />
+        <button type="button" class="btn btn-ghost btn-sm" data-remove-row aria-label="Remove this window">✕</button>
+    </div>
+</template>
+<template data-blackout-template>
+    <li class="blackout-row" data-blackout-row>
+        <input class="form-input form-input-sm" type="date" name="Blackouts[__ROW__].Date" value="" required aria-label="Closed from" />
+        <span class="hours-window-sep" aria-hidden="true">–</span>
+        <input class="form-input form-input-sm" type="date" name="Blackouts[__ROW__].EndDate" value="" aria-label="Closed until (optional)" />
+        <input class="form-input" type="text" name="Blackouts[__ROW__].Reason" value="" maxlength="200"
+               placeholder="Why it's closed (optional — shown to organizers)" aria-label="Reason" />
+        <button type="button" class="btn btn-ghost btn-sm" data-remove-row aria-label="Remove this blackout">✕</button>
+    </li>
+</template>
+
+@section scripts {
+    <script src="~/js/hours-editor.js" asp-append-version="true"></script>
+}

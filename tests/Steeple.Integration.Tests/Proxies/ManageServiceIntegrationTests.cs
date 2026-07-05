@@ -38,6 +38,9 @@ public class ManageServiceIntegrationTests
         new FakeGeocodingGateway(),
         new FakeGeofencePolicy(),
         new NullAnalytics(),
+        new DisabledFeatureFlags(),
+        new AvailabilityService(
+            new EfAvailabilityRepository(db), new EfVenueManagerRepository(db), new NullAnalytics(), new FixedTimeProvider(FixedNow)),
         new FixedTimeProvider(FixedNow),
         Options.Create(new GeocodingOptions()));
 
@@ -349,6 +352,11 @@ public class ManageServiceIntegrationTests
     {
         public Task TrackAsync(string eventType, object? payload = null, string? sessionId = null, CancellationToken ct = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class DisabledFeatureFlags : IFeatureFlags
+    {
+        public bool IsEnabled(string key) => false;
     }
 
     /// <summary>Always resolves inside the beachhead (Vienna, VA) — the real Google gateway is out

@@ -12,6 +12,7 @@ class FakeManageRepository implements ManageRepository {
   final FixtureLoader fixtures;
   final Map<String, ManagedRoom> _roomOverrides = {};
   final Map<String, Application> _applicationOverrides = {};
+  final Map<String, RoomAvailabilityRules> _hoursOverrides = {};
 
   @override
   Future<List<ManagedVenue>> venues() =>
@@ -45,6 +46,26 @@ class FakeManageRepository implements ManageRepository {
     );
     _roomOverrides[id] = updated;
     return updated;
+  }
+
+  @override
+  Future<RoomAvailabilityRules> openHours(String roomId) async {
+    final override = _hoursOverrides[roomId];
+    if (override != null) return override;
+    return fixtures.load('room_open_hours', RoomAvailabilityRules.fromJson);
+  }
+
+  @override
+  Future<RoomAvailabilityRules> saveOpenHours(
+    String roomId,
+    RoomAvailabilityRules rules,
+  ) async {
+    // Echo the save back (same style as `saveRoom`) so the screen sees its own
+    // edit; keep the fixture's roomId/timezone as the canonical envelope.
+    final base = await openHours(roomId);
+    final saved = base.copyWith(days: rules.days, blackouts: rules.blackouts);
+    _hoursOverrides[roomId] = saved;
+    return saved;
   }
 
   @override

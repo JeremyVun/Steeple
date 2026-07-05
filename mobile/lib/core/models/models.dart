@@ -10,6 +10,7 @@ export 'manage.dart';
 export 'notification.dart';
 export 'paged.dart';
 export 'room.dart';
+export 'room_availability.dart';
 export 'search_query.dart';
 export 'user.dart';
 export 'wire_enums.dart';

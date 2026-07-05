@@ -62,7 +62,8 @@ public class ListingServiceTests
     }
 
     private static ListingService CreateService(Room room) =>
-        new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new NullAnalyticsSink(), new FixedTimeProvider());
+        new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new FakeAvailabilityService(),
+            new NullAnalyticsSink(), new FixedTimeProvider());
 
     private static Room CreateRoom(RoomStatus status, double latitude = InAreaLatitude, double longitude = InAreaLongitude)
     {
@@ -123,6 +124,21 @@ public class ListingServiceTests
 
         public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
+    }
+
+    private sealed class FakeAvailabilityService : IAvailabilityService
+    {
+        public Task<ManageResult<RoomAvailabilityRulesDto>> GetRulesAsync(Guid callerId, Guid roomId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> SaveRulesAsync(
+            Guid callerId, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default) => Task.FromResult(false);
+
+        public Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<DayOpenHoursDto>?>(null);
     }
 
     private sealed class NullAnalyticsSink : IAnalyticsSink

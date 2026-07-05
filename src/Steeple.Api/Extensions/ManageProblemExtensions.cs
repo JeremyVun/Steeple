@@ -16,7 +16,8 @@ public static class ManageProblemExtensions
             ManageErrorCodes.AlreadyVerified => StatusCodes.Status409Conflict,
             ManageErrorCodes.VerificationPending => StatusCodes.Status409Conflict,
             ManageErrorCodes.NotFound => StatusCodes.Status404NotFound,
-            // invalid_venue / invalid_room / invalid_photo / invalid_image / geofence_rejected / no_photos / invalid_verification
+            // invalid_venue / invalid_room / invalid_photo / invalid_image / geofence_rejected /
+            // no_photos / no_open_hours / invalid_availability / invalid_verification
             _ => StatusCodes.Status400BadRequest,
         };
 

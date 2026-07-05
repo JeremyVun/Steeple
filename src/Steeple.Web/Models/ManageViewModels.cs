@@ -232,3 +232,99 @@ public sealed record FlagGroupViewModel(
     IReadOnlyList<FilterOption> Options,
     IReadOnlyList<string> Selected,
     string? HelpText);
+
+/// <summary>One open window row in the hours form (<c>HH:mm</c> from native time inputs).</summary>
+public sealed class HoursWindowFormModel
+{
+    public string StartTime { get; set; } = "";
+    public string EndTime { get; set; } = "";
+}
+
+/// <summary>One weekday's rows. <see cref="DayOfWeek"/> is the wire token; posted hidden.</summary>
+public sealed class HoursDayFormModel
+{
+    public string DayOfWeek { get; set; } = "";
+    public List<HoursWindowFormModel> Windows { get; set; } = [];
+}
+
+/// <summary>One blackout row; an optional end date expands to per-date blackouts on save.</summary>
+public sealed class BlackoutFormModel
+{
+    public DateOnly? Date { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public string Reason { get; set; } = "";
+}
+
+/// <summary>
+/// The hours &amp; blackouts form. Mutable + model-bound (indexed inputs; <c>hours-editor.js</c>
+/// re-indexes rows on add/remove) so a failed save re-renders with input intact.
+/// </summary>
+public sealed class HoursFormViewModel
+{
+    public List<HoursDayFormModel> Days { get; set; } = [];
+    public List<BlackoutFormModel> Blackouts { get; set; } = [];
+
+    /// <summary>Top-of-form error banner.</summary>
+    public string? Error { get; set; }
+
+    /// <summary>Wire token + label, Sunday-first (the wire's canonical day order).</summary>
+    public static IReadOnlyList<FilterOption> DayOptions { get; } =
+    [
+        new("sunday", "Sunday"),
+        new("monday", "Monday"),
+        new("tuesday", "Tuesday"),
+        new("wednesday", "Wednesday"),
+        new("thursday", "Thursday"),
+        new("friday", "Friday"),
+        new("saturday", "Saturday"),
+    ];
+
+    /// <summary>Prefills all seven day rows (closed days keep an empty window list).</summary>
+    public static HoursFormViewModel From(RoomAvailabilityRulesDto rules) => new()
+    {
+        Days = [.. DayOptions.Select(day => new HoursDayFormModel
+        {
+            DayOfWeek = day.Value,
+            Windows = [.. rules.Days
+                .Where(d => d.DayOfWeek == day.Value)
+                .SelectMany(d => d.Windows)
+                .Select(w => new HoursWindowFormModel { StartTime = w.StartTime, EndTime = w.EndTime })],
+        })],
+        Blackouts = [.. rules.Blackouts.Select(b => new BlackoutFormModel { Date = b.Date, Reason = b.Reason ?? "" })],
+    };
+
+    /// <summary>
+    /// The replace-all wire payload. Blackout ranges expand to per-date rows here (the API
+    /// models single dates); the API's own limits (≤200, no past dates) still apply.
+    /// </summary>
+    public SaveAvailabilityRulesRequest ToRequest() => new(
+        Days: [.. Days
+            .Where(d => d.Windows.Count > 0)
+            .Select(d => new DayOpenHoursDto(
+                d.DayOfWeek,
+                [.. d.Windows.Select(w => new OpenWindowDto(w.StartTime.Trim(), w.EndTime.Trim()))]))],
+        Blackouts: [.. Blackouts
+            .Where(b => b.Date is not null)
+            .SelectMany(ExpandRange)
+            .DistinctBy(b => b.Date)
+            .OrderBy(b => b.Date)]);
+
+    private static IEnumerable<BlackoutDateDto> ExpandRange(BlackoutFormModel row)
+    {
+        var reason = string.IsNullOrWhiteSpace(row.Reason) ? null : row.Reason.Trim();
+        var last = row.EndDate is { } end && end > row.Date!.Value ? end : row.Date!.Value;
+        for (var date = row.Date!.Value; date <= last; date = date.AddDays(1))
+        {
+            yield return new BlackoutDateDto(date, reason);
+        }
+    }
+}
+
+/// <summary>The hours &amp; blackouts page for one room.</summary>
+public sealed class RoomHoursViewModel
+{
+    public required ManagedRoomDto Room { get; init; }
+    public required HoursFormViewModel Form { get; init; }
+    public required string Timezone { get; init; }
+    public string? Flash { get; init; }
+}

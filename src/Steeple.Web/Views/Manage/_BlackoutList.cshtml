@@ -1,0 +1,25 @@
+@model HoursFormViewModel
+@* Blackout dates: single date, or a range the BFF expands to per-date rows on save. *@
+
+<fieldset class="form-fieldset hours-blackouts">
+    <legend class="field-label">Blackout dates</legend>
+    <p class="field-help">Days the room is closed regardless of the hours above — holidays, renovations, your own events.</p>
+
+    <ul class="blackout-list" data-blackouts>
+        @for (var b = 0; b < Model.Blackouts.Count; b++)
+        {
+            <li class="blackout-row" data-blackout-row>
+                <input class="form-input form-input-sm" type="date" name="Blackouts[@b].Date"
+                       value="@(Model.Blackouts[b].Date?.ToString("yyyy-MM-dd"))" required aria-label="Closed from" />
+                <span class="hours-window-sep" aria-hidden="true">–</span>
+                <input class="form-input form-input-sm" type="date" name="Blackouts[@b].EndDate"
+                       value="@(Model.Blackouts[b].EndDate?.ToString("yyyy-MM-dd"))" aria-label="Closed until (optional)" />
+                <input class="form-input" type="text" name="Blackouts[@b].Reason" value="@Model.Blackouts[b].Reason" maxlength="200"
+                       placeholder="Why it's closed (optional — shown to organizers)" aria-label="Reason" />
+                <button type="button" class="btn btn-ghost btn-sm" data-remove-row aria-label="Remove this blackout">✕</button>
+            </li>
+        }
+    </ul>
+
+    <button type="button" class="btn btn-ghost btn-sm" data-add-blackout>+ Add blackout</button>
+</fieldset>

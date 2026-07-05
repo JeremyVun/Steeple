@@ -31,6 +31,14 @@ class _PendingManageRepository implements ManageRepository {
       Completer<ManagedRoom>().future;
 
   @override
+  Future<RoomAvailabilityRules> openHours(String roomId) =>
+      Completer<RoomAvailabilityRules>().future;
+
+  @override
+  Future<RoomAvailabilityRules> saveOpenHours(String roomId, RoomAvailabilityRules rules) =>
+      Completer<RoomAvailabilityRules>().future;
+
+  @override
   Future<Paged<Application>> applications({String? status, int page = 1}) =>
       Completer<Paged<Application>>().future;
 

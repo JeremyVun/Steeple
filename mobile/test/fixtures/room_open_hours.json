@@ -1,0 +1,32 @@
+{
+  "roomId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "timezone": "America/New_York",
+  "days": [
+    { "dayOfWeek": "sunday", "windows": [] },
+    {
+      "dayOfWeek": "monday",
+      "windows": [{ "startTime": "18:00", "endTime": "21:00" }]
+    },
+    {
+      "dayOfWeek": "tuesday",
+      "windows": [{ "startTime": "18:00", "endTime": "21:00" }]
+    },
+    {
+      "dayOfWeek": "wednesday",
+      "windows": [
+        { "startTime": "09:00", "endTime": "12:00" },
+        { "startTime": "18:00", "endTime": "21:00" }
+      ]
+    },
+    { "dayOfWeek": "thursday", "windows": [{ "startTime": "18:00", "endTime": "21:00" }] },
+    { "dayOfWeek": "friday", "windows": [] },
+    {
+      "dayOfWeek": "saturday",
+      "windows": [{ "startTime": "09:00", "endTime": "17:00" }]
+    }
+  ],
+  "blackouts": [
+    { "date": "2026-12-24", "reason": "Christmas Eve service" },
+    { "date": "2026-12-25", "reason": "Christmas Day" }
+  ]
+}

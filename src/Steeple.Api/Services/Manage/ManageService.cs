@@ -11,11 +11,16 @@ namespace Steeple.Api.Services.Manage;
 /// </summary>
 public sealed class ManageService : IManageService
 {
+    /// <summary>Flag gating the "open hours required to publish" rule (config-backed, off by default).</summary>
+    private const string OpenHoursRequiredFlag = "manage.open_hours_required";
+
     private readonly IManageRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IGeocodingGateway _geocoding;
     private readonly IGeofencePolicy _geofence;
     private readonly IAnalyticsSink _analytics;
+    private readonly IFeatureFlags _flags;
+    private readonly IAvailabilityService _availability;
     private readonly TimeProvider _clock;
     private readonly GeocodingOptions _geocodingOptions;
 
@@ -26,6 +31,8 @@ public sealed class ManageService : IManageService
         IGeocodingGateway geocoding,
         IGeofencePolicy geofence,
         IAnalyticsSink analytics,
+        IFeatureFlags flags,
+        IAvailabilityService availability,
         TimeProvider clock,
         IOptions<GeocodingOptions> geocodingOptions)
     {
@@ -34,6 +41,8 @@ public sealed class ManageService : IManageService
         _geocoding = geocoding;
         _geofence = geofence;
         _analytics = analytics;
+        _flags = flags;
+        _availability = availability;
         _clock = clock;
         _geocodingOptions = geocodingOptions.Value;
     }
@@ -382,6 +391,14 @@ public sealed class ManageService : IManageService
                 {
                     return ManageResult<ManagedRoomDto>.Fail(
                         ManageErrorCodes.NoPhotos, "Add at least one photo before publishing.");
+                }
+
+                // Open-hours gate (flag-gated, off by default) — like no_photos, only on publish.
+                if (_flags.IsEnabled(OpenHoursRequiredFlag)
+                    && !await _availability.HasOpenHoursAsync(room.Id, ct).ConfigureAwait(false))
+                {
+                    return ManageResult<ManagedRoomDto>.Fail(
+                        ManageErrorCodes.NoOpenHours, "Add open hours before you publish.");
                 }
 
                 if (room.FirstPublishedAtUtc is not null)

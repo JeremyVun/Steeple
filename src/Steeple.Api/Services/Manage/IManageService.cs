@@ -70,6 +70,12 @@ public static class ManageErrorCodes
     /// <summary>Publishing is blocked because the room has zero photos.</summary>
     public const string NoPhotos = "no_photos";
 
+    /// <summary>Publishing is blocked because the room has no open-hours rows (flag-gated).</summary>
+    public const string NoOpenHours = "no_open_hours";
+
+    /// <summary>Availability rules payload failed validation.</summary>
+    public const string InvalidAvailability = "invalid_availability";
+
     /// <summary>Venue verification payload failed validation.</summary>
     public const string InvalidVerification = "invalid_verification";
 
