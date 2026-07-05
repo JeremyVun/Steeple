@@ -40,7 +40,10 @@ public sealed class ApplyController : SteepleControllerBase
 
     /// <summary>The apply form for a listing (fillable signed-out; the gate is at submit).</summary>
     [HttpGet("space/{venueSlug}/{roomSlug}/apply")]
-    public async Task<IActionResult> Index(string venueSlug, string roomSlug, CancellationToken ct)
+    public async Task<IActionResult> Index(
+        string venueSlug, string roomSlug,
+        DateOnly? date, string? startTime, string? endTime, [FromQuery] string[]? daysOfWeek,
+        CancellationToken ct)
     {
         if (!ApplyEnabled())
         {
@@ -56,6 +59,14 @@ public sealed class ApplyController : SteepleControllerBase
 
         var stashed = ReadStash(room.RoomId);
         var form = stashed ?? new ApplyFormModel { IdempotencyKey = Guid.NewGuid() };
+
+        // Prefill from a When selection carried through search → detail → here (only for a fresh
+        // form; a restored draft always wins). Bad weekday tokens are ignored leniently.
+        if (stashed is null)
+        {
+            PrefillFromWhen(form, date, startTime, endTime, daysOfWeek);
+        }
+
         if (form.ActivityType.Length == 0 && room.Activities.Count > 0)
         {
             form.ActivityType = room.Activities[0];
@@ -157,6 +168,42 @@ public sealed class ApplyController : SteepleControllerBase
         TempData["ThreadFlash"] = $"Your request is on its way to {room.Venue.Name}. They'll reply here.";
         return Redirect(Url.Content($"~/inbox/applications/{application.Id}"));
     }
+
+    /// <summary>
+    /// Seeds the apply form from a When (time-first search) selection: a weekly selection flips the
+    /// frequency and checks the days; a one-off seeds the start date; times prefill either way. The
+    /// commit-5 picker then lights up from these native fields (and <c>InitialMonth</c> follows the
+    /// start date). Malformed values are ignored — the person just finishes filling the form.
+    /// </summary>
+    private static void PrefillFromWhen(
+        ApplyFormModel form, DateOnly? date, string? startTime, string? endTime, string[]? daysOfWeek)
+    {
+        var days = WhenCarry.ValidWeekdays(daysOfWeek);
+        if (days.Count > 0)
+        {
+            form.Frequency = "recurringWeekly";
+            form.DaysOfWeek = days.ToList();
+        }
+        else if (date is { } d)
+        {
+            form.Frequency = "oneOff";
+            form.StartDate = d;
+        }
+
+        if (IsWireTime(startTime))
+        {
+            form.StartTime = startTime!;
+        }
+
+        if (IsWireTime(endTime))
+        {
+            form.EndTime = endTime!;
+        }
+    }
+
+    private static bool IsWireTime(string? value) =>
+        !string.IsNullOrEmpty(value)
+        && TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
     private IActionResult ReRender(RoomDetailDto room, ApplyFormModel form, string? error, ScheduleCheckResultDto? conflict = null)
     {

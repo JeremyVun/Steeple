@@ -49,6 +49,34 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<RoomOpenHours>> GetOpenHoursForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+        await _db.RoomOpenHours
+            .Where(h => roomIds.Contains(h.RoomId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<RoomBlackoutDate>> GetBlackoutsForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+        await _db.RoomBlackoutDates
+            .Where(b => roomIds.Contains(b.RoomId))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+        await _db.BookingOccurrences
+            .Where(o => roomIds.Contains(o.RoomId)
+                && o.Status == OccurrenceStatus.Scheduled
+                && o.Booking!.Status == BookingStatus.Confirmed
+                && o.StartUtc < toUtc
+                && o.EndUtc > fromUtc)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public async Task ReplaceRulesAsync(
         Guid roomId,
         IReadOnlyList<RoomOpenHours> openHours,

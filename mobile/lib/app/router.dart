@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../core/auth/session_manager.dart';
 import '../core/auth/session_state.dart';
 import '../core/flags/flags_service.dart';
+import '../core/models/models.dart';
 import '../core/navigation/route_names.dart';
 import '../features/apply/presentation/apply_screen.dart';
 import '../features/bookings/presentation/booking_detail_screen.dart';
@@ -150,6 +151,10 @@ GoRouter createRouter(Ref ref, RouterRefresh refresh) {
               builder: (context, state) => ListingDetailScreen(
                 venueSlug: state.pathParameters['venueSlug']!,
                 roomSlug: state.pathParameters['roomSlug']!,
+                // The search's When filter, when the card that got tapped
+                // came from one (MOBILE_CONTRACTS §7) — carried through so
+                // Apply can prefill its schedule.
+                whenSelection: state.extra as WhenFilter?,
               ),
               routes: [
                 GoRoute(
@@ -159,6 +164,7 @@ GoRouter createRouter(Ref ref, RouterRefresh refresh) {
                   builder: (context, state) => ApplyScreen(
                     venueSlug: state.pathParameters['venueSlug']!,
                     roomSlug: state.pathParameters['roomSlug']!,
+                    whenSelection: state.extra as WhenFilter?,
                   ),
                 ),
               ],

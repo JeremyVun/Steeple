@@ -329,6 +329,44 @@ img { max-width: 100%; display: block; }
     margin-bottom: 0.3rem;
 }
 
+/* When (time-first search) control: its own divided row above the facets. */
+.filter-when {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.6rem;
+}
+.when-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.55rem 1.5rem;
+}
+.when-band .chip-set { align-items: center; }
+.when-date .field-input { width: 9.5rem; }
+.when-weekly-toggle { align-self: center; }
+.when-custom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+.when-custom .field-input { width: 8rem; }
+/* "Custom time" reveal trigger — a quiet text button that sits among the band chips. */
+.when-custom-btn {
+    background: none;
+    border: 0;
+    padding: 0.34rem 0.4rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--sage-deep);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.when-custom-btn:hover { color: var(--ink); }
+.when-custom-btn:focus-visible { box-shadow: var(--focus); outline: none; border-radius: var(--radius-sm); }
+
 .toggle {
     display: inline-flex;
     align-items: center;
@@ -492,6 +530,8 @@ img { max-width: 100%; display: block; }
 }
 .card-meta { margin: 0.15rem 0 0; font-size: 0.88rem; color: var(--ink-soft); }
 .card-capacity { font-weight: 600; color: var(--ink); }
+/* "Free 6:00–9:00 PM" — the matched availability window from a time-first search. */
+.card-free { margin: 0.2rem 0 0; font-size: 0.88rem; font-weight: 600; color: var(--sage-deep); }
 
 /* ---------- Badges ---------- */
 .badge {

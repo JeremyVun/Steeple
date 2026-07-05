@@ -13,6 +13,7 @@ class SearchFilters {
     this.activities = const {},
     this.accessibility = const {},
     this.suburb,
+    this.when = const WhenFilter(),
   });
 
   final bool freeOnly;
@@ -20,13 +21,15 @@ class SearchFilters {
   final Set<String> activities;
   final Set<String> accessibility;
   final String? suburb;
+  final WhenFilter when;
 
   int get activeCount =>
       (freeOnly ? 1 : 0) +
       (minCapacity == null ? 0 : 1) +
       activities.length +
       accessibility.length +
-      (suburb == null ? 0 : 1);
+      (suburb == null ? 0 : 1) +
+      (when.isAny ? 0 : 1);
 
   SearchFilters copyWith({
     bool? freeOnly,
@@ -34,6 +37,7 @@ class SearchFilters {
     Set<String>? activities,
     Set<String>? accessibility,
     String? Function()? suburb,
+    WhenFilter? when,
   }) =>
       SearchFilters(
         freeOnly: freeOnly ?? this.freeOnly,
@@ -41,6 +45,7 @@ class SearchFilters {
         activities: activities ?? this.activities,
         accessibility: accessibility ?? this.accessibility,
         suburb: suburb == null ? this.suburb : suburb(),
+        when: when ?? this.when,
       );
 
   SearchQuery toQuery(BoundingBox? region) => SearchQuery(
@@ -53,6 +58,13 @@ class SearchFilters {
         freeOnly: freeOnly,
         activities: activities.toList()..sort(),
         accessibility: accessibility.toList()..sort(),
+        date: when.date,
+        daysOfWeek: when.daysOfWeek.toList()..sort(),
+        // timeOfDay and the explicit range are alternatives (CONTRACTS §3) —
+        // never send both.
+        timeOfDay: when.timeOfDay,
+        startTime: when.timeOfDay == null ? when.startTime : null,
+        endTime: when.timeOfDay == null ? when.endTime : null,
       );
 }
 
@@ -75,6 +87,41 @@ class SearchFiltersNotifier extends Notifier<SearchFilters> {
   void setFreeOnly(bool value) => state = state.copyWith(freeOnly: value);
 
   void setMinCapacity(int? value) => state = state.copyWith(minCapacity: () => value);
+
+  /// A one-off date pick clears any weekly selection (mutually exclusive,
+  /// CONTRACTS §3).
+  void setWhenDate(String? date) => state = state.copyWith(
+        when: state.when.copyWith(date: () => date, daysOfWeek: const {}),
+      );
+
+  /// Toggling a weekday clears any one-off date (mutually exclusive).
+  void toggleWhenDay(String token) {
+    final next = Set.of(state.when.daysOfWeek);
+    next.contains(token) ? next.remove(token) : next.add(token);
+    state = state.copyWith(
+      when: state.when.copyWith(date: () => null, daysOfWeek: next),
+    );
+  }
+
+  /// A time band and a custom range are alternatives — picking one clears
+  /// the other.
+  void setWhenTimeOfDay(String? band) => state = state.copyWith(
+        when: state.when.copyWith(
+          timeOfDay: () => band,
+          startTime: () => null,
+          endTime: () => null,
+        ),
+      );
+
+  void setWhenCustomRange(String? start, String? end) => state = state.copyWith(
+        when: state.when.copyWith(
+          timeOfDay: () => null,
+          startTime: () => start,
+          endTime: () => end,
+        ),
+      );
+
+  void clearWhen() => state = state.copyWith(when: const WhenFilter());
 
   void clear() => state = const SearchFilters();
 }

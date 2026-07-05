@@ -619,6 +619,25 @@ public class AvailabilityServiceTests
                         && o.EndUtc > fromUtc)
                     .ToList());
 
+        public Task<IReadOnlyList<RoomOpenHours>> GetOpenHoursForRoomsAsync(
+            IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RoomOpenHours>>(OpenHours.Where(h => roomIds.Contains(h.RoomId)).ToList());
+
+        public Task<IReadOnlyList<RoomBlackoutDate>> GetBlackoutsForRoomsAsync(
+            IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<RoomBlackoutDate>>(Blackouts.Where(b => roomIds.Contains(b.RoomId)).ToList());
+
+        public Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesForRoomsAsync(
+            IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<BookingOccurrence>>(
+                Occurrences
+                    .Where(o => roomIds.Contains(o.RoomId)
+                        && o.Status == OccurrenceStatus.Scheduled
+                        && o.Booking!.Status == BookingStatus.Confirmed
+                        && o.StartUtc < toUtc
+                        && o.EndUtc > fromUtc)
+                    .ToList());
+
         public Task ReplaceRulesAsync(
             Guid roomId,
             IReadOnlyList<RoomOpenHours> openHours,

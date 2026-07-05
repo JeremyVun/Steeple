@@ -13,7 +13,22 @@ public class RoomRepository : IRoomRepository
     public RoomRepository(SteepleDbContext db) => _db = db;
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default)
+    public async Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
+        await BuildOrdered(criteria)
+            .Skip(criteria.Skip)
+            .Take(criteria.Take)
+            .ToListAsync(ct);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
+        await BuildOrdered(criteria).ToListAsync(ct);
+
+    /// <inheritdoc />
+    public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
+        ApplyFilters(_db.Rooms.AsNoTracking(), criteria).CountAsync(ct);
+
+    /// <summary>The filtered + presentation-ordered query (venue/photos included), before pagination.</summary>
+    private IQueryable<Room> BuildOrdered(RoomSearchCriteria criteria)
     {
         var filtered = ApplyFilters(
             _db.Rooms
@@ -22,7 +37,6 @@ public class RoomRepository : IRoomRepository
                 .Include(r => r.Photos),
             criteria);
 
-        IQueryable<Room> ordered;
         if (criteria.Center is { } center)
         {
             // Nearest-first ordering pushed into SQL so Skip/Take page over distance, not name —
@@ -33,32 +47,19 @@ public class RoomRepository : IRoomRepository
             var cLng = center.Longitude;
             var lngScaleSq = Math.Cos(cLat * Math.PI / 180.0);
             lngScaleSq *= lngScaleSq;
-            ordered = filtered
+            return filtered
                 .OrderBy(r =>
                     (r.Venue!.Latitude - cLat) * (r.Venue.Latitude - cLat) +
                     (r.Venue.Longitude - cLng) * (r.Venue.Longitude - cLng) * lngScaleSq)
                 .ThenBy(r => r.Id);
         }
-        else
-        {
-            // Stable ordering so pagination is deterministic.
-            ordered = filtered
-                .OrderBy(r => r.Venue!.Name)
-                .ThenBy(r => r.Name)
-                .ThenBy(r => r.Id);
-        }
 
-        var rooms = await ordered
-            .Skip(criteria.Skip)
-            .Take(criteria.Take)
-            .ToListAsync(ct);
-
-        return rooms;
+        // Stable ordering so pagination is deterministic.
+        return filtered
+            .OrderBy(r => r.Venue!.Name)
+            .ThenBy(r => r.Name)
+            .ThenBy(r => r.Id);
     }
-
-    /// <inheritdoc />
-    public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
-        ApplyFilters(_db.Rooms.AsNoTracking(), criteria).CountAsync(ct);
 
     /// <inheritdoc />
     public Task<Room?> GetByIdAsync(Guid id, CancellationToken ct = default) =>
@@ -156,6 +157,63 @@ public class RoomRepository : IRoomRepository
             query = query.Where(r => ((int)r.AccessibilityFeatures & accessibility) == accessibility);
         }
 
+        if (criteria.When is { } when)
+        {
+            query = ApplyWhenPrefilter(query, when);
+        }
+
         return query;
+    }
+
+    /// <summary>
+    /// Cheap, translatable open-hours/blackout prefilter for a time-first search (the service refines
+    /// survivors against real free windows afterwards, so this only needs to be a <b>superset</b> of
+    /// the true matches — never dropping a room that could still qualify). Requires an open-hours row
+    /// (index <c>(RoomId, DayOfWeek)</c>) on the requested weekday(s): containing the explicit range,
+    /// overlapping the band, or any row for an unconstrained day. Recurring searches require such a
+    /// row for <b>every</b> requested weekday. One-off searches also exclude blackout dates.
+    /// </summary>
+    private static IQueryable<Room> ApplyWhenPrefilter(IQueryable<Room> query, AvailabilityFilter when)
+    {
+        foreach (var weekday in ExpandWeekdays(when))
+        {
+            var wd = weekday;
+            query = when.RangeKind switch
+            {
+                // Explicit range: a single open window must contain [start, end).
+                WhenRangeKind.Explicit => query.Where(r => r.OpenHours.Any(h =>
+                    h.DayOfWeek == wd && h.StartTime <= when.RangeStart && h.EndTime >= when.RangeEnd)),
+                // Band: an open window merely has to overlap the band (duration fit is a refinement concern).
+                WhenRangeKind.Band => query.Where(r => r.OpenHours.Any(h =>
+                    h.DayOfWeek == wd && h.StartTime < when.RangeEnd && h.EndTime > when.RangeStart)),
+                // Any window: just declare open hours that day.
+                _ => query.Where(r => r.OpenHours.Any(h => h.DayOfWeek == wd)),
+            };
+        }
+
+        if (when is { IsRecurring: false, Date: { } date })
+        {
+            query = query.Where(r => !r.BlackoutDates.Any(b => b.Date == date));
+        }
+
+        return query;
+    }
+
+    /// <summary>The distinct weekday(s) a filter targets: the one-off date's weekday, or every weekday in the recurring mask.</summary>
+    private static IEnumerable<DayOfWeek> ExpandWeekdays(AvailabilityFilter when)
+    {
+        if (!when.IsRecurring)
+        {
+            yield return when.Date!.Value.DayOfWeek;
+            yield break;
+        }
+
+        for (var d = DayOfWeek.Sunday; d <= DayOfWeek.Saturday; d++)
+        {
+            if ((when.Weekdays & (Weekdays)(1 << (int)d)) != 0)
+            {
+                yield return d;
+            }
+        }
     }
 }

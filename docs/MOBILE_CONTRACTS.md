@@ -109,6 +109,10 @@ Mapping (exhaustive — anything unlisted → `server`, retryable):
 - **Schedules:** `ProposedSchedule` keeps dates as `String` (`yyyy-MM-dd`) and times as
   `String` (`HH:mm`) — they are venue-local wall-clock, **never** parsed into `DateTime`
   (SYSTEM_DESIGN §5 timezone rule). Only `…Utc` fields become `DateTime` (UTC).
+- **`RoomSummary.matchedWindow`** *(additive — availability plan commit 6)*:
+  `MatchedWindow? {date?, startTime, endTime}`, present only when the search carried a
+  When filter — the free window that satisfied it. `ListingCard` renders it as an accent
+  line ("Free 6:00–9:00 PM", plus "· Sep 8" when `date` is set).
 
 ## 6. Session & auth (`core/auth/`)
 
@@ -166,6 +170,12 @@ error screen). `manage*` routes are guarded the same way `inbox`/`bookings` are 
 prefix match in the redirect) — they're not a fifth tab, just a top-level route pushed
 off `profile`.
 
+`listing`/`apply` `extra` *(availability plan commit 6)*: an optional `WhenFilter?`
+(`core/models/search_query.dart`) — the search's When filter, passed as router `extra`
+from a `ListingCard` tap through `listing` and forwarded unchanged to `apply`, which
+one-shot-seeds `ApplicationDraft.schedule` from it (never overwrites a draft already in
+progress).
+
 **Deep-link registry** (universal links and FCM `deepLink` values — CONTRACTS §9): the
 path-only forms of `listing`, `applicationThread`, `bookingDetail`, `inbox`. Anything
 else falls back to `/explore`. `steeple://` is auth-callback only, never navigation.
@@ -179,6 +189,12 @@ methods take `CancelToken?` where the UI can abandon (search). All return wire m
 // features/discovery/data
 abstract class DiscoveryRepository {
   Future<ListingSearchResult> search(SearchQuery query, {CancelToken? cancel}); // GET /listings/search
+  // SearchQuery gained the When filter fields *(availability plan commit 6)*:
+  // date, daysOfWeek, timeOfDay, startTime, endTime, durationMinutes — built from
+  // SearchFilters.when (a WhenFilter; see search_query.dart). Fixture-backed
+  // FakeDiscoveryRepository narrows to a deterministic subset and stamps
+  // matchedWindow when a When filter is present, so the filter sheet and
+  // result cards are exercisable offline.
   Future<List<String>> suburbs();                                               // GET /suburbs
   Future<GeofenceContext> geofence();                                           // GET /geofence
 }
@@ -249,7 +265,7 @@ feature/agent may touch; everything else is private):
 | Feature | Exposes | Type / semantics |
 |---|---|---|
 | core | `envProvider`, `dioProvider`, `apiClientProvider`, `sessionProvider`, `sessionManagerProvider`, `flagsProvider`, `analyticsProvider`, `connectivityProvider`/`isOnlineProvider`, `pushServiceProvider` | Session is `SessionState`; flags is snapshot map; repos inject `ApiClient` |
-| discovery | `searchFiltersProvider` | `Notifier<SearchFilters>` — the one filter state |
+| discovery | `searchFiltersProvider` | `Notifier<SearchFilters>` — the one filter state; `SearchFilters.when` is a `WhenFilter` (date XOR daysOfWeek + timeOfDay band/custom range — additive, availability plan commit 6) |
 | | `searchResultsProvider` | `AsyncNotifier<ListingSearchResult>`; debounces 350ms, cancels in-flight, caches last result (stale-while-revalidate) |
 | listing | `listingDetailProvider(slugPair)` | family `AsyncNotifier<RoomDetail>`; in-memory cache for back-nav |
 | | `roomAvailabilityProvider(roomId)` | family `AsyncNotifier<RoomAvailability>`; fetches today..+`availabilityWindowDays` (42) once, kept alive; feeds both the detail "When it's open" strip and the apply calendar |
@@ -345,7 +361,10 @@ provider and render a placeholder when it is false; channel errors count as fals
   fixtures (`managed_venues.json`'s `[{id, name, slug}]`). `FakeListingRepository.availability`
   re-dates `availability.json` to start at the requested `from` so the fake reads as "live"
   regardless of the calendar date (states/order preserved); `checkSchedule` serves
-  `conflict_check.json`.
+  `conflict_check.json`. `listing_search.json`'s first item carries a `matchedWindow`
+  (additive — availability plan commit 6) so the round-trip test and `ListingCard`'s
+  accent-line rendering are both exercised; `FakeDiscoveryRepository.search` stamps
+  `matchedWindow` on a deterministic subset whenever the query carries a When filter.
   One test per fixture asserts `fromJson` round-trips — this is the drift alarm
   (MOBILE_DESIGN §7); when CONTRACTS.md changes, the failing fixture test is the to-do list.
 - Every repository has a `Fake*Repository` (in `features/X/data/fake/`) that serves

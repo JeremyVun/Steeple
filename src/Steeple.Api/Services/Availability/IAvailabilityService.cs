@@ -53,6 +53,20 @@ public interface IAvailabilityService
     /// </summary>
     Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(
         Guid roomId, ScheduleDto? schedule, CancellationToken ct = default);
+
+    /// <summary>
+    /// Refines the time-first ("When") search: given the prefiltered candidate rooms (each with its
+    /// venue IANA timezone) and the resolved filter, returns only the rooms whose real free windows
+    /// (open hours − blackouts − <b>confirmed</b> bookings) satisfy the filter, mapped to the
+    /// <see cref="MatchedWindowDto"/> that qualified. One-off: the free window must satisfy on the
+    /// target date. Recurring: <b>every</b> matching date within the next 28 venue-local days must
+    /// satisfy; the reported window is the one on the first matching date (no date). Batches one
+    /// occurrences query across all candidates over the horizon (no per-room round-trips).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
+        IReadOnlyList<(Guid RoomId, string Timezone)> candidates,
+        AvailabilityFilter filter,
+        CancellationToken ct = default);
 }
 
 /// <summary>

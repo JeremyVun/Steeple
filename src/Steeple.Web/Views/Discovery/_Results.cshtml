@@ -50,6 +50,9 @@
     };
 
     var mapJson = JsonSerializer.Serialize(mapData);
+
+    // The active When selection travels to each card so its link carries the slot through to apply.
+    ViewData["WhenQuery"] = Model.Query;
 }
 
 @* Re-emitted on every HTMX swap; site.js reads this on htmx:afterSwap to rebuild markers. *@

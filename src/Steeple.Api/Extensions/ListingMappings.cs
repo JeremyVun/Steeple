@@ -15,7 +15,8 @@ public static class ListingMappings
     public static RoomSummaryDto ToSummaryDto(
         this Room room,
         double? distanceMeters = null,
-        RatingSummaryDto? rating = null)
+        RatingSummaryDto? rating = null,
+        MatchedWindowDto? matchedWindow = null)
     {
         var venue = room.Venue;
         return new RoomSummaryDto(
@@ -36,7 +37,8 @@ public static class ListingMappings
             Activities: room.AcceptedActivityTypes.ToNameList(),
             Accessibility: room.AccessibilityFeatures.ToNameList(),
             DistanceMeters: distanceMeters,
-            Rating: rating);
+            Rating: rating,
+            MatchedWindow: matchedWindow);
     }
 
     /// <summary>

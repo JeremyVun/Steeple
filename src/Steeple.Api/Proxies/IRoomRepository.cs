@@ -11,6 +11,13 @@ public interface IRoomRepository
     Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default);
 
     /// <summary>
+    /// Returns <b>every</b> room matching the criteria (same filters + ordering as
+    /// <see cref="SearchAsync"/> but no pagination), for the time-first search path where survivors
+    /// are refined against real free windows before the page is cut. Beachhead-scale only.
+    /// </summary>
+    Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default);
+
+    /// <summary>
     /// Returns the total count of rooms matching the criteria (ignoring pagination).
     /// </summary>
     Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default);

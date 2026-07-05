@@ -24,13 +24,49 @@ import 'availability_calendar.dart';
 /// drafted anonymously; the SSO sheet appears at submit and the draft
 /// survives it (provider keyed outside auth state — MOBILE_CONTRACTS §6).
 class ApplyScreen extends ConsumerStatefulWidget {
-  const ApplyScreen({required this.venueSlug, required this.roomSlug, super.key});
+  const ApplyScreen({
+    required this.venueSlug,
+    required this.roomSlug,
+    this.whenSelection,
+    super.key,
+  });
 
   final String venueSlug;
   final String roomSlug;
 
+  /// The search's When filter (CONTRACTS §3), carried through as router
+  /// `extra` from the listing detail screen — seeds the schedule below on
+  /// first load only, never overwriting a draft already in progress
+  /// (MOBILE_CONTRACTS §7).
+  final WhenFilter? whenSelection;
+
   @override
   ConsumerState<ApplyScreen> createState() => _ApplyScreenState();
+}
+
+/// Weekday wire tokens, Sunday-first — the order CONTRACTS §5 requires
+/// `schedule.daysOfWeek` emitted in.
+const _weekdayOrder = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+];
+
+/// Seeds a fresh [ProposedSchedule] from a search's When filter: weekly when
+/// days were picked, one-off otherwise; time band/custom range resolved to a
+/// concrete `HH:mm` range (or left blank — "any time" — for the user to fill
+/// in via the calendar/pickers below).
+ProposedSchedule _scheduleFromWhen(WhenFilter when) {
+  final (startTime, endTime) = when.resolvedRange;
+  final recurring = when.daysOfWeek.isNotEmpty;
+  return ProposedSchedule(
+    frequency: recurring ? 'recurringWeekly' : 'oneOff',
+    startDate: recurring ? '' : (when.date ?? ''),
+    daysOfWeek: recurring
+        ? (when.daysOfWeek.toList()..sort((a, b) =>
+            _weekdayOrder.indexOf(a).compareTo(_weekdayOrder.indexOf(b))))
+        : null,
+    startTime: startTime ?? '',
+    endTime: endTime ?? '',
+  );
 }
 
 class _ApplyScreenState extends ConsumerState<ApplyScreen> {
@@ -42,6 +78,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   final _intentController = TextEditingController();
   bool _submitting = false;
   bool _tracked = false;
+  bool _seededFromSearch = false;
 
   /// The advisory conflict check (DESIGN_SYSTEM §8.13): debounced 500ms after
   /// the schedule changes, re-rendered from the submit-time 409 when it blocks.
@@ -105,6 +142,23 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     });
   }
 
+  /// One-shot prefill from the search's When filter (if the room was reached
+  /// through one) — never overwrites a schedule already drafted. Deferred a
+  /// frame since it writes another provider, which can't happen mid-build.
+  void _seedScheduleFromSearch(String roomId) {
+    if (_seededFromSearch) return;
+    final when = widget.whenSelection;
+    if (when == null) return;
+    _seededFromSearch = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(applyDraftProvider(roomId).notifier);
+      final draft = ref.read(applyDraftProvider(roomId));
+      if (draft.schedule != null) return; // an in-progress draft wins
+      notifier.update(draft.copyWith(schedule: _scheduleFromWhen(when)));
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = ref.watch(
@@ -126,6 +180,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
               {'roomId': room.roomId},
             );
           }
+          _seedScheduleFromSearch(room.roomId);
           return _buildForm(room);
         },
       ),

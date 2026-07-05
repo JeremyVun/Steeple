@@ -126,10 +126,78 @@
         }, { threshold: 0 }).observe(sentinel);
     }
 
+    // Discovery "When" control: progressive reveals + mutual exclusion, no availability derived
+    // client-side. The fields are real inputs in the HTMX filter form, so toggling them rides the
+    // existing hx-get swap + hx-push-url; on load we read the server-rendered state back out of the
+    // DOM (values set from the query string) so a shared URL re-hydrates the control.
+    function initWhenControl() {
+        var control = document.querySelector("[data-when-control]");
+        if (!control) {
+            return;
+        }
+
+        var weekly = control.querySelector("[data-when-weekly]");
+        var dateField = control.querySelector("[data-when-date]");
+        var dateInput = dateField ? dateField.querySelector("input") : null;
+        var weekdays = control.querySelector("[data-when-weekdays]");
+        var weekdayInputs = weekdays ? weekdays.querySelectorAll("input") : [];
+
+        // Weekly vs one-off date are mutually exclusive (the API 400s if both are sent), so we
+        // disable the inactive side's fields — disabled inputs are left out of the form serialize.
+        function applyWeekly() {
+            var on = !!(weekly && weekly.checked);
+            if (weekdays) { weekdays.hidden = !on; }
+            if (dateField) { dateField.hidden = on; }
+            if (dateInput) { dateInput.disabled = on; }
+            weekdayInputs.forEach(function (i) { i.disabled = !on; });
+        }
+        if (weekly) {
+            weekly.addEventListener("change", applyWeekly);
+        }
+        applyWeekly();
+
+        // Time band (radio chips) vs an explicit custom range are mutually exclusive too.
+        var customToggle = control.querySelector("[data-when-custom-toggle]");
+        var custom = control.querySelector("[data-when-custom]");
+        var customInputs = custom ? custom.querySelectorAll("input") : [];
+        var bandRadios = control.querySelectorAll("[data-when-band]");
+
+        function showCustom(on) {
+            if (custom) { custom.hidden = !on; }
+            customInputs.forEach(function (i) { i.disabled = !on; });
+            if (customToggle) { customToggle.setAttribute("aria-expanded", on ? "true" : "false"); }
+        }
+        function customHasValue() {
+            return Array.prototype.some.call(customInputs, function (i) { return i.value; });
+        }
+        showCustom(customHasValue());
+
+        if (customToggle) {
+            customToggle.addEventListener("click", function () {
+                var opening = !!(custom && custom.hidden);
+                if (opening) {
+                    bandRadios.forEach(function (r) { r.checked = false; });
+                }
+                showCustom(opening);
+            });
+        }
+        bandRadios.forEach(function (radio) {
+            // Runs before the form's bubble-phase HTMX handler, so a chosen band clears the custom
+            // range before the request serializes — the two never travel together.
+            radio.addEventListener("change", function () {
+                if (radio.checked) {
+                    customInputs.forEach(function (i) { i.value = ""; });
+                    showCustom(false);
+                }
+            });
+        });
+    }
+
     function init() {
         initToggle();
         initCopyLink();
         initGallery();
+        initWhenControl();
         syncFilterBarHeight();
         initStickyFilter();
     }

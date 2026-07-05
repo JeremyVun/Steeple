@@ -93,6 +93,23 @@ public static class ApplicationDisplay
         };
     }
 
+    /// <summary>
+    /// A tight venue-local time range: "6:00–9:00 PM" (drops the leading meridiem when both ends
+    /// share it), else "9:30 AM–1:00 PM". Used for the card "Free …" line (§10 voice).
+    /// </summary>
+    public static string FormatTimeRange(string startWire, string endWire)
+    {
+        var start = FormatTime(startWire);
+        var end = FormatTime(endWire);
+        var split = start.LastIndexOf(' ');
+        if (split > 0 && end.EndsWith(start[(split + 1)..], StringComparison.Ordinal))
+        {
+            return $"{start[..split]}–{end}";
+        }
+
+        return $"{start}–{end}";
+    }
+
     /// <summary>"09:00" (wire HH:mm) → "9:00 AM". Unparseable values pass through untouched.</summary>
     public static string FormatTime(string wireTime) =>
         TimeOnly.TryParseExact(wireTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)

@@ -8,7 +8,17 @@
         || Model.Query.MinCapacity.HasValue
         || !string.IsNullOrWhiteSpace(Model.Query.Suburb)
         || Model.Query.Activities != ActivityType.None
-        || Model.Query.Accessibility != AccessibilityFeature.None;
+        || Model.Query.Accessibility != AccessibilityFeature.None
+        || Model.Query.HasWhenFilter;
+
+    var today = DateTime.Today.ToString("yyyy-MM-dd");
+    var isWeekly = Model.Query.IsWeekly;
+    var timeBands = new[]
+    {
+        new FilterOption("morning", "Morning"),
+        new FilterOption("afternoon", "Afternoon"),
+        new FilterOption("evening", "Evening"),
+    };
 }
 
 <section class="hero wrap-wide" aria-labelledby="hero-heading">
@@ -69,6 +79,66 @@
             {
                 <a class="filter-clear" href="~/">Clear all</a>
             }
+        </div>
+
+        @* When (time-first search, §8.12 / CONTRACTS §3). Plain form fields inside the HTMX form
+           so the selection rides the swap + hx-push-url; site.js handles the reveals and the
+           date⇄weekday / band⇄custom mutual exclusion. No JS: everything visible, still submittable. *@
+        <div class="filter-when" data-when-control>
+            <div class="when-row">
+                <fieldset class="filter-group when-band">
+                    <legend class="filter-legend">When</legend>
+                    <div class="chip-set">
+                        @foreach (var band in timeBands)
+                        {
+                            <label class="chip">
+                                <input type="radio" name="timeOfDay" value="@band.Value"
+                                       data-when-band
+                                       @(string.Equals(Model.Query.TimeOfDay, band.Value, StringComparison.OrdinalIgnoreCase) ? "checked" : "") />
+                                <span class="chip-text">@band.Label</span>
+                            </label>
+                        }
+                        <button type="button" class="when-custom-btn" data-when-custom-toggle
+                                aria-expanded="@(Model.Query.HasCustomTime ? "true" : "false")">Custom time</button>
+                    </div>
+                </fieldset>
+
+                <label class="field when-date" data-when-date>
+                    <span class="field-label">On date</span>
+                    <input class="field-input when-date-input" type="date" name="date" min="@today"
+                           value="@(Model.Query.Date?.ToString("yyyy-MM-dd") ?? "")" />
+                </label>
+
+                <label class="toggle when-weekly-toggle">
+                    <input type="checkbox" data-when-weekly @(isWeekly ? "checked" : "") />
+                    <span class="toggle-label">Weekly on…</span>
+                </label>
+            </div>
+
+            <div class="when-custom" data-when-custom hidden="@(!Model.Query.HasCustomTime)">
+                <label class="field">
+                    <span class="field-label">From</span>
+                    <input class="field-input" type="time" name="startTime" value="@(Model.Query.StartTime ?? "")" />
+                </label>
+                <label class="field">
+                    <span class="field-label">To</span>
+                    <input class="field-input" type="time" name="endTime" value="@(Model.Query.EndTime ?? "")" />
+                </label>
+            </div>
+
+            <fieldset class="filter-group when-weekdays" data-when-weekdays hidden="@(!isWeekly)">
+                <legend class="filter-legend">Weekly on</legend>
+                <div class="chip-set">
+                    @foreach (var day in ApplyViewModel.DayOptions)
+                    {
+                        <label class="chip">
+                            <input type="checkbox" name="daysOfWeek" value="@day.Value"
+                                   @(Model.Query.IsWeekdaySelected(day.Value) ? "checked" : "") />
+                            <span class="chip-text">@day.Label</span>
+                        </label>
+                    }
+                </div>
+            </fieldset>
         </div>
 
         <div class="filter-facets">

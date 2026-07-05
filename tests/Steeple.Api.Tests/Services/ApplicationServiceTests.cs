@@ -691,6 +691,10 @@ public class ApplicationServiceTests
         public Task<AvailabilityReadResult<RoomAvailabilityDto>> GetPublicAvailabilityAsync(
             Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
+            IReadOnlyList<(Guid RoomId, string Timezone)> candidates, AvailabilityFilter filter, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>Config-free feature-flag stub: flags off unless explicitly enabled.</summary>

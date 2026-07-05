@@ -35,13 +35,14 @@ public sealed class ListingService : IListingService
     }
 
     /// <inheritdoc />
-    public async Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, CancellationToken ct = default)
+    public async Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, AvailabilityFilter? when = null, CancellationToken ct = default)
     {
         var bounds = _geofence.ResolveSearchBounds(query);
 
         var page = query.Page < 1 ? 1 : query.Page;
         // Clamp page size so an anonymous caller can't pull the whole table in one request.
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
+        var skip = (page - 1) * pageSize;
 
         // Distance is only meaningful when the query supplied a center; when present we push the
         // nearest-first ordering into the query so pagination returns the closest rooms, not page 1 by name.
@@ -56,12 +57,36 @@ public sealed class ListingService : IListingService
             Activities: query.Activities,
             Accessibility: query.Accessibility,
             Suburb: query.Suburb,
-            Skip: (page - 1) * pageSize,
+            Skip: skip,
             Take: pageSize,
-            Center: searchCenter);
+            Center: searchCenter,
+            When: when);
 
-        var rooms = await _rooms.SearchAsync(criteria, ct).ConfigureAwait(false);
-        var totalCount = await _rooms.CountAsync(criteria, ct).ConfigureAwait(false);
+        // Rooms to project + the true total. A When filter refines the cheap SQL prefilter against
+        // real free windows, so we fetch every prefiltered candidate, drop non-matchers, count and
+        // paginate afterwards (the SQL Skip/Take can't see availability). Plain search paginates in SQL.
+        IReadOnlyList<Room> rooms;
+        int totalCount;
+        IReadOnlyDictionary<Guid, MatchedWindowDto> matched;
+        if (when is not null)
+        {
+            var candidates = await _rooms.SearchAllAsync(criteria, ct).ConfigureAwait(false);
+            matched = await _availability
+                .FilterByWhenAsync(
+                    candidates.Where(r => r.Venue is not null).Select(r => (r.Id, r.Venue!.Timezone)).ToList(),
+                    when,
+                    ct)
+                .ConfigureAwait(false);
+            rooms = candidates.Where(r => matched.ContainsKey(r.Id)).ToList();
+            totalCount = rooms.Count;
+        }
+        else
+        {
+            rooms = await _rooms.SearchAsync(criteria, ct).ConfigureAwait(false);
+            totalCount = await _rooms.CountAsync(criteria, ct).ConfigureAwait(false);
+            matched = EmptyMatched;
+        }
+
         var ratingSummaries = await _ratings
             .GetVenueSummariesAsync(
                 rooms.Select(r => r.VenueId).Distinct().ToList(),
@@ -79,19 +104,20 @@ public sealed class ListingService : IListingService
                     var distance = venue is null
                         ? (double?)null
                         : GeoMath.DistanceMeters(c.Latitude, c.Longitude, venue.Latitude, venue.Longitude);
-                    return room.ToSummaryDto(distance, ratingSummaries.GetValueOrDefault(room.VenueId));
+                    return room.ToSummaryDto(distance, ratingSummaries.GetValueOrDefault(room.VenueId), matched.GetValueOrDefault(room.Id));
                 })
                 .OrderBy(dto => dto.DistanceMeters ?? double.MaxValue);
         }
         else
         {
             items = rooms
-                .Select(room => room.ToSummaryDto(rating: ratingSummaries.GetValueOrDefault(room.VenueId)))
+                .Select(room => room.ToSummaryDto(rating: ratingSummaries.GetValueOrDefault(room.VenueId), matchedWindow: matched.GetValueOrDefault(room.Id)))
                 .OrderBy(dto => dto.VenueName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(dto => dto.RoomName, StringComparer.OrdinalIgnoreCase);
         }
 
-        var itemList = items.ToList();
+        // Plain search already paged in SQL; the When path holds every survivor, so cut the page here.
+        var itemList = (when is not null ? items.Skip(skip).Take(pageSize) : items).ToList();
 
         var center = searchCenter ?? _geofence.Center;
 
@@ -106,7 +132,12 @@ public sealed class ListingService : IListingService
                 accessibility = query.Accessibility.ToNameList(),
                 bounds,
                 resultCount = totalCount,
-                zeroResult = totalCount == 0
+                zeroResult = totalCount == 0,
+                // Additive When-filter instrumentation (CONTRACTS §7).
+                hasWhenFilter = when is not null,
+                whenMode = when is null ? "none" : when.IsRecurring ? "recurring" : "oneOff",
+                timeOfDay = when?.TimeOfDayBand,
+                weekdayCount = when is { IsRecurring: true } ? WeekdayCount(when.Weekdays) : (int?)null
             },
             ct).ConfigureAwait(false);
 
@@ -119,6 +150,12 @@ public sealed class ListingService : IListingService
             Page: page,
             PageSize: pageSize);
     }
+
+    /// <summary>Empty match map for the plain-search path (no When filter, no matched windows).</summary>
+    private static readonly IReadOnlyDictionary<Guid, MatchedWindowDto> EmptyMatched = new Dictionary<Guid, MatchedWindowDto>();
+
+    /// <summary>Number of set weekdays in a recurring mask (analytics <c>weekdayCount</c>).</summary>
+    private static int WeekdayCount(Weekdays days) => System.Numerics.BitOperations.PopCount((uint)days);
 
     /// <inheritdoc />
     public async Task<RoomDetailDto?> GetByIdAsync(Guid roomId, CancellationToken ct = default)

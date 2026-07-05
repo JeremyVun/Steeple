@@ -64,7 +64,10 @@ public sealed class DiscoveryController : SteepleControllerBase
     /// Shareable listing detail page, addressed by venue + room slug (the canonical URL).
     /// </summary>
     [HttpGet("space/{venueSlug}/{roomSlug}")]
-    public async Task<IActionResult> Detail(string venueSlug, string roomSlug, [FromQuery] int reviewsPage = 1, CancellationToken ct = default)
+    public async Task<IActionResult> Detail(
+        string venueSlug, string roomSlug, [FromQuery] int reviewsPage = 1,
+        DateOnly? date = null, string? startTime = null, string? endTime = null,
+        [FromQuery] string[]? daysOfWeek = null, CancellationToken ct = default)
     {
         EnsureSessionId();
         var dto = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
@@ -74,6 +77,9 @@ public sealed class DiscoveryController : SteepleControllerBase
             return View("NotFound");
         }
 
+        // Thread any When selection carried in from a search result onto the apply CTA, so the
+        // slot the person picked survives the hop into the request form.
+        ViewData["ApplyWhenQuery"] = WhenCarry.ToQueryString(date, startTime, endTime, daysOfWeek);
         ViewData["Canonical"] = AbsoluteUrl($"/space/{dto.Venue.Slug}/{dto.RoomSlug}");
         ViewData["Description"] = BuildListingDescription(dto);
         // The in-product apply flow supersedes the mailto CTA when its flag is on (ROADMAP Phase 2).

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/theme.dart';
 import '../models/models.dart';
+import '../utils/dates.dart';
 import 'badges.dart';
 import 'chips.dart';
 
@@ -105,6 +106,16 @@ class ListingCard extends StatelessWidget {
                             ),
                           ),
                         ],
+                        if (summary.matchedWindow != null) ...[
+                          const SizedBox(height: SteepleTokens.space1),
+                          Text(
+                            _matchedWindowLabel(summary.matchedWindow!),
+                            style: SteepleTypography.bodySm.copyWith(
+                              color: colors.selectedFg,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: SteepleTokens.space1),
                         Text.rich(
                           TextSpan(
@@ -192,4 +203,12 @@ class _ListingPhoto extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "Free 6:00–9:00 PM" (plus "· Sep 8" for a one-off search's matched date)
+/// — the accent line for a card that came from a When filter (CONTRACTS §3).
+String _matchedWindowLabel(MatchedWindow window) {
+  final range = timeRange12(window.startTime, window.endTime);
+  final date = window.date;
+  return date == null ? 'Free $range' : 'Free $range · ${monthDay(date)}';
 }

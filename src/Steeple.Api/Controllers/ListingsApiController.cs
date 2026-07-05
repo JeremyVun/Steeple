@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
+using Steeple.Api.Utils;
 
 namespace Steeple.Api.Controllers;
 
@@ -18,16 +19,26 @@ namespace Steeple.Api.Controllers;
 [Route("api/v1")]
 public sealed class ListingsApiController : ControllerBase
 {
+    /// <summary>Time-first ("When") search is gated behind this flag (off → params ignored).</summary>
+    private const string AvailabilityFlag = "listing.availability";
+
+    /// <summary>The beachhead's single IANA timezone; the one-off <c>date</c> is validated venue-local against it.</summary>
+    private const string BeachheadTimezone = "America/New_York";
+
     private readonly IListingService _listings;
     private readonly IGeofencePolicy _geofence;
+    private readonly IFeatureFlags _flags;
+    private readonly TimeProvider _clock;
 
-    public ListingsApiController(IListingService listings, IGeofencePolicy geofence)
+    public ListingsApiController(IListingService listings, IGeofencePolicy geofence, IFeatureFlags flags, TimeProvider clock)
     {
         _listings = listings;
         _geofence = geofence;
+        _flags = flags;
+        _clock = clock;
     }
 
-    /// <summary>Geo-fenced search over published rooms.</summary>
+    /// <summary>Geo-fenced search over published rooms, optionally time-first ("When") filtered.</summary>
     [HttpGet("listings/search")]
     public async Task<ActionResult<ListingSearchResult>> Search([FromQuery] ListingSearchQuery query, CancellationToken ct)
     {
@@ -36,8 +47,53 @@ public sealed class ListingsApiController : ControllerBase
         query.Activities = ReadFlags("Activities", query.Activities);
         query.Accessibility = ReadFlags("Accessibility", query.Accessibility);
 
-        var result = await _listings.SearchAsync(query, ct);
+        // Resolve the When filter from the raw query (repeatable daysOfWeek bound like the flags
+        // params). Behind listing.availability: flag off → params ignored. Malformed → 400 invalid_when.
+        var todayLocal = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(BeachheadTimezone)).DateTime);
+        var when = WhenFilterBinder.Resolve(
+            new WhenFilterBinder.WhenQuery(
+                Date: Request.Query["date"],
+                TimeOfDay: Request.Query["timeOfDay"],
+                StartTime: Request.Query["startTime"],
+                EndTime: Request.Query["endTime"],
+                DayTokens: ReadTokens("daysOfWeek"),
+                DurationMinutes: Request.Query["durationMinutes"]),
+            todayLocal,
+            _flags.IsEnabled(AvailabilityFlag));
+
+        if (when.Error is { } detail)
+        {
+            return Problem(detail: detail, statusCode: StatusCodes.Status400BadRequest, extensions: new Dictionary<string, object?>
+            {
+                ["code"] = "invalid_when",
+            });
+        }
+
+        var result = await _listings.SearchAsync(query, when.Filter, ct);
         return Ok(result);
+    }
+
+    /// <summary>Reads repeated/comma-joined query values for <paramref name="key"/> as a flat token list.</summary>
+    private IReadOnlyList<string> ReadTokens(string key)
+    {
+        if (!Request.Query.TryGetValue(key, out StringValues raw) || raw.Count == 0)
+        {
+            return [];
+        }
+
+        var tokens = new List<string>();
+        foreach (var entry in raw)
+        {
+            if (string.IsNullOrWhiteSpace(entry))
+            {
+                continue;
+            }
+
+            tokens.AddRange(entry.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+
+        return tokens;
     }
 
     /// <summary>Full listing detail by venue + room slug (the canonical address).</summary>

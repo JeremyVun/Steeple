@@ -14,6 +14,9 @@ namespace Steeple.Api.Contracts;
 /// <param name="Take">Maximum number of results to return (page size).</param>
 /// <param name="Center">Optional search center. When set, results are ordered nearest-first so
 /// pagination returns the closest rooms rather than the alphabetically-first page.</param>
+/// <param name="When">Optional time-first ("When") filter. When set, the repository applies a cheap
+/// open-hours/blackout SQL prefilter; the service refines survivors against real free windows
+/// (open hours − blackouts − confirmed bookings) and paginates afterwards.</param>
 public record RoomSearchCriteria(
     BoundingBox Bounds,
     int? MinCapacity,
@@ -23,4 +26,5 @@ public record RoomSearchCriteria(
     string? Suburb,
     int Skip,
     int Take,
-    GeoPoint? Center = null);
+    GeoPoint? Center = null,
+    AvailabilityFilter? When = null);

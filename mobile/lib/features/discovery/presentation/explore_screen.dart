@@ -160,10 +160,16 @@ class _ResultsList extends ConsumerWidget {
           final room = result.items[index - 1];
           return ListingCard(
             summary: room,
-            onTap: () => context.goNamed(
-              RouteNames.listing,
-              pathParameters: {'venueSlug': room.venueSlug, 'roomSlug': room.roomSlug},
-            ),
+            onTap: () {
+              final when = ref.read(searchFiltersProvider).when;
+              context.goNamed(
+                RouteNames.listing,
+                pathParameters: {'venueSlug': room.venueSlug, 'roomSlug': room.roomSlug},
+                // Carry the search's When filter through so Apply can
+                // prefill its schedule (MOBILE_CONTRACTS §7).
+                extra: when.isAny ? null : when,
+              );
+            },
           );
         },
       ),

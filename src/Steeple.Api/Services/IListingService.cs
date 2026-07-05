@@ -8,8 +8,9 @@ public interface IListingService
     /// Searches published rooms within the geofenced area resolved from the query.
     /// </summary>
     /// <param name="query">The model-bound search request.</param>
+    /// <param name="when">The resolved time-first ("When") filter, or null for a plain search.</param>
     /// <param name="ct">Cancellation token.</param>
-    Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, CancellationToken ct = default);
+    Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, AvailabilityFilter? when = null, CancellationToken ct = default);
 
     /// <summary>
     /// Gets full detail for a single room by its identifier, or <c>null</c> if not found / not discoverable.

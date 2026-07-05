@@ -17,7 +17,7 @@ class FakeDiscoveryRepository implements DiscoveryRepository {
   @override
   Future<ListingSearchResult> search(SearchQuery query, {CancelToken? cancel}) async {
     final all = await fixtures.load('listing_search', ListingSearchResult.fromJson);
-    final items = all.items.where((room) {
+    var items = all.items.where((room) {
       if (query.freeOnly && !room.isFree) return false;
       final minCapacity = query.minCapacity;
       if (minCapacity != null && room.capacity < minCapacity) return false;
@@ -26,6 +26,30 @@ class FakeDiscoveryRepository implements DiscoveryRepository {
       if (!query.accessibility.every(room.accessibility.contains)) return false;
       return true;
     }).toList();
+
+    // A When filter (CONTRACTS §3, additive) narrows to a deterministic
+    // subset and stamps the free window that "satisfied" it, so the sheet
+    // and result cards are exercisable offline.
+    final hasWhen = query.date != null || query.daysOfWeek.isNotEmpty;
+    if (hasWhen) {
+      final startTime = query.startTime ??
+          (query.timeOfDay == null ? null : timeOfDayBands[query.timeOfDay]?.$1) ??
+          '18:00';
+      final endTime = query.endTime ??
+          (query.timeOfDay == null ? null : timeOfDayBands[query.timeOfDay]?.$2) ??
+          '21:00';
+      items = [
+        for (final room in items.take(2))
+          room.copyWith(
+            matchedWindow: MatchedWindow(
+              date: query.date,
+              startTime: startTime,
+              endTime: endTime,
+            ),
+          ),
+      ];
+    }
+
     return ListingSearchResult(
       items: items,
       totalCount: items.length,

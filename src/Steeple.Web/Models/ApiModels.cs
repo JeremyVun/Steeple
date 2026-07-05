@@ -50,6 +50,13 @@ public record RoomPhotoDto(Guid Id, string Url, string? ThumbUrl, string? CardUr
 /// <summary>Visible star-rating aggregate for a venue/listing surface.</summary>
 public record RatingSummaryDto(double AverageStars, int Count);
 
+/// <summary>
+/// The free window that satisfied a When (time-first) search (CONTRACTS §3): venue-local
+/// <c>HH:mm</c> times, with <see cref="Date"/> set for one-off searches and absent for recurring
+/// ones. Powers the card's "Free 6:00–9:00 PM" line and seeds a concrete apply prefill.
+/// </summary>
+public record MatchedWindowDto(DateOnly? Date, string StartTime, string EndTime);
+
 /// <summary>One public, revealed venue review comment.</summary>
 public record VenueReviewDto(int Stars, string? Comment, string RaterName, DateTimeOffset CreatedAtUtc);
 
@@ -79,7 +86,10 @@ public record RoomSummaryDto(
     IReadOnlyList<string> Activities,
     IReadOnlyList<string> Accessibility,
     double? DistanceMeters,
-    RatingSummaryDto? Rating);
+    RatingSummaryDto? Rating,
+    // Additive (availability plan commit 6): the free window that matched the active When filter,
+    // present only on searches with one — null otherwise so pre-When clients/searches degrade.
+    MatchedWindowDto? MatchedWindow = null);
 
 /// <summary>A venue projected for listing/detail presentation.</summary>
 public record VenueSummaryDto(
@@ -505,4 +515,92 @@ public class ListingSearchQuery
     public AccessibilityFeature Accessibility { get; set; } = AccessibilityFeature.None;
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 24;
+
+    // --- When filter (time-first search, CONTRACTS §3). Forwarded verbatim to the API by the
+    // --- search proxy; echoed back here so the "When" filter control re-hydrates from the URL.
+    // date + daysOfWeek are mutually exclusive (the API 400s if both are sent).
+
+    /// <summary>One-off date (venue-local <c>yyyy-MM-dd</c>). Mutually exclusive with <see cref="DaysOfWeek"/>.</summary>
+    public DateOnly? Date { get; set; }
+
+    /// <summary>Time band token: <c>morning | afternoon | evening</c> (alternative to an explicit range).</summary>
+    public string? TimeOfDay { get; set; }
+
+    /// <summary>Explicit venue-local start, <c>HH:mm</c> (alternative to <see cref="TimeOfDay"/>).</summary>
+    public string? StartTime { get; set; }
+
+    /// <summary>Explicit venue-local end, <c>HH:mm</c>.</summary>
+    public string? EndTime { get; set; }
+
+    /// <summary>Recurring weekday tokens (<c>monday</c>…<c>sunday</c>, repeatable). Non-empty ⇒ weekly mode.</summary>
+    public List<string> DaysOfWeek { get; set; } = [];
+
+    /// <summary>Requested slot length; the API defaults to 120 when absent.</summary>
+    public int? DurationMinutes { get; set; }
+
+    /// <summary>Weekly mode is implied by any selected weekday (no separate flag on the wire).</summary>
+    public bool IsWeekly => DaysOfWeek.Count > 0;
+
+    /// <summary>True when a custom time range is in play (drives the "Custom time" reveal on load).</summary>
+    public bool HasCustomTime => !string.IsNullOrEmpty(StartTime) || !string.IsNullOrEmpty(EndTime);
+
+    /// <summary>True when any When constraint is active (for the "Clear all" affordance).</summary>
+    public bool HasWhenFilter =>
+        Date.HasValue || DaysOfWeek.Count > 0 || !string.IsNullOrEmpty(TimeOfDay) || HasCustomTime;
+
+    /// <summary>Case-insensitive weekday-chip selection test.</summary>
+    public bool IsWeekdaySelected(string token) =>
+        DaysOfWeek.Any(d => string.Equals(d, token, StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>
+/// Builds the "carry-through" query string that threads the active When selection from a search
+/// result → the room detail page → the apply form, so a person who searched "Tuesday evenings"
+/// lands on a pre-filled request. Only the concrete pieces travel (date/startTime/endTime and
+/// repeatable daysOfWeek) — never the band token, which the matched window has already resolved.
+/// </summary>
+public static class WhenCarry
+{
+    private static readonly HashSet<string> Weekdays = new(StringComparer.OrdinalIgnoreCase)
+    { "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
+
+    /// <summary>Keeps only valid weekday tokens (lenient: bad values are dropped), lowercased and de-duped.</summary>
+    public static IReadOnlyList<string> ValidWeekdays(IEnumerable<string>? tokens) =>
+        (tokens ?? [])
+            .Where(Weekdays.Contains)
+            .Select(t => t.ToLowerInvariant())
+            .Distinct()
+            .ToList();
+
+    /// <summary>
+    /// A <c>?date=…&amp;startTime=…&amp;endTime=…&amp;daysOfWeek=…</c> suffix (or "" when nothing is
+    /// carried). Weekly wins: when any weekday is present the one-off <paramref name="date"/> is
+    /// dropped (the two are mutually exclusive on the wire).
+    /// </summary>
+    public static string ToQueryString(DateOnly? date, string? startTime, string? endTime, IEnumerable<string>? daysOfWeek)
+    {
+        var days = ValidWeekdays(daysOfWeek);
+        var parts = new List<string>();
+
+        if (days.Count > 0)
+        {
+            parts.AddRange(days.Select(d => $"daysOfWeek={Uri.EscapeDataString(d)}"));
+        }
+        else if (date is { } d)
+        {
+            parts.Add($"date={d:yyyy-MM-dd}");
+        }
+
+        if (!string.IsNullOrEmpty(startTime))
+        {
+            parts.Add($"startTime={Uri.EscapeDataString(startTime)}");
+        }
+
+        if (!string.IsNullOrEmpty(endTime))
+        {
+            parts.Add($"endTime={Uri.EscapeDataString(endTime)}");
+        }
+
+        return parts.Count == 0 ? "" : "?" + string.Join("&", parts);
+    }
 }

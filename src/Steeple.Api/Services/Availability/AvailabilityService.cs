@@ -205,6 +205,175 @@ public sealed class AvailabilityService : IAvailabilityService
             new ScheduleCheckResultDto(Available: conflicts.Count == 0, TotalOccurrences: instants.Count, Conflicts: conflicts));
     }
 
+    /// <summary>Recurring When-search horizon: a match must hold on every matching date in the next 28 days (CONTRACTS §3).</summary>
+    private const int RecurringHorizonDays = 28;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
+        IReadOnlyList<(Guid RoomId, string Timezone)> candidates,
+        AvailabilityFilter filter,
+        CancellationToken ct = default)
+    {
+        var result = new Dictionary<Guid, MatchedWindowDto>();
+        if (candidates.Count == 0)
+        {
+            return result;
+        }
+
+        var roomIds = candidates.Select(c => c.RoomId).ToList();
+        var now = _clock.GetUtcNow();
+
+        // Batch the three availability reads across the whole candidate set (no per-room round-trips).
+        var openHours = (await _repository.GetOpenHoursForRoomsAsync(roomIds, ct).ConfigureAwait(false)).ToLookup(h => h.RoomId);
+        var blackouts = (await _repository.GetBlackoutsForRoomsAsync(roomIds, ct).ConfigureAwait(false)).ToLookup(b => b.RoomId);
+
+        // Resolve the target venue-local dates per timezone and the UTC horizon covering them all.
+        var tzById = new Dictionary<string, TimeZoneInfo>();
+        var datesByTz = new Dictionary<string, IReadOnlyList<DateOnly>>();
+        DateTimeOffset? minFromUtc = null, maxToUtc = null;
+        foreach (var tzId in candidates.Select(c => c.Timezone).Distinct())
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(tzId);
+            tzById[tzId] = tz;
+            var todayLocal = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, tz).DateTime);
+            var dates = TargetDates(filter, todayLocal);
+            datesByTz[tzId] = dates;
+            if (dates.Count == 0)
+            {
+                continue;
+            }
+
+            var fromUtc = new DateTimeOffset(
+                TimeZoneInfo.ConvertTimeToUtc(dates.Min().ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+            var toUtc = new DateTimeOffset(
+                TimeZoneInfo.ConvertTimeToUtc(dates.Max().AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+            minFromUtc = minFromUtc is null || fromUtc < minFromUtc ? fromUtc : minFromUtc;
+            maxToUtc = maxToUtc is null || toUtc > maxToUtc ? toUtc : maxToUtc;
+        }
+
+        if (minFromUtc is null)
+        {
+            return result; // no target dates for any candidate (e.g. one-off date already past everywhere)
+        }
+
+        var occByRoom = (await _repository
+            .GetConfirmedOccurrencesForRoomsAsync(roomIds, minFromUtc.Value, maxToUtc!.Value, ct)
+            .ConfigureAwait(false)).ToLookup(o => o.RoomId);
+
+        foreach (var (roomId, tzId) in candidates)
+        {
+            var dates = datesByTz[tzId];
+            if (dates.Count == 0)
+            {
+                continue;
+            }
+
+            var tz = tzById[tzId];
+            var rules = new AvailabilityRules(
+                blackouts[roomId].Select(b => b.Date).ToHashSet(),
+                OpenHoursByWeekday(openHours[roomId].ToList()));
+            var busyByDate = BusyByDate(occByRoom[roomId].ToList(), tz);
+
+            (TimeOnly Start, TimeOnly End)? firstWindow = null;
+            var satisfiedEveryDate = true;
+            foreach (var date in dates)
+            {
+                var window = MatchFreeWindow(date, rules, busyByDate.GetValueOrDefault(date) ?? [], filter);
+                if (window is null)
+                {
+                    satisfiedEveryDate = false;
+                    break;
+                }
+
+                firstWindow ??= window;
+            }
+
+            if (satisfiedEveryDate && firstWindow is { } w)
+            {
+                // One-off carries the date; recurring omits it (window shown is the first matching date's).
+                result[roomId] = new MatchedWindowDto(
+                    filter.IsRecurring ? null : filter.Date, Format(w.Start), Format(w.End));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// The first free window on <paramref name="date"/> that satisfies the filter, or null. Explicit:
+    /// a window containing the requested range. Band: a window whose overlap with the band is at least
+    /// the duration. Any-window: a window at least the duration long. Free windows are sorted by start.
+    /// </summary>
+    private static (TimeOnly Start, TimeOnly End)? MatchFreeWindow(
+        DateOnly date,
+        AvailabilityRules rules,
+        IReadOnlyList<(TimeOnly Start, TimeOnly End)> busy,
+        AvailabilityFilter filter)
+    {
+        if (rules.BlackoutDates.Contains(date))
+        {
+            return null;
+        }
+
+        var open = rules.OpenHoursByWeekday.GetValueOrDefault(date.DayOfWeek) ?? [];
+        var free = AvailabilityCalculator.SubtractWindows(open, busy);
+        var duration = TimeSpan.FromMinutes(filter.DurationMinutes);
+
+        foreach (var w in free)
+        {
+            switch (filter.RangeKind)
+            {
+                case WhenRangeKind.Explicit:
+                    if (w.Start <= filter.RangeStart && w.End >= filter.RangeEnd)
+                    {
+                        return w;
+                    }
+
+                    break;
+                case WhenRangeKind.Band:
+                    var overlapStart = w.Start > filter.RangeStart ? w.Start : filter.RangeStart;
+                    var overlapEnd = w.End < filter.RangeEnd ? w.End : filter.RangeEnd;
+                    if (overlapEnd > overlapStart && overlapEnd - overlapStart >= duration)
+                    {
+                        return w;
+                    }
+
+                    break;
+                default:
+                    if (w.End - w.Start >= duration)
+                    {
+                        return w;
+                    }
+
+                    break;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The venue-local dates a filter targets: the one-off date (unless past for this tz), or every matching weekday in the 28-day horizon.</summary>
+    private static IReadOnlyList<DateOnly> TargetDates(AvailabilityFilter filter, DateOnly todayLocal)
+    {
+        if (!filter.IsRecurring)
+        {
+            var date = filter.Date!.Value;
+            return date < todayLocal ? [] : [date];
+        }
+
+        var dates = new List<DateOnly>();
+        for (var i = 0; i < RecurringHorizonDays; i++)
+        {
+            var date = todayLocal.AddDays(i);
+            if ((filter.Weekdays & (Weekdays)(1 << (int)date.DayOfWeek)) != 0)
+            {
+                dates.Add(date);
+            }
+        }
+
+        return dates;
+    }
+
     /// <summary>Open windows keyed by weekday, each day's list ordered by start time.</summary>
     private static IReadOnlyDictionary<DayOfWeek, IReadOnlyList<(TimeOnly Start, TimeOnly End)>> OpenHoursByWeekday(
         IReadOnlyList<RoomOpenHours> hours) =>

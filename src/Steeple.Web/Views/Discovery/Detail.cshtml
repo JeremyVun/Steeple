@@ -45,6 +45,9 @@
         || !string.IsNullOrWhiteSpace(venue.TransitInfo);
     var reviews = ViewData["VenueReviews"] as VenueReviewPageDto
         ?? new VenueReviewPageDto([], 0, 1, 5);
+    // When (time-first search) selection carried in from a result card, appended to the apply link.
+    var applyWhen = ViewData["ApplyWhenQuery"] as string ?? "";
+    var applyUrl = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/apply") + applyWhen;
     var hasReviewPrevious = reviews.Page > 1;
     var hasReviewNext = reviews.Page * reviews.PageSize < reviews.TotalCount;
     var previousReviewsUrl = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}?reviewsPage={reviews.Page - 1}#reviews");
@@ -240,7 +243,7 @@
                         <p class="avail-preview-loading" role="status">Loading availability…</p>
                     </div>
                     <noscript>
-                        <p><a href="@Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/apply")">See available dates and ask to book</a></p>
+                        <p><a href="@applyUrl">See available dates and ask to book</a></p>
                     </noscript>
                 </section>
             }
@@ -365,7 +368,7 @@
 
                 @if ((ViewData["ApplyEnabled"] as bool?) == true)
                 {
-                    <a class="btn btn-primary btn-block" href="@Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}/apply")">Ask to book</a>
+                    <a class="btn btn-primary btn-block" href="@applyUrl">Ask to book</a>
                     <p class="apply-note">@venue.Name reads every request and decides — most reply within a few days.</p>
                     @if (hasContact)
                     {

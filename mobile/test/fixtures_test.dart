@@ -27,6 +27,12 @@ void main() {
       expect(result.items[0].rating?.averageStars, 4.75);
       expect(result.center?.latitude, closeTo(38.9012, 0.0001));
       expect(result.appliedBounds.minLat, closeTo(38.85, 0.0001));
+      // Additive matchedWindow (CONTRACTS §3, availability plan commit 6):
+      // present only on the item stamped with one.
+      expect(result.items[0].matchedWindow?.date, '2026-09-08');
+      expect(result.items[0].matchedWindow?.startTime, '18:00');
+      expect(result.items[0].matchedWindow?.endTime, '21:00');
+      expect(result.items[1].matchedWindow, isNull);
     });
   });
 

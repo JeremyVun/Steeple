@@ -116,6 +116,9 @@ public class ListingServiceTests
         public Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Room>>([]);
 
+        public Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Room>>([]);
+
         public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
             Task.FromResult(0);
 
@@ -147,6 +150,10 @@ public class ListingServiceTests
         public Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(
             Guid roomId, ScheduleDto? schedule, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
+            IReadOnlyList<(Guid RoomId, string Timezone)> candidates, AvailabilityFilter filter, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, MatchedWindowDto>>(new Dictionary<Guid, MatchedWindowDto>());
     }
 
     private sealed class NullAnalyticsSink : IAnalyticsSink

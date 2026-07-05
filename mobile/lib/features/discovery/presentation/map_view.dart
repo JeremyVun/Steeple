@@ -120,13 +120,19 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
               child: ListingCard(
                 key: ValueKey(selected.roomId),
                 summary: selected,
-                onTap: () => context.goNamed(
-                  RouteNames.listing,
-                  pathParameters: {
-                    'venueSlug': selected.venueSlug,
-                    'roomSlug': selected.roomSlug,
-                  },
-                ),
+                onTap: () {
+                  final when = ref.read(searchFiltersProvider).when;
+                  context.goNamed(
+                    RouteNames.listing,
+                    pathParameters: {
+                      'venueSlug': selected.venueSlug,
+                      'roomSlug': selected.roomSlug,
+                    },
+                    // Carry the search's When filter through so Apply can
+                    // prefill its schedule (MOBILE_CONTRACTS §7).
+                    extra: when.isAny ? null : when,
+                  );
+                },
               ),
             ),
           ),

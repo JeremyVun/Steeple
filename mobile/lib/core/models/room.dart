@@ -51,6 +51,21 @@ abstract class VenueReviewPage with _$VenueReviewPage {
       _$VenueReviewPageFromJson(json);
 }
 
+/// The free window that satisfied a search's When filter (CONTRACTS §3,
+/// additive — availability plan commit 6): `date` is set for one-off
+/// searches, absent for recurring ones.
+@freezed
+abstract class MatchedWindow with _$MatchedWindow {
+  const factory MatchedWindow({
+    String? date,
+    required String startTime,
+    required String endTime,
+  }) = _MatchedWindow;
+
+  factory MatchedWindow.fromJson(Map<String, dynamic> json) =>
+      _$MatchedWindowFromJson(json);
+}
+
 /// A room projected as a search-result card (`GET /listings/search`,
 /// `ListingCard`).
 @freezed
@@ -74,6 +89,9 @@ abstract class RoomSummary with _$RoomSummary {
     @Default(<String>[]) List<String> accessibility,
     double? distanceMeters,
     RatingSummary? rating,
+
+    /// Present only on searches with a When filter (additive).
+    MatchedWindow? matchedWindow,
   }) = _RoomSummary;
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) =>

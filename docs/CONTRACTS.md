@@ -88,9 +88,28 @@ Response `ListingSearchResult`:
 
 `RoomSummary`: `roomId, venueId, roomSlug, venueSlug, roomName, venueName, suburb,
 primaryPhotoUrl?, capacity, isFree, pricePerHour?, currency, latitude, longitude,
-activities[], accessibility[], distanceMeters?, rating?{averageStars, count}`. `rating`
-is the venue-level aggregate across all rooms and appears only when at least one rating is
-revealed.
+activities[], accessibility[], distanceMeters?, rating?{averageStars, count},
+matchedWindow?{date?, startTime, endTime}`. `rating` is the venue-level aggregate across
+all rooms and appears only when at least one rating is revealed. `matchedWindow` is
+additive *(availability plan commit 6)* and present only on searches with a When filter:
+the free window that satisfied the filter ("Free 6–9 PM"); `date` is set for one-off
+searches, absent for recurring ones.
+
+**When filter (time-first search) ✅ *(built 2026-07-05 — availability plan commit 6)*:**
+
+- One-off: `date=yyyy-MM-dd` (venue-local, ≥ today) plus either
+  `timeOfDay=morning|afternoon|evening` (bands 08:00–12:00 / 12:00–17:00 / 17:00–22:00) or
+  explicit `startTime`/`endTime` (`HH:mm`); `date` alone means "any free window that day".
+- Recurring: repeatable `daysOfWeek=tuesday&daysOfWeek=thursday` (§2.1 tokens, bound
+  manually like the flags params) plus the same band/range; a room matches only when the
+  slot is free on **every** matching date within the next 28 days (horizon fixed — honest
+  against real bookings, cheap at beachhead scale).
+- `durationMinutes` (default 120): a room matches only if a free window fits the duration;
+  with an explicit `startTime`/`endTime` the requested range itself must be free.
+- Semantics: free = open hours − blackouts − **confirmed** occurrences (same engine as §6
+  guest reads). Malformed When params → `400 invalid_when` (never silently ignored).
+  `date` + `daysOfWeek` together → `400 invalid_when`. Behind `listing.availability`
+  (flag off: When params are ignored and results carry no `matchedWindow`).
 
 ### `GET /api/v1/listings/by-slug/{venueSlug}/{roomSlug}` ✅ · `GET /api/v1/listings/{id}` ✅
 Response `RoomDetail`: summary fields + `description, houseRules, amenities[],
@@ -385,7 +404,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 
 | Event | Source | Key props |
 |---|---|---|
-| `search_performed` ✅ | server | filters, resultCount, zeroResult |
+| `search_performed` ✅ | server | filters, resultCount, zeroResult (+ additive: hasWhenFilter, whenMode `oneOff\|recurring\|none`, timeOfDay?, weekdayCount?) |
 | `listing_viewed` ✅ | server | roomId, venueId |
 | `map_interacted` ✅ | client | kind (pan/zoom/pin) |
 | `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |

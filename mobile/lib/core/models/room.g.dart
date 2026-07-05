@@ -53,6 +53,20 @@ Map<String, dynamic> _$VenueReviewPageToJson(_VenueReviewPage instance) =>
       'pageSize': instance.pageSize,
     };
 
+_MatchedWindow _$MatchedWindowFromJson(Map<String, dynamic> json) =>
+    _MatchedWindow(
+      date: json['date'] as String?,
+      startTime: json['startTime'] as String,
+      endTime: json['endTime'] as String,
+    );
+
+Map<String, dynamic> _$MatchedWindowToJson(_MatchedWindow instance) =>
+    <String, dynamic>{
+      'date': instance.date,
+      'startTime': instance.startTime,
+      'endTime': instance.endTime,
+    };
+
 _RoomSummary _$RoomSummaryFromJson(Map<String, dynamic> json) => _RoomSummary(
   roomId: json['roomId'] as String,
   venueId: json['venueId'] as String,
@@ -82,6 +96,9 @@ _RoomSummary _$RoomSummaryFromJson(Map<String, dynamic> json) => _RoomSummary(
   rating: json['rating'] == null
       ? null
       : RatingSummary.fromJson(json['rating'] as Map<String, dynamic>),
+  matchedWindow: json['matchedWindow'] == null
+      ? null
+      : MatchedWindow.fromJson(json['matchedWindow'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
@@ -104,6 +121,7 @@ Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
       'accessibility': instance.accessibility,
       'distanceMeters': instance.distanceMeters,
       'rating': instance.rating,
+      'matchedWindow': instance.matchedWindow,
     };
 
 _RoomPhoto _$RoomPhotoFromJson(Map<String, dynamic> json) => _RoomPhoto(

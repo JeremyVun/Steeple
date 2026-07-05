@@ -18,11 +18,17 @@ class ListingDetailScreen extends ConsumerWidget {
   const ListingDetailScreen({
     required this.venueSlug,
     required this.roomSlug,
+    this.whenSelection,
     super.key,
   });
 
   final String venueSlug;
   final String roomSlug;
+
+  /// The search's When filter (CONTRACTS §3), carried through as router
+  /// `extra` when the tapped card came from one — forwarded to Apply so it
+  /// can prefill the schedule (MOBILE_CONTRACTS §7).
+  final WhenFilter? whenSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,18 +42,29 @@ class ListingDetailScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(
           listingDetailProvider((venueSlug: venueSlug, roomSlug: roomSlug)),
         ),
-        data: (room) => _Detail(room: room, venueSlug: venueSlug, roomSlug: roomSlug),
+        data: (room) => _Detail(
+          room: room,
+          venueSlug: venueSlug,
+          roomSlug: roomSlug,
+          whenSelection: whenSelection,
+        ),
       ),
     );
   }
 }
 
 class _Detail extends ConsumerWidget {
-  const _Detail({required this.room, required this.venueSlug, required this.roomSlug});
+  const _Detail({
+    required this.room,
+    required this.venueSlug,
+    required this.roomSlug,
+    this.whenSelection,
+  });
 
   final RoomDetail room;
   final String venueSlug;
   final String roomSlug;
+  final WhenFilter? whenSelection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -230,6 +247,7 @@ class _Detail extends ConsumerWidget {
                       ? () => context.goNamed(
                             RouteNames.apply,
                             pathParameters: {'venueSlug': venueSlug, 'roomSlug': roomSlug},
+                            extra: whenSelection,
                           )
                       : null,
                   child: const Text('Ask to book'),

@@ -28,6 +28,20 @@ public interface IAvailabilityRepository
     Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesAsync(
         Guid roomId, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
 
+    /// <summary>Open hours for many rooms at once (time-first search refinement); flat, unordered.</summary>
+    Task<IReadOnlyList<RoomOpenHours>> GetOpenHoursForRoomsAsync(IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default);
+
+    /// <summary>Blackout dates for many rooms at once (time-first search refinement); flat, unordered.</summary>
+    Task<IReadOnlyList<RoomBlackoutDate>> GetBlackoutsForRoomsAsync(IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// The <b>confirmed</b> busy occurrences for many rooms overlapping <c>[fromUtc, toUtc)</c>
+    /// (one query for the whole candidate set — the time-first search refinement batches here rather
+    /// than issuing a query per room). Same semantics as the single-room read.
+    /// </summary>
+    Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
+
     /// <summary>
     /// Replaces the room's entire rule set (delete existing rows, insert the supplied ones) in one
     /// SaveChanges — a single implicit transaction, so a partial write is never visible.
