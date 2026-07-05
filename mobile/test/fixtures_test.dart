@@ -288,6 +288,66 @@ void main() {
       expect(page.items[1].bookingId, isNull);
       expect(page.items[0].organizer.ratingSummary?.completedBookings, 3);
     });
+
+    test('the pending item carries an additive host-review conflicts block', () {
+      final page = Paged<Application>.fromJson(
+        _loadJson('manage_applications_page.json'),
+        (json) => Application.fromJson(json),
+      );
+
+      // Additive (CONTRACTS §6): null on the decided item, present on pending.
+      expect(page.items[0].conflicts, isNull);
+      final conflicts = page.items[1].conflicts;
+      expect(conflicts, isNotNull);
+      expect(conflicts!.totalOccurrences, 4);
+      expect(conflicts.conflicts, hasLength(2));
+      expect(
+        conflicts.conflicts.map((c) => c.reason),
+        containsAll(<String>['booked', 'blackout']),
+      );
+      expect(conflicts.pendingOverlaps, hasLength(2));
+      expect(conflicts.pendingOverlaps[0].organizerName, 'Priya Patel');
+      expect(conflicts.pendingOverlaps[0].overlappingDateCount, 2);
+      // Adapts to the shared verdict shape — 2 of 4 clash ⇒ not available.
+      expect(conflicts.checkResult.available, isFalse);
+      expect(conflicts.checkResult.totalOccurrences, 4);
+    });
+
+    test('tolerates a legacy payload with no conflicts', () {
+      final json = _loadJson('manage_applications_page.json');
+      final items = (json['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+      items[1].remove('conflicts');
+
+      final application = Application.fromJson(items[1]);
+
+      expect(application.conflicts, isNull);
+    });
+  });
+
+  group('host_calendar.json', () {
+    test('round-trips VenueCalendar', () {
+      final calendar = VenueCalendar.fromJson(_loadJson('host_calendar.json'));
+
+      expect(calendar.timezone, 'America/New_York');
+      expect(calendar.from, '2026-07-05');
+      expect(calendar.to, '2026-07-11');
+      expect(calendar.rooms, hasLength(2));
+      expect(calendar.rooms[0].name, 'Fellowship Hall');
+      expect(calendar.occurrences, hasLength(6));
+      expect(calendar.occurrences[0].organizerName, 'Priya Patel');
+      expect(calendar.occurrences[0].startTime, '18:00');
+      // Every occurrence date falls inside the echoed window.
+      for (final o in calendar.occurrences) {
+        expect(o.localDate.compareTo(calendar.from) >= 0, isTrue);
+        expect(o.localDate.compareTo(calendar.to) <= 0, isTrue);
+      }
+      // Two pending overlays; the first spans two dates.
+      expect(calendar.pending, hasLength(2));
+      expect(calendar.pending[0].organizerName, 'Marcus Lee');
+      expect(calendar.pending[0].dates, hasLength(2));
+      expect(calendar.pending[1].applicationId,
+          'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+    });
   });
 
   group('room_open_hours.json', () {

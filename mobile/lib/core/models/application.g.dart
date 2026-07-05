@@ -79,6 +79,44 @@ Map<String, dynamic> _$ApplicationMessageToJson(_ApplicationMessage instance) =>
       'sentAtUtc': instance.sentAtUtc.toIso8601String(),
     };
 
+_PendingOverlap _$PendingOverlapFromJson(Map<String, dynamic> json) =>
+    _PendingOverlap(
+      applicationId: json['applicationId'] as String,
+      organizerName: json['organizerName'] as String,
+      overlappingDateCount: (json['overlappingDateCount'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$PendingOverlapToJson(_PendingOverlap instance) =>
+    <String, dynamic>{
+      'applicationId': instance.applicationId,
+      'organizerName': instance.organizerName,
+      'overlappingDateCount': instance.overlappingDateCount,
+    };
+
+_ApplicationConflicts _$ApplicationConflictsFromJson(
+  Map<String, dynamic> json,
+) => _ApplicationConflicts(
+  totalOccurrences: (json['totalOccurrences'] as num).toInt(),
+  conflicts:
+      (json['conflicts'] as List<dynamic>?)
+          ?.map((e) => ScheduleConflict.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <ScheduleConflict>[],
+  pendingOverlaps:
+      (json['pendingOverlaps'] as List<dynamic>?)
+          ?.map((e) => PendingOverlap.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const <PendingOverlap>[],
+);
+
+Map<String, dynamic> _$ApplicationConflictsToJson(
+  _ApplicationConflicts instance,
+) => <String, dynamic>{
+  'totalOccurrences': instance.totalOccurrences,
+  'conflicts': instance.conflicts,
+  'pendingOverlaps': instance.pendingOverlaps,
+};
+
 _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
   id: json['id'] as String,
   roomId: json['roomId'] as String,
@@ -104,6 +142,11 @@ _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
           ?.map((e) => ApplicationMessage.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const <ApplicationMessage>[],
+  conflicts: json['conflicts'] == null
+      ? null
+      : ApplicationConflicts.fromJson(
+          json['conflicts'] as Map<String, dynamic>,
+        ),
 );
 
 Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
@@ -126,6 +169,7 @@ Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
       'bookingId': instance.bookingId,
       'messageCount': instance.messageCount,
       'messages': instance.messages,
+      'conflicts': instance.conflicts,
     };
 
 _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>

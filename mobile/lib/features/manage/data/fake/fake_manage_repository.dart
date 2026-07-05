@@ -1,5 +1,6 @@
 import '../../../../core/fixtures/fixture_loader.dart';
 import '../../../../core/models/models.dart';
+import '../../../../core/utils/dates.dart';
 import '../manage_repository.dart';
 
 /// Fixture-backed manage (MOBILE_CONTRACTS §11). `saveRoom`/`decide` fold the
@@ -79,6 +80,33 @@ class FakeManageRepository implements ManageRepository {
         _applicationOverrides[application.id] ?? application,
     ].where((application) => status == null || application.status == status).toList();
     return Paged(items: items, totalCount: items.length, page: 1, pageSize: page0.pageSize);
+  }
+
+  /// Serves `host_calendar.json`, re-dated so the fixture's first day lands on
+  /// the requested [from] (same trick as `FakeListingRepository.availability`):
+  /// every occurrence/pending date shifts by one constant delta, so the fake
+  /// reads as "live" this week whatever the calendar date. Rooms/order/status
+  /// stay verbatim.
+  @override
+  Future<VenueCalendar> calendar(
+    String venueId, {
+    required String from,
+    required String to,
+  }) async {
+    final base = await fixtures.load('host_calendar', VenueCalendar.fromJson);
+    final delta = daysBetween(base.from, from);
+    return base.copyWith(
+      venueId: venueId,
+      from: from,
+      to: to,
+      occurrences: [
+        for (final o in base.occurrences) o.copyWith(localDate: addDays(o.localDate, delta)),
+      ],
+      pending: [
+        for (final p in base.pending)
+          p.copyWith(dates: [for (final d in p.dates) addDays(d, delta)]),
+      ],
+    );
   }
 
   @override

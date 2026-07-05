@@ -159,6 +159,8 @@ public class ListingServiceWhenTests
         public Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DayOpenHoursDto>?>(null);
         public Task<AvailabilityReadResult<RoomAvailabilityDto>> GetPublicAvailabilityAsync(Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(Guid roomId, ScheduleDto? schedule, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(Guid roomId, ScheduleDto schedule, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class NullAnalytics : IAnalyticsSink

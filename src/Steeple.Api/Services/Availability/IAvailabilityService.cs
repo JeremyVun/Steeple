@@ -67,7 +67,35 @@ public interface IAvailabilityService
         IReadOnlyList<(Guid RoomId, string Timezone)> candidates,
         AvailabilityFilter filter,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// The manager-review conflict core for a <b>stored</b> application schedule (CONTRACTS §6):
+    /// total occurrences plus the same rules + confirmed-booking conflicts the submit-time block
+    /// computes. Returns <c>null</c> when the room has no availability rules (nothing to classify).
+    /// No scoping — the caller (<see cref="Applications.ApplicationService"/>) has already verified
+    /// the manager. Never re-validates the schedule (a stored one may since have slid into the past)
+    /// — it materializes as-is; pending-demand overlaps are composed by the caller.
+    /// </summary>
+    Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(
+        Guid roomId, ScheduleDto schedule, CancellationToken ct = default);
+
+    /// <summary>
+    /// The venue calendar (CONTRACTS §6): confirmed <c>Scheduled|Occurred</c> occurrences plus
+    /// undecided-application overlays across every room of a managed venue over <c>[from, to]</c>
+    /// (venue-local dates, all room statuses). Manager-scoped — an unknown venue or a non-manager
+    /// caller both answer <c>NotFound</c> (no existence leak). <c>from</c>/<c>to</c> default to
+    /// venue-local today .. +27 days; <c>invalid_range</c> when <c>to</c> precedes <c>from</c> or
+    /// the span exceeds 92 days.
+    /// </summary>
+    Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(
+        Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
 }
+
+/// <summary>
+/// The rules + confirmed-booking conflict digest for one stored application schedule (the caller
+/// wraps it with pending-demand overlaps into an <see cref="ApplicationConflictsDto"/>).
+/// </summary>
+public sealed record StoredScheduleConflicts(int TotalOccurrences, IReadOnlyList<ScheduleConflictDto> Conflicts);
 
 /// <summary>
 /// Outcome of a public availability read: a value, a stable <c>invalid_*</c> error code the

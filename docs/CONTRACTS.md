@@ -366,6 +366,22 @@ All times are venue-local wall-clock `HH:mm` (24h) strings; weekday tokens per �
   (legacy, pre-gate) skip the block entirely. The `booking_occurrences` exclusion constraint
   remains the final race authority (`slot_taken` on approval is unchanged).
 
+**Host review & venue calendar ✅ *(built 2026-07-05 — availability plan commit 7)*:**
+
+- `Application` gains additive `conflicts?` — **manager detail reads only** (never on lists or
+  organizer-scoped reads; pending demand and other organizers stay host-only):
+  `{totalOccurrences, conflicts: [{date, reason}], pendingOverlaps: [{applicationId,
+  organizerName, overlappingDateCount}]}`. `conflicts` uses the §"Guest availability reads"
+  engine (rules + confirmed bookings); `pendingOverlaps` lists other undecided applications
+  for the same room whose projected dates + time ranges intersect this one's. Present only on
+  undecided applications; null otherwise or when the room has no availability rules.
+- `GET /api/v1/manage/venues/{id}/calendar?from&to` ✅ (manager-scoped; range ≤ 92 days →
+  `400 invalid_range`) → `VenueCalendarDto`: `{venueId, timezone, from, to, rooms: [{id,
+  name}], occurrences: [{bookingId, roomId, organizerName, localDate, startTime, endTime,
+  status}], pending: [{applicationId, roomId, organizerName, startTime, endTime, dates: []}]}`.
+  Occurrences are confirmed bookings' scheduled/occurred occurrences in the range; `pending`
+  projects undecided applications' would-be dates (an overlay, not a commitment).
+
 ### Photos
 - `POST /api/v1/manage/rooms/{id}/photos` ✅ — multipart `file` (≤10 MB, enforced by Kestrel
   before the pipeline runs) + optional `caption`. Server decodes (decode failure → `400

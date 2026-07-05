@@ -588,3 +588,93 @@ public sealed class ConflictSummaryViewModel
     public string? NextAction =>
         Role == "danger" ? "Pick another time — the calendar shows what's free." : null;
 }
+
+// ------------------------------------------------------------------------------------------------
+// Host review (CONTRACTS §6 "Host review & venue calendar"). The provider-side application detail
+// gets the manager-only conflict summary + a CSS-only mini-week strip built from the same payload
+// the page already fetched — no extra lazy fetch (§8.13: render exactly what the server returned).
+// ------------------------------------------------------------------------------------------------
+
+/// <summary>One Su–Sa column of the host-review mini-week strip.</summary>
+public sealed record MiniWeekCell(string DayLabel, string DayInitial, bool Occupied, bool Conflicted)
+{
+    /// <summary>The occupancy/state class (colours from the §2.3 status tokens).</summary>
+    public string CssClass => (Occupied, Conflicted) switch
+    {
+        (true, true) => "cal-mini-clash",
+        (true, false) => "cal-mini-occupied",
+        _ => "cal-mini-free",
+    };
+
+    /// <summary>Colour-independent state, carried in the accessible name (§9.5).</summary>
+    public string StateLabel => (Occupied, Conflicted) switch
+    {
+        (true, true) => "requested, clashes",
+        (true, false) => "requested",
+        _ => "not this day",
+    };
+}
+
+/// <summary>Host-side review helpers: the conflict verdict adapter + the mini-week strip.</summary>
+public static class HostReviewDisplay
+{
+    private static readonly string[] Tokens =
+        ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+    private static readonly string[] Labels =
+        ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    private static readonly string[] Initials = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+    /// <summary>
+    /// Adapts the host-only <see cref="ApplicationConflictsDto"/> to the shared verdict card model
+    /// (§8.13) — the same all-clear / partial / clash banner the apply flow uses.
+    /// </summary>
+    public static ConflictSummaryViewModel ToVerdict(ApplicationConflictsDto conflicts) =>
+        new()
+        {
+            Result = new ScheduleCheckResultDto(
+                Available: conflicts.Conflicts.Count == 0,
+                TotalOccurrences: conflicts.TotalOccurrences,
+                Conflicts: conflicts.Conflicts),
+        };
+
+    /// <summary>
+    /// Seven Su–Sa cells marking which weekdays the request occupies (from the schedule) and which
+    /// of those clash (from the conflict dates). A one-off marks its single weekday; a weekly
+    /// request marks each selected day.
+    /// </summary>
+    public static IReadOnlyList<MiniWeekCell> BuildMiniWeek(ScheduleDto schedule, ApplicationConflictsDto? conflicts)
+    {
+        var occupied = new bool[7];
+        if (schedule.Frequency == "recurringWeekly" && schedule.DaysOfWeek is { Count: > 0 } days)
+        {
+            foreach (var token in days)
+            {
+                var i = Array.FindIndex(Tokens, t => string.Equals(t, token, StringComparison.OrdinalIgnoreCase));
+                if (i >= 0)
+                {
+                    occupied[i] = true;
+                }
+            }
+        }
+        else
+        {
+            occupied[(int)schedule.StartDate.DayOfWeek] = true;
+        }
+
+        var clashed = new bool[7];
+        foreach (var clash in conflicts?.Conflicts ?? [])
+        {
+            clashed[(int)clash.Date.DayOfWeek] = true;
+        }
+
+        var cells = new List<MiniWeekCell>(7);
+        for (var i = 0; i < 7; i++)
+        {
+            cells.Add(new MiniWeekCell(Labels[i], Initials[i], occupied[i], occupied[i] && clashed[i]));
+        }
+
+        return cells;
+    }
+}

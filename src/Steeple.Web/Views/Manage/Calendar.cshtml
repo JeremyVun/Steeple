@@ -1,0 +1,14 @@
+@model CalendarViewModel
+
+<section class="inbox-page wrap">
+    <header class="inbox-head">
+        <h1>Calendar</h1>
+        <partial name="_ManageTabs" model="@("calendar")" />
+    </header>
+
+    @* One stable swap target: every venue/room/nav control inside re-renders as one fragment
+       (Discovery pattern). No-JS falls back to full-page GETs of the same URLs. *@
+    <div id="calendar-grid" class="cal-shell">
+        <partial name="_CalendarGrid" model="Model" />
+    </div>
+</section>

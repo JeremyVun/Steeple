@@ -41,6 +41,10 @@ class _PendingManageRepository implements ManageRepository {
       Completer<Paged<Application>>().future;
 
   @override
+  Future<VenueCalendar> calendar(String venueId, {required String from, required String to}) =>
+      Completer<VenueCalendar>().future;
+
+  @override
   Future<Application> decide(String id, {required bool approve, String? message}) =>
       Completer<Application>().future;
 }

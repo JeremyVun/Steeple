@@ -162,6 +162,7 @@ features can import them without touching `app/router.dart` (§2 dependency cont
 | `manageRequest` | `/manage/requests/:id` | (pushed, root navigator) | ✔ | Approve/decline one application |
 | `manageRoom` | `/manage/rooms/:id` | (pushed, root navigator) | ✔ | Basic room edit + publish-state actions; "Hours & blackouts" tile → `manageRoomHours` |
 | `manageRoomHours` | `/manage/rooms/:id/hours` | (pushed, root navigator) | ✔ | Open-hours (7 days Sunday-first) + blackout editor; one replace-all `PUT` (`saveOpenHours`) with local pre-validation (≤6 windows/day, end>start, no intra-day overlap) |
+| `manageCalendar` | `/manage/calendar` | (pushed, root navigator) | ✔ | Agenda-first venue calendar (CONTRACTS §6); venue selector when >1 managed venue, a 7-day week strip over a day-grouped agenda (confirmed = solid/sage, pending = dashed/warning → `manageRequest`), prev/next week nav. Entry point: calendar action on the `manage` home AppBar. Fetches exactly the visible week (`calendar` from..+6d) |
 
 Redirect logic (in order): `forceUpgrade` flag → `/upgrade`; guarded route while
 `SignedOut` → `/signin?from=…`; while `SessionUnknown` → hold on splash (must resolve
@@ -250,8 +251,20 @@ abstract class ManageRepository {
   Future<RoomAvailabilityRules> openHours(String roomId);                // GET /manage/rooms/{id}/availability
   Future<RoomAvailabilityRules> saveOpenHours(String roomId, RoomAvailabilityRules rules); // PUT (replace-all)
   Future<Paged<Application>> applications({String? status, int page = 1}); // GET /manage/applications
+  Future<VenueCalendar> calendar(String venueId, {required String from, required String to}); // GET /manage/venues/{id}/calendar?from&to (≤92d)
   Future<Application> decide(String id, {required bool approve, String? message}); // POST /applications/{id}/decision
 }
+// Application (manager detail read only) additionally carries `conflicts:
+// ApplicationConflicts?` (additive; null on lists/organizer reads/decided apps):
+// {totalOccurrences, conflicts:[ScheduleConflict{date,reason}], pendingOverlaps:
+// [PendingOverlap{applicationId,organizerName,overlappingDateCount}]}. `checkResult`
+// adapts it to the shared ScheduleCheckResult the §8.13 verdict card renders.
+// VenueCalendar (core/models/venue_calendar.dart) = {venueId, timezone, from, to,
+// rooms:[CalendarRoomRef{id,name}], occurrences:[CalendarOccurrence{bookingId,roomId,
+// organizerName,localDate,startTime,endTime,status}], pending:[CalendarPending{
+// applicationId,roomId,organizerName,startTime,endTime,dates:[]}]} — venue-local
+// wall-clock (dates yyyy-MM-dd, times HH:mm; never DateTime). Screen-local family
+// notifier `manageCalendarProvider((venueId,from))` fetches the visible week only.
 // core/push
 abstract class DevicesRepository {
   Future<void> register(String fcmToken, String platform);               // POST /me/devices
@@ -274,7 +287,7 @@ feature/agent may touch; everything else is private):
 | | `unreadCountProvider` | drives the tab badge |
 | bookings | `myBookingsProvider`, `bookingDetailProvider(id)` | `AsyncNotifier` families |
 | profile | `meProvider` | `AsyncNotifier<UserProfile>` |
-| manage | `manageRepositoryProvider`, `manageVenuesProvider` | `manageVenuesProvider` is `AsyncNotifier<List<ManagedVenue>>` — public because `profile`'s "Your spaces" section watches it (behind `mobile.manage_enabled`) to decide whether to show the entry point at all. Screen-local family notifiers (requests list, one request, one venue's rooms, one room, one room's hours) live under `features/manage/application/` and aren't public |
+| manage | `manageRepositoryProvider`, `manageVenuesProvider` | `manageVenuesProvider` is `AsyncNotifier<List<ManagedVenue>>` — public because `profile`'s "Your spaces" section watches it (behind `mobile.manage_enabled`) to decide whether to show the entry point at all. Screen-local family notifiers (requests list, one request, one venue's rooms, one room, one room's hours, one venue's calendar week) live under `features/manage/application/` and aren't public |
 
 Conventions: screen state is always `AsyncValue<T>` rendered through `AsyncValueView`
 (§9); widgets watch with `select()` for sub-fields; no provider outside `core` may be
@@ -297,7 +310,10 @@ OfflineBanner()                                                // listens connec
 // Availability primitives (DESIGN_SYSTEM §8.10/§8.13) — shared by the listing detail
 // "When it's open" strip and the apply calendar:
 AvailabilityLegend()                                           // mandatory 4-state legend
-AvailabilityVerdictCard({required ScheduleCheckResult result, bool hardBlock})  // §8.13 card
+AvailabilityVerdictCard({required ScheduleCheckResult result, bool hardBlock,
+    List<PendingOverlap> pendingOverlaps, void Function(String applicationId)? onTapOverlap})
+    // §8.13 card; pendingOverlaps adds the host-review "K other pending requests overlap"
+    // section (CONTRACTS §6) — each row taps through to that request via onTapOverlap
 // + availability_day_state.dart: enum DayState; deriveDayState({date, day, openWindows, today});
 //   dayStateVisual(DayState, SteepleColors) → {background, foreground, dot, cross};
 //   openWindowsForDate(openHours, date); dayStateSemantics(state, freeWindows).
@@ -357,7 +373,12 @@ provider and render a placeholder when it is false; channel errors count as fals
   `application.json`, `booking.json`, `notifications_page.json`, `flags.json`,
   `managed_venues.json`, `managed_venue_detail.json`, `managed_room.json`,
   `manage_applications_page.json`, `room_open_hours.json`, `availability.json`,
-  `conflict_check.json`). `FixtureLoader.loadList` covers array-rooted
+  `conflict_check.json`, `host_calendar.json`). `manage_applications_page.json`'s pending
+  item carries the additive host-review `conflicts` block (CONTRACTS §6); `host_calendar.json`
+  (2 rooms, 6 confirmed occurrences + 2 pending overlays over a Sunday-anchored week) backs
+  `FakeManageRepository.calendar`, which **re-dates** it so the fixture's first day lands on
+  the requested `from` (same trick as `FakeListingRepository.availability`), so the agenda
+  reads as "live" this week whatever the calendar date. `FixtureLoader.loadList` covers array-rooted
   fixtures (`managed_venues.json`'s `[{id, name, slug}]`). `FakeListingRepository.availability`
   re-dates `availability.json` to start at the requested `from` so the fake reads as "live"
   regardless of the calendar date (states/order preserved); `checkSchedule` serves

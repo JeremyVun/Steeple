@@ -34,4 +34,28 @@ public sealed class ManageAvailabilityController : ControllerBase
         var result = await _availability.SaveRulesAsync(User.GetUserId(), id, request, ct);
         return result.Error is null ? Ok(result.Value) : this.ToManageProblem(result.Error);
     }
+
+    /// <summary>
+    /// The venue calendar: confirmed occurrences + pending-application overlays across the venue's
+    /// rooms over <c>[from, to]</c> (venue-local; defaults to today .. +27 days). Manager-scoped —
+    /// an unknown venue or a non-manager caller both 404. <c>invalid_range</c> when <c>to</c> is
+    /// before <c>from</c> or the span exceeds 92 days.
+    /// </summary>
+    [HttpGet("venues/{id:guid}/calendar")]
+    [EnableRateLimiting(RateLimitPolicies.Manage)]
+    public async Task<ActionResult<VenueCalendarDto>> GetCalendar(
+        Guid id, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken ct)
+    {
+        var result = await _availability.GetVenueCalendarAsync(User.GetUserId(), id, from, to, ct);
+        if (result.Value is { } dto)
+        {
+            return Ok(dto);
+        }
+
+        // Reuse the Manage problem mapping: not_found → 404, invalid_range → 400 (both carry `code`).
+        var error = result.IsNotFound
+            ? new ManageError(ManageErrorCodes.NotFound, "No such venue.")
+            : new ManageError(result.ErrorCode!, result.ErrorDetail!);
+        return this.ToManageProblem(error);
+    }
 }

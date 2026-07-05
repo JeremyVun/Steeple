@@ -212,6 +212,78 @@ public sealed class ManageController : SteepleControllerBase
         return Redirect(Url.Content($"~/manage/applications/{id}"));
     }
 
+    /// <summary>
+    /// The venue calendar: confirmed occurrences + a pending overlay across a week or month, for
+    /// one managed venue. A read-and-navigate surface — the whole grid (venue/room/nav controls
+    /// included) swaps as one HTMX fragment, and every control is a plain GET so no-JS works too.
+    /// </summary>
+    [RequireManageEnabled]
+    [HttpGet("/manage/calendar")]
+    public async Task<IActionResult> Calendar(
+        [FromQuery] Guid? venue, [FromQuery] DateOnly? start, [FromQuery] string? view,
+        [FromQuery] Guid? room, CancellationToken ct = default)
+    {
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        IReadOnlyList<ManagedVenueDto> venues;
+        try
+        {
+            venues = await _api.GetManagedVenuesAsync(accessToken, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Calendar venues fetch failed.");
+            return View("~/Views/Inbox/Unavailable.cshtml");
+        }
+
+        var viewMode = view == "month" ? "month" : "week";
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        var vmBase = new CalendarViewModel
+        {
+            Venues = venues,
+            SelectedVenueId = venue is { } v && venues.Any(x => x.Id == v) ? v
+                : venues.Count > 0 ? venues[0].Id : Guid.Empty,
+            View = viewMode,
+            Anchor = start ?? today,
+            Today = today,
+            RoomFilter = room,
+            Calendar = null,
+        };
+
+        ViewData["Title"] = "Calendar";
+        ViewData["Robots"] = "noindex,nofollow";
+
+        if (venues.Count == 0)
+        {
+            // No venues yet — render the page (tab + onboarding note), nothing to fetch.
+            return RenderCalendar(vmBase);
+        }
+
+        VenueCalendarDto? calendar = null;
+        try
+        {
+            calendar = await _api.GetVenueCalendarAsync(
+                accessToken, vmBase.SelectedVenueId, vmBase.RangeStart, vmBase.RangeEnd, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // The calendar endpoint may still be landing in parallel; degrade to an empty grid.
+            _logger.LogWarning(ex, "Venue calendar fetch failed.");
+        }
+
+        return RenderCalendar(vmBase with { Calendar = calendar });
+    }
+
+    private IActionResult RenderCalendar(CalendarViewModel vm) =>
+        Request.Headers.ContainsKey("HX-Request")
+            ? PartialView("_CalendarGrid", vm)
+            : View("Calendar", vm);
+
     // ----- Phase 5: self-service listings editor (flag web.manage_enabled) ---------------------
 
     /// <summary>The provider home: managed venues, or onboarding when there are none yet.</summary>

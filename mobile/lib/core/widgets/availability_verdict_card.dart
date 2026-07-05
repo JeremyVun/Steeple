@@ -5,20 +5,27 @@ import '../models/models.dart';
 import '../utils/dates.dart';
 
 /// The one shared availability/conflict verdict card (DESIGN_SYSTEM §8.13),
-/// used by the apply live check and the submit-time `409 schedule_unavailable`
-/// re-render alike. Advisory language only — approval and the DB exclusion
-/// constraint are the authority; this always renders exactly what the server
-/// returned. [hardBlock] forces the `danger` treatment + next-action line for
-/// the submit block regardless of the partial/full split.
+/// used by the apply live check, the submit-time `409 schedule_unavailable`
+/// re-render, and the host-review conflict verdict (CONTRACTS §6) alike.
+/// Advisory language only — approval and the DB exclusion constraint are the
+/// authority; this always renders exactly what the server returned.
+/// [hardBlock] forces the `danger` treatment + next-action line for the submit
+/// block regardless of the partial/full split. [pendingOverlaps] adds the
+/// host-review "K other pending requests overlap" section (empty elsewhere);
+/// each row taps through via [onTapOverlap] when supplied.
 class AvailabilityVerdictCard extends StatefulWidget {
   const AvailabilityVerdictCard({
     required this.result,
     this.hardBlock = false,
+    this.pendingOverlaps = const [],
+    this.onTapOverlap,
     super.key,
   });
 
   final ScheduleCheckResult result;
   final bool hardBlock;
+  final List<PendingOverlap> pendingOverlaps;
+  final void Function(String applicationId)? onTapOverlap;
 
   @override
   State<AvailabilityVerdictCard> createState() => _AvailabilityVerdictCardState();
@@ -132,12 +139,65 @@ class _AvailabilityVerdictCardState extends State<AvailabilityVerdictCard> {
               style: SteepleTypography.caption.copyWith(color: pair.fg),
             ),
           ],
+          if (widget.pendingOverlaps.isNotEmpty) ...[
+            const SizedBox(height: SteepleTokens.space3),
+            Divider(height: 1, color: pair.fg.withValues(alpha: 0.2)),
+            const SizedBox(height: SteepleTokens.space2),
+            Text(
+              '${widget.pendingOverlaps.length} other pending '
+              '${widget.pendingOverlaps.length == 1 ? 'request' : 'requests'} overlap',
+              style: SteepleTypography.caption.copyWith(
+                color: pair.fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            for (final overlap in widget.pendingOverlaps)
+              _OverlapRow(overlap: overlap, color: pair.fg, onTap: widget.onTapOverlap),
+          ],
         ],
       ),
     );
   }
 
   static String _dates(int n) => n == 1 ? 'date' : 'dates';
+}
+
+/// One "organizer — N dates" overlap row; a real button when [onTap] routes to
+/// that request's detail.
+class _OverlapRow extends StatelessWidget {
+  const _OverlapRow({required this.overlap, required this.color, this.onTap});
+
+  final PendingOverlap overlap;
+  final Color color;
+  final void Function(String applicationId)? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = overlap.overlappingDateCount;
+    final text = '${overlap.organizerName} — $count '
+        '${count == 1 ? 'date' : 'dates'}';
+    final row = Padding(
+      padding: const EdgeInsets.only(top: SteepleTokens.space1),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: SteepleTypography.caption.copyWith(color: color),
+            ),
+          ),
+          if (onTap != null)
+            Icon(Icons.chevron_right_rounded, size: 16, color: color),
+        ],
+      ),
+    );
+    if (onTap == null) return row;
+    return Semantics(
+      button: true,
+      label: 'View request from ${overlap.organizerName}',
+      child: InkWell(onTap: () => onTap!(overlap.applicationId), child: row),
+    );
+  }
 }
 
 enum _Tier { clear, partial, blocked }

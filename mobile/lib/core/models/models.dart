@@ -14,5 +14,6 @@ export 'room.dart';
 export 'room_availability.dart';
 export 'search_query.dart';
 export 'user.dart';
+export 'venue_calendar.dart';
 export 'wire_enums.dart';
 export 'wire_tokens.dart';

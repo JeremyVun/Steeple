@@ -87,6 +87,41 @@
                 }
             </div>
 
+            @* Host review (CONTRACTS §6): the manager-only conflict verdict + a CSS mini-week
+               strip + competing pending demand, rendered inline from the detail payload the page
+               already fetched (no extra lazy fetch). Organizers never see this block. *@
+            @if (!Model.ViewerIsOrganizer && app.Conflicts is { } conflicts)
+            {
+                var miniWeek = HostReviewDisplay.BuildMiniWeek(app.Schedule, conflicts);
+                <section class="host-review" aria-label="Availability check">
+                    <partial name="~/Views/Apply/_ConflictSummary.cshtml" model="HostReviewDisplay.ToVerdict(conflicts)" />
+
+                    <ol class="cal-mini" role="list" aria-label="Requested days this week">
+                        @foreach (var cell in miniWeek)
+                        {
+                            <li class="cal-mini-cell @cell.CssClass">
+                                <span class="cal-mini-dow" aria-hidden="true">@cell.DayInitial</span>
+                                <span class="sr-only">@cell.DayLabel — @cell.StateLabel</span>
+                            </li>
+                        }
+                    </ol>
+
+                    @if (conflicts.PendingOverlaps.Count > 0)
+                    {
+                        <p class="host-overlap">
+                            @conflicts.PendingOverlaps.Count other pending request@(conflicts.PendingOverlaps.Count == 1 ? "" : "s")
+                            want overlapping times:
+                            @for (var i = 0; i < conflicts.PendingOverlaps.Count; i++)
+                            {
+                                var overlap = conflicts.PendingOverlaps[i];
+                                <a href="@Url.Content($"~/manage/applications/{overlap.ApplicationId}")">@overlap.OrganizerName</a>
+                                <text> (@overlap.OverlappingDateCount date@(overlap.OverlappingDateCount == 1 ? "" : "s"))</text>@(i < conflicts.PendingOverlaps.Count - 1 ? ", " : ".")
+                            }
+                        </p>
+                    }
+                </section>
+            }
+
             @if (app.Messages.Count > 0)
             {
                 <ol class="thread-messages" role="list" aria-label="Messages">

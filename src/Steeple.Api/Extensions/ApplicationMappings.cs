@@ -14,7 +14,8 @@ public static class ApplicationMappings
     public static ApplicationDto ToDto(
         this Application application,
         bool includeThread,
-        OrganizerRatingSummaryDto? organizerRatingSummary = null)
+        OrganizerRatingSummaryDto? organizerRatingSummary = null,
+        ApplicationConflictsDto? conflicts = null)
     {
         var room = application.Room ?? throw new InvalidOperationException("Application loaded without its room.");
         var venue = room.Venue ?? throw new InvalidOperationException("Application loaded without its venue.");
@@ -42,7 +43,8 @@ public static class ApplicationMappings
             MessageCount: messages.Count,
             Messages: includeThread
                 ? messages.Select(m => new ApplicationMessageDto(m.Id, m.SenderId, m.Body, m.SentAtUtc)).ToList()
-                : []);
+                : [],
+            Conflicts: conflicts);
     }
 
     /// <summary>The stored schedule as its venue-local wire shape (times back to <c>HH:mm</c>).</summary>

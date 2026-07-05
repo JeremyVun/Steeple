@@ -475,6 +475,127 @@ public class ApplicationServiceTests
         Assert.Equal(ApplicationStatus.Expired, repo.Applications.Single().Status);
     }
 
+    // ----- Manager-review conflict digest (CONTRACTS §6) ----------------------------------------
+
+    [Fact]
+    public async Task GetAsync_ManagerDetailUndecidedFlagOnRulesPresent_PopulatesConflicts()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Pending);
+        repo.Applications.Add(application);
+        var availability = new FakeAvailabilityService { StoredConflicts = new StoredScheduleConflicts(3, []) };
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.GetAsync(application.Id, manager.Id);
+
+        Assert.Null(result.Error);
+        Assert.NotNull(result.Value!.Conflicts);
+        Assert.Equal(3, result.Value.Conflicts!.TotalOccurrences);
+        Assert.Empty(result.Value.Conflicts.PendingOverlaps);
+    }
+
+    [Fact]
+    public async Task GetAsync_OrganizerDetail_NeverCarriesConflicts()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Pending);
+        repo.Applications.Add(application);
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, flags: flags);
+
+        var result = await service.GetAsync(application.Id, organizer.Id);
+
+        Assert.Null(result.Error);
+        Assert.Null(result.Value!.Conflicts);
+    }
+
+    [Fact]
+    public async Task GetAsync_ManagerDetailDecidedApplication_HasNoConflicts()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Approved, decidedAtUtc: FixedNow);
+        repo.Applications.Add(application);
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, flags: flags);
+
+        var result = await service.GetAsync(application.Id, manager.Id);
+
+        Assert.Null(result.Error);
+        Assert.Null(result.Value!.Conflicts);
+    }
+
+    [Fact]
+    public async Task GetAsync_ManagerDetailRoomWithNoRules_HasNoConflicts()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Pending);
+        repo.Applications.Add(application);
+        // A room with no availability rules: the engine returns null, so the digest is absent.
+        var availability = new FakeAvailabilityService { StoredConflicts = null };
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.GetAsync(application.Id, manager.Id);
+
+        Assert.Null(result.Error);
+        Assert.Null(result.Value!.Conflicts);
+    }
+
+    [Fact]
+    public async Task GetAsync_ManagerDetailFlagOff_HasNoConflicts()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Pending);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _); // flag off by default
+
+        var result = await service.GetAsync(application.Id, manager.Id);
+
+        Assert.Null(result.Error);
+        Assert.Null(result.Value!.Conflicts);
+    }
+
+    [Fact]
+    public async Task GetAsync_PendingOverlaps_CountsOnlySharedDatesWhenTimesOverlap()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+
+        // Range Mon 2026-07-06 .. Sun 2026-07-19: Tuesdays 07-07/07-14, Wednesdays 07-08/07-15,
+        // Thursdays 07-09/07-16.
+        var start = new DateOnly(2026, 7, 6);
+        var end = new DateOnly(2026, 7, 19);
+        var subject = NewRecurring(room, organizer, Weekdays.Tuesday | Weekdays.Thursday, "09:00", "11:00", start, end);
+        repo.Applications.Add(subject);
+
+        // Overlapping-time competitor on Wed+Thu → shares only the two Thursdays.
+        var rivalA = NewUser("Rival A", "a@example.com");
+        repo.Users.Add(rivalA);
+        repo.Applications.Add(NewRecurring(room, rivalA, Weekdays.Wednesday | Weekdays.Thursday, "09:00", "11:00", start, end));
+
+        // Same Tue+Thu dates but a disjoint time band → no overlap at all.
+        var rivalB = NewUser("Rival B", "b@example.com");
+        repo.Users.Add(rivalB);
+        repo.Applications.Add(NewRecurring(room, rivalB, Weekdays.Tuesday | Weekdays.Thursday, "12:00", "13:00", start, end));
+
+        // A decided competitor is never counted (not undecided).
+        var rivalC = NewUser("Rival C", "c@example.com");
+        repo.Users.Add(rivalC);
+        repo.Applications.Add(NewRecurring(room, rivalC, Weekdays.Thursday, "09:00", "11:00", start, end, ApplicationStatus.Approved));
+
+        var availability = new FakeAvailabilityService { StoredConflicts = new StoredScheduleConflicts(4, []) };
+        var flags = new FakeFeatureFlags().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.GetAsync(subject.Id, manager.Id);
+
+        Assert.Null(result.Error);
+        var overlaps = result.Value!.Conflicts!.PendingOverlaps;
+        var only = Assert.Single(overlaps);
+        Assert.Equal("Rival A", only.OrganizerName);
+        Assert.Equal(2, only.OverlappingDateCount); // the two shared Thursdays
+    }
+
     // ----- Scenario / request builders --------------------------------------------------------
 
     private static DateOnly Today() => DateOnly.FromDateTime(FixedNow.UtcDateTime.Date);
@@ -567,6 +688,36 @@ public class ApplicationServiceTests
             Organizer = organizer,
         };
     }
+
+    private static Application NewRecurring(
+        Room room,
+        User organizer,
+        Weekdays days,
+        string startTime,
+        string endTime,
+        DateOnly startDate,
+        DateOnly endDate,
+        ApplicationStatus status = ApplicationStatus.Pending) => new()
+    {
+        Id = Guid.NewGuid(),
+        RoomId = room.Id,
+        OrganizerId = organizer.Id,
+        ActivityType = ActivityType.Community,
+        GroupSize = 20,
+        Frequency = ScheduleFrequency.RecurringWeekly,
+        StartDate = startDate,
+        EndDate = endDate,
+        DaysOfWeek = days,
+        StartTime = TimeOnly.ParseExact(startTime, "HH:mm"),
+        EndTime = TimeOnly.ParseExact(endTime, "HH:mm"),
+        IntentText = "Weekly gathering.",
+        Status = status,
+        CreatedAtUtc = FixedNow,
+        DecidedAtUtc = status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo ? null : FixedNow,
+        ExpiresAtUtc = FixedNow.AddDays(14),
+        Room = room,
+        Organizer = organizer,
+    };
 
     private static ScheduleDto NewSchedule(
         string frequency = "oneOff",
@@ -666,6 +817,9 @@ public class ApplicationServiceTests
     {
         public ScheduleCheckResultDto Verdict { get; set; } = new(Available: true, TotalOccurrences: 1, Conflicts: []);
 
+        /// <summary>The stored-schedule digest returned to the manager-review path; null = no rules.</summary>
+        public StoredScheduleConflicts? StoredConflicts { get; set; } = new(TotalOccurrences: 1, Conflicts: []);
+
         public int CheckCalls { get; private set; }
 
         public Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(
@@ -674,6 +828,14 @@ public class ApplicationServiceTests
             CheckCalls++;
             return Task.FromResult(AvailabilityReadResult<ScheduleCheckResultDto>.Ok(Verdict));
         }
+
+        public Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(
+            Guid roomId, ScheduleDto schedule, CancellationToken ct = default) =>
+            Task.FromResult(StoredConflicts);
+
+        public Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(
+            Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default) =>
+            throw new NotSupportedException();
 
         public Task<ManageResult<RoomAvailabilityRulesDto>> GetRulesAsync(Guid callerId, Guid roomId, CancellationToken ct = default) =>
             throw new NotSupportedException();
@@ -857,6 +1019,22 @@ public class ApplicationServiceTests
         public Task<(IReadOnlyList<Application> Items, int TotalCount)> GetForVenuesAsync(
             IReadOnlyList<Guid> venueIds, ApplicationStatus? status, int page, int pageSize, CancellationToken ct = default) =>
             Page(Applications.Where(a => venueIds.Contains((a.Room ?? Rooms.First(r => r.Id == a.RoomId)).VenueId)), status, page, pageSize);
+
+        public Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
+            Guid roomId, Guid excludeApplicationId, CancellationToken ct = default)
+        {
+            var items = Applications
+                .Where(a => a.RoomId == roomId
+                    && a.Id != excludeApplicationId
+                    && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
+                .ToList();
+            foreach (var application in items)
+            {
+                Attach(application);
+            }
+
+            return Task.FromResult<IReadOnlyList<Application>>(items);
+        }
 
         public Task AddMessageAsync(ApplicationMessage message, CancellationToken ct = default)
         {

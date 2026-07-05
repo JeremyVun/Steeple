@@ -23,6 +23,13 @@ class ManageHomeScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Manage'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.calendar_month_rounded),
+              tooltip: 'Calendar',
+              onPressed: () => context.pushNamed(RouteNames.manageCalendar),
+            ),
+          ],
           bottom: const TabBar(tabs: [Tab(text: 'Requests'), Tab(text: 'Rooms')]),
         ),
         body: const TabBarView(children: [_RequestsTab(), _RoomsTab()]),

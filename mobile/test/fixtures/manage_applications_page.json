@@ -65,7 +65,26 @@
       "expiresAtUtc": "2026-07-17T15:30:00Z",
       "bookingId": null,
       "messageCount": 0,
-      "messages": []
+      "messages": [],
+      "conflicts": {
+        "totalOccurrences": 4,
+        "conflicts": [
+          { "date": "2026-07-18", "reason": "booked" },
+          { "date": "2026-08-01", "reason": "blackout" }
+        ],
+        "pendingOverlaps": [
+          {
+            "applicationId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "organizerName": "Priya Patel",
+            "overlappingDateCount": 2
+          },
+          {
+            "applicationId": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            "organizerName": "Chen Wei",
+            "overlappingDateCount": 1
+          }
+        ]
+      }
     }
   ],
   "totalCount": 2,

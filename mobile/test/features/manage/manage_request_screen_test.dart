@@ -43,6 +43,10 @@ class _PendingManageRepository implements ManageRepository {
       Completer<Paged<Application>>().future;
 
   @override
+  Future<VenueCalendar> calendar(String venueId, {required String from, required String to}) =>
+      Completer<VenueCalendar>().future;
+
+  @override
   Future<Application> decide(String id, {required bool approve, String? message}) =>
       Completer<Application>().future;
 }
@@ -95,12 +99,23 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await _settle(tester);
 
-    expect(find.text('Approve'), findsOneWidget);
-    expect(find.text('Decline'), findsOneWidget);
-    // From the fixture (manage_applications_page.json): the pending item.
+    // Above the fold: the pending item's header + the host-review verdict card
+    // (CONTRACTS §6) with its pending-overlap section.
     expect(find.text('Pending'), findsOneWidget);
     expect(find.text('Fellowship Hall'), findsWidgets);
     expect(find.text('Marcus Lee · Group of 40 · Community'), findsOneWidget);
+    expect(find.text('2 of 4 dates clash'), findsOneWidget);
+    expect(find.text('2 other pending requests overlap'), findsOneWidget);
+
+    // The approve/decline actions sit below the verdict card now — scroll the
+    // outer list (the message TextField adds its own Scrollable, so be explicit).
+    await tester.scrollUntilVisible(
+      find.text('Approve'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Approve'), findsOneWidget);
+    expect(find.text('Decline'), findsOneWidget);
 
     await tester.tap(find.text('Approve'));
     await tester.pumpAndSettle();

@@ -1,0 +1,205 @@
+@model CalendarViewModel
+@using System.Globalization
+@{
+    var cal = Url.Content("~/manage/calendar");
+    var appBase = Url.Content("~/manage/applications");
+    var bookingBase = Url.Content("~/bookings");
+}
+
+@if (Model.Venues.Count == 0)
+{
+    <div class="empty-state">
+        <h2>Your calendar lives here</h2>
+        <p>Once you list a venue and it takes bookings, this is where you'll see confirmed
+           sessions and pending requests laid out by week or month.</p>
+        <a class="btn btn-primary" href="~/manage/venues/new">List your venue</a>
+    </div>
+}
+else
+{
+@* --- Toolbar: venue picker, heading + prev/next, week/month toggle ------------------------- *@
+@if (Model.HasMultipleVenues)
+{
+    <nav class="cal-venue-chips" aria-label="Choose a venue">
+        @foreach (var v in Model.Venues)
+        {
+            var active = v.Id == Model.SelectedVenueId;
+            <a class="chip-link@(active ? " is-active" : "")"
+               href="@cal@Model.Link(venue: v.Id, start: Model.Today, clearRoom: true)"
+               hx-get="@cal@Model.Link(venue: v.Id, start: Model.Today, clearRoom: true)"
+               hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+               aria-current="@(active ? "true" : null)">@v.Name</a>
+        }
+    </nav>
+}
+
+<div class="cal-toolbar">
+    <div class="cal-nav">
+        <a class="cal-nav-btn" aria-label="Previous @(Model.IsMonth ? "month" : "week")"
+           href="@cal@Model.Link(start: Model.PrevAnchor)"
+           hx-get="@cal@Model.Link(start: Model.PrevAnchor)"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true">‹</a>
+        <span class="cal-heading" aria-live="polite">@Model.Heading</span>
+        <a class="cal-nav-btn" aria-label="Next @(Model.IsMonth ? "month" : "week")"
+           href="@cal@Model.Link(start: Model.NextAnchor)"
+           hx-get="@cal@Model.Link(start: Model.NextAnchor)"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true">›</a>
+        <a class="cal-today-btn" href="@cal@Model.Link(start: Model.Today)"
+           hx-get="@cal@Model.Link(start: Model.Today)"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true">Today</a>
+    </div>
+
+    <div class="cal-viewtoggle" role="group" aria-label="Calendar view">
+        <a class="cal-toggle@(Model.IsMonth ? "" : " is-active")"
+           href="@cal@Model.Link(view: "week")"
+           hx-get="@cal@Model.Link(view: "week")"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+           aria-current="@(Model.IsMonth ? null : "true")">Week</a>
+        <a class="cal-toggle@(Model.IsMonth ? " is-active" : "")"
+           href="@cal@Model.Link(view: "month")"
+           hx-get="@cal@Model.Link(view: "month")"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+           aria-current="@(Model.IsMonth ? "true" : null)">Month</a>
+    </div>
+</div>
+
+@* --- Room filter chips --------------------------------------------------------------------- *@
+@if (Model.AllRooms.Count > 1)
+{
+    <nav class="cal-room-chips" aria-label="Filter by room">
+        <a class="chip-link@(Model.RoomFilter is null ? " is-active" : "")"
+           href="@cal@Model.Link(clearRoom: true)"
+           hx-get="@cal@Model.Link(clearRoom: true)"
+           hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+           aria-current="@(Model.RoomFilter is null ? "true" : null)">All rooms</a>
+        @foreach (var r in Model.AllRooms)
+        {
+            var active = Model.RoomFilter == r.Id;
+            <a class="chip-link@(active ? " is-active" : "")"
+               href="@cal@Model.Link(room: r.Id)"
+               hx-get="@cal@Model.Link(room: r.Id)"
+               hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+               aria-current="@(active ? "true" : null)">@r.Name</a>
+        }
+    </nav>
+}
+
+@* --- Grid ---------------------------------------------------------------------------------- *@
+@if (Model.Calendar is null)
+{
+    <div class="cal-empty" role="status">
+        <p>No bookings in this range yet.</p>
+    </div>
+}
+else if (Model.AllRooms.Count == 0)
+{
+    <div class="cal-empty" role="status">
+        <p>This venue has no rooms yet — add one to start taking bookings.</p>
+    </div>
+}
+else if (Model.IsMonth)
+{
+    <div class="cal-month" role="grid" aria-label="Month calendar">
+        <div class="cal-month-dow" role="row" aria-hidden="true">
+            @foreach (var d in new[] { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" })
+            {
+                <span role="columnheader">@d</span>
+            }
+        </div>
+        @foreach (var week in Model.MonthWeeks)
+        {
+            <div class="cal-month-week" role="row">
+                @foreach (var day in week)
+                {
+                    var occ = Model.OccurrencesFor(day).Count;
+                    var pend = Model.PendingFor(day).Count;
+                    var outside = day.Month != Model.MonthFirst.Month;
+                    var label = day.ToString("dddd, MMMM d", CultureInfo.InvariantCulture);
+                    var summary = occ + pend == 0 ? "nothing booked"
+                        : $"{occ} confirmed, {pend} pending";
+                    <a class="cal-mday@(outside ? " is-outside" : "")@(day == Model.Today ? " is-today" : "")"
+                       role="gridcell"
+                       href="@cal@Model.Link(view: "week", start: day)"
+                       hx-get="@cal@Model.Link(view: "week", start: day)"
+                       hx-target="#calendar-grid" hx-swap="innerHTML" hx-push-url="true"
+                       aria-label="@label — @summary">
+                        <span class="cal-mday-num">@day.Day</span>
+                        @if (occ + pend > 0)
+                        {
+                            <span class="cal-dots" aria-hidden="true">
+                                @for (var i = 0; i < Math.Min(occ, 4); i++)
+                                {
+                                    <span class="cal-dot cal-dot-occ"></span>
+                                }
+                                @for (var i = 0; i < Math.Min(pend, 4); i++)
+                                {
+                                    <span class="cal-dot cal-dot-pending"></span>
+                                }
+                            </span>
+                        }
+                    </a>
+                }
+            </div>
+        }
+    </div>
+}
+else
+{
+    @* Week view is day-major in the DOM (seven day columns): the same markup collapses to a
+       stacked agenda on phones via a media query, hiding empty days. Rooms show as a label on
+       each block when the venue has more than one. *@
+    <div class="cal-week" role="list" aria-label="Week of @Model.WeekStart.ToString("MMM d, yyyy", CultureInfo.InvariantCulture)">
+        @foreach (var day in Model.VisibleDays)
+        {
+            var occ = Model.OccurrencesFor(day);
+            var pend = Model.PendingFor(day);
+            var empty = occ.Count == 0 && pend.Count == 0;
+            <div class="cal-day@(empty ? " cal-day--empty" : "")@(day == Model.Today ? " is-today" : "")" role="listitem">
+                <div class="cal-day-head">
+                    <span class="cal-dow">@day.ToString("ddd", CultureInfo.InvariantCulture)</span>
+                    <span class="cal-dnum">@day.Day</span>
+                </div>
+                <div class="cal-day-body">
+                    @if (empty)
+                    {
+                        <p class="cal-day-none" aria-hidden="true">·</p>
+                    }
+                    else
+                    {
+                        @foreach (var o in occ)
+                        {
+                            <a class="cal-occ" href="@bookingBase/@o.BookingId"
+                               title="@o.OrganizerName · @CalendarViewModel.TimeRange(o.StartTime, o.EndTime)">
+                                <span class="cal-occ-time">@CalendarViewModel.TimeRange(o.StartTime, o.EndTime)</span>
+                                <span class="cal-occ-who">@o.OrganizerName</span>
+                                @if (Model.ShowRoomLabels)
+                                {
+                                    <span class="cal-occ-room">@Model.RoomName(o.RoomId)</span>
+                                }
+                            </a>
+                        }
+                        @foreach (var p in pend)
+                        {
+                            <a class="cal-pending" href="@appBase/@p.ApplicationId"
+                               title="Pending · @p.OrganizerName · @CalendarViewModel.TimeRange(p.StartTime, p.EndTime)">
+                                <span class="cal-occ-time">@CalendarViewModel.TimeRange(p.StartTime, p.EndTime)</span>
+                                <span class="cal-occ-who">@p.OrganizerName</span>
+                                <span class="cal-pending-tag">Pending</span>
+                                @if (Model.ShowRoomLabels)
+                                {
+                                    <span class="cal-occ-room">@Model.RoomName(p.RoomId)</span>
+                                }
+                            </a>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (Model.IsEmptyRange)
+    {
+        <p class="cal-empty-note" role="status">Nothing booked this week yet.</p>
+    }
+}
+}

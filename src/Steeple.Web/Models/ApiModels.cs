@@ -258,7 +258,11 @@ public record ApplicationDto(
     DateTimeOffset ExpiresAtUtc,
     Guid? BookingId,
     int MessageCount,
-    IReadOnlyList<ApplicationMessageDto> Messages);
+    IReadOnlyList<ApplicationMessageDto> Messages,
+    // Additive (availability plan commit 7, CONTRACTS §6): host-only conflict + pending-overlap
+    // summary, populated only on the manager detail read of an undecided application — null on
+    // lists, organizer-scoped reads, and rooms without availability rules.
+    ApplicationConflictsDto? Conflicts = null);
 
 /// <summary>A page of applications (CONTRACTS §2 pagination envelope).</summary>
 public record ApplicationListResult(
@@ -371,6 +375,57 @@ public record ScheduleConflictDto(DateOnly Date, string Reason);
 /// submit-time hard block. The same payload rides the <c>409 schedule_unavailable</c> problem body.
 /// </summary>
 public record ScheduleCheckResultDto(bool Available, int TotalOccurrences, IReadOnlyList<ScheduleConflictDto> Conflicts);
+
+// --- Host review & venue calendar (CONTRACTS §6 "Host review & venue calendar") ---
+
+/// <summary>Another undecided application whose projected dates + times overlap this one's (host-only).</summary>
+public record PendingOverlapDto(Guid ApplicationId, string OrganizerName, int OverlappingDateCount);
+
+/// <summary>
+/// Manager-detail-only conflict payload (additive <c>conflicts?</c> on <see cref="ApplicationDto"/>).
+/// <see cref="Conflicts"/> reuses the guest availability engine (rules + confirmed bookings);
+/// <see cref="PendingOverlaps"/> surfaces competing undecided demand — both host-only, present
+/// only on undecided applications and null when the room has no availability rules.
+/// </summary>
+public record ApplicationConflictsDto(
+    int TotalOccurrences,
+    IReadOnlyList<ScheduleConflictDto> Conflicts,
+    IReadOnlyList<PendingOverlapDto> PendingOverlaps);
+
+/// <summary>One room lane on the venue calendar.</summary>
+public record CalendarRoomDto(Guid Id, string Name);
+
+/// <summary>A confirmed booking occurrence on the venue calendar (venue-local <c>HH:mm</c> times).</summary>
+public record CalendarOccurrenceDto(
+    Guid BookingId,
+    Guid RoomId,
+    string OrganizerName,
+    DateOnly LocalDate,
+    string StartTime,
+    string EndTime,
+    string Status);
+
+/// <summary>An undecided application projected onto the calendar as a pending overlay (not a commitment).</summary>
+public record CalendarPendingDto(
+    Guid ApplicationId,
+    Guid RoomId,
+    string OrganizerName,
+    string StartTime,
+    string EndTime,
+    IReadOnlyList<DateOnly> Dates);
+
+/// <summary>
+/// <c>GET /api/v1/manage/venues/{id}/calendar?from&amp;to</c> (manager-scoped) — confirmed
+/// occurrences plus a pending overlay across a bounded venue-local range (≤92 days).
+/// </summary>
+public record VenueCalendarDto(
+    Guid VenueId,
+    string Timezone,
+    DateOnly From,
+    DateOnly To,
+    IReadOnlyList<CalendarRoomDto> Rooms,
+    IReadOnlyList<CalendarOccurrenceDto> Occurrences,
+    IReadOnlyList<CalendarPendingDto> Pending);
 
 /// <summary>Full room detail for the provider's manage screens.</summary>
 public record ManagedRoomDto(

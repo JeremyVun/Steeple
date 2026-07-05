@@ -77,6 +77,36 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default) =>
+        _db.Venues
+            .Include(v => v.Rooms)
+            .FirstOrDefaultAsync(v => v.Id == venueId, ct);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<BookingOccurrence>> GetCalendarOccurrencesAsync(
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+        await _db.BookingOccurrences
+            .Include(o => o.Booking!)
+            .ThenInclude(b => b.Organizer)
+            .Where(o => roomIds.Contains(o.RoomId)
+                && (o.Status == OccurrenceStatus.Scheduled || o.Status == OccurrenceStatus.Occurred)
+                && o.Booking!.Status == BookingStatus.Confirmed
+                && o.StartUtc < toUtc
+                && o.EndUtc > fromUtc)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+        await _db.Applications
+            .Include(a => a.Organizer)
+            .Where(a => roomIds.Contains(a.RoomId)
+                && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.NeedsInfo))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public async Task ReplaceRulesAsync(
         Guid roomId,
         IReadOnlyList<RoomOpenHours> openHours,

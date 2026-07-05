@@ -180,6 +180,24 @@ public sealed class SteepleApiClient : ISteepleApiClient
     public Task<ManagedVenueDetailDto?> GetManagedVenueAsync(string accessToken, Guid id, CancellationToken ct = default) =>
         GetAuthorizedOrNullAsync<ManagedVenueDetailDto>($"api/v1/manage/venues/{id}", accessToken, ct);
 
+    public Task<VenueCalendarDto?> GetVenueCalendarAsync(
+        string accessToken, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
+    {
+        var qs = new List<string>();
+        if (from is { } f)
+        {
+            qs.Add($"from={f:yyyy-MM-dd}");
+        }
+
+        if (to is { } t)
+        {
+            qs.Add($"to={t:yyyy-MM-dd}");
+        }
+
+        var path = $"api/v1/manage/venues/{venueId}/calendar" + (qs.Count > 0 ? "?" + string.Join("&", qs) : "");
+        return GetAuthorizedOrNullAsync<VenueCalendarDto>(path, accessToken, ct);
+    }
+
     public async Task<(ManagedVenueDetailDto? Venue, string? ErrorCode)> CreateVenueAsync(
         string accessToken, SaveVenueRequest request, CancellationToken ct = default)
     {

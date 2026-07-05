@@ -42,6 +42,25 @@ public interface IAvailabilityRepository
     Task<IReadOnlyList<BookingOccurrence>> GetConfirmedOccurrencesForRoomsAsync(
         IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
 
+    /// <summary>The venue with its rooms loaded (all statuses — the host sees the whole venue); null when unknown.</summary>
+    Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The venue-calendar occurrences for many rooms overlapping <c>[fromUtc, toUtc)</c>:
+    /// <c>Scheduled</c> or <c>Occurred</c> occurrences of <c>Confirmed</c> bookings, each with its
+    /// booking's organizer loaded (for the calendar's <c>organizerName</c>). Read-only.
+    /// </summary>
+    Task<IReadOnlyList<BookingOccurrence>> GetCalendarOccurrencesAsync(
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// The undecided (<c>Pending|NeedsInfo</c>) applications on the given rooms, organizer loaded
+    /// — the pending overlay the calendar projects onto the range. Read-only cross-module read
+    /// (same stance as the confirmed-occurrence reads: the Availability surface reads, never writes).
+    /// </summary>
+    Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
+        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default);
+
     /// <summary>
     /// Replaces the room's entire rule set (delete existing rows, insert the supplied ones) in one
     /// SaveChanges — a single implicit transaction, so a partial write is never visible.

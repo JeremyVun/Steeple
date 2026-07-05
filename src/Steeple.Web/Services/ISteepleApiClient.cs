@@ -104,6 +104,15 @@ public interface ISteepleApiClient
     /// <summary>Venues the signed-in provider manages (labels a provider surface and routes it).</summary>
     Task<IReadOnlyList<ManagedVenueDto>> GetManagedVenuesAsync(string accessToken, CancellationToken ct = default);
 
+    /// <summary>
+    /// The venue calendar (confirmed occurrences + pending overlay) across a bounded venue-local
+    /// range (manager-scoped). Omitting <paramref name="from"/>/<paramref name="to"/> lets the API
+    /// pick its default window. <c>null</c> when the venue isn't managed by the caller (404) or the
+    /// endpoint isn't available yet — the caller renders an empty calendar.
+    /// </summary>
+    Task<VenueCalendarDto?> GetVenueCalendarAsync(
+        string accessToken, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default);
+
     // --- Manage (provider self-service CRUD, bearer-authorized BFF calls) ---
 
     /// <summary>Full venue detail (including its rooms) for the provider's manage screens, or <c>null</c> when not found.</summary>

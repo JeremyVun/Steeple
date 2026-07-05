@@ -4,6 +4,7 @@
 // client-side form/request model, never deserialized from the wire.
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'availability.dart';
 import 'wire_enums.dart';
 import 'wire_tokens.dart';
 
@@ -86,6 +87,48 @@ abstract class ApplicationMessage with _$ApplicationMessage {
       _$ApplicationMessageFromJson(json);
 }
 
+/// One other still-pending application whose dates overlap this one
+/// (CONTRACTS §6 "Host review"). [overlappingDateCount] is how many of its
+/// occurrences collide; [applicationId] is routable to that request's detail.
+@freezed
+abstract class PendingOverlap with _$PendingOverlap {
+  const factory PendingOverlap({
+    required String applicationId,
+    required String organizerName,
+    required int overlappingDateCount,
+  }) = _PendingOverlap;
+
+  factory PendingOverlap.fromJson(Map<String, dynamic> json) =>
+      _$PendingOverlapFromJson(json);
+}
+
+/// The host-review conflict summary carried on the manager's application
+/// **detail** read (CONTRACTS §6; additive — null on list/organizer reads and
+/// on already-decided applications). [conflicts] reuses the guest
+/// [ScheduleConflict] shape (venue-local `yyyy-MM-dd` + reason); [checkResult]
+/// adapts to the shared [ScheduleCheckResult] the §8.13 verdict card renders.
+@freezed
+abstract class ApplicationConflicts with _$ApplicationConflicts {
+  const ApplicationConflicts._();
+
+  const factory ApplicationConflicts({
+    required int totalOccurrences,
+    @Default(<ScheduleConflict>[]) List<ScheduleConflict> conflicts,
+    @Default(<PendingOverlap>[]) List<PendingOverlap> pendingOverlaps,
+  }) = _ApplicationConflicts;
+
+  factory ApplicationConflicts.fromJson(Map<String, dynamic> json) =>
+      _$ApplicationConflictsFromJson(json);
+
+  /// Adapts to the shared availability verdict shape — available iff nothing
+  /// clashes (pending overlaps are advisory, not a hard clash).
+  ScheduleCheckResult get checkResult => ScheduleCheckResult(
+        available: conflicts.isEmpty,
+        totalOccurrences: totalOccurrences,
+        conflicts: conflicts,
+      );
+}
+
 /// An application as both parties see it (CONTRACTS §5). List endpoints
 /// return `messages: []` (the thread stays behind the detail fetch);
 /// `messageCount` is always set.
@@ -117,6 +160,11 @@ abstract class Application with _$Application {
     String? bookingId,
     required int messageCount,
     @Default(<ApplicationMessage>[]) List<ApplicationMessage> messages,
+
+    /// Host-review conflict summary (CONTRACTS §6) — additive; present only on
+    /// the manager's detail read of a still-actionable application, null
+    /// otherwise (lists, organizer reads, decided applications).
+    ApplicationConflicts? conflicts,
   }) = _Application;
 
   factory Application.fromJson(Map<String, dynamic> json) =>

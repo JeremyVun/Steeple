@@ -701,6 +701,14 @@ public class ManageServiceTests
         public Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
             IReadOnlyList<(Guid RoomId, string Timezone)> candidates, AvailabilityFilter filter, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(
+            Guid roomId, ScheduleDto schedule, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(
+            Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeGeocodingGateway : IGeocodingGateway

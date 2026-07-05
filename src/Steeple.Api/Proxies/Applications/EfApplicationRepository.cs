@@ -45,6 +45,17 @@ public class EfApplicationRepository : IApplicationRepository
         PageAsync(Graph().Where(a => venueIds.Contains(a.Room!.VenueId)), status, page, pageSize, ct);
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
+        Guid roomId, Guid excludeApplicationId, CancellationToken ct = default) =>
+        await _db.Applications
+            .Include(a => a.Organizer)
+            .Where(a => a.RoomId == roomId
+                && a.Id != excludeApplicationId
+                && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.NeedsInfo))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+    /// <inheritdoc />
     public async Task AddMessageAsync(ApplicationMessage message, CancellationToken ct = default)
     {
         _db.ApplicationMessages.Add(message);

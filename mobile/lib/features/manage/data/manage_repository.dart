@@ -30,6 +30,11 @@ abstract class ManageRepository {
   /// an error, for non-managers).
   Future<Paged<Application>> applications({String? status, int page = 1});
 
+  /// `GET /api/v1/manage/venues/{id}/calendar?from&to` — the venue's confirmed
+  /// occurrences + pending overlays over a venue-local date span (≤92 days;
+  /// server defaults today..+27d when omitted).
+  Future<VenueCalendar> calendar(String venueId, {required String from, required String to});
+
   /// `POST /api/v1/applications/{id}/decision`.
   Future<Application> decide(String id, {required bool approve, String? message});
 }
@@ -89,6 +94,18 @@ class ApiManageRepository implements ManageRepository {
         query: {'status': ?status, 'page': page},
         decode: (data) =>
             Paged.fromJson(data as Map<String, dynamic>, Application.fromJson),
+      );
+
+  @override
+  Future<VenueCalendar> calendar(
+    String venueId, {
+    required String from,
+    required String to,
+  }) =>
+      _api.get(
+        '/api/v1/manage/venues/$venueId/calendar',
+        query: {'from': from, 'to': to},
+        decode: (data) => VenueCalendar.fromJson(data as Map<String, dynamic>),
       );
 
   @override

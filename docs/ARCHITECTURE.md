@@ -163,7 +163,11 @@ modules consume it only via `IAvailabilityService` — Manage's publish gate
 (`blackout` > `outsideOpenHours` > `booked`); it feeds the anonymous
 `GET /listings/{id}/availability` + `POST …/availability/check` endpoints (per-IP
 `availability` policy, behind `listing.availability`) and the apply-time hard block
-(`409 schedule_unavailable`, skipped for rooms with no rules). Rules are **advisory
+(`409 schedule_unavailable`, skipped for rooms with no rules). Host review (commit 7)
+reuses the same engine: manager detail reads of undecided applications carry a
+`conflicts` digest (per-date reasons + overlapping pending demand — host-only, never
+organizer-visible), and `GET /manage/venues/{id}/calendar` composes confirmed occurrences
+with pending-application overlays across a venue's rooms. Rules are **advisory
 shaping** for guests and hosts; the `booking_occurrences` exclusion constraint remains
 the only booking authority.
 

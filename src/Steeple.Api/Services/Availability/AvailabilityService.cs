@@ -169,6 +169,20 @@ public sealed class AvailabilityService : IAvailabilityService
             return AvailabilityReadResult<ScheduleCheckResultDto>.Fail(AvailabilityErrorCodes.InvalidApplication, invalid);
         }
 
+        var (_, total, conflicts) = await ClassifyScheduleAsync(roomId, timezone, parsed, ct).ConfigureAwait(false);
+        return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
+            new ScheduleCheckResultDto(Available: conflicts.Count == 0, TotalOccurrences: total, Conflicts: conflicts));
+    }
+
+    /// <summary>
+    /// Materializes a (venue-local) schedule and classifies each occurrence against the room's rules
+    /// and confirmed bookings — the shared core of the advisory check, the submit-time block, and the
+    /// manager-review digest. <c>HasRules</c> is false for a legacy room with no declared
+    /// availability (classification skipped; every occurrence counts as available).
+    /// </summary>
+    private async Task<(bool HasRules, int Total, IReadOnlyList<ScheduleConflictDto> Conflicts)> ClassifyScheduleAsync(
+        Guid roomId, string timezone, ParsedSchedule parsed, CancellationToken ct)
+    {
         var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
         var instants = ScheduleMaterializer.Materialize(
             parsed.Frequency, parsed.StartDate, parsed.EndDate, parsed.DaysOfWeek, parsed.StartTime, parsed.EndTime, tz);
@@ -177,11 +191,11 @@ public sealed class AvailabilityService : IAvailabilityService
         var blackouts = await _repository.GetBlackoutsAsync(roomId, ct).ConfigureAwait(false);
         var rules = new AvailabilityRules(blackouts.Select(b => b.Date).ToHashSet(), OpenHoursByWeekday(hours));
 
-        // Legacy room with no declared availability: every occurrence is available (no classification).
-        if (!rules.HasRules)
+        // Legacy room with no declared availability, or a schedule that materializes to nothing:
+        // every occurrence is available (no classification).
+        if (!rules.HasRules || instants.Count == 0)
         {
-            return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
-                new ScheduleCheckResultDto(Available: true, TotalOccurrences: instants.Count, Conflicts: []));
+            return (rules.HasRules, instants.Count, []);
         }
 
         var fromUtc = instants.Min(i => i.StartUtc);
@@ -201,8 +215,146 @@ public sealed class AvailabilityService : IAvailabilityService
             }
         }
 
-        return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
-            new ScheduleCheckResultDto(Available: conflicts.Count == 0, TotalOccurrences: instants.Count, Conflicts: conflicts));
+        return (true, instants.Count, conflicts);
+    }
+
+    /// <inheritdoc />
+    public async Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(
+        Guid roomId, ScheduleDto schedule, CancellationToken ct = default)
+    {
+        var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
+        if (room?.Venue is null || !TryParseStoredSchedule(schedule, out var parsed))
+        {
+            return null;
+        }
+
+        var (hasRules, total, conflicts) = await ClassifyScheduleAsync(roomId, room.Venue.Timezone, parsed, ct).ConfigureAwait(false);
+        return hasRules ? new StoredScheduleConflicts(total, conflicts) : null;
+    }
+
+    /// <summary>Days a calendar defaults to when <c>to</c> is absent: today plus this many (CONTRACTS §6).</summary>
+    private const int DefaultCalendarSpanDays = 27;
+
+    /// <inheritdoc />
+    public async Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(
+        Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default)
+    {
+        var venue = await _repository.GetVenueWithRoomsAsync(venueId, ct).ConfigureAwait(false);
+        if (venue is null || !await _venueManagers.IsManagerAsync(callerId, venueId, ct).ConfigureAwait(false))
+        {
+            // Unknown and unmanaged answer identically — no existence leak (matches Manage venues).
+            return AvailabilityReadResult<VenueCalendarDto>.NotFound();
+        }
+
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(venue.Timezone);
+        var todayLocal = VenueLocalToday(venue.Timezone, _clock.GetUtcNow());
+        var fromDate = from ?? todayLocal;
+        var toDate = to ?? todayLocal.AddDays(DefaultCalendarSpanDays);
+
+        if (toDate < fromDate || toDate.DayNumber - fromDate.DayNumber > MaxRangeDays)
+        {
+            return AvailabilityReadResult<VenueCalendarDto>.Fail(
+                AvailabilityErrorCodes.InvalidRange,
+                $"'to' must be on or after 'from' and the range at most {MaxRangeDays} days.");
+        }
+
+        var rooms = venue.Rooms.OrderBy(r => r.Name).ThenBy(r => r.Id).ToList();
+        var roomIds = rooms.Select(r => r.Id).ToList();
+
+        var occurrences = new List<CalendarOccurrenceDto>();
+        var pending = new List<CalendarPendingDto>();
+        if (roomIds.Count > 0)
+        {
+            var fromUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(fromDate.ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+            var toUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(toDate.AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+
+            var occ = await _repository.GetCalendarOccurrencesAsync(roomIds, fromUtc, toUtc, ct).ConfigureAwait(false);
+            occurrences = occ
+                .OrderBy(o => o.StartUtc)
+                .Select(o => new CalendarOccurrenceDto(
+                    o.BookingId,
+                    o.RoomId,
+                    o.Booking!.Organizer!.DisplayName,
+                    o.LocalDate,
+                    Format(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(o.StartUtc, tz).DateTime)),
+                    Format(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(o.EndUtc, tz).DateTime)),
+                    FlagEnumExtensions.ToCamelCaseToken(o.Status.ToString())))
+                .ToList();
+
+            var apps = await _repository.GetUndecidedApplicationsForRoomsAsync(roomIds, ct).ConfigureAwait(false);
+            foreach (var app in apps)
+            {
+                var dates = MaterializeLocalDates(app, tz).Where(d => d >= fromDate && d <= toDate).OrderBy(d => d).ToList();
+                if (dates.Count == 0)
+                {
+                    continue; // its projected schedule doesn't touch the window
+                }
+
+                pending.Add(new CalendarPendingDto(
+                    app.Id, app.RoomId, app.Organizer!.DisplayName, Format(app.StartTime), Format(app.EndTime), dates));
+            }
+        }
+
+        return AvailabilityReadResult<VenueCalendarDto>.Ok(new VenueCalendarDto(
+            venueId,
+            venue.Timezone,
+            fromDate,
+            toDate,
+            rooms.Select(r => new CalendarRoomDto(r.Id, r.Name)).ToList(),
+            occurrences,
+            pending));
+    }
+
+    /// <summary>The venue-local dates a stored (application) schedule would occupy if approved.</summary>
+    private static IReadOnlyList<DateOnly> MaterializeLocalDates(Application app, TimeZoneInfo tz) =>
+        ScheduleMaterializer.Materialize(
+            app.Frequency,
+            app.StartDate,
+            app.EndDate ?? app.StartDate,
+            app.Frequency == ScheduleFrequency.RecurringWeekly ? app.DaysOfWeek : null,
+            app.StartTime,
+            app.EndTime,
+            tz)
+        .Select(i => i.LocalDate)
+        .ToList();
+
+    /// <summary>
+    /// Leniently parses a <b>stored</b> (already-valid) schedule into its materializable fields —
+    /// unlike <see cref="ValidateSchedule"/> it never rejects a past start date (time may have moved
+    /// on since submit). Returns false only on a structurally impossible schedule (defensive).
+    /// </summary>
+    private static bool TryParseStoredSchedule(ScheduleDto schedule, out ParsedSchedule parsed)
+    {
+        parsed = default;
+        if (!Enum.TryParse<ScheduleFrequency>(schedule.Frequency, ignoreCase: true, out var frequency) || !Enum.IsDefined(frequency))
+        {
+            return false;
+        }
+
+        if (!TryParseTime(schedule.StartTime, out var start) || !TryParseTime(schedule.EndTime, out var end))
+        {
+            return false;
+        }
+
+        if (frequency == ScheduleFrequency.RecurringWeekly)
+        {
+            if (schedule.EndDate is not { } endDate || schedule.DaysOfWeek is not { Count: > 0 } tokens)
+            {
+                return false;
+            }
+
+            var days = FlagEnumExtensions.CombineTokens<Weekdays>(tokens, out _);
+            if (days == Weekdays.None)
+            {
+                return false;
+            }
+
+            parsed = new ParsedSchedule(frequency, schedule.StartDate, endDate, days, start, end);
+            return true;
+        }
+
+        parsed = new ParsedSchedule(frequency, schedule.StartDate, schedule.StartDate, null, start, end);
+        return true;
     }
 
     /// <summary>Recurring When-search horizon: a match must hold on every matching date in the next 28 days (CONTRACTS §3).</summary>

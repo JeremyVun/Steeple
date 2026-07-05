@@ -447,7 +447,180 @@ public class AvailabilityServiceTests
         Assert.Equal("outsideOpenHours", Assert.Single(result.Value.Conflicts).Reason);
     }
 
+    // ----- Stored-schedule conflict digest (manager review, CONTRACTS §6) -----------------------
+
+    [Fact]
+    public async Task GetStoredScheduleConflictsAsync_RoomWithRules_ReturnsDigest()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "11:00"));
+        var service = CreateService(repo, managers, out _);
+
+        // 10:00–12:00 doesn't fit the 09:00–11:00 window → one outsideOpenHours conflict.
+        var result = await service.GetStoredScheduleConflictsAsync(
+            room.Id, new ScheduleDto("oneOff", TodayLocal, null, null, "10:00", "12:00"));
+
+        Assert.NotNull(result);
+        Assert.Equal(1, result!.TotalOccurrences);
+        Assert.Equal("outsideOpenHours", Assert.Single(result.Conflicts).Reason);
+    }
+
+    [Fact]
+    public async Task GetStoredScheduleConflictsAsync_NoRulesRoom_ReturnsNull()
+    {
+        var (repo, managers, room, _) = NewScenario(); // no open hours, no blackouts
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetStoredScheduleConflictsAsync(
+            room.Id, new ScheduleDto("oneOff", TodayLocal, null, null, "10:00", "12:00"));
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetStoredScheduleConflictsAsync_PastStartDate_StillMaterializes()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
+        var service = CreateService(repo, managers, out _);
+
+        // A start date a week in the past would be rejected by the submit-time validator; the stored
+        // path materializes it as-is (time has moved on since the application was filed).
+        var result = await service.GetStoredScheduleConflictsAsync(
+            room.Id, new ScheduleDto("oneOff", TodayLocal.AddDays(-7), null, null, "10:00", "12:00"));
+
+        Assert.NotNull(result);
+        Assert.Equal(1, result!.TotalOccurrences);
+        Assert.Empty(result.Conflicts);
+    }
+
+    // ----- Venue calendar (CONTRACTS §6) --------------------------------------------------------
+
+    [Theory]
+    [InlineData(5, 0)]   // to before from
+    [InlineData(0, 93)]  // span over 92 days
+    public async Task GetVenueCalendarAsync_OutOfRange_ReturnsInvalidRange(int fromOffset, int toOffset)
+    {
+        var (repo, managers, venue, _, manager) = NewCalendarScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetVenueCalendarAsync(
+            manager.Id, venue.Id, TodayLocal.AddDays(fromOffset), TodayLocal.AddDays(toOffset));
+
+        Assert.Null(result.Value);
+        Assert.Equal(AvailabilityErrorCodes.InvalidRange, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_SpanExactly92Days_IsValid()
+    {
+        var (repo, managers, venue, _, manager) = NewCalendarScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetVenueCalendarAsync(manager.Id, venue.Id, TodayLocal, TodayLocal.AddDays(92));
+
+        Assert.Null(result.ErrorCode);
+        Assert.NotNull(result.Value);
+    }
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_AbsentParams_DefaultsToTodayPlus27()
+    {
+        var (repo, managers, venue, _, manager) = NewCalendarScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetVenueCalendarAsync(manager.Id, venue.Id, null, null);
+
+        Assert.Equal(TodayLocal, result.Value!.From);
+        Assert.Equal(TodayLocal.AddDays(27), result.Value.To);
+    }
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_NotManagerOrUnknownVenue_ReturnsNotFound()
+    {
+        var (repo, managers, venue, _, _) = NewCalendarScenario();
+        var service = CreateService(repo, managers, out _);
+
+        var notManager = await service.GetVenueCalendarAsync(Guid.NewGuid(), venue.Id, null, null);
+        Assert.True(notManager.IsNotFound);
+
+        var unknown = await service.GetVenueCalendarAsync(Guid.NewGuid(), Guid.NewGuid(), null, null);
+        Assert.True(unknown.IsNotFound);
+    }
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_ListsAllRoomStatusesAndConvertsOccurrences()
+    {
+        var (repo, managers, venue, room, manager) = NewCalendarScenario();
+        var draft = new Room { Id = Guid.NewGuid(), VenueId = venue.Id, Venue = venue, Name = "Annex", Slug = "annex", Status = RoomStatus.Draft };
+        venue.Rooms.Add(draft);
+
+        var from = new DateOnly(2026, 7, 6);
+        var to = new DateOnly(2026, 7, 20);
+        // 2026-07-10 (Fri) 09:00–11:00 local, confirmed scheduled → "scheduled"; an Occurred one; and a
+        // cancelled booking that must not appear.
+        repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 10), "09:00", "11:00", organizerName: "Ollie"));
+        repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 13), "14:00", "15:00", occStatus: OccurrenceStatus.Occurred));
+        repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 14), "10:00", "11:00", bookingStatus: BookingStatus.Cancelled));
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetVenueCalendarAsync(manager.Id, venue.Id, from, to);
+
+        Assert.Null(result.ErrorCode);
+        Assert.Equal(2, result.Value!.Rooms.Count); // both the Published and the Draft room
+        Assert.Equal(2, result.Value.Occurrences.Count); // cancelled excluded
+        var scheduled = result.Value.Occurrences.Single(o => o.Status == "scheduled");
+        Assert.Equal("Ollie", scheduled.OrganizerName);
+        Assert.Equal(new DateOnly(2026, 7, 10), scheduled.LocalDate);
+        Assert.Equal("09:00", scheduled.StartTime);
+        Assert.Equal("11:00", scheduled.EndTime);
+        Assert.Contains(result.Value.Occurrences, o => o.Status == "occurred");
+    }
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_TruncatesPendingProjectionToRange()
+    {
+        var (repo, managers, venue, room, manager) = NewCalendarScenario();
+        var from = new DateOnly(2026, 7, 6);
+        var to = new DateOnly(2026, 7, 20);
+
+        // A recurring Friday application spanning well beyond the window; only 07-10 and 07-17 fall in range.
+        var organizer = new User { Id = Guid.NewGuid(), DisplayName = "Priya", CreatedAtUtc = FixedNow };
+        repo.Applications.Add(new Application
+        {
+            Id = Guid.NewGuid(),
+            RoomId = room.Id,
+            OrganizerId = organizer.Id,
+            Organizer = organizer,
+            Frequency = ScheduleFrequency.RecurringWeekly,
+            StartDate = new DateOnly(2026, 6, 1),
+            EndDate = new DateOnly(2026, 12, 31),
+            DaysOfWeek = Weekdays.Friday,
+            StartTime = new TimeOnly(9, 0),
+            EndTime = new TimeOnly(11, 0),
+            Status = ApplicationStatus.Pending,
+            CreatedAtUtc = FixedNow,
+        });
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.GetVenueCalendarAsync(manager.Id, venue.Id, from, to);
+
+        var pending = Assert.Single(result.Value!.Pending);
+        Assert.Equal("Priya", pending.OrganizerName);
+        Assert.Equal([new DateOnly(2026, 7, 10), new DateOnly(2026, 7, 17)], pending.Dates);
+        Assert.All(pending.Dates, d => Assert.True(d >= from && d <= to));
+    }
+
     // ----- Helpers -----------------------------------------------------------------------------
+
+    private static (FakeAvailabilityRepository Repo, FakeVenueManagerRepository Managers, Venue Venue, Room Room, User Manager) NewCalendarScenario()
+    {
+        var (repo, managers, room, manager) = NewScenario();
+        var venue = room.Venue!;
+        venue.Rooms.Add(room);
+        repo.Venues.Add(venue);
+        return (repo, managers, venue, room, manager);
+    }
 
     private static ScheduleDto NewSchedule(string frequency, DateOnly startDate, string startTime, string endTime) =>
         new(frequency, startDate, frequency == "recurringWeekly" ? startDate : null, null, startTime, endTime);
@@ -458,13 +631,20 @@ public class AvailabilityServiceTests
         string localStart,
         string localEnd,
         OccurrenceStatus occStatus = OccurrenceStatus.Scheduled,
-        BookingStatus bookingStatus = BookingStatus.Confirmed)
+        BookingStatus bookingStatus = BookingStatus.Confirmed,
+        string organizerName = "Organizer")
     {
         var tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
         DateTimeOffset ToUtc(string time) =>
             new(TimeZoneInfo.ConvertTimeToUtc(localDate.ToDateTime(TimeOnly.Parse(time)), tz), TimeSpan.Zero);
 
-        var booking = new Booking { Id = Guid.NewGuid(), RoomId = roomId, Status = bookingStatus };
+        var booking = new Booking
+        {
+            Id = Guid.NewGuid(),
+            RoomId = roomId,
+            Status = bookingStatus,
+            Organizer = new User { Id = Guid.NewGuid(), DisplayName = organizerName, CreatedAtUtc = FixedNow },
+        };
         return new BookingOccurrence
         {
             Id = Guid.NewGuid(),
@@ -636,6 +816,32 @@ public class AvailabilityServiceTests
                         && o.Booking!.Status == BookingStatus.Confirmed
                         && o.StartUtc < toUtc
                         && o.EndUtc > fromUtc)
+                    .ToList());
+
+        public List<Venue> Venues { get; } = [];
+
+        public List<Application> Applications { get; } = [];
+
+        public Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default) =>
+            Task.FromResult(Venues.FirstOrDefault(v => v.Id == venueId));
+
+        public Task<IReadOnlyList<BookingOccurrence>> GetCalendarOccurrencesAsync(
+            IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<BookingOccurrence>>(
+                Occurrences
+                    .Where(o => roomIds.Contains(o.RoomId)
+                        && (o.Status == OccurrenceStatus.Scheduled || o.Status == OccurrenceStatus.Occurred)
+                        && o.Booking!.Status == BookingStatus.Confirmed
+                        && o.StartUtc < toUtc
+                        && o.EndUtc > fromUtc)
+                    .ToList());
+
+        public Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
+            IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Application>>(
+                Applications
+                    .Where(a => roomIds.Contains(a.RoomId)
+                        && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
                     .ToList());
 
         public Task ReplaceRulesAsync(

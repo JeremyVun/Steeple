@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/theme.dart';
 import '../../../core/api/app_error.dart';
 import '../../../core/models/models.dart';
+import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../application/manage_request_providers.dart';
@@ -85,6 +87,17 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
             ),
           ),
         ),
+        if (application.conflicts != null) ...[
+          const SizedBox(height: SteepleTokens.space5),
+          AvailabilityVerdictCard(
+            result: application.conflicts!.checkResult,
+            pendingOverlaps: application.conflicts!.pendingOverlaps,
+            onTapOverlap: (id) => context.pushNamed(
+              RouteNames.manageRequest,
+              pathParameters: {'id': id},
+            ),
+          ),
+        ],
         const SizedBox(height: SteepleTokens.space6),
         Text(
           'Their request',

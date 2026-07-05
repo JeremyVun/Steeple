@@ -14,6 +14,7 @@ import '../features/discovery/presentation/explore_screen.dart';
 import '../features/inbox/presentation/application_thread_screen.dart';
 import '../features/inbox/presentation/inbox_screen.dart';
 import '../features/listing/presentation/listing_detail_screen.dart';
+import '../features/manage/presentation/manage_calendar_screen.dart';
 import '../features/manage/presentation/manage_home_screen.dart';
 import '../features/manage/presentation/manage_request_screen.dart';
 import '../features/manage/presentation/manage_room_hours_screen.dart';
@@ -114,6 +115,11 @@ GoRouter createRouter(Ref ref, RouterRefresh refresh) {
         path: '/manage',
         builder: (context, state) => const ManageHomeScreen(),
         routes: [
+          GoRoute(
+            name: RouteNames.manageCalendar,
+            path: 'calendar',
+            builder: (context, state) => const ManageCalendarScreen(),
+          ),
           GoRoute(
             name: RouteNames.manageRequest,
             path: 'requests/:id',

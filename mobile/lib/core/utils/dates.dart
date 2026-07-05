@@ -95,6 +95,12 @@ String todayLocalIso() {
 String addDays(String yyyyMmDd, int delta) =>
     _civilFromDays(_daysSinceEpoch(yyyyMmDd) + delta);
 
+/// Whole calendar days from [start] to [end] (`end - start`), negative when
+/// [end] precedes [start]. Pure civil-day arithmetic — venue-local dates are
+/// never routed through [DateTime]/timezone to be differenced.
+int daysBetween(String start, String end) =>
+    _daysSinceEpoch(end) - _daysSinceEpoch(start);
+
 /// 0 = Sunday … 6 = Saturday for a `yyyy-MM-dd` — public wrapper over the
 /// timezone-free weekday computation.
 int weekdayOf(String yyyyMmDd) => _dayOfWeek(yyyyMmDd);

@@ -236,11 +236,92 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application!], ct).ConfigureAwait(false);
-        var summary = application!.OrganizerId == callerId
-            ? null
-            : (await GetOrganizerSummariesAsync([application], ct).ConfigureAwait(false)).GetValueOrDefault(application.OrganizerId);
-        return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true, summary));
+
+        // The manager-vs-organizer split: a caller who isn't the organizer is (per LoadScopedAsync)
+        // a manager of the room's venue. Only the manager sees the reputation summary and — while the
+        // application is still undecided and the availability surface is on — the conflict digest
+        // (pending demand and other organizers' identities stay host-only, CONTRACTS §6).
+        var callerIsManager = application!.OrganizerId != callerId;
+        var summary = callerIsManager
+            ? (await GetOrganizerSummariesAsync([application], ct).ConfigureAwait(false)).GetValueOrDefault(application.OrganizerId)
+            : null;
+        var conflicts = callerIsManager && IsUndecided(application.Status) && _flags.IsEnabled(AvailabilityFlag)
+            ? await BuildConflictsAsync(application, ct).ConfigureAwait(false)
+            : null;
+        return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true, summary, conflicts));
     }
+
+    /// <summary>
+    /// The manager-review conflict digest (CONTRACTS §6) for an undecided application: the schedule's
+    /// rules + confirmed-booking conflicts (from the Availability engine) plus competing pending
+    /// demand on the same room. Null when the room has no availability rules (nothing to review).
+    /// </summary>
+    private async Task<ApplicationConflictsDto?> BuildConflictsAsync(Application application, CancellationToken ct)
+    {
+        var core = await _availability
+            .GetStoredScheduleConflictsAsync(application.RoomId, application.ToScheduleDto(), ct)
+            .ConfigureAwait(false);
+        if (core is null)
+        {
+            return null; // room has no availability rules
+        }
+
+        var overlaps = await BuildPendingOverlapsAsync(application, ct).ConfigureAwait(false);
+        return new ApplicationConflictsDto(core.TotalOccurrences, core.Conflicts, overlaps);
+    }
+
+    /// <summary>
+    /// Other undecided applications on the same room whose projected dates <b>and</b> time ranges
+    /// intersect this one's, with the count of shared dates each. Times are constant across a
+    /// schedule's dates, so a single half-open <c>[start, end)</c> overlap test gates a competitor;
+    /// the count is the size of the date intersection. Competitors with no shared dates or disjoint
+    /// times are omitted.
+    /// </summary>
+    private async Task<IReadOnlyList<PendingOverlapDto>> BuildPendingOverlapsAsync(Application application, CancellationToken ct)
+    {
+        var competitors = await _repository.GetUndecidedForRoomAsync(application.RoomId, application.Id, ct).ConfigureAwait(false);
+        if (competitors.Count == 0)
+        {
+            return [];
+        }
+
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(application.Room!.Venue!.Timezone);
+        var myDates = MaterializeLocalDates(application, tz);
+
+        var overlaps = new List<PendingOverlapDto>();
+        foreach (var competitor in competitors)
+        {
+            // Half-open time-range overlap: touching endpoints ([) ) don't clash.
+            if (application.StartTime >= competitor.EndTime || competitor.StartTime >= application.EndTime)
+            {
+                continue;
+            }
+
+            var theirDates = MaterializeLocalDates(competitor, tz).ToHashSet();
+            var shared = myDates.Count(theirDates.Contains);
+            if (shared == 0)
+            {
+                continue;
+            }
+
+            overlaps.Add(new PendingOverlapDto(competitor.Id, competitor.Organizer!.DisplayName, shared));
+        }
+
+        return overlaps.OrderByDescending(o => o.OverlappingDateCount).ThenBy(o => o.OrganizerName).ToList();
+    }
+
+    /// <summary>The venue-local dates a stored application schedule would occupy if approved.</summary>
+    private static IReadOnlyList<DateOnly> MaterializeLocalDates(Application app, TimeZoneInfo tz) =>
+        ScheduleMaterializer.Materialize(
+            app.Frequency,
+            app.StartDate,
+            app.EndDate ?? app.StartDate,
+            app.Frequency == ScheduleFrequency.RecurringWeekly ? app.DaysOfWeek : null,
+            app.StartTime,
+            app.EndTime,
+            tz)
+        .Select(i => i.LocalDate)
+        .ToList();
 
     /// <inheritdoc />
     public async Task<ApplicationResult<ApplicationDto>> AddMessageAsync(
