@@ -11,6 +11,11 @@
         return;
     }
 
+    // With JS running, the calendar + windows drive the schedule; the native date/time fields
+    // collapse to the no-JS fallback (§8.9). The submit guard below re-reveals them if a value
+    // is missing, so browser validation never targets a hidden field.
+    form.classList.add("is-picker-active");
+
     var startDate = form.querySelector("[data-start-date]");
     var endDate = form.querySelector("[data-end-date]");
     var startTime = form.querySelector("[data-start-time]");
@@ -131,6 +136,23 @@
     form.addEventListener("change", function (e) {
         if (e.target.matches("[data-range-start]")) { setNative(startTime, e.target.value); updateReadout(); }
         else if (e.target.matches("[data-range-end]")) { setNative(endTime, e.target.value); updateReadout(); }
+    });
+
+    // Switching to weekly after a date is already picked: seed that day's weekday chip (§8.12).
+    form.querySelectorAll("[data-freq-radio]").forEach(function (radio) {
+        radio.addEventListener("change", function () {
+            if (isWeekly() && startDate && startDate.value) { precheckWeekday(startDate.value); }
+        });
+    });
+
+    // ----- Submit guard: incomplete schedule → reveal the native fields and let validation run -----
+    form.addEventListener("submit", function (e) {
+        var incomplete = [startDate, startTime, endTime].some(function (f) { return f && !f.value; });
+        if (incomplete) {
+            form.classList.remove("is-picker-active");
+            e.preventDefault();
+            form.reportValidity();
+        }
     });
 
     // ----- Roving tabindex + arrow keys on the calendar grid (§8.10) --------------------------------

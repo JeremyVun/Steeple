@@ -70,6 +70,21 @@
                        value="@(Model.Query.MinCapacity?.ToString() ?? "")" />
             </label>
 
+            @* JS-only summarizing trigger for the When popover (site.js unhides it and collapses
+               the .filter-when row into the anchored panel). No JS: stays hidden, inline row remains. *@
+            <button type="button" class="when-trigger" data-when-trigger hidden
+                    aria-haspopup="dialog" aria-expanded="false">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span class="when-trigger-label">When:</span>
+                <span class="when-trigger-summary" data-when-summary>Any time</span>
+                <span class="when-trigger-caret" aria-hidden="true">▾</span>
+            </button>
+
             <label class="toggle toggle-pill">
                 <input type="checkbox" name="FreeOnly" value="true" @(Model.Query.FreeOnly ? "checked" : "") />
                 <span class="toggle-label">Free only</span>
@@ -85,9 +100,19 @@
            so the selection rides the swap + hx-push-url; site.js handles the reveals and the
            date⇄weekday / band⇄custom mutual exclusion. No JS: everything visible, still submittable. *@
         <div class="filter-when" data-when-control>
+            <div class="when-panel" data-when-panel>
+            <div class="when-mode chip-set" data-when-mode hidden role="group" aria-label="How often">
+                <button type="button" class="chip-btn is-selected" data-when-mode-btn="once">Just once</button>
+                <button type="button" class="chip-btn" data-when-mode-btn="weekly">Weekly</button>
+            </div>
+
+            @* JS-rendered plain date picker (no availability semantics — that lives on the apply
+               calendar, §8.10). Writes into the real date input below. *@
+            <div class="when-cal" data-when-calendar hidden></div>
+
             <div class="when-row">
                 <fieldset class="filter-group when-band">
-                    <legend class="filter-legend">When</legend>
+                    <legend class="filter-legend">Time of day</legend>
                     <div class="chip-set">
                         @foreach (var band in timeBands)
                         {
@@ -139,6 +164,12 @@
                     }
                 </div>
             </fieldset>
+
+            <div class="when-panel-foot" data-when-foot hidden>
+                <button type="button" class="when-clear-btn" data-when-clear>Clear</button>
+                <button type="button" class="btn btn-primary btn-sm" data-when-done>Done</button>
+            </div>
+            </div>
         </div>
 
         <div class="filter-facets">

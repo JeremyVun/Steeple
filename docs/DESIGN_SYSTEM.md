@@ -347,6 +347,21 @@ all seven**, min touch target 44px, each a real checkbox inside a `<label>` (web
 nothing is selected yet; it never unchecks user choices. At least one chip required in
 weekly mode — enforce at submit with `danger` helper text, not by disabling chips.
 
+### 8.12a Search "When" popover (web discovery)
+
+The filter bar's date/time selection lives behind one summarizing trigger pill in the
+primary row ("When: Any time" → "When: Fri 10 Jul · Morning" / "When: Weekly · Tue ·
+Evening"; active state = filter-chip selected pair). Clicking opens a non-modal
+`role="dialog"` panel anchored under the bar: Just once / Weekly mode chips, a **plain**
+mini month calendar (12-month horizon, §8.10 grid styling but *no availability states or
+legend* — availability semantics belong to the apply calendar only), the
+Morning/Afternoon/Evening chips + custom-time reveal (§8.2), weekday chips in weekly mode
+(§8.12), and a Clear / Done footer. Esc, Done, and outside-click close it; results update
+live on every change (the panel writes into the real form inputs, which stay the no-JS
+fallback rendered inline). Phones (≤640px): the panel becomes a fixed bottom sheet
+(max-height 85dvh, internal scroll) — the stacked filter bar would push an anchored panel
+below the fold — with full-bleed width so all seven columns keep ≥44px targets.
+
 ### 8.13 Availability & conflict feedback
 
 One shared verdict card, used by the apply live check, the submit hard-block re-render, and

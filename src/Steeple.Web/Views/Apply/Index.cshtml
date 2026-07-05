@@ -98,7 +98,7 @@
                 }
 
                 <div class="form-row@(Model.PickerEnabled ? " apply-native-schedule" : "")">
-                    <div class="form-field" data-when-freq="oneOff recurringWeekly">
+                    <div class="form-field apply-native-start" data-when-freq="oneOff recurringWeekly">
                         <label class="field-label" for="apply-startdate" data-label-oneoff="Date" data-label-weekly="First date">@(isWeekly ? "First date" : "Date")</label>
                         <input class="form-input" id="apply-startdate" name="StartDate" type="date"
                                value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required
@@ -137,19 +137,21 @@
                     <p class="field-help">Pick one or more — "Tuesdays and Thursdays" is one request.</p>
                 </fieldset>
 
-                <div class="form-row">
-                    <div class="form-field">
-                        <label class="field-label" for="apply-starttime">From</label>
-                        <input class="form-input" id="apply-starttime" name="StartTime" type="time"
-                               value="@form.StartTime" required data-schedule-field data-start-time />
+                <div class="apply-native-times">
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label class="field-label" for="apply-starttime">From</label>
+                            <input class="form-input" id="apply-starttime" name="StartTime" type="time"
+                                   value="@form.StartTime" required data-schedule-field data-start-time />
+                        </div>
+                        <div class="form-field">
+                            <label class="field-label" for="apply-endtime">To</label>
+                            <input class="form-input" id="apply-endtime" name="EndTime" type="time"
+                                   value="@form.EndTime" required data-schedule-field data-end-time />
+                        </div>
                     </div>
-                    <div class="form-field">
-                        <label class="field-label" for="apply-endtime">To</label>
-                        <input class="form-input" id="apply-endtime" name="EndTime" type="time"
-                               value="@form.EndTime" required data-schedule-field data-end-time />
-                    </div>
+                    <p class="field-help">Times are local to @venue.Name.</p>
                 </div>
-                <p class="field-help">Times are local to @venue.Name.</p>
 
                 @if (Model.PickerEnabled)
                 {

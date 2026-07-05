@@ -6,7 +6,7 @@
     <form hx-post="@Url.Content("~/admin/applications/status")" hx-target="#admin-applications-panel" hx-swap="outerHTML">
         <div class="admin-bulkbar">
             <label class="admin-bulkbar-all">
-                <input type="checkbox" class="admin-select-all" onclick="hsBulkAll(this)" aria-label="Select all applications" />
+                <input type="checkbox" class="admin-select-all" aria-label="Select all applications" />
                 Select all
             </label>
             <span class="admin-bulkbar-count" data-selected-count>0 selected</span>
@@ -47,7 +47,6 @@
                         <tr>
                             <td class="admin-col-check">
                                 <input type="checkbox" class="admin-row-check" name="ids" value="@app.Id"
-                                       onclick="hsBulkRow(this)"
                                        aria-label="Select application from @app.Organizer for @app.Room" />
                             </td>
                             <td>

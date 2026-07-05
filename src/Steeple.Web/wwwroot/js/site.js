@@ -191,6 +191,247 @@
                 }
             });
         });
+
+        // ---- Popover enhancement -----------------------------------------------------------------
+        // With JS, the inline When row collapses into a summarizing trigger pill + anchored panel.
+        // The real inputs above stay canonical; the calendar, mode buttons and summary only read
+        // from / write into them, so shared URLs and the no-JS form keep working unchanged.
+        var form = control.closest("form");
+        var trigger = form ? form.querySelector("[data-when-trigger]") : null;
+        var panel = control.querySelector("[data-when-panel]");
+        var summary = form ? form.querySelector("[data-when-summary]") : null;
+        var calMount = control.querySelector("[data-when-calendar]");
+        var modeRow = control.querySelector("[data-when-mode]");
+        var foot = control.querySelector("[data-when-foot]");
+        if (!trigger || !panel || !calMount) {
+            return;
+        }
+
+        control.classList.add("when-enhanced");
+        trigger.hidden = false;
+        if (modeRow) { modeRow.hidden = false; }
+        if (foot) { foot.hidden = false; }
+        calMount.hidden = !!(weekly && weekly.checked);
+        panel.hidden = true;
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "When do you need the space?");
+        panel.setAttribute("tabindex", "-1");
+
+        function fmt12(v) {
+            var p = v.split(":"), h = +p[0], ap = h < 12 ? "AM" : "PM", hr = h % 12 || 12;
+            return hr + ":" + p[1] + " " + ap;
+        }
+
+        function summarize() {
+            var parts = [];
+            if (weekly && weekly.checked) {
+                var days = [];
+                weekdayInputs.forEach(function (i) {
+                    if (i.checked) {
+                        var text = i.nextElementSibling ? i.nextElementSibling.textContent.trim() : i.value;
+                        days.push(text.slice(0, 3));
+                    }
+                });
+                parts.push(days.length ? "Weekly · " + days.join(", ") : "Weekly");
+            } else if (dateInput && dateInput.value) {
+                parts.push(new Date(dateInput.value + "T00:00:00")
+                    .toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }));
+            }
+            var band = control.querySelector("[data-when-band]:checked");
+            if (band) {
+                var chipText = band.nextElementSibling;
+                parts.push(chipText ? chipText.textContent.trim() : band.value);
+            } else if (customInputs.length && customInputs[0].value && customInputs[1] && customInputs[1].value) {
+                parts.push(fmt12(customInputs[0].value) + "–" + fmt12(customInputs[1].value));
+            }
+            var text = parts.join(" · ") || "Any time";
+            if (summary) { summary.textContent = text; }
+            trigger.classList.toggle("is-active", text !== "Any time");
+        }
+
+        // ---- Mini calendar: a plain date picker writing into the real date input ------------------
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var view = dateInput && dateInput.value ? new Date(dateInput.value + "T00:00:00") : new Date(today);
+        var maxMonth = new Date(today.getFullYear(), today.getMonth() + 12, 1);
+
+        function wireDate(d) {
+            var m = d.getMonth() + 1, day = d.getDate();
+            return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+        }
+
+        function renderCalendar() {
+            calMount.textContent = "";
+            var y = view.getFullYear(), mo = view.getMonth();
+            var selected = dateInput && dateInput.value ? dateInput.value : null;
+
+            var nav = document.createElement("div");
+            nav.className = "avail-calendar-nav";
+            var heading = document.createElement("h3");
+            heading.className = "avail-calendar-heading";
+            heading.setAttribute("aria-live", "polite");
+            heading.textContent = new Date(y, mo, 1)
+                .toLocaleDateString(undefined, { month: "long", year: "numeric" });
+            function navBtn(dir, label, enabled) {
+                var b = document.createElement("button");
+                b.type = "button";
+                b.className = "avail-nav-btn" + (enabled ? "" : " is-disabled");
+                b.textContent = dir < 0 ? "‹" : "›";
+                b.setAttribute("aria-label", label);
+                b.disabled = !enabled;
+                b.addEventListener("click", function () {
+                    view = new Date(y, mo + dir, 1);
+                    renderCalendar();
+                });
+                return b;
+            }
+            nav.appendChild(navBtn(-1, "Previous month", new Date(y, mo, 1) > new Date(today.getFullYear(), today.getMonth(), 1)));
+            nav.appendChild(heading);
+            nav.appendChild(navBtn(1, "Next month", new Date(y, mo + 1, 1) <= maxMonth));
+            calMount.appendChild(nav);
+
+            var head = document.createElement("div");
+            head.className = "avail-weekhead";
+            ["S", "M", "T", "W", "T", "F", "S"].forEach(function (d) {
+                var s = document.createElement("span");
+                s.className = "avail-weekday";
+                s.textContent = d;
+                head.appendChild(s);
+            });
+            calMount.appendChild(head);
+
+            var grid = document.createElement("div");
+            grid.className = "avail-days";
+            var firstDow = new Date(y, mo, 1).getDay();
+            for (var b = 0; b < firstDow; b++) {
+                var blank = document.createElement("span");
+                blank.className = "avail-day avail-blank";
+                grid.appendChild(blank);
+            }
+            var daysInMonth = new Date(y, mo + 1, 0).getDate();
+            for (var d = 1; d <= daysInMonth; d++) {
+                var date = new Date(y, mo, d);
+                var wire = wireDate(date);
+                var isPast = date < today;
+                var accessible = date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+                if (isPast) {
+                    var span = document.createElement("span");
+                    span.className = "avail-day avail-past";
+                    span.setAttribute("aria-label", accessible + " — past");
+                    var n = document.createElement("span");
+                    n.className = "avail-num";
+                    n.textContent = d;
+                    span.appendChild(n);
+                    grid.appendChild(span);
+                } else {
+                    var btn = document.createElement("button");
+                    btn.type = "button";
+                    btn.className = "avail-day avail-open"
+                        + (wire === wireDate(today) ? " is-today" : "")
+                        + (wire === selected ? " is-selected" : "");
+                    btn.setAttribute("data-date", wire);
+                    btn.setAttribute("aria-label", accessible);
+                    btn.setAttribute("aria-pressed", wire === selected ? "true" : "false");
+                    var num = document.createElement("span");
+                    num.className = "avail-num";
+                    num.textContent = d;
+                    btn.appendChild(num);
+                    btn.addEventListener("click", function (e) {
+                        var el = e.currentTarget;
+                        var value = el.getAttribute("data-date") === (dateInput ? dateInput.value : "")
+                            ? "" : el.getAttribute("data-date");
+                        if (dateInput) {
+                            dateInput.value = value;
+                            dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+                        }
+                        renderCalendar();
+                        summarize();
+                    });
+                    grid.appendChild(btn);
+                }
+            }
+            calMount.appendChild(grid);
+        }
+        renderCalendar();
+
+        // ---- Mode buttons drive the (now hidden) weekly checkbox -----------------------------------
+        var modeBtns = modeRow ? modeRow.querySelectorAll("[data-when-mode-btn]") : [];
+        function syncMode() {
+            var on = !!(weekly && weekly.checked);
+            modeBtns.forEach(function (b) {
+                b.classList.toggle("is-selected", (b.getAttribute("data-when-mode-btn") === "weekly") === on);
+            });
+            calMount.hidden = on;
+        }
+        modeBtns.forEach(function (b) {
+            b.addEventListener("click", function () {
+                var wantWeekly = b.getAttribute("data-when-mode-btn") === "weekly";
+                if (weekly && weekly.checked !== wantWeekly) {
+                    weekly.checked = wantWeekly;
+                    weekly.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+                syncMode();
+                summarize();
+            });
+        });
+        syncMode();
+
+        // ---- Open / close ---------------------------------------------------------------------------
+        function setOpen(open) {
+            panel.hidden = !open;
+            trigger.setAttribute("aria-expanded", open ? "true" : "false");
+            if (open) { panel.focus({ preventScroll: true }); }
+        }
+        trigger.addEventListener("click", function () { setOpen(panel.hidden); });
+        document.addEventListener("click", function (e) {
+            if (panel.hidden) { return; }
+            // A calendar click re-renders the grid before this handler runs, detaching the day
+            // button — a detached target was inside the panel, never an outside click.
+            if (!(e.target instanceof Element) || !e.target.isConnected) { return; }
+            if (!control.contains(e.target) && !trigger.contains(e.target)) {
+                setOpen(false);
+            }
+        });
+        panel.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                setOpen(false);
+                trigger.focus();
+            }
+        });
+        var done = control.querySelector("[data-when-done]");
+        if (done) {
+            done.addEventListener("click", function () {
+                setOpen(false);
+                trigger.focus();
+            });
+        }
+
+        // ---- Clear: reset every When field, then fire one change so HTMX refreshes ----------------
+        var clearBtn = control.querySelector("[data-when-clear]");
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function () {
+                bandRadios.forEach(function (r) { r.checked = false; });
+                customInputs.forEach(function (i) { i.value = ""; });
+                showCustom(false);
+                weekdayInputs.forEach(function (i) { i.checked = false; });
+                if (weekly) { weekly.checked = false; }
+                applyWeekly();
+                syncMode();
+                if (dateInput) {
+                    dateInput.value = "";
+                    dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+                renderCalendar();
+                summarize();
+            });
+        }
+
+        // Any change to the real inputs (band chips, weekday chips, custom times) refreshes the pill.
+        control.addEventListener("change", function () {
+            syncMode();
+            summarize();
+        });
+        summarize();
     }
 
     function init() {

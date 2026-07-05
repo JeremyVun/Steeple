@@ -4,7 +4,7 @@
     <form hx-post="@Url.Content("~/admin/users/status")" hx-target="#admin-users-table" hx-swap="outerHTML">
         <div class="admin-bulkbar">
             <label class="admin-bulkbar-all">
-                <input type="checkbox" class="admin-select-all" onclick="hsBulkAll(this)" aria-label="Select all users" />
+                <input type="checkbox" class="admin-select-all" aria-label="Select all users" />
                 Select all
             </label>
             <span class="admin-bulkbar-count" data-selected-count>0 selected</span>
@@ -39,7 +39,6 @@
                     <tr>
                         <td class="admin-col-check">
                             <input type="checkbox" class="admin-row-check" name="ids" value="@user.Id"
-                                   onclick="hsBulkRow(this)"
                                    aria-label="Select @user.Name" />
                         </td>
                         <td>

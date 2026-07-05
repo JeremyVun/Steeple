@@ -114,6 +114,7 @@ services:
       Flags__web.sign_in_enabled: "${WEB_SIGN_IN_ENABLED:-false}"
       Flags__web.apply_from_browser: "${WEB_APPLY_FROM_BROWSER:-false}"
       Flags__web.manage_enabled: "${WEB_MANAGE_ENABLED:-false}"
+      Flags__web.availability_picker: "${WEB_AVAILABILITY_PICKER:-true}"
     ports:
       - "${WEB_PORT:-8080}:8080"
     volumes:

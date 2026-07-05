@@ -58,6 +58,10 @@
 
 * { box-sizing: border-box; }
 
+/* Author display rules (e.g. .form-field { display: flex }) beat the UA's [hidden]
+   rule — this keeps the hidden attribute authoritative everywhere. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -69,6 +73,10 @@ body {
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Sticky footer: short pages (login, 404) pin the footer to the viewport bottom. */
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
 }
 
 h1, h2, h3 {
@@ -187,7 +195,7 @@ img { max-width: 100%; display: block; }
 }
 
 /* ---------- Hero ---------- */
-.site-main { display: block; }
+.site-main { display: block; flex: 1 0 auto; }
 /* Compact hero so the search/results/map sit high on the page rather than below the fold. */
 .hero { padding-block: clamp(1.1rem, 2.5vw, 1.6rem) 0.9rem; }
 .hero-text { max-width: 64ch; }
@@ -366,6 +374,102 @@ img { max-width: 100%; display: block; }
 }
 .when-custom-btn:hover { color: var(--ink); }
 .when-custom-btn:focus-visible { box-shadow: var(--focus); outline: none; border-radius: var(--radius-sm); }
+
+/* No-JS: the panel wrapper is transparent, the When fields flow inline exactly as before. */
+.when-panel { display: contents; }
+
+/* JS-enhanced (site.js adds .when-enhanced): the row collapses behind a summarizing trigger
+   pill in the primary row; the panel becomes a dialog anchored under the filter bar. */
+.when-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.42rem 0.85rem;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: var(--card);
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.when-trigger:hover { border-color: var(--sage); }
+.when-trigger:focus-visible { box-shadow: var(--focus); outline: none; }
+.when-trigger.is-active {
+    background: var(--sage-tint);
+    border-color: var(--sage);
+    color: var(--sage-deep);
+}
+.when-trigger-label { color: var(--ink-faint); }
+.when-trigger.is-active .when-trigger-label { color: inherit; }
+.when-trigger-summary { font-weight: 600; }
+.when-trigger-caret { font-size: 0.7rem; color: var(--ink-faint); }
+
+.when-enhanced { display: contents; }
+.when-enhanced .when-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0.9rem;
+    width: min(26rem, calc(100% - 1.8rem));
+    background: var(--card);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 1.1rem;
+    z-index: 40;
+}
+.when-enhanced .when-panel:focus { outline: none; }
+/* The calendar + mode buttons take over date + frequency: the native fallbacks retire. */
+.when-enhanced .when-date,
+.when-enhanced .when-weekly-toggle { display: none; }
+.when-enhanced .when-row { border: 0; padding: 0; }
+
+.when-cal .avail-day { font-size: 0.85rem; }
+.when-cal .avail-calendar-heading { font-size: 1rem; }
+.when-cal .avail-weekhead, .when-cal .avail-days { gap: 3px; }
+@media (max-width: 640px) {
+    /* Phones: the stacked filter bar pushes an anchored panel below the fold, so the panel
+       becomes a fixed bottom sheet instead — always in-viewport, scrolls internally. */
+    .when-enhanced .when-panel {
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: auto;
+        max-height: 85dvh;
+        overflow-y: auto;
+        border-radius: var(--radius) var(--radius) 0 0;
+        border-bottom: 0;
+        padding: 0.9rem;
+        z-index: 60;
+        box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+    }
+}
+
+.when-panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--line);
+    padding-top: 0.75rem;
+}
+.when-clear-btn {
+    background: none;
+    border: 0;
+    padding: 0.3rem 0.2rem;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink-faint);
+    text-decoration: underline;
+    cursor: pointer;
+}
+.when-clear-btn:hover { color: var(--terracotta-deep); }
+.when-clear-btn:focus-visible { box-shadow: var(--focus); outline: none; border-radius: var(--radius-sm); }
 
 .toggle {
     display: inline-flex;
@@ -1759,6 +1863,9 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
     border: 1px solid transparent; border-radius: var(--radius-sm);
     background: transparent; color: var(--ink); font: inherit; font-size: 0.95rem; cursor: pointer;
     padding: 0;
+    /* Grid items otherwise refuse to shrink below the 44px aspect square and the 7-column
+       grid overflows narrow containers (e.g. the When popover on phones). */
+    min-width: 0;
 }
 .avail-day.avail-blank { border: 0; background: transparent; cursor: default; }
 button.avail-day { -webkit-appearance: none; appearance: none; }
@@ -1790,6 +1897,10 @@ button.avail-day:focus-visible { box-shadow: var(--focus); outline: none; }
 .avail-swatch.avail-closed { background: var(--paper-deep); }
 
 /* Day windows / time-range control (§8.11) */
+/* The picker block is JS-territory (HTMX fragments + slot-picker.js): without JS nothing would
+   ever load into it, so it stays hidden until slot-picker.js marks the form as picker-active. */
+.apply-picker { display: none; }
+.is-picker-active .apply-picker { display: block; }
 .apply-day-windows { margin-bottom: 1rem; }
 .apply-day-hint, .day-windows-empty { font-size: 0.9rem; color: var(--ink-faint); margin: 0.25rem 0; }
 .day-windows-lead { font-size: 0.95rem; margin: 0 0 0.6rem; }
@@ -1802,6 +1913,13 @@ button.avail-day:focus-visible { box-shadow: var(--focus); outline: none; }
 
 /* Native inputs stay canonical but sit quieter once the picker is active. */
 .apply-native-schedule { margin-top: 0.5rem; }
+
+/* Picker-active (§8.9): the calendar + free windows drive the values, so the duplicated native
+   date/time fields collapse to their no-JS fallback role. slot-picker.js removes the class on an
+   incomplete submit so browser validation always targets visible fields. The weekly "Until" field
+   and weekday chips stay — the calendar has no affordance for them. */
+.is-picker-active .apply-native-start,
+.is-picker-active .apply-native-times { display: none; }
 
 /* Verdict / conflict card (§8.13) — status pairs from §2.3. */
 .apply-conflict, .apply-conflict-block { margin: 0 0 1rem; }
