@@ -71,6 +71,10 @@ public sealed class EfManageRepository : IManageRepository
         _db.HasFutureConfirmedOccurrenceAsync(roomId, nowUtc, ct);
 
     /// <inheritdoc />
+    public Task<bool> HasFutureConfirmedVenueOccurrencesAsync(Guid venueId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+        _db.HasFutureConfirmedVenueOccurrenceAsync(venueId, nowUtc, ct);
+
+    /// <inheritdoc />
     public Task<bool> HasPublishedRoomsAsync(Guid venueId, CancellationToken ct = default) =>
         _db.Rooms.AnyAsync(r => r.VenueId == venueId && r.Status == RoomStatus.Published, ct);
 

@@ -24,6 +24,13 @@ public static class BookingOccurrenceQueries
         this SteepleDbContext db, Guid roomId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
         db.BookingOccurrences.Where(o => o.RoomId == roomId).FutureConfirmed(nowUtc).AnyAsync(ct);
 
+    /// <summary>Whether any room of the given venue has a future confirmed occurrence (venue-wide check).</summary>
+    public static Task<bool> HasFutureConfirmedVenueOccurrenceAsync(
+        this SteepleDbContext db, Guid venueId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+        db.BookingOccurrences
+            .Where(o => db.Rooms.Any(r => r.Id == o.RoomId && r.VenueId == venueId))
+            .FutureConfirmed(nowUtc).AnyAsync(ct);
+
     /// <summary>Which of the given rooms have a future confirmed occurrence (bulk check).</summary>
     public static IQueryable<Guid> RoomIdsWithFutureConfirmedOccurrences(
         this SteepleDbContext db, IReadOnlyCollection<Guid> roomIds, DateTimeOffset nowUtc) =>

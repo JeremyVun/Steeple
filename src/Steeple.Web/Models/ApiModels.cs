@@ -339,7 +339,8 @@ public record SaveVenueRequest(
     string? Postcode,
     string? ContactEmail,
     string? ParkingInfo,
-    string? TransitInfo);
+    string? TransitInfo,
+    string? Timezone);
 
 /// <summary>One document link supplied with a venue verification request.</summary>
 public record VenueVerificationDocumentRequest(string? Label, string? Url);

@@ -28,6 +28,7 @@ public sealed class VenueFormViewModel
     public string ContactEmail { get; set; } = "";
     public string ParkingInfo { get; set; } = "";
     public string TransitInfo { get; set; } = "";
+    public string Timezone { get; set; } = "America/New_York";
 
     /// <summary>Top-of-form error banner.</summary>
     public string? Error { get; set; }
@@ -39,6 +40,24 @@ public sealed class VenueFormViewModel
         new("publicSpace", "Public space"),
         new("other", "Other"),
     ];
+
+    /// <summary>US-first IANA shortlist (value = wire identifier).</summary>
+    public static IReadOnlyList<FilterOption> TimezoneOptions { get; } =
+    [
+        new("America/New_York", "Eastern — New York"),
+        new("America/Chicago", "Central — Chicago"),
+        new("America/Denver", "Mountain — Denver"),
+        new("America/Phoenix", "Arizona — Phoenix"),
+        new("America/Los_Angeles", "Pacific — Los Angeles"),
+        new("America/Anchorage", "Alaska — Anchorage"),
+        new("Pacific/Honolulu", "Hawaii — Honolulu"),
+    ];
+
+    /// <summary>The shortlist plus the venue's current zone when it isn't on it, so an edit round-trips unchanged.</summary>
+    public IReadOnlyList<FilterOption> TimezoneChoices =>
+        TimezoneOptions.Any(o => o.Value == Timezone)
+            ? TimezoneOptions
+            : [.. TimezoneOptions, new(Timezone, Timezone)];
 
     /// <summary>Prefills the form from a fetched venue.</summary>
     public static VenueFormViewModel From(ManagedVenueDetailDto venue) => new()
@@ -53,6 +72,7 @@ public sealed class VenueFormViewModel
         ContactEmail = venue.ContactEmail ?? "",
         ParkingInfo = venue.ParkingInfo,
         TransitInfo = venue.TransitInfo,
+        Timezone = venue.Timezone,
     };
 
     /// <summary>The wire payload (create and edit send the full form).</summary>
@@ -65,7 +85,8 @@ public sealed class VenueFormViewModel
         Postcode: Postcode.Trim(),
         ContactEmail: string.IsNullOrWhiteSpace(ContactEmail) ? "" : ContactEmail.Trim(),
         ParkingInfo: ParkingInfo.Trim(),
-        TransitInfo: TransitInfo.Trim());
+        TransitInfo: TransitInfo.Trim(),
+        Timezone: Timezone.Trim());
 }
 
 /// <summary>The venue editor page: details form + the rooms list.</summary>

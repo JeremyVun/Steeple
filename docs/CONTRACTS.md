@@ -280,6 +280,11 @@ Edits a provider makes to an already-published room apply immediately (never blo
 - `PATCH /api/v1/manage/venues/{id}` ✅ — same `SaveVenueRequest` shape; `null` fields mean
   "unchanged". Address-affecting changes re-geocode (same geofence check) and stamp
   `ProviderEditedAtUtc`.
+- `SaveVenueRequest.timezone` ✅ *(additive 2026-07-05)* — IANA identifier (must contain `/`
+  and resolve, e.g. `"America/New_York"`); invalid → `400 invalid_venue`. Create default:
+  `America/New_York` (single-timezone beachhead). Changing it while the venue has upcoming
+  confirmed occurrences → `409 has_active_bookings` (existing bookings were promised at their
+  current venue-local times); same value re-sent is always fine.
 - `POST /api/v1/manage/venues/{id}/verification` ✅ — `SubmitVenueVerificationRequest`:
   `{contactName, contactEmail?, evidenceSummary, attestedAuthority, documents:[{label,url}]}`
   where `documents` has 1–5 HTTP(S) links to externally hosted/signed proof documents (lease,

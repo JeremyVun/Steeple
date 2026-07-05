@@ -37,6 +37,12 @@ public interface IManageRepository
     Task<bool> HasFutureConfirmedOccurrencesAsync(Guid roomId, DateTimeOffset nowUtc, CancellationToken ct = default);
 
     /// <summary>
+    /// Whether any room of the venue has a future confirmed occurrence (cross-module read); blocks a
+    /// timezone change so existing bookings keep the local wall-clock times they were promised.
+    /// </summary>
+    Task<bool> HasFutureConfirmedVenueOccurrencesAsync(Guid venueId, DateTimeOffset nowUtc, CancellationToken ct = default);
+
+    /// <summary>
     /// Whether the venue has at least one Published room, checked live against the DB (not the
     /// in-memory snapshot) so a room published concurrently between load and save isn't missed.
     /// </summary>

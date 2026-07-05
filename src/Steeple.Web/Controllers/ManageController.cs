@@ -683,6 +683,7 @@ public sealed class ManageController : SteepleControllerBase
     {
         "geofence_rejected" => "That address is outside the area Steeple currently serves.",
         "invalid_venue" => "Check the venue details — a required field is missing or too long.",
+        "has_active_bookings" => "You can change the timezone after the venue's upcoming confirmed bookings finish — they were promised at their current local times.",
         "rate_limited" => "You're saving quickly — give it a minute.",
         _ => "Couldn't save the venue. Try again in a moment.",
     };

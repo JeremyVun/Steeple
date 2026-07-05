@@ -61,6 +61,12 @@ public sealed class ManageService : IManageService
             return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, invalid);
         }
 
+        var (timezone, timezoneError) = ValidateTimezone(request);
+        if (timezoneError is not null)
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, timezoneError);
+        }
+
         var venueType = FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) ?? VenueType.Church;
 
         var location = await GeocodeInsideBeachheadAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
@@ -92,8 +98,9 @@ public sealed class ManageService : IManageService
             ParkingInfo = request.ParkingInfo?.Trim() ?? "",
             TransitInfo = request.TransitInfo?.Trim() ?? "",
             IsIdentityVerified = false, // concierge/Admin verification, never self-claimed
-            // The beachhead is single-timezone; an areas table brings per-area zones (SYSTEM_DESIGN §10).
-            Timezone = "America/New_York",
+            // Beachhead default hosts can now override with any IANA identifier (per-area zones
+            // still land with an areas table — SYSTEM_DESIGN §10).
+            Timezone = timezone ?? "America/New_York",
             CreatedAtUtc = now,
             UpdatedAtUtc = now,
         };
@@ -122,6 +129,23 @@ public sealed class ManageService : IManageService
         if (ValidateVenueFields(name, description, addressLine, suburb, postcode, request) is { } invalid)
         {
             return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, invalid);
+        }
+
+        // Null/absent timezone keeps the current one (PATCH-ish semantics with the other fields).
+        var (timezone, timezoneError) = ValidateTimezone(request);
+        if (timezoneError is not null)
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, timezoneError);
+        }
+
+        // Blocked while future confirmed bookings exist — they were promised at the current local
+        // wall-clock times; return before any field is mutated so nothing is half-applied.
+        if (timezone is not null && timezone != venue!.Timezone
+            && await _repository.HasFutureConfirmedVenueOccurrencesAsync(venue.Id, _clock.GetUtcNow(), ct).ConfigureAwait(false))
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(
+                ManageErrorCodes.HasActiveBookings,
+                "Change the timezone after the venue's confirmed bookings finish — existing bookings were promised at their current local times.");
         }
 
         var addressChanged = addressLine != venue!.AddressLine
@@ -155,6 +179,10 @@ public sealed class ManageService : IManageService
         }
         venue.ParkingInfo = request.ParkingInfo?.Trim() ?? venue.ParkingInfo;
         venue.TransitInfo = request.TransitInfo?.Trim() ?? venue.TransitInfo;
+        if (timezone is not null)
+        {
+            venue.Timezone = timezone;
+        }
 
         var now = _clock.GetUtcNow();
         venue.UpdatedAtUtc = now;
@@ -487,6 +515,27 @@ public sealed class ManageService : IManageService
         if (request.VenueType is not null && FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) is null)
             return $"Unknown venue type '{request.VenueType}'.";
         return null;
+    }
+
+    /// <summary>
+    /// Validates an optional IANA timezone override. Null/whitespace means "unchanged" (returns
+    /// no timezone, no error); otherwise the trimmed value must be an IANA id ('/'-shaped and
+    /// resolvable) or the venue-invalid detail is returned.
+    /// </summary>
+    private static (string? Timezone, string? Error) ValidateTimezone(SaveVenueRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Timezone))
+        {
+            return (null, null);
+        }
+
+        var timezone = request.Timezone.Trim();
+        if (!timezone.Contains('/') || !TimeZoneInfo.TryFindSystemTimeZoneById(timezone, out _))
+        {
+            return (null, "Timezone must be an IANA identifier like 'America/New_York'.");
+        }
+
+        return (timezone, null);
     }
 
     private static string? ValidateVerificationFields(

@@ -55,6 +55,17 @@
 </fieldset>
 
 <div class="form-field">
+    <label class="field-label" for="venue-timezone">Timezone</label>
+    <select class="form-input" id="venue-timezone" name="Timezone">
+        @foreach (var opt in Model.TimezoneChoices)
+        {
+            <option value="@opt.Value" selected="@(opt.Value == Model.Timezone)">@opt.Label</option>
+        }
+    </select>
+    <p class="field-help">Booking times are shown in this timezone. It can't be changed while the venue has upcoming confirmed bookings.</p>
+</div>
+
+<div class="form-field">
     <label class="field-label" for="venue-email">Contact email <span class="field-optional">optional</span></label>
     <input class="form-input" id="venue-email" name="ContactEmail" type="email" value="@Model.ContactEmail" maxlength="320"
            placeholder="hall@standrews.org" />

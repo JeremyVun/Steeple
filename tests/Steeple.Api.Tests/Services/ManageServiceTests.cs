@@ -274,6 +274,120 @@ public class ManageServiceTests
         Assert.Equal("Renamed Venue", repo.Venues.Single().Name);
     }
 
+    // ----- Timezone self-service ---------------------------------------------------------------
+
+    [Fact]
+    public async Task CreateVenueAsync_WithValidTimezone_HonorsIt()
+    {
+        var repo = new FakeManageRepository();
+        var managers = new FakeVenueManagerRepository();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest(timezone: "America/Chicago"));
+
+        Assert.Null(result.Error);
+        Assert.Equal("America/Chicago", repo.Venues.Single().Timezone);
+    }
+
+    [Fact]
+    public async Task CreateVenueAsync_WithoutTimezone_DefaultsToBeachhead()
+    {
+        var repo = new FakeManageRepository();
+        var managers = new FakeVenueManagerRepository();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest());
+
+        Assert.Null(result.Error);
+        Assert.Equal("America/New_York", repo.Venues.Single().Timezone);
+    }
+
+    [Theory]
+    [InlineData("EST")]
+    [InlineData("Mars/Olympus")]
+    [InlineData("notimezone")]
+    public async Task CreateVenueAsync_WithBadTimezone_ReturnsInvalidVenue(string timezone)
+    {
+        var repo = new FakeManageRepository();
+        var managers = new FakeVenueManagerRepository();
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest(timezone: timezone));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.InvalidVenue, result.Error!.Code);
+        Assert.Empty(repo.Venues);
+    }
+
+    [Fact]
+    public async Task UpdateVenueAsync_SameTimezone_IsNoOpEvenWithFutureOccurrences()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        venue.Timezone = "America/New_York";
+        repo.HasFutureConfirmedVenueOccurrences = true;
+        var service = CreateService(repo, managers, out _);
+
+        var request = NewSaveVenueRequest(
+            addressLine: venue.AddressLine, suburb: venue.Suburb, postcode: venue.Postcode,
+            timezone: "America/New_York");
+        var result = await service.UpdateVenueAsync(manager.Id, venue.Id, request);
+
+        Assert.Null(result.Error);
+        Assert.Equal("America/New_York", repo.Venues.Single().Timezone);
+    }
+
+    [Fact]
+    public async Task UpdateVenueAsync_ChangeTimezoneWithFutureConfirmedOccurrences_ReturnsHasActiveBookings()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        venue.Timezone = "America/New_York";
+        repo.HasFutureConfirmedVenueOccurrences = true;
+        var service = CreateService(repo, managers, out _);
+
+        var request = NewSaveVenueRequest(
+            addressLine: venue.AddressLine, suburb: venue.Suburb, postcode: venue.Postcode,
+            timezone: "America/Chicago");
+        var result = await service.UpdateVenueAsync(manager.Id, venue.Id, request);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.HasActiveBookings, result.Error!.Code);
+        Assert.Equal("America/New_York", repo.Venues.Single().Timezone); // unchanged
+    }
+
+    [Fact]
+    public async Task UpdateVenueAsync_ChangeTimezoneWithoutFutureOccurrences_Succeeds()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        venue.Timezone = "America/New_York";
+        repo.HasFutureConfirmedVenueOccurrences = false;
+        var service = CreateService(repo, managers, out _);
+
+        var request = NewSaveVenueRequest(
+            addressLine: venue.AddressLine, suburb: venue.Suburb, postcode: venue.Postcode,
+            timezone: "America/Chicago");
+        var result = await service.UpdateVenueAsync(manager.Id, venue.Id, request);
+
+        Assert.Null(result.Error);
+        Assert.Equal("America/Chicago", repo.Venues.Single().Timezone);
+    }
+
+    [Fact]
+    public async Task UpdateVenueAsync_WhitespaceTimezone_KeepsCurrent()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        venue.Timezone = "America/New_York";
+        repo.HasFutureConfirmedVenueOccurrences = true; // would block a real change
+        var service = CreateService(repo, managers, out _);
+
+        var request = NewSaveVenueRequest(
+            addressLine: venue.AddressLine, suburb: venue.Suburb, postcode: venue.Postcode,
+            timezone: "   ");
+        var result = await service.UpdateVenueAsync(manager.Id, venue.Id, request);
+
+        Assert.Null(result.Error);
+        Assert.Equal("America/New_York", repo.Venues.Single().Timezone);
+    }
+
     // ----- Venue verification ------------------------------------------------------------------
 
     [Fact]
@@ -423,7 +537,8 @@ public class ManageServiceTests
         string name = "New Grace Venue",
         string addressLine = "456 Chapel Rd",
         string suburb = "Vienna",
-        string postcode = "22180") =>
+        string postcode = "22180",
+        string? timezone = null) =>
         new(
             Name: name,
             Description: "A welcoming space for the community.",
@@ -433,7 +548,8 @@ public class ManageServiceTests
             Postcode: postcode,
             ContactEmail: null,
             ParkingInfo: null,
-            TransitInfo: null);
+            TransitInfo: null,
+            Timezone: timezone);
 
     private static SubmitVenueVerificationRequest NewVerificationRequest(string url = "https://docs.example.org/lease.pdf") =>
         new(
@@ -557,6 +673,8 @@ public class ManageServiceTests
 
         public bool HasFutureConfirmedOccurrences { get; set; }
 
+        public bool HasFutureConfirmedVenueOccurrences { get; set; }
+
         public Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default)
         {
             var venue = Venues.FirstOrDefault(v => v.Id == venueId);
@@ -608,6 +726,9 @@ public class ManageServiceTests
 
         public Task<bool> HasFutureConfirmedOccurrencesAsync(Guid roomId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
             Task.FromResult(HasFutureConfirmedOccurrences);
+
+        public Task<bool> HasFutureConfirmedVenueOccurrencesAsync(Guid venueId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(HasFutureConfirmedVenueOccurrences);
 
         public Task<bool> HasPublishedRoomsAsync(Guid venueId, CancellationToken ct = default) =>
             Task.FromResult(Rooms.Any(r => r.VenueId == venueId && r.Status == RoomStatus.Published));
