@@ -147,6 +147,37 @@ void main() {
     });
   });
 
+  group('application_counter_offer.json', () {
+    test('round-trips an Application carrying an open counterOffer', () {
+      final application =
+          Application.fromJson(_loadJson('application_counter_offer.json'));
+
+      // New status token (CONTRACTS §5, availability plan commit 8).
+      expect(application.statusValue, ApplicationStatus.counterOffered);
+      expect(application.bookingId, isNull);
+
+      final counter = application.counterOffer;
+      expect(counter, isNotNull);
+      expect(counter!.statusValue, CounterOfferStatus.open);
+      expect(counter.isOpen, isTrue);
+      expect(counter.respondedAtUtc, isNull);
+      expect(counter.message, contains('Thursday'));
+      // The offered schedule differs from the ask (Thursday vs Tuesday).
+      expect(counter.schedule.daysOfWeek, ['thursday']);
+      expect(application.schedule.daysOfWeek, ['tuesday']);
+    });
+
+    test('tolerates an unknown counter status token', () {
+      final json = _loadJson('application_counter_offer.json');
+      (json['counterOffer'] as Map<String, dynamic>)['status'] = 'someFutureState';
+
+      final application = Application.fromJson(json);
+
+      expect(application.counterOffer!.statusValue, CounterOfferStatus.unknown);
+      expect(application.counterOffer!.isOpen, isFalse);
+    });
+  });
+
   group('booking.json', () {
     test('round-trips Booking', () {
       final booking = Booking.fromJson(_loadJson('booking.json'));

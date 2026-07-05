@@ -63,6 +63,9 @@ public class EfApplicationRepository : IApplicationRepository
     }
 
     /// <inheritdoc />
+    public void AddCounterOffer(ApplicationCounterOffer counter) => _db.ApplicationCounterOffers.Add(counter);
+
+    /// <inheritdoc />
     public Task SaveAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 
     private IQueryable<Application> Graph() =>
@@ -70,6 +73,7 @@ public class EfApplicationRepository : IApplicationRepository
             .Include(a => a.Room!).ThenInclude(r => r.Venue)
             .Include(a => a.Organizer)
             .Include(a => a.Messages)
+            .Include(a => a.CounterOffers)
             .Include(a => a.Booking);
 
     private static async Task<(IReadOnlyList<Application> Items, int TotalCount)> PageAsync(

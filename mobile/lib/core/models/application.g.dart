@@ -117,6 +117,30 @@ Map<String, dynamic> _$ApplicationConflictsToJson(
   'pendingOverlaps': instance.pendingOverlaps,
 };
 
+_CounterOffer _$CounterOfferFromJson(Map<String, dynamic> json) =>
+    _CounterOffer(
+      id: json['id'] as String,
+      schedule: ProposedSchedule.fromJson(
+        json['schedule'] as Map<String, dynamic>,
+      ),
+      message: json['message'] as String?,
+      status: json['status'] as String,
+      createdAtUtc: DateTime.parse(json['createdAtUtc'] as String),
+      respondedAtUtc: json['respondedAtUtc'] == null
+          ? null
+          : DateTime.parse(json['respondedAtUtc'] as String),
+    );
+
+Map<String, dynamic> _$CounterOfferToJson(_CounterOffer instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'schedule': instance.schedule,
+      'message': instance.message,
+      'status': instance.status,
+      'createdAtUtc': instance.createdAtUtc.toIso8601String(),
+      'respondedAtUtc': instance.respondedAtUtc?.toIso8601String(),
+    };
+
 _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
   id: json['id'] as String,
   roomId: json['roomId'] as String,
@@ -147,6 +171,9 @@ _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
       : ApplicationConflicts.fromJson(
           json['conflicts'] as Map<String, dynamic>,
         ),
+  counterOffer: json['counterOffer'] == null
+      ? null
+      : CounterOffer.fromJson(json['counterOffer'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
@@ -170,6 +197,7 @@ Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
       'messageCount': instance.messageCount,
       'messages': instance.messages,
       'conflicts': instance.conflicts,
+      'counterOffer': instance.counterOffer,
     };
 
 _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>

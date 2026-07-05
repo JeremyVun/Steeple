@@ -32,4 +32,13 @@ public enum NotificationType
 
     /// <summary>A room the recipient manages was declined in moderation (Phase 5).</summary>
     ListingDeclined = 8,
+
+    /// <summary>The host proposed a counter-offer schedule on the recipient's application.</summary>
+    CounterOfferReceived = 9,
+
+    /// <summary>The organizer accepted the host's counter-offer (booking created).</summary>
+    CounterOfferAccepted = 10,
+
+    /// <summary>The organizer declined the host's counter-offer (application back to pending).</summary>
+    CounterOfferDeclined = 11,
 }

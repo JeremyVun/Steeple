@@ -124,4 +124,31 @@ class FakeManageRepository implements ManageRepository {
     _applicationOverrides[id] = updated;
     return updated;
   }
+
+  @override
+  Future<Application> counterOffer(
+    String id,
+    ProposedSchedule schedule, {
+    String? message,
+  }) async {
+    final page = await fixtures.load(
+      'manage_applications_page',
+      (json) => Paged.fromJson(json, Application.fromJson),
+    );
+    final base = _applicationOverrides[id] ??
+        page.items.firstWhere((application) => application.id == id, orElse: () => page.items.first);
+    final now = DateTime.now().toUtc();
+    final updated = base.copyWith(
+      status: 'counterOffered',
+      counterOffer: CounterOffer(
+        id: 'fake-counter-${now.millisecondsSinceEpoch}',
+        schedule: schedule,
+        message: message,
+        status: 'open',
+        createdAtUtc: now,
+      ),
+    );
+    _applicationOverrides[id] = updated;
+    return updated;
+  }
 }

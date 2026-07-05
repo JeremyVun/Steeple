@@ -32,6 +32,17 @@ class ApplicationThreadNotifier extends AsyncNotifier<Application> {
     final updated = await ref.read(applicationsRepositoryProvider).withdraw(applicationId);
     state = AsyncData(updated);
   }
+
+  /// Accept or decline an open counter-offer (CONTRACTS §5). Returns the
+  /// updated application so the screen can tell an accept-that-booked from a
+  /// `slot_taken` auto-decline; throws on `409` (screen maps the error).
+  Future<Application> respondToCounter({required bool accept}) async {
+    final updated = await ref
+        .read(applicationsRepositoryProvider)
+        .respondToCounter(applicationId, accept: accept);
+    state = AsyncData(updated);
+    return updated;
+  }
 }
 
 final applicationThreadProvider =

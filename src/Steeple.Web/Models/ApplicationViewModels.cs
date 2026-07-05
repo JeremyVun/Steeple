@@ -18,7 +18,7 @@ public static class ApplicationDisplay
     public static string StatusRole(string status) => status switch
     {
         "pending" => "warning",
-        "needsInfo" => "info",
+        "needsInfo" or "counterOffered" => "info",
         "approved" or "confirmed" => "success",
         "declined" or "cancelled" => "danger",
         _ => "neutral", // withdrawn, expired, completed, and any token this build doesn't know yet
@@ -29,6 +29,7 @@ public static class ApplicationDisplay
     {
         "pending" => "Pending",
         "needsInfo" => "Needs info",
+        "counterOffered" => "Time suggested",
         "approved" => "Approved",
         "declined" => "Declined",
         "withdrawn" => "Withdrawn",
@@ -248,12 +249,77 @@ public sealed class ApplicationThreadViewModel
     /// <summary>One-shot success note ("Request sent"), if any.</summary>
     public string? Flash { get; init; }
 
-    /// <summary>Whether the thread still accepts messages / decisions.</summary>
+    /// <summary>True when <c>booking.counter_offers</c> is on (gates the whole counter-offer UI).</summary>
+    public bool CounterOffersEnabled { get; init; }
+
+    /// <summary>
+    /// Server-suggested nearby free windows for the counter-offer composer (up to ~4). Empty when
+    /// the availability fetch failed or the flag is off — the composer just renders without chips.
+    /// </summary>
+    public IReadOnlyList<CounterSnapChip> CounterSnaps { get; init; } = [];
+
+    /// <summary>The classic undecided states (pending/needsInfo) — approve is only offered here.</summary>
     public bool IsUndecided => Application.Status is "pending" or "needsInfo";
+
+    /// <summary>True while a time has been suggested and the ball is in the organizer's court.</summary>
+    public bool IsCounterOffered => Application.Status == "counterOffered";
+
+    /// <summary>Whether the thread still accepts messages (flows normally while counterOffered too).</summary>
+    public bool AcceptsMessages => IsUndecided || IsCounterOffered;
+
+    /// <summary>Provider may still approve only before a counter is on the table.</summary>
+    public bool ProviderCanApprove => IsUndecided;
+
+    /// <summary>Provider may decline throughout the undecided lifecycle, counterOffered included.</summary>
+    public bool ProviderCanDecline => IsUndecided || IsCounterOffered;
+
+    /// <summary>Provider may suggest (or re-suggest, superseding) a time while undecided.</summary>
+    public bool ProviderCanCounter => CounterOffersEnabled && (IsUndecided || IsCounterOffered);
+
+    /// <summary>The organizer has a live counter to accept/decline right now.</summary>
+    public bool OrganizerHasOpenCounter =>
+        CounterOffersEnabled && IsCounterOffered && Application.CounterOffer is { Status: "open" };
 
     /// <summary>Display name for a thread message's sender.</summary>
     public string SenderName(Guid senderId) =>
         senderId == Application.Organizer.Id ? Application.Organizer.DisplayName : Application.VenueName;
+}
+
+/// <summary>A server-computed free window offered as a one-tap "suggest this time" chip.</summary>
+public sealed record CounterSnapChip(DateOnly Date, string StartTime, string EndTime)
+{
+    /// <summary>The wire value carried on the chip's submit button: <c>yyyy-MM-dd|HH:mm|HH:mm</c>.</summary>
+    public string SnapValue => $"{Date:yyyy-MM-dd}|{StartTime}|{EndTime}";
+
+    /// <summary>Human label, e.g. "Tue, Jul 7 · 6:00–8:00 PM".</summary>
+    public string Label =>
+        $"{Date.ToString("ddd, MMM d", CultureInfo.InvariantCulture)} · {ApplicationDisplay.FormatTimeRange(StartTime, EndTime)}";
+}
+
+/// <summary>
+/// Model-bound counter-offer composer (venue-local schedule; posted to the BFF, which submits to
+/// the API). Mirrors the apply form's schedule fields. A <c>snap</c> submit button overrides these
+/// with a one-off window (the ManageController parses it before calling the API).
+/// </summary>
+public sealed class CounterOfferFormModel
+{
+    /// <summary>"oneOff" | "recurringWeekly".</summary>
+    public string Frequency { get; set; } = "oneOff";
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public List<string> DaysOfWeek { get; set; } = [];
+    public string StartTime { get; set; } = "";
+    public string EndTime { get; set; } = "";
+    public string? Message { get; set; }
+
+    /// <summary>Builds the wire schedule from the composer's fields.</summary>
+    public ScheduleDto ToSchedule() => new(
+        Frequency,
+        StartDate ?? DateOnly.FromDateTime(DateTime.Today),
+        Frequency == "recurringWeekly" ? EndDate : null,
+        Frequency == "recurringWeekly" ? DaysOfWeek : null,
+        StartTime,
+        EndTime);
 }
 
 // ------------------------------------------------------------------------------------------------

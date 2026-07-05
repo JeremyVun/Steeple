@@ -1,0 +1,55 @@
+{
+  "id": "a1a1a1a1-aaaa-4aaa-8aaa-a1a1a1a1a1a1",
+  "roomId": "33333333-3333-4333-8333-333333333333",
+  "roomName": "Sunday School Annex",
+  "venueName": "Grace Community Church",
+  "venueSlug": "grace-community-church",
+  "roomSlug": "sunday-school-annex",
+  "organizer": {
+    "id": "99999999-9999-4999-8999-999999999999",
+    "displayName": "Priya Patel",
+    "ratingSummary": {
+      "averageStars": 4.5,
+      "ratingCount": 2,
+      "noShowCount": 0,
+      "completedBookings": 3
+    }
+  },
+  "activityType": "children",
+  "groupSize": 15,
+  "schedule": {
+    "frequency": "recurringWeekly",
+    "startDate": "2026-09-01",
+    "endDate": "2026-12-15",
+    "daysOfWeek": ["tuesday"],
+    "startTime": "09:00",
+    "endTime": "11:30"
+  },
+  "intentText": "Toddler playgroup, ~15 people, ages 1-3 with parents/caregivers. Free-play with soft toys and a short singalong; we'd bring our own mats and put everything away afterward.",
+  "status": "counterOffered",
+  "createdAtUtc": "2026-07-01T13:05:00Z",
+  "expiresAtUtc": "2026-07-15T13:05:00Z",
+  "messageCount": 1,
+  "messages": [
+    {
+      "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      "senderId": "88888888-8888-4888-8888-888888888888",
+      "body": "We'd love to host you — Tuesdays are taken by our own group, but Thursday mornings are wide open. Would that work?",
+      "sentAtUtc": "2026-07-02T09:22:00Z"
+    }
+  ],
+  "counterOffer": {
+    "id": "c0c0c0c0-cccc-4ccc-8ccc-c0c0c0c0c0c0",
+    "schedule": {
+      "frequency": "recurringWeekly",
+      "startDate": "2026-09-03",
+      "endDate": "2026-12-17",
+      "daysOfWeek": ["thursday"],
+      "startTime": "09:30",
+      "endTime": "12:00"
+    },
+    "message": "Thursday mornings, half an hour later so it clears our early service.",
+    "status": "open",
+    "createdAtUtc": "2026-07-02T09:22:00Z"
+  }
+}

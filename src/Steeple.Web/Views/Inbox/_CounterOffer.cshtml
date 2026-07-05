@@ -1,0 +1,98 @@
+@model ApplicationThreadViewModel
+@{
+    var app = Model.Application;
+    var s = app.Schedule;
+    var isWeekly = s.Frequency == "recurringWeekly";
+    var postUrl = Url.Content($"~/manage/applications/{app.Id}/counter-offer");
+}
+@* Provider counter-offer composer (CONTRACTS §5): prefilled from the requested schedule, venue-local.
+   No-JS by design (CSP) — the "snap" chips are one-tap submits for a server-suggested free window;
+   the manual fields drive the "Suggest this time" button. Revealed by a <details> disclosure. *@
+<details class="counter-composer">
+    <summary class="btn btn-ghost counter-composer-toggle">Suggest another time</summary>
+    <div class="counter-composer-body">
+        <p class="decision-note">
+            Propose a time that works for @app.VenueName. @app.Organizer.DisplayName can accept it
+            (which books it) or decline — your original request stays until they do.
+        </p>
+
+        <form method="post" action="@postUrl" class="counter-form">
+            @Html.AntiForgeryToken()
+
+            @if (Model.CounterSnaps.Count > 0)
+            {
+                <div class="counter-snaps">
+                    <p class="field-label">Nearby free windows — suggest one in a tap</p>
+                    <div class="chip-set">
+                        @foreach (var chip in Model.CounterSnaps)
+                        {
+                            <button type="submit" name="snap" value="@chip.SnapValue" class="chip-btn counter-snap">@chip.Label</button>
+                        }
+                    </div>
+                    <p class="field-help">Or set your own below.</p>
+                </div>
+            }
+
+            <fieldset class="form-field form-fieldset">
+                <legend class="field-label">How often</legend>
+                <div class="freq-toggle" role="radiogroup">
+                    <label class="toggle-pill">
+                        <input type="radio" name="Frequency" value="oneOff" checked="@(!isWeekly)" /> Just once
+                    </label>
+                    <label class="toggle-pill">
+                        <input type="radio" name="Frequency" value="recurringWeekly" checked="@isWeekly" /> Weekly
+                    </label>
+                </div>
+            </fieldset>
+
+            <div class="form-row">
+                <div class="form-field">
+                    <label class="field-label" for="counter-startdate">@(isWeekly ? "First date" : "Date")</label>
+                    <input class="form-input" id="counter-startdate" name="StartDate" type="date"
+                           value="@s.StartDate.ToString("yyyy-MM-dd")" required />
+                </div>
+                <div class="form-field">
+                    <label class="field-label" for="counter-enddate">Until (weekly)</label>
+                    <input class="form-input" id="counter-enddate" name="EndDate" type="date"
+                           value="@(s.EndDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+            </div>
+
+            <fieldset class="form-field form-fieldset">
+                <legend class="field-label">On these days (weekly)</legend>
+                <div class="chip-set">
+                    @foreach (var option in ApplyViewModel.DayOptions)
+                    {
+                        <label class="chip">
+                            <input type="checkbox" name="DaysOfWeek" value="@option.Value"
+                                   @(s.DaysOfWeek is { } days && days.Contains(option.Value) ? "checked" : "") />
+                            <span class="chip-text">@option.Label</span>
+                        </label>
+                    }
+                </div>
+            </fieldset>
+
+            <div class="form-row">
+                <div class="form-field">
+                    <label class="field-label" for="counter-starttime">From</label>
+                    <input class="form-input" id="counter-starttime" name="StartTime" type="time"
+                           value="@s.StartTime" required />
+                </div>
+                <div class="form-field">
+                    <label class="field-label" for="counter-endtime">To</label>
+                    <input class="form-input" id="counter-endtime" name="EndTime" type="time"
+                           value="@s.EndTime" required />
+                </div>
+            </div>
+            <p class="field-help">Times are local to @app.VenueName.</p>
+
+            <div class="form-field">
+                <label class="field-label" for="counter-message">Add a note (optional)</label>
+                <textarea class="form-input" id="counter-message" name="Message" rows="2" maxlength="2000"
+                          placeholder="E.g. that room's free earlier — would 6 PM suit?"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Suggest this time</button>
+        </form>
+    </div>
+</details>

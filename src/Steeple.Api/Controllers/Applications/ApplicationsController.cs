@@ -99,6 +99,26 @@ public sealed class ApplicationsController : ControllerBase
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }
 
+    /// <summary>Proposes a counter-offer schedule (venue managers only; behind <c>booking.counter_offers</c>).</summary>
+    [HttpPost("applications/{id:guid}/counter-offer")]
+    [EnableRateLimiting(RateLimitPolicies.Apply)]
+    public async Task<ActionResult<ApplicationDto>> CounterOffer(
+        Guid id, [FromBody] CounterOfferRequest request, CancellationToken ct)
+    {
+        var result = await _applications.CounterOfferAsync(id, User.GetUserId(), request, ct);
+        return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
+    }
+
+    /// <summary>Accepts or declines the open counter-offer (organizer only; behind <c>booking.counter_offers</c>).</summary>
+    [HttpPost("applications/{id:guid}/counter-offer/respond")]
+    [EnableRateLimiting(RateLimitPolicies.Apply)]
+    public async Task<ActionResult<ApplicationDto>> RespondToCounterOffer(
+        Guid id, [FromBody] CounterOfferResponseRequest request, CancellationToken ct)
+    {
+        var result = await _applications.RespondToCounterOfferAsync(id, User.GetUserId(), request, ct);
+        return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
+    }
+
     /// <summary>Maps a stable applications error code onto the RFC 9457 envelope (CONTRACTS §2).</summary>
     private ObjectResult ToProblem(ApplicationError error)
     {

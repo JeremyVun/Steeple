@@ -193,9 +193,33 @@ completedBookings}}, activityType, groupSize,
 schedule{…}, intentText, status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
 bookingId? /* set once approved — the booking it created */, messageCount,
 messages: [{id, senderId, body, sentAtUtc}] }`
-`status`: `pending | needsInfo | approved | declined | withdrawn | expired`. List endpoints
-return `messages: []` (thread stays behind the detail fetch); `messageCount` is always set.
-Undecided applications auto-expire 14 days after submission (lazy sweep on read — no worker).
+`status`: `pending | needsInfo | counterOffered | approved | declined | withdrawn | expired`.
+List endpoints return `messages: []` (thread stays behind the detail fetch); `messageCount` is
+always set. Undecided applications auto-expire 14 days after submission (lazy sweep on read —
+no worker).
+
+**Counter-offers ✅ *(built 2026-07-05 — availability plan commit 8; behind `booking.counter_offers`)*:**
+
+`Application` gains additive `counterOffer?` — the latest non-superseded counter
+(`CounterOfferDto`): `{id, schedule: ScheduleDto, message?, status, createdAtUtc,
+respondedAtUtc?}`, `status` ∈ `open | accepted | declinedByOrganizer | superseded | lapsed`.
+At most one counter is ever `open` (DB partial unique index); history rows stay on the thread.
+
+- `POST /api/v1/applications/{id}/counter-offer` ✅ (venue manager, `apply` limit) —
+  `{schedule, message?}`. Validates like a submit (incl. the §6 availability check against
+  rules + confirmed bookings → `409 schedule_unavailable`). Supersedes any open counter,
+  moves the application to `counterOffered`, refreshes the 14-day expiry, notifies the
+  organizer (`CounterOfferReceived`). `409 invalid_state` once decided.
+- `POST /api/v1/applications/{id}/counter-offer/respond` ✅ (organizer, `apply` limit) —
+  `{decision: "accept"|"decline"}`. **Accept is a booking transaction on the counter
+  schedule** (the application keeps the original ask); an exclusion-constraint race →
+  `409 slot_taken` and the application is auto-declined, identical to approval. Decline →
+  application returns to `pending`, counter becomes `declinedByOrganizer`, host notified.
+  `409 invalid_state` when no counter is open.
+- While `counterOffered`: messages flow normally (and do **not** flip the status the way the
+  pending⇄needsInfo thread rule does); host **decline** stays allowed; host **approve** is
+  blocked (`409 invalid_state` — the ball is in the organizer's court). Expiry, withdrawal,
+  and decline all mark an open counter `lapsed`.
 
 - `GET /api/v1/me/applications` ✅ (organizer) · `GET /api/v1/manage/applications` ✅ (provider
   inbox; empty list — not an error — for non-managers) — §2 pagination, filter by `status`.
@@ -425,8 +449,8 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `map_interacted` ✅ | client | kind (pan/zoom/pin) |
 | `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |
 | `sso_started` ✅ / `sso_completed` ✅ | web BFF¹ / server | provider?, surface, trigger / provider, surface, isNewUser |
-| `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path) |
-| `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount / cancelledBy / markedBy |
+| `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path; additive `viaCounterOffer`) |
+| `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount (+ additive `weekdayCount`, `viaCounterOffer`) / cancelledBy / markedBy |
 | `rating_submitted` ✅ | server | rateeType, stars, hasComment |
 | `notification_sent` ✅ / `notification_opened` ✅ | server / client | type, channel, recipientCount |
 | `venue_created` ✅ / `room_created` ✅ | server | venueId, suburb / roomId, venueId |
@@ -437,6 +461,8 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `open_hours_updated` ✅ | server | roomId, windowCount, blackoutCount |
 | `availability_viewed` ✅ | server | roomId, dayCount |
 | `availability_checked` ✅ | server | roomId, available, conflictCount |
+| `counter_offer_sent` ✅ | server | applicationId, roomId, superseded (bool) |
+| `counter_offer_responded` ✅ | server | applicationId, decision, timeToResponseHours |
 | `listing_moderated` ✅ | Admin (stdout only — not `IAnalyticsSink`; same log-line shape) | roomId, outcome (approved/declined), actor |
 
 ¹ Interim: these client-ish funnel events are still emitted server-side by the Web BFF

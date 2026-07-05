@@ -50,6 +50,57 @@
 
     <div class="thread-grid">
         <div class="thread-main">
+            @if (Model.ViewerIsOrganizer && Model.OrganizerHasOpenCounter && app.CounterOffer is { } offer)
+            {
+                @* Counter-offer card (CONTRACTS §5, §8.4 info pair): requested-vs-offered diff + accept/decline.
+                   Accept is behind a <details> confirm (CSP: no JS confirm dialogs). *@
+                <section class="counter-card" aria-labelledby="counter-card-title">
+                    <p class="counter-card-eyebrow" id="counter-card-title">@app.VenueName suggested a different time</p>
+                    <dl class="counter-diff">
+                        <div class="counter-line counter-line-was">
+                            <dt>You asked for</dt>
+                            <dd>@ApplicationDisplay.DescribeSchedule(app.Schedule)</dd>
+                        </div>
+                        <div class="counter-line counter-line-offered">
+                            <dt>They suggest</dt>
+                            <dd>@ApplicationDisplay.DescribeSchedule(offer.Schedule)</dd>
+                        </div>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(offer.Message))
+                    {
+                        <blockquote class="counter-message">@offer.Message</blockquote>
+                    }
+                    <div class="counter-card-actions">
+                        <details class="account-confirm counter-accept">
+                            <summary class="btn btn-primary">Accept this time</summary>
+                            <p class="decision-note">
+                                This books @ApplicationDisplay.DescribeSchedule(offer.Schedule) — your original ask goes away.
+                            </p>
+                            <form method="post" action="@Url.Content($"~/inbox/applications/{app.Id}/counter-offer/respond")">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-primary" name="decision" value="accept">Confirm this time</button>
+                            </form>
+                        </details>
+                        <form method="post" action="@Url.Content($"~/inbox/applications/{app.Id}/counter-offer/respond")">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-ghost" name="decision" value="decline">Decline</button>
+                        </form>
+                    </div>
+                </section>
+            }
+            else if (Model.ViewerIsOrganizer && Model.CounterOffersEnabled
+                     && app.CounterOffer is { Status: "declinedByOrganizer" or "lapsed" or "superseded" } past)
+            {
+                <p class="thread-note" role="note">
+                    @(past.Status switch
+                    {
+                        "declinedByOrganizer" => "You declined the suggested time.",
+                        "lapsed" => "The suggested time lapsed.",
+                        _ => "A newer time was suggested.",
+                    })
+                </p>
+            }
+
             <div class="request-card">
                 <p class="request-card-heading">The request</p>
                 <dl class="request-facts">
@@ -138,7 +189,7 @@
                 </ol>
             }
 
-            @if (Model.IsUndecided)
+            @if (Model.AcceptsMessages)
             {
                 <form method="post" action="@replyUrl" class="thread-reply">
                     @Html.AntiForgeryToken()
@@ -161,23 +212,36 @@
         </div>
 
         <aside class="thread-aside">
-            @if (!Model.ViewerIsOrganizer && Model.IsUndecided)
+            @if (!Model.ViewerIsOrganizer && Model.ProviderCanDecline)
             {
                 <div class="decision-card">
                     <p class="decision-heading">Your decision</p>
                     <p class="decision-note">
                         @app.Organizer.DisplayName gets notified either way. A question first is always fine.
                     </p>
+                    @if (Model.IsCounterOffered)
+                    {
+                        <p class="decision-waiting" role="note">
+                            Waiting on the organizer — you can still decline or suggest again.
+                        </p>
+                    }
                     <form method="post" action="@Url.Content($"~/manage/applications/{app.Id}/decision")" class="decision-form">
                         @Html.AntiForgeryToken()
                         <label class="field-label" for="decision-message">Add a note (optional)</label>
                         <textarea class="form-input" id="decision-message" name="message" rows="2" maxlength="2000"
                                   placeholder="E.g. the side door will be unlocked from 8:45."></textarea>
                         <div class="decision-actions">
-                            <button type="submit" class="btn btn-primary" name="decision" value="approve">Approve</button>
+                            @if (Model.ProviderCanApprove)
+                            {
+                                <button type="submit" class="btn btn-primary" name="decision" value="approve">Approve</button>
+                            }
                             <button type="submit" class="btn btn-danger" name="decision" value="decline">Decline</button>
                         </div>
                     </form>
+                    @if (Model.ProviderCanCounter)
+                    {
+                        <partial name="_CounterOffer" model="Model" />
+                    }
                 </div>
             }
 

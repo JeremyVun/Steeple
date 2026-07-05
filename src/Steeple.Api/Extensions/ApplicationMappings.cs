@@ -44,7 +44,33 @@ public static class ApplicationMappings
             Messages: includeThread
                 ? messages.Select(m => new ApplicationMessageDto(m.Id, m.SenderId, m.Body, m.SentAtUtc)).ToList()
                 : [],
-            Conflicts: conflicts);
+            Conflicts: conflicts,
+            // The latest non-superseded counter rides the detail read for both parties (lists omit it,
+            // matching the thread/conflicts). Superseded rows stay only as history.
+            CounterOffer: includeThread ? application.LatestCounterOfferDto() : null);
+    }
+
+    /// <summary>
+    /// The latest non-superseded counter-offer on an application as its wire DTO — the open counter
+    /// if one exists, else the most recent answered/lapsed one; null when the application was never
+    /// countered.
+    /// </summary>
+    public static CounterOfferDto? LatestCounterOfferDto(this Application application)
+    {
+        var counter = application.CounterOffers
+            .Where(c => c.Status != CounterOfferStatus.Superseded)
+            .OrderByDescending(c => c.CreatedAtUtc)
+            .FirstOrDefault();
+
+        return counter is null
+            ? null
+            : new CounterOfferDto(
+                Id: counter.Id,
+                Schedule: counter.ToScheduleDto(),
+                Message: counter.Message,
+                Status: FlagEnumExtensions.ToCamelCaseToken(counter.Status.ToString()),
+                CreatedAtUtc: counter.CreatedAtUtc,
+                RespondedAtUtc: counter.RespondedAtUtc);
     }
 
     /// <summary>The stored schedule as its venue-local wire shape (times back to <c>HH:mm</c>).</summary>
@@ -55,4 +81,13 @@ public static class ApplicationMappings
         DaysOfWeek: application.DaysOfWeek is { } days && days != Weekdays.None ? days.ToNameList() : null,
         StartTime: application.StartTime.ToString("HH\\:mm"),
         EndTime: application.EndTime.ToString("HH\\:mm"));
+
+    /// <summary>A counter-offer's stored schedule as its venue-local wire shape (times back to <c>HH:mm</c>).</summary>
+    public static ScheduleDto ToScheduleDto(this ApplicationCounterOffer counter) => new(
+        Frequency: FlagEnumExtensions.ToCamelCaseToken(counter.Frequency.ToString()),
+        StartDate: counter.StartDate,
+        EndDate: counter.EndDate,
+        DaysOfWeek: counter.DaysOfWeek is { } days && days != Weekdays.None ? days.ToNameList() : null,
+        StartTime: counter.StartTime.ToString("HH\\:mm"),
+        EndTime: counter.EndTime.ToString("HH\\:mm"));
 }

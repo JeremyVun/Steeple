@@ -26,6 +26,9 @@ public sealed class ApplicationService : IApplicationService
     /// <summary>Feature flag gating the submit-time availability hard block (CONTRACTS §6).</summary>
     private const string AvailabilityFlag = "listing.availability";
 
+    /// <summary>Feature flag gating the host counter-offer surface (CONTRACTS §5).</summary>
+    private const string CounterOffersFlag = "booking.counter_offers";
+
     private readonly IApplicationRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IBookingService _bookings;
@@ -100,21 +103,9 @@ public sealed class ApplicationService : IApplicationService
         // rules report available and pass. Reuses the same materialization + classification math as
         // the advisory check endpoint (no duplicated logic). The booking_occurrences exclusion
         // constraint remains the final race authority at approval time.
-        if (_flags.IsEnabled(AvailabilityFlag))
+        if (await CheckAvailabilityBlockAsync(room.Id, request.Schedule!, ct).ConfigureAwait(false) is { } block)
         {
-            var check = await _availability.CheckScheduleAsync(room.Id, request.Schedule, ct).ConfigureAwait(false);
-            if (check.Value is { Available: false } verdict)
-            {
-                return ApplicationResult<SubmitOutcome>.Fail(
-                    ApplicationErrorCodes.ScheduleUnavailable,
-                    "The proposed schedule isn't available — some dates fall outside the room's open hours, on a blackout, or are already booked.",
-                    new Dictionary<string, object?>
-                    {
-                        ["available"] = verdict.Available,
-                        ["totalOccurrences"] = verdict.TotalOccurrences,
-                        ["conflicts"] = verdict.Conflicts,
-                    });
-            }
+            return ApplicationResult<SubmitOutcome>.Fail(block.Code, block.Detail, block.Extensions!);
         }
 
         var now = _clock.GetUtcNow();
@@ -341,7 +332,7 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application!], ct).ConfigureAwait(false);
-        if (!IsUndecided(application!.Status))
+        if (!IsUndecided(application!.Status) && application.Status != ApplicationStatus.CounterOffered)
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -352,9 +343,14 @@ public sealed class ApplicationService : IApplicationService
 
         // The ask/answer rhythm drives the sub-state: a provider question parks the application
         // in NeedsInfo; the organizer's answer puts it back in the provider's court (Pending).
-        application.Status = callerIsOrganizer
-            ? (application.Status == ApplicationStatus.NeedsInfo ? ApplicationStatus.Pending : application.Status)
-            : ApplicationStatus.NeedsInfo;
+        // While CounterOffered the thread flows but must NOT flip status — the ball stays with the
+        // organizer until they accept/decline the counter (CONTRACTS §5).
+        if (application.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
+        {
+            application.Status = callerIsOrganizer
+                ? (application.Status == ApplicationStatus.NeedsInfo ? ApplicationStatus.Pending : application.Status)
+                : ApplicationStatus.NeedsInfo;
+        }
 
         await _repository.AddMessageAsync(
             new ApplicationMessage
@@ -416,7 +412,13 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application], ct).ConfigureAwait(false);
-        if (!IsUndecided(application.Status))
+
+        // Approve needs the ball in the provider's court (Pending|NeedsInfo). A CounterOffered
+        // application has been handed to the organizer, so the host can only *decline* it (which
+        // also lapses the open counter) — approving is blocked until the organizer responds.
+        var counterOffered = application.Status == ApplicationStatus.CounterOffered;
+        var canDecide = approve ? IsUndecided(application.Status) : (IsUndecided(application.Status) || counterOffered);
+        if (!canDecide)
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -426,6 +428,12 @@ public sealed class ApplicationService : IApplicationService
         application.Status = approve ? ApplicationStatus.Approved : ApplicationStatus.Declined;
         application.DecidedAtUtc = now;
 
+        // A host decline of a CounterOffered application lapses its open counter along with the flip.
+        if (!approve && counterOffered)
+        {
+            LapseOpenCounter(application);
+        }
+
         // Approval *is* the booking transaction (SYSTEM_DESIGN §5/§7): the Approved flip above is
         // still unsaved, and ConfirmFromApplicationAsync commits it atomically with the booking and
         // every materialized occurrence. When the exclusion constraint aborts that save, the slot
@@ -433,39 +441,10 @@ public sealed class ApplicationService : IApplicationService
         // slot_taken instead of a half-approved state.
         if (approve)
         {
-            var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct).ConfigureAwait(false);
+            var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct: ct).ConfigureAwait(false);
             if (confirmation.SlotTaken)
             {
-                application.Status = ApplicationStatus.Declined;
-                await _repository.SaveAsync(ct).ConfigureAwait(false);
-
-                await NotifyOrganizerAsync(
-                    application,
-                    NotificationType.ApplicationDeclined,
-                    new EmailContent(
-                        Subject: $"About your request for {application.Room!.Name}",
-                        TextBody:
-                            $"The time you asked for at {application.Room.Name} ({application.Room.Venue!.Name}) " +
-                            "was booked by another group before your request could be approved.\n\n" +
-                            "There are more spaces nearby on Steeple — your request details are in your inbox."),
-                    ct).ConfigureAwait(false);
-
-                await TrackSafelyAsync(
-                    "application_decided",
-                    new
-                    {
-                        applicationId = application.Id,
-                        roomId = application.RoomId,
-                        outcome = "declined",
-                        autoDeclined = true,
-                        reason = "slot_taken",
-                        timeToDecisionHours = Math.Round((now - application.CreatedAtUtc).TotalHours, 1),
-                    },
-                    ct).ConfigureAwait(false);
-
-                return ApplicationResult<ApplicationDto>.Fail(
-                    ApplicationErrorCodes.SlotTaken,
-                    "Another booking already holds an overlapping time — this request was automatically declined and the organizer notified.");
+                return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: false, ct).ConfigureAwait(false);
             }
         }
 
@@ -543,7 +522,7 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application], ct).ConfigureAwait(false);
-        if (!IsUndecided(application.Status))
+        if (!IsUndecided(application.Status) && application.Status != ApplicationStatus.CounterOffered)
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -551,9 +530,241 @@ public sealed class ApplicationService : IApplicationService
 
         application.Status = ApplicationStatus.Withdrawn;
         application.DecidedAtUtc = _clock.GetUtcNow();
+        LapseOpenCounter(application); // a withdrawal past an open counter lapses it too (CONTRACTS §5)
         await _repository.SaveAsync(ct).ConfigureAwait(false);
 
         return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true));
+    }
+
+    /// <inheritdoc />
+    public async Task<ApplicationResult<ApplicationDto>> CounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct = default)
+    {
+        // Flag off → indistinguishable from an unknown route (404), like listing.availability's endpoints.
+        if (!_flags.IsEnabled(CounterOffersFlag))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.NotFound, "Application not found.");
+        }
+
+        var scheduleProblem = ValidateSchedule(request.Schedule);
+        if (scheduleProblem is not null)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.InvalidApplication, scheduleProblem);
+        }
+
+        var (application, error) = await LoadScopedAsync(applicationId, callerId, ct).ConfigureAwait(false);
+        if (error is not null)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(error.Code, error.Detail);
+        }
+
+        // Venue-manager only (same scoping as Decide): a caller who is only the organizer can't counter.
+        if (application!.OrganizerId == callerId
+            && !await _venueManagers.IsManagerAsync(callerId, application.Room!.VenueId, ct).ConfigureAwait(false))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.NotVenueManager, "Only the venue can counter-offer an application.");
+        }
+
+        await SweepExpiredAsync([application], ct).ConfigureAwait(false);
+
+        // Counterable while the ball can still move: not yet decided/withdrawn/expired. A re-counter
+        // while already CounterOffered is allowed (it supersedes the prior open counter).
+        if (!(IsUndecided(application.Status) || application.Status == ApplicationStatus.CounterOffered))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidState, "This application has already been decided.");
+        }
+
+        // Same submit-time availability hard block against the room's rules + confirmed bookings.
+        if (await CheckAvailabilityBlockAsync(application.RoomId, request.Schedule!, ct).ConfigureAwait(false) is { } block)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(block.Code, block.Detail, block.Extensions!);
+        }
+
+        var now = _clock.GetUtcNow();
+        var parsed = ParseSchedule(request.Schedule!);
+        var message = request.Message?.Trim() is { Length: > 0 } m
+            ? (m.Length > MaxTextLength ? m[..MaxTextLength] : m)
+            : null;
+
+        // One atomic save: supersede any open counter, insert the new open one, flip to
+        // CounterOffered, refresh the 14-day expiry.
+        var superseded = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
+        if (superseded is not null)
+        {
+            superseded.Status = CounterOfferStatus.Superseded;
+        }
+
+        var counter = new ApplicationCounterOffer
+        {
+            Id = Guid.NewGuid(),
+            ApplicationId = application.Id,
+            ProposedByUserId = callerId,
+            Frequency = parsed.Frequency,
+            StartDate = parsed.StartDate,
+            EndDate = parsed.EndDate,
+            DaysOfWeek = parsed.DaysOfWeek,
+            StartTime = parsed.StartTime,
+            EndTime = parsed.EndTime,
+            Message = message,
+            Status = CounterOfferStatus.Open,
+            CreatedAtUtc = now,
+        };
+        application.CounterOffers.Add(counter);
+        _repository.AddCounterOffer(counter);
+        application.Status = ApplicationStatus.CounterOffered;
+        application.ExpiresAtUtc = now + ExpiryWindow;
+        await _repository.SaveAsync(ct).ConfigureAwait(false);
+
+        await NotifyOrganizerAsync(
+            application,
+            NotificationType.CounterOfferReceived,
+            new EmailContent(
+                Subject: $"{application.Room!.Venue!.Name} suggested a different time for {application.Room.Name}",
+                TextBody:
+                    $"{application.Room.Venue.Name} proposed an alternative time for your request to use {application.Room.Name}.\n\n" +
+                    $"You asked for: {DescribeSchedule(application)}\n" +
+                    $"They suggested: {DescribeSchedule(counter)}\n\n" +
+                    (counter.Message is { Length: > 0 } note ? $"They added: \"{note}\"\n\n" : "") +
+                    "Accept or decline the new time from your Steeple inbox."),
+            ct).ConfigureAwait(false);
+
+        await TrackSafelyAsync(
+            "counter_offer_sent",
+            new
+            {
+                applicationId = application.Id,
+                roomId = application.RoomId,
+                superseded = superseded is not null,
+            },
+            ct).ConfigureAwait(false);
+
+        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
+        var summary = refreshed.OrganizerId == callerId
+            ? null
+            : (await GetOrganizerSummariesAsync([refreshed], ct).ConfigureAwait(false)).GetValueOrDefault(refreshed.OrganizerId);
+        return ApplicationResult<ApplicationDto>.Ok(refreshed.ToDto(includeThread: true, summary));
+    }
+
+    /// <inheritdoc />
+    public async Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct = default)
+    {
+        if (!_flags.IsEnabled(CounterOffersFlag))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.NotFound, "Application not found.");
+        }
+
+        var accept = string.Equals(request.Decision, "accept", StringComparison.OrdinalIgnoreCase);
+        if (!accept && !string.Equals(request.Decision, "decline", StringComparison.OrdinalIgnoreCase))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidApplication, $"Unknown decision '{request.Decision}'.");
+        }
+
+        var (application, error) = await LoadScopedAsync(applicationId, callerId, ct).ConfigureAwait(false);
+        if (error is not null)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(error.Code, error.Detail);
+        }
+
+        // Organizer-only (same scoping as Withdraw): the counter is the organizer's to answer.
+        if (application!.OrganizerId != callerId)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidState, "Only the organizer can respond to a counter-offer.");
+        }
+
+        await SweepExpiredAsync([application], ct).ConfigureAwait(false);
+
+        var open = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
+        if (application.Status != ApplicationStatus.CounterOffered || open is null)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidState, "There's no open counter-offer to respond to.");
+        }
+
+        var now = _clock.GetUtcNow();
+        var timeToResponseHours = Math.Round((now - open.CreatedAtUtc).TotalHours, 1);
+
+        if (accept)
+        {
+            // Booking transaction on the COUNTER schedule — the application keeps the original ask.
+            // The Approved + Accepted flips are tracked and commit atomically with the booking.
+            application.Status = ApplicationStatus.Approved;
+            application.DecidedAtUtc = now;
+            open.Status = CounterOfferStatus.Accepted;
+            open.RespondedAtUtc = now;
+
+            var spec = new ScheduleSpec(open.Frequency, open.StartDate, open.EndDate, open.DaysOfWeek, open.StartTime, open.EndTime);
+            var confirmation = await _bookings.ConfirmFromApplicationAsync(application, spec, ct).ConfigureAwait(false);
+            if (confirmation.SlotTaken)
+            {
+                // Same race handling as approval: the Accepted flip never committed (the booking save
+                // aborted). Roll the counter back to Lapsed so the auto-decline save persists a clean
+                // terminal state, then auto-decline, notify, and return slot_taken.
+                open.Status = CounterOfferStatus.Lapsed;
+                return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: true, ct).ConfigureAwait(false);
+            }
+
+            await NotifyManagersAsync(
+                application,
+                NotificationType.CounterOfferAccepted,
+                new EmailContent(
+                    Subject: $"{application.Organizer!.DisplayName} accepted your counter-offer for {application.Room!.Name}",
+                    TextBody:
+                        $"{application.Organizer.DisplayName} accepted your suggested time for {application.Room.Name} " +
+                        $"at {application.Room.Venue!.Name}.\n\n" +
+                        $"When: {DescribeSchedule(open)}\n\n" +
+                        "The booking is confirmed — the details are in your Steeple inbox."),
+                ct).ConfigureAwait(false);
+
+            await TrackSafelyAsync(
+                "counter_offer_responded",
+                new { applicationId = application.Id, decision = "accept", timeToResponseHours },
+                ct).ConfigureAwait(false);
+            await TrackSafelyAsync(
+                "application_decided",
+                new
+                {
+                    applicationId = application.Id,
+                    roomId = application.RoomId,
+                    outcome = "approved",
+                    viaCounterOffer = true,
+                    timeToDecisionHours = Math.Round((now - application.CreatedAtUtc).TotalHours, 1),
+                },
+                ct).ConfigureAwait(false);
+        }
+        else
+        {
+            // Decline returns the ball to the venue: the application is Pending again, counter closed.
+            application.Status = ApplicationStatus.Pending;
+            open.Status = CounterOfferStatus.DeclinedByOrganizer;
+            open.RespondedAtUtc = now;
+            await _repository.SaveAsync(ct).ConfigureAwait(false);
+
+            await NotifyManagersAsync(
+                application,
+                NotificationType.CounterOfferDeclined,
+                new EmailContent(
+                    Subject: $"{application.Organizer!.DisplayName} declined your counter-offer for {application.Room!.Name}",
+                    TextBody:
+                        $"{application.Organizer.DisplayName} declined your suggested time for {application.Room.Name} " +
+                        $"at {application.Room.Venue!.Name}.\n\n" +
+                        $"Their original request still stands: {DescribeSchedule(application)}\n\n" +
+                        "You can approve it, propose another time, or decline from your Steeple inbox."),
+                ct).ConfigureAwait(false);
+
+            await TrackSafelyAsync(
+                "counter_offer_responded",
+                new { applicationId = application.Id, decision = "decline", timeToResponseHours },
+                ct).ConfigureAwait(false);
+        }
+
+        // The organizer's own view — no reputation summary.
+        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
+        return ApplicationResult<ApplicationDto>.Ok(refreshed.ToDto(includeThread: true));
     }
 
     // ----- Party scoping & state helpers --------------------------------------------------------
@@ -592,13 +803,75 @@ public sealed class ApplicationService : IApplicationService
         status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo;
 
     /// <summary>
+    /// Expirable for the lazy sweep: the two undecided states plus CounterOffered — a counter left
+    /// unanswered lapses on the same 14-day clock (CONTRACTS §5).
+    /// </summary>
+    private static bool IsExpirable(ApplicationStatus status) =>
+        IsUndecided(status) || status == ApplicationStatus.CounterOffered;
+
+    /// <summary>Marks any open counter on the application Lapsed (a terminal flip on the parent).</summary>
+    private static void LapseOpenCounter(Application application)
+    {
+        var open = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
+        if (open is not null)
+        {
+            open.Status = CounterOfferStatus.Lapsed;
+        }
+    }
+
+    /// <summary>
+    /// The approval-race auto-decline (CONTRACTS §5): the exclusion constraint already aborted the
+    /// booking save, so the still-tracked Approved flip never committed. Flips the application to
+    /// Declined, lapses any open counter, saves, notifies the organizer, tracks, and returns the
+    /// <c>slot_taken</c> failure — shared by the approve and counter-offer-accept paths.
+    /// </summary>
+    private async Task<ApplicationResult<ApplicationDto>> AutoDeclineSlotTakenAsync(
+        Application application, DateTimeOffset now, bool viaCounterOffer, CancellationToken ct)
+    {
+        application.Status = ApplicationStatus.Declined;
+        application.DecidedAtUtc = now;
+        LapseOpenCounter(application);
+        await _repository.SaveAsync(ct).ConfigureAwait(false);
+
+        await NotifyOrganizerAsync(
+            application,
+            NotificationType.ApplicationDeclined,
+            new EmailContent(
+                Subject: $"About your request for {application.Room!.Name}",
+                TextBody:
+                    $"The time you asked for at {application.Room.Name} ({application.Room.Venue!.Name}) " +
+                    "was booked by another group before your request could be approved.\n\n" +
+                    "There are more spaces nearby on Steeple — your request details are in your inbox."),
+            ct).ConfigureAwait(false);
+
+        await TrackSafelyAsync(
+            "application_decided",
+            new
+            {
+                applicationId = application.Id,
+                roomId = application.RoomId,
+                outcome = "declined",
+                autoDeclined = true,
+                reason = "slot_taken",
+                viaCounterOffer,
+                timeToDecisionHours = Math.Round((now - application.CreatedAtUtc).TotalHours, 1),
+            },
+            ct).ConfigureAwait(false);
+
+        return ApplicationResult<ApplicationDto>.Fail(
+            ApplicationErrorCodes.SlotTaken,
+            "Another booking already holds an overlapping time — this request was automatically declined and the organizer notified.");
+    }
+
+    /// <summary>
     /// Lazy expiry (no background worker at this scale): any undecided application read past its
     /// expiry flips to Expired before it is returned, so no surface ever renders a stale Pending.
+    /// A CounterOffered application that lapses also lapses its open counter.
     /// </summary>
     private async Task SweepExpiredAsync(IReadOnlyList<Application> applications, CancellationToken ct)
     {
         var now = _clock.GetUtcNow();
-        var lapsed = applications.Where(a => IsUndecided(a.Status) && a.ExpiresAtUtc <= now).ToList();
+        var lapsed = applications.Where(a => IsExpirable(a.Status) && a.ExpiresAtUtc <= now).ToList();
         if (lapsed.Count == 0)
         {
             return;
@@ -606,6 +879,11 @@ public sealed class ApplicationService : IApplicationService
 
         foreach (var application in lapsed)
         {
+            if (application.Status == ApplicationStatus.CounterOffered)
+            {
+                LapseOpenCounter(application);
+            }
+
             application.Status = ApplicationStatus.Expired;
         }
 
@@ -632,7 +910,16 @@ public sealed class ApplicationService : IApplicationService
             return $"Tell the venue what you're planning (up to {MaxTextLength} characters).";
         }
 
-        var schedule = request.Schedule;
+        return ValidateSchedule(request.Schedule);
+    }
+
+    /// <summary>
+    /// Returns a human-readable problem, or null when the venue-local schedule is valid — the same
+    /// rules a submit enforces (bounded recurrence, weekday tokens, ordered times, no past start),
+    /// reused by the counter-offer path (CONTRACTS §5).
+    /// </summary>
+    private string? ValidateSchedule(ScheduleDto? schedule)
+    {
         if (schedule is null)
         {
             return "A proposed schedule is required.";
@@ -698,6 +985,36 @@ public sealed class ApplicationService : IApplicationService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The availability hard block (CONTRACTS §6): when <c>listing.availability</c> is on, returns a
+    /// <c>schedule_unavailable</c> error (with the per-date conflict payload) if the proposed schedule
+    /// lands outside open hours / on a blackout / on already-booked time. Null = allowed (flag off, no
+    /// rules, or every occurrence free). Shared by submit and counter-offer.
+    /// </summary>
+    private async Task<ApplicationError?> CheckAvailabilityBlockAsync(Guid roomId, ScheduleDto schedule, CancellationToken ct)
+    {
+        if (!_flags.IsEnabled(AvailabilityFlag))
+        {
+            return null;
+        }
+
+        var check = await _availability.CheckScheduleAsync(roomId, schedule, ct).ConfigureAwait(false);
+        if (check.Value is not { Available: false } verdict)
+        {
+            return null;
+        }
+
+        return new ApplicationError(
+            ApplicationErrorCodes.ScheduleUnavailable,
+            "The proposed schedule isn't available — some dates fall outside the room's open hours, on a blackout, or are already booked.",
+            new Dictionary<string, object?>
+            {
+                ["available"] = verdict.Available,
+                ["totalOccurrences"] = verdict.TotalOccurrences,
+                ["conflicts"] = verdict.Conflicts,
+            });
     }
 
     /// <summary>Parses a validated schedule into its stored (venue-local) representation.</summary>
@@ -796,14 +1113,26 @@ public sealed class ApplicationService : IApplicationService
     // ----- Copy helpers (email text only — clients humanize wire tokens themselves) --------------
 
     /// <summary>"Tuesdays 9:00–11:30 AM, Sep 1 – Dec 15" / "Tue, Sep 1, 9:00–11:30 AM" (venue-local).</summary>
-    private static string DescribeSchedule(Application application)
-    {
-        var start = FormatTime(application.StartTime);
-        var end = FormatTime(application.EndTime);
+    private static string DescribeSchedule(Application application) =>
+        DescribeSchedule(
+            application.Frequency, application.DaysOfWeek, application.StartDate, application.EndDate,
+            application.StartTime, application.EndTime);
 
-        return application.Frequency == ScheduleFrequency.RecurringWeekly
-            ? $"{ScheduleText.DescribeDays(application.DaysOfWeek ?? Weekdays.None)} {start}–{end}, {FormatDate(application.StartDate)} – {FormatDate(application.EndDate ?? application.StartDate)}"
-            : $"{application.StartDate.ToString("ddd, MMM d", CultureInfo.InvariantCulture)}, {start}–{end}";
+    /// <summary>The same venue-local schedule copy for a counter-offer's proposed time.</summary>
+    private static string DescribeSchedule(ApplicationCounterOffer counter) =>
+        DescribeSchedule(
+            counter.Frequency, counter.DaysOfWeek, counter.StartDate, counter.EndDate,
+            counter.StartTime, counter.EndTime);
+
+    private static string DescribeSchedule(
+        ScheduleFrequency frequency, Weekdays? days, DateOnly startDate, DateOnly? endDate, TimeOnly startTime, TimeOnly endTime)
+    {
+        var start = FormatTime(startTime);
+        var end = FormatTime(endTime);
+
+        return frequency == ScheduleFrequency.RecurringWeekly
+            ? $"{ScheduleText.DescribeDays(days ?? Weekdays.None)} {start}–{end}, {FormatDate(startDate)} – {FormatDate(endDate ?? startDate)}"
+            : $"{startDate.ToString("ddd, MMM d", CultureInfo.InvariantCulture)}, {start}–{end}";
     }
 
     private static string FormatTime(TimeOnly time) => time.ToString("h:mm tt", CultureInfo.InvariantCulture);

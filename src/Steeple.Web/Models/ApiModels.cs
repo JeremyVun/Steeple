@@ -262,7 +262,30 @@ public record ApplicationDto(
     // Additive (availability plan commit 7, CONTRACTS §6): host-only conflict + pending-overlap
     // summary, populated only on the manager detail read of an undecided application — null on
     // lists, organizer-scoped reads, and rooms without availability rules.
-    ApplicationConflictsDto? Conflicts = null);
+    ApplicationConflictsDto? Conflicts = null,
+    // Additive (availability plan commit 8, CONTRACTS §5): the latest non-superseded counter-offer
+    // (behind the API's booking.counter_offers flag) — null when none exists on the thread.
+    CounterOfferDto? CounterOffer = null);
+
+/// <summary>
+/// The latest non-superseded counter-offer on an application (CONTRACTS §5). A venue manager
+/// proposes an alternative venue-local <see cref="Schedule"/>; the organizer accepts (books it) or
+/// declines (the ask returns to pending). <see cref="Status"/> ∈
+/// <c>open | accepted | declinedByOrganizer | superseded | lapsed</c>.
+/// </summary>
+public record CounterOfferDto(
+    Guid Id,
+    ScheduleDto Schedule,
+    string? Message,
+    string Status,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? RespondedAtUtc);
+
+/// <summary><c>POST /api/v1/applications/{id}/counter-offer</c> body (venue manager).</summary>
+public record CounterOfferRequest(ScheduleDto Schedule, string? Message);
+
+/// <summary><c>POST /api/v1/applications/{id}/counter-offer/respond</c> body (organizer): <c>accept</c> | <c>decline</c>.</summary>
+public record CounterOfferDecisionRequest(string Decision);
 
 /// <summary>A page of applications (CONTRACTS §2 pagination envelope).</summary>
 public record ApplicationListResult(

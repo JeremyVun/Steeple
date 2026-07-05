@@ -37,6 +37,17 @@ abstract class ManageRepository {
 
   /// `POST /api/v1/applications/{id}/decision`.
   Future<Application> decide(String id, {required bool approve, String? message});
+
+  /// `POST /api/v1/applications/{id}/counter-offer` (CONTRACTS §5) — the
+  /// manager suggests an alternative [schedule]. Supersedes any open counter,
+  /// moves the application to `counterOffered`. Can `409 schedule_unavailable`
+  /// (conflict payload in `AppError.problem`) or `409 invalid_state` once
+  /// decided.
+  Future<Application> counterOffer(
+    String id,
+    ProposedSchedule schedule, {
+    String? message,
+  });
 }
 
 class ApiManageRepository implements ManageRepository {
@@ -115,6 +126,18 @@ class ApiManageRepository implements ManageRepository {
           'decision': approve ? 'approve' : 'decline',
           'message': ?message,
         },
+        decode: (data) => Application.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<Application> counterOffer(
+    String id,
+    ProposedSchedule schedule, {
+    String? message,
+  }) =>
+      _api.post(
+        '/api/v1/applications/$id/counter-offer',
+        body: {'schedule': schedule.toJson(), 'message': ?message},
         decode: (data) => Application.fromJson(data as Map<String, dynamic>),
       );
 }

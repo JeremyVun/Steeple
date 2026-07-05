@@ -17,13 +17,17 @@ namespace Steeple.Web.Controllers;
 [Authorize]
 public sealed class ManageController : SteepleControllerBase
 {
+    private const string CounterOffersFlag = "booking.counter_offers";
+
     private readonly ISteepleApiClient _api;
+    private readonly IFeatureFlags _flags;
     private readonly ILogger<ManageController> _logger;
 
     /// <summary>Creates the controller.</summary>
-    public ManageController(ISteepleApiClient api, ILogger<ManageController> logger)
+    public ManageController(ISteepleApiClient api, IFeatureFlags flags, ILogger<ManageController> logger)
     {
         _api = api;
+        _flags = flags;
         _logger = logger;
     }
 
@@ -124,6 +128,10 @@ public sealed class ManageController : SteepleControllerBase
             return Redirect(Url.Content($"~/inbox/applications/{id}"));
         }
 
+        var counterOffersEnabled = _flags.IsEnabled(CounterOffersFlag);
+        var canCounter = counterOffersEnabled && application.Status is "pending" or "needsInfo" or "counterOffered";
+        var snaps = canCounter ? await FetchCounterSnapsAsync(accessToken, application, ct) : [];
+
         ViewData["Title"] = $"Request · {application.RoomName}";
         ViewData["Robots"] = "noindex,nofollow";
         return View("~/Views/Inbox/Detail.cshtml", new ApplicationThreadViewModel
@@ -131,9 +139,118 @@ public sealed class ManageController : SteepleControllerBase
             Application = application,
             ViewerIsOrganizer = false,
             ViewerId = viewerId,
+            CounterOffersEnabled = counterOffersEnabled,
+            CounterSnaps = snaps,
             Error = TempData["ThreadError"] as string,
             Flash = TempData["ThreadFlash"] as string,
         });
+    }
+
+    /// <summary>
+    /// Server-suggested "snap" chips for the counter-offer composer: up to 4 free windows on/near
+    /// the requested date(s), fetched from the guest availability read (BFF-computed). Any failure
+    /// degrades to no chips (the composer still works from its manual fields).
+    /// </summary>
+    private async Task<IReadOnlyList<CounterSnapChip>> FetchCounterSnapsAsync(
+        string accessToken, ApplicationDto application, CancellationToken ct)
+    {
+        var from = application.Schedule.StartDate;
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        if (from < today)
+        {
+            from = today;
+        }
+
+        // One-off: just that day. Recurring: the requested span, capped to keep the read cheap.
+        var to = application.Schedule.Frequency == "recurringWeekly"
+            ? (application.Schedule.EndDate ?? from.AddDays(28))
+            : from;
+        if (to < from)
+        {
+            to = from;
+        }
+
+        if (to > from.AddDays(28))
+        {
+            to = from.AddDays(28);
+        }
+
+        try
+        {
+            var availability = await _api.GetListingAvailabilityAsync(application.RoomId, from, to, ct);
+            if (availability is null)
+            {
+                return [];
+            }
+
+            return availability.Days
+                .Where(d => !d.IsBlackout)
+                .SelectMany(d => d.FreeWindows.Select(w => new CounterSnapChip(d.Date, w.StartTime, w.EndTime)))
+                .Take(4)
+                .ToList();
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Counter-offer snap availability fetch failed.");
+            return [];
+        }
+    }
+
+    /// <summary>Suggests an alternative time (venue manager). A <c>snap</c> chip overrides the composer fields.</summary>
+    [HttpPost("/manage/applications/{id:guid}/counter-offer")]
+    public async Task<IActionResult> CounterOffer(Guid id, CounterOfferFormModel form, [FromForm] string? snap, CancellationToken ct)
+    {
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        var schedule = ParseSnap(snap) ?? form.ToSchedule();
+        var message = string.IsNullOrWhiteSpace(form.Message) ? null : form.Message.Trim();
+
+        try
+        {
+            var (application, errorCode, _) = await _api.PostCounterOfferAsync(
+                accessToken, id, new CounterOfferRequest(schedule, message), ct);
+
+            if (application is not null)
+            {
+                TempData["ThreadFlash"] = $"Suggested a new time — {application.Organizer.DisplayName} has been asked.";
+            }
+            else
+            {
+                TempData["ThreadError"] = errorCode switch
+                {
+                    "schedule_unavailable" => "That time isn't free either — check the calendar.",
+                    "invalid_state" => "This request has already been decided.",
+                    "invalid_application" => "Check the suggested time — a date or time looks off.",
+                    "rate_limited" => "You're suggesting quickly — give it a minute.",
+                    _ => "Couldn't suggest a time. Try again in a moment.",
+                };
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Counter-offer failed.");
+            TempData["ThreadError"] = "Couldn't reach the server — try again in a moment.";
+        }
+
+        return Redirect(Url.Content($"~/manage/applications/{id}"));
+    }
+
+    /// <summary>Parses a snap chip's <c>yyyy-MM-dd|HH:mm|HH:mm</c> value into a one-off schedule.</summary>
+    private static ScheduleDto? ParseSnap(string? snap)
+    {
+        if (string.IsNullOrEmpty(snap))
+        {
+            return null;
+        }
+
+        var parts = snap.Split('|');
+        return parts.Length == 3 && DateOnly.TryParse(parts[0], out var date)
+            ? new ScheduleDto("oneOff", date, null, null, parts[1], parts[2])
+            : null;
     }
 
     /// <summary>Approves or declines, with an optional note posted onto the thread.</summary>

@@ -24,4 +24,10 @@ public enum ApplicationStatus
 
     /// <summary>Lapsed undecided past its expiry window.</summary>
     Expired = 5,
+
+    /// <summary>
+    /// The host proposed a counter-offer schedule; the ball is in the organizer's court to accept
+    /// (books the counter) or decline (returns to Pending). Counts as undecided for expiry.
+    /// </summary>
+    CounterOffered = 6,
 }

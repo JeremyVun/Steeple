@@ -109,6 +109,11 @@ Mapping (exhaustive — anything unlisted → `server`, retryable):
 - **Schedules:** `ProposedSchedule` keeps dates as `String` (`yyyy-MM-dd`) and times as
   `String` (`HH:mm`) — they are venue-local wall-clock, **never** parsed into `DateTime`
   (SYSTEM_DESIGN §5 timezone rule). Only `…Utc` fields become `DateTime` (UTC).
+- **`Application.counterOffer`** *(additive — availability plan commit 8)*: `CounterOffer?`
+  `{id, schedule: ProposedSchedule, message?, status (open|accepted|declinedByOrganizer|
+  superseded|lapsed), createdAtUtc, respondedAtUtc?}` — the latest non-superseded counter;
+  `isOpen` getter. New `Application.status` token `counterOffered`. `CounterOfferStatus`
+  is a single-value wire enum with the usual `unknown` fallback.
 - **`RoomSummary.matchedWindow`** *(additive — availability plan commit 6)*:
   `MatchedWindow? {date?, startTime, endTime}`, present only when the search carried a
   When filter — the free window that satisfied it. `ListingCard` renders it as an accent
@@ -222,6 +227,7 @@ abstract class ApplicationsRepository {
   Future<Application> byId(String id);                                   // GET /applications/{id}
   Future<ApplicationMessage> sendMessage(String id, String body);        // POST /applications/{id}/messages
   Future<Application> withdraw(String id);                               // POST /applications/{id}/withdraw
+  Future<Application> respondToCounter(String id, {required bool accept}); // POST /applications/{id}/counter-offer/respond (organizer; accept books the counter, race → 409 slot_taken auto-decline; decline → back to pending; 409 invalid_state when none open)
 }
 // features/inbox/data
 abstract class InboxRepository {
@@ -253,12 +259,22 @@ abstract class ManageRepository {
   Future<Paged<Application>> applications({String? status, int page = 1}); // GET /manage/applications
   Future<VenueCalendar> calendar(String venueId, {required String from, required String to}); // GET /manage/venues/{id}/calendar?from&to (≤92d)
   Future<Application> decide(String id, {required bool approve, String? message}); // POST /applications/{id}/decision
+  Future<Application> counterOffer(String id, ProposedSchedule schedule, {String? message}); // POST /applications/{id}/counter-offer (manager suggests another time; supersedes any open counter → counterOffered; 409 schedule_unavailable carries the conflict payload; 409 invalid_state once decided)
 }
 // Application (manager detail read only) additionally carries `conflicts:
 // ApplicationConflicts?` (additive; null on lists/organizer reads/decided apps):
 // {totalOccurrences, conflicts:[ScheduleConflict{date,reason}], pendingOverlaps:
 // [PendingOverlap{applicationId,organizerName,overlappingDateCount}]}. `checkResult`
 // adapts it to the shared ScheduleCheckResult the §8.13 verdict card renders.
+// Application also carries `counterOffer: CounterOffer?` (additive — availability
+// plan commit 8; the latest non-superseded counter, both parties): {id, schedule:
+// ProposedSchedule, message?, status: open|accepted|declinedByOrganizer|superseded|
+// lapsed, createdAtUtc, respondedAtUtc?}; `isOpen` == status open. New application
+// status token `counterOffered` (§8.4 chip → info "Time suggested"). The organizer
+// thread shows a CounterOfferCard (requested vs offered diff) while it's open with
+// Accept/Decline → respondToCounter; the host manage-request screen's "Suggest
+// another time" composer submits counterOffer and disables Approve while
+// counterOffered (Decline stays).
 // VenueCalendar (core/models/venue_calendar.dart) = {venueId, timezone, from, to,
 // rooms:[CalendarRoomRef{id,name}], occurrences:[CalendarOccurrence{bookingId,roomId,
 // organizerName,localDate,startTime,endTime,status}], pending:[CalendarPending{
@@ -302,7 +318,7 @@ AsyncValueView<T>(value: AsyncValue<T>, data: (T) => Widget,
     {Widget Function()? skeleton, void Function()? onRetry})   // error→ErrorView, loading→skeleton
 ErrorView(error: AppError, {VoidCallback? onRetry})
 EmptyState({required IconData icon, required String title, String? body, Widget? action})
-StatusChip(statusRaw: String, domain: StatusDomain)            // DESIGN_SYSTEM §8.4 mapping
+StatusChip(statusRaw: String, domain: StatusDomain)            // DESIGN_SYSTEM §8.4 mapping (application counterOffered → info "Time suggested")
 FreeBadge() / PriceBadge(price, currency)
 ListingCard(summary: RoomSummary, {VoidCallback? onTap})       // the one card, list + map popup
 SkeletonListingCard() / SkeletonList(itemCount)
@@ -373,7 +389,13 @@ provider and render a placeholder when it is false; channel errors count as fals
   `application.json`, `booking.json`, `notifications_page.json`, `flags.json`,
   `managed_venues.json`, `managed_venue_detail.json`, `managed_room.json`,
   `manage_applications_page.json`, `room_open_hours.json`, `availability.json`,
-  `conflict_check.json`, `host_calendar.json`). `manage_applications_page.json`'s pending
+  `conflict_check.json`, `host_calendar.json`, `application_counter_offer.json`).
+  `application_counter_offer.json` is an organizer-side application with status
+  `counterOffered` and an open `counterOffer` (Thursday vs the Tuesday ask), backing the
+  thread's CounterOfferCard; `FakeApplicationsRepository` serves it via `byId`/`mine` for
+  its id (`counterOfferedApplicationId`) and echoes `respondToCounter` (accept → approved +
+  bookingId, decline → pending), while `FakeManageRepository.counterOffer` folds an open
+  counter onto the pending item. `manage_applications_page.json`'s pending
   item carries the additive host-review `conflicts` block (CONTRACTS §6); `host_calendar.json`
   (2 rooms, 6 confirmed occurrences + 2 pending overlays over a Sunday-anchored week) backs
   `FakeManageRepository.calendar`, which **re-dates** it so the fixture's first day lands on

@@ -47,6 +47,10 @@ class _PendingManageRepository implements ManageRepository {
   @override
   Future<Application> decide(String id, {required bool approve, String? message}) =>
       Completer<Application>().future;
+
+  @override
+  Future<Application> counterOffer(String id, ProposedSchedule schedule, {String? message}) =>
+      Completer<Application>().future;
 }
 
 Widget _wrap(ManageRepository repository) => ProviderScope(

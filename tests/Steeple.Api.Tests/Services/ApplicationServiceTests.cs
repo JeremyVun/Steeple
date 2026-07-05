@@ -596,6 +596,344 @@ public class ApplicationServiceTests
         Assert.Equal(2, only.OverlappingDateCount); // the two shared Thursdays
     }
 
+    // ----- Counter-offers (CONTRACTS §5) --------------------------------------------------------
+
+    private static FakeFeatureFlags CounterFlag() => new FakeFeatureFlags().Enable("booking.counter_offers");
+
+    [Fact]
+    public async Task CounterOfferAsync_FlagOff_ReturnsNotFound()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _); // flag off by default
+
+        var result = await service.CounterOfferAsync(
+            application.Id, manager.Id, new CounterOfferRequest(NewSchedule(startTime: "14:00", endTime: "16:00"), null));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.NotFound, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_FlagOff_ReturnsNotFound()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("accept"));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.NotFound, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task CounterOfferAsync_ManagerCountersPending_MovesToCounterOfferedAndNotifiesOrganizer()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out var analytics, flags: CounterFlag());
+
+        var result = await service.CounterOfferAsync(
+            application.Id, manager.Id, new CounterOfferRequest(NewSchedule(startTime: "14:00", endTime: "16:00"), "Try the afternoon."));
+
+        Assert.Null(result.Error);
+        var stored = repo.Applications.Single();
+        Assert.Equal(ApplicationStatus.CounterOffered, stored.Status);
+        Assert.Equal(FixedNow.AddDays(14), stored.ExpiresAtUtc); // expiry refreshed
+        var counter = Assert.Single(stored.CounterOffers);
+        Assert.Equal(CounterOfferStatus.Open, counter.Status);
+        Assert.Equal(manager.Id, counter.ProposedByUserId);
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.CounterOfferReceived, notification.Type);
+        Assert.Contains(notification.Recipients, r => r.UserId == organizer.Id);
+        Assert.Contains(analytics.Events, e => e.EventType == "counter_offer_sent");
+    }
+
+    [Fact]
+    public async Task CounterOfferAsync_SecondCounter_SupersedesTheOpenOne()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var first = NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out var analytics, flags: CounterFlag());
+
+        var result = await service.CounterOfferAsync(
+            application.Id, manager.Id, new CounterOfferRequest(NewSchedule(startTime: "15:00", endTime: "17:00"), null));
+
+        Assert.Null(result.Error);
+        Assert.Equal(CounterOfferStatus.Superseded, first.Status);
+        var open = Assert.Single(application.CounterOffers, c => c.Status == CounterOfferStatus.Open);
+        Assert.Equal(new TimeOnly(15, 0), open.StartTime);
+        var sent = Assert.Single(analytics.Events, e => e.EventType == "counter_offer_sent");
+        Assert.Equal(true, sent.Payload!.GetType().GetProperty("superseded")!.GetValue(sent.Payload));
+    }
+
+    [Fact]
+    public async Task CounterOfferAsync_OnDecidedApplication_ReturnsInvalidState()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Approved, decidedAtUtc: FixedNow);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _, flags: CounterFlag());
+
+        var result = await service.CounterOfferAsync(
+            application.Id, manager.Id, new CounterOfferRequest(NewSchedule(startTime: "14:00", endTime: "16:00"), null));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidState, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task CounterOfferAsync_OrganizerWhoIsNotManager_ReturnsNotVenueManager()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _, flags: CounterFlag());
+
+        var result = await service.CounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferRequest(NewSchedule(startTime: "14:00", endTime: "16:00"), null));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.NotVenueManager, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task CounterOfferAsync_AvailabilityBlocks_ReturnsScheduleUnavailable()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var availability = new FakeAvailabilityService
+        {
+            Verdict = new ScheduleCheckResultDto(Available: false, TotalOccurrences: 1, Conflicts: [new ScheduleConflictDto(Today().AddDays(2), "booked")]),
+        };
+        var flags = CounterFlag().Enable("listing.availability");
+        var service = CreateService(repo, managers, out _, out _, out _, availability: availability, flags: flags);
+
+        var result = await service.CounterOfferAsync(
+            application.Id, manager.Id, new CounterOfferRequest(NewSchedule(startTime: "14:00", endTime: "16:00"), null));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.ScheduleUnavailable, result.Error!.Code);
+        Assert.Equal(ApplicationStatus.Pending, repo.Applications.Single().Status); // unchanged
+    }
+
+    [Fact]
+    public async Task DecideAsync_ApproveWhileCounterOffered_ReturnsInvalidState()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.DecideAsync(application.Id, manager.Id, new ApplicationDecisionRequest("approve", null));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidState, result.Error!.Code);
+        Assert.Equal(ApplicationStatus.CounterOffered, repo.Applications.Single().Status);
+    }
+
+    [Fact]
+    public async Task DecideAsync_DeclineWhileCounterOffered_DeclinesAndLapsesTheCounter()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.DecideAsync(application.Id, manager.Id, new ApplicationDecisionRequest("decline", null));
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Declined, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.Lapsed, counter.Status);
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_Accept_ApprovesAndBooksTheCounterSchedule()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var counter = NewCounter(application, startTime: "14:00", endTime: "16:00"); // differs from the 09:00–11:00 ask
+        repo.Applications.Add(application);
+        var bookings = new FakeBookingService();
+        var service = CreateService(repo, managers, out var notifications, out _, out var analytics, bookings, flags: CounterFlag());
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("accept"));
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Approved, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.Accepted, counter.Status);
+        Assert.Equal(FixedNow, counter.RespondedAtUtc);
+        Assert.Contains(application, bookings.Confirmed);
+        // Booked on the counter schedule, not the original ask.
+        Assert.NotNull(bookings.LastSpec);
+        Assert.Equal(new TimeOnly(14, 0), bookings.LastSpec!.StartTime);
+        Assert.NotEqual(application.StartTime, bookings.LastSpec.StartTime);
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.CounterOfferAccepted, notification.Type);
+        Assert.Contains(analytics.Events, e => e.EventType == "counter_offer_responded");
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_AcceptSlotTaken_AutoDeclinesAndLapsesCounter()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var bookings = new FakeBookingService { SlotTaken = true };
+        var service = CreateService(repo, managers, out _, out _, out _, bookings, flags: CounterFlag());
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("accept"));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.SlotTaken, result.Error!.Code);
+        Assert.Equal(ApplicationStatus.Declined, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.Lapsed, counter.Status);
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_Decline_ReturnsToPendingAndClosesCounter()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out _, flags: CounterFlag());
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("decline"));
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Pending, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.DeclinedByOrganizer, counter.Status);
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.CounterOfferDeclined, notification.Type);
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_NoOpenCounter_ReturnsInvalidState()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer); // Pending, no counter
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _, flags: CounterFlag());
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("accept"));
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidState, result.Error!.Code);
+    }
+
+    [Fact]
+    public async Task AddMessageAsync_WhileCounterOffered_PostsWithoutFlippingStatus()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var byManager = await service.AddMessageAsync(application.Id, manager.Id, new ApplicationMessageRequest("One more thing…"));
+        Assert.Null(byManager.Error);
+        Assert.Equal(ApplicationStatus.CounterOffered, repo.Applications.Single().Status);
+
+        var byOrganizer = await service.AddMessageAsync(application.Id, organizer.Id, new ApplicationMessageRequest("Sounds good."));
+        Assert.Null(byOrganizer.Error);
+        Assert.Equal(ApplicationStatus.CounterOffered, repo.Applications.Single().Status);
+    }
+
+    [Fact]
+    public async Task WithdrawAsync_WhileCounterOffered_WithdrawsAndLapsesTheCounter()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.WithdrawAsync(application.Id, organizer.Id);
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Withdrawn, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.Lapsed, counter.Status);
+    }
+
+    [Fact]
+    public async Task SweepExpired_CounterOfferedPastExpiry_ExpiresAndLapsesTheCounter()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(
+            room, organizer, ApplicationStatus.CounterOffered,
+            createdAtUtc: FixedNow.AddDays(-20), expiresAtUtc: FixedNow.AddDays(-1));
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _, flags: CounterFlag());
+
+        var result = await service.GetAsync(application.Id, organizer.Id);
+
+        Assert.Null(result.Error);
+        Assert.Equal("expired", result.Value!.Status);
+        Assert.Equal(ApplicationStatus.Expired, repo.Applications.Single().Status);
+        Assert.Equal(CounterOfferStatus.Lapsed, counter.Status);
+    }
+
+    [Fact]
+    public async Task GetAsync_DetailCarriesLatestNonSupersededCounter()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        var superseded = NewCounter(application, CounterOfferStatus.Superseded, "10:00", "12:00");
+        var open = NewCounter(application, CounterOfferStatus.Open, "14:00", "16:00");
+        open.CreatedAtUtc = FixedNow.AddMinutes(5); // newer than the superseded one
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _, flags: CounterFlag());
+
+        var result = await service.GetAsync(application.Id, organizer.Id);
+
+        Assert.Null(result.Error);
+        Assert.NotNull(result.Value!.CounterOffer);
+        Assert.Equal(open.Id, result.Value.CounterOffer!.Id);
+        Assert.Equal("open", result.Value.CounterOffer.Status);
+        Assert.Equal("14:00", result.Value.CounterOffer.Schedule.StartTime);
+    }
+
+    private static ApplicationCounterOffer NewCounter(
+        Application application,
+        CounterOfferStatus status = CounterOfferStatus.Open,
+        string startTime = "14:00",
+        string endTime = "16:00")
+    {
+        var counter = new ApplicationCounterOffer
+        {
+            Id = Guid.NewGuid(),
+            ApplicationId = application.Id,
+            ProposedByUserId = Guid.NewGuid(),
+            Frequency = ScheduleFrequency.OneOff,
+            StartDate = application.StartDate,
+            EndDate = null,
+            DaysOfWeek = null,
+            StartTime = TimeOnly.ParseExact(startTime, "HH:mm"),
+            EndTime = TimeOnly.ParseExact(endTime, "HH:mm"),
+            Status = status,
+            CreatedAtUtc = FixedNow,
+        };
+        application.CounterOffers.Add(counter);
+        return counter;
+    }
+
     // ----- Scenario / request builders --------------------------------------------------------
 
     private static DateOnly Today() => DateOnly.FromDateTime(FixedNow.UtcDateTime.Date);
@@ -776,13 +1114,18 @@ public class ApplicationServiceTests
 
         public List<Application> Confirmed { get; } = [];
 
-        public Task<BookingConfirmation> ConfirmFromApplicationAsync(Application application, CancellationToken ct = default)
+        /// <summary>The schedule the last confirmation booked (the counter's, or null for the ask).</summary>
+        public ScheduleSpec? LastSpec { get; private set; }
+
+        public Task<BookingConfirmation> ConfirmFromApplicationAsync(
+            Application application, ScheduleSpec? schedule = null, CancellationToken ct = default)
         {
             if (SlotTaken)
             {
                 return Task.FromResult(new BookingConfirmation(null, SlotTaken: true));
             }
 
+            LastSpec = schedule;
             Confirmed.Add(application);
             return Task.FromResult(new BookingConfirmation(null, SlotTaken: false));
         }
@@ -1043,6 +1386,8 @@ public class ApplicationServiceTests
             application.Messages.Add(message);
             return Task.CompletedTask;
         }
+
+        public void AddCounterOffer(ApplicationCounterOffer counter) { }
 
         public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
 

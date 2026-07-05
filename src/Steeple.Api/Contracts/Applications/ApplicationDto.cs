@@ -24,7 +24,8 @@ public record ApplicationDto(
     Guid? BookingId,
     int MessageCount,
     IReadOnlyList<ApplicationMessageDto> Messages,
-    ApplicationConflictsDto? Conflicts = null);
+    ApplicationConflictsDto? Conflicts = null,
+    CounterOfferDto? CounterOffer = null);
 
 /// <summary>The applying organizer as shown to the provider, including reputation once available.</summary>
 public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);

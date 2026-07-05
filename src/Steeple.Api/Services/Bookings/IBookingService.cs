@@ -18,8 +18,15 @@ public interface IBookingService
     /// exclusion-constraint abort leaves nothing behind (first-approval-wins).
     /// Returns <see cref="BookingConfirmation.SlotTaken"/> instead of a booking when a live
     /// occurrence already holds an overlapping slot.
+    /// <para>
+    /// <paramref name="schedule"/> overrides the application's own schedule when the booking is
+    /// created on a different one — the counter-offer accept path (CONTRACTS §5): the application
+    /// keeps the organizer's original ask, but the booking + occurrences materialize from the
+    /// counter's schedule. Null (the default) books the application as submitted (the approval path).
+    /// </para>
     /// </summary>
-    Task<BookingConfirmation> ConfirmFromApplicationAsync(Application application, CancellationToken ct = default);
+    Task<BookingConfirmation> ConfirmFromApplicationAsync(
+        Application application, ScheduleSpec? schedule = null, CancellationToken ct = default);
 
     /// <summary>The organizer's bookings, newest first, optionally filtered by status token.</summary>
     Task<BookingResult<BookingListResult>> GetForOrganizerAsync(
@@ -56,6 +63,18 @@ public interface IBookingService
 /// exclusion constraint rejected an overlap (the caller auto-declines the application).
 /// </summary>
 public sealed record BookingConfirmation(BookingDto? Booking, bool SlotTaken);
+
+/// <summary>
+/// A venue-local wall-clock schedule to book, overriding an application's own — the counter-offer
+/// accept path (CONTRACTS §5). Mirrors <c>ScheduleDto</c> in parsed form.
+/// </summary>
+public sealed record ScheduleSpec(
+    ScheduleFrequency Frequency,
+    DateOnly StartDate,
+    DateOnly? EndDate,
+    Weekdays? DaysOfWeek,
+    TimeOnly StartTime,
+    TimeOnly EndTime);
 
 /// <summary>
 /// Outcome of a bookings use-case: a value or a stable error code the controller maps onto the

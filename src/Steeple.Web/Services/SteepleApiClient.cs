@@ -169,6 +169,30 @@ public sealed class SteepleApiClient : ISteepleApiClient
         string accessToken, Guid id, CancellationToken ct = default) =>
         PostForApplicationAsync($"api/v1/applications/{id}/withdraw", accessToken, body: null, ct);
 
+    public async Task<(ApplicationDto? Application, string? ErrorCode, ScheduleCheckResultDto? Conflict)> PostCounterOfferAsync(
+        string accessToken, Guid id, CounterOfferRequest request, CancellationToken ct = default)
+    {
+        using var httpRequest = AuthorizedRequest(HttpMethod.Post, $"api/v1/applications/{id}/counter-offer", accessToken, request);
+        using var response = await _http.SendAsync(httpRequest, ct);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var application = await response.Content.ReadFromJsonAsync<ApplicationDto>(ct);
+            return application is null ? (null, "empty_response", null) : (application, null, null);
+        }
+
+        // 409 schedule_unavailable carries the same {available, totalOccurrences, conflicts[]} payload
+        // the submit path returns — parse it so the composer can re-render the verdict card.
+        var body = await response.Content.ReadAsStringAsync(ct);
+        var errorCode = ReadProblemCode(body) ?? "api_error";
+        var conflict = errorCode == "schedule_unavailable" ? ReadScheduleCheckResult(body) : null;
+        return (null, errorCode, conflict);
+    }
+
+    public Task<(ApplicationDto? Application, string? ErrorCode)> RespondToCounterOfferAsync(
+        string accessToken, Guid id, string decision, CancellationToken ct = default) =>
+        PostForApplicationAsync($"api/v1/applications/{id}/counter-offer/respond", accessToken, new CounterOfferDecisionRequest(decision), ct);
+
     public async Task<IReadOnlyList<ManagedVenueDto>> GetManagedVenuesAsync(string accessToken, CancellationToken ct = default)
     {
         using var request = AuthorizedRequest(HttpMethod.Get, "api/v1/manage/venues", accessToken, body: null);

@@ -48,7 +48,8 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
-    public async Task<BookingConfirmation> ConfirmFromApplicationAsync(Application application, CancellationToken ct = default)
+    public async Task<BookingConfirmation> ConfirmFromApplicationAsync(
+        Application application, ScheduleSpec? schedule = null, CancellationToken ct = default)
     {
         var room = application.Room ?? throw new InvalidOperationException("Application passed without its room.");
         var venue = room.Venue ?? throw new InvalidOperationException("Application passed without its venue.");
@@ -58,11 +59,17 @@ public sealed class BookingService : IBookingService
         // Venues are founder-seeded (concierge phase), so an unknown zone is a data bug, not user input.
         var venueZone = TimeZoneInfo.FindSystemTimeZoneById(venue.Timezone);
 
+        // The counter-offer accept path books an overriding schedule; approval books the ask as-is.
+        var viaCounterOffer = schedule is not null;
+        var spec = schedule ?? new ScheduleSpec(
+            application.Frequency, application.StartDate, application.EndDate,
+            application.DaysOfWeek, application.StartTime, application.EndTime);
+
         var now = _clock.GetUtcNow();
-        var endDate = application.EndDate ?? application.StartDate;
+        var endDate = spec.EndDate ?? spec.StartDate;
         var instants = ScheduleMaterializer.Materialize(
-            application.Frequency, application.StartDate, endDate,
-            application.DaysOfWeek, application.StartTime, application.EndTime, venueZone);
+            spec.Frequency, spec.StartDate, endDate,
+            spec.DaysOfWeek, spec.StartTime, spec.EndTime, venueZone);
 
         var booking = new Booking
         {
@@ -70,12 +77,12 @@ public sealed class BookingService : IBookingService
             ApplicationId = application.Id,
             RoomId = room.Id,
             OrganizerId = application.OrganizerId,
-            Type = application.Frequency == ScheduleFrequency.RecurringWeekly ? BookingType.Recurring : BookingType.OneOff,
-            StartDate = application.StartDate,
+            Type = spec.Frequency == ScheduleFrequency.RecurringWeekly ? BookingType.Recurring : BookingType.OneOff,
+            StartDate = spec.StartDate,
             EndDate = endDate,
-            DaysOfWeek = application.DaysOfWeek,
-            StartTime = application.StartTime,
-            EndTime = application.EndTime,
+            DaysOfWeek = spec.DaysOfWeek,
+            StartTime = spec.StartTime,
+            EndTime = spec.EndTime,
             Status = BookingStatus.Confirmed,
             CreatedAtUtc = now,
         };
@@ -113,6 +120,11 @@ public sealed class BookingService : IBookingService
                 roomId = booking.RoomId,
                 type = FlagEnumExtensions.ToCamelCaseToken(booking.Type.ToString()),
                 occurrenceCount = booking.Occurrences.Count,
+                // Set weekdays of a recurring term (0/absent for a one-off); whether booked via counter.
+                weekdayCount = spec.Frequency == ScheduleFrequency.RecurringWeekly
+                    ? System.Numerics.BitOperations.PopCount((uint)(int)(spec.DaysOfWeek ?? Weekdays.None))
+                    : 0,
+                viaCounterOffer,
             },
             ct).ConfigureAwait(false);
 

@@ -34,6 +34,17 @@ class ManageRequestNotifier extends AsyncNotifier<Application> {
     state = AsyncData(updated);
     return updated;
   }
+
+  /// Suggest another time (CONTRACTS §5). Returns the now-`counterOffered`
+  /// application so the screen reflects it; throws on `409` (the screen maps
+  /// `schedule_unavailable`'s server detail / `invalid_state`).
+  Future<Application> counterOffer(ProposedSchedule schedule, {String? message}) async {
+    final updated = await ref
+        .read(manageRepositoryProvider)
+        .counterOffer(applicationId, schedule, message: message);
+    state = AsyncData(updated);
+    return updated;
+  }
 }
 
 final manageRequestProvider =

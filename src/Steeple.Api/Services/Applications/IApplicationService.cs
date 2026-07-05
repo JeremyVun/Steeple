@@ -43,6 +43,23 @@ public interface IApplicationService
 
     /// <summary>Withdraws the application (organizer only). Only allowed while undecided.</summary>
     Task<ApplicationResult<ApplicationDto>> WithdrawAsync(Guid applicationId, Guid organizerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The host proposes a counter-offer schedule (venue managers only; behind
+    /// <c>booking.counter_offers</c>). Validates the schedule like a submit, supersedes any open
+    /// counter, moves the application to <c>CounterOffered</c>, refreshes expiry, and notifies the
+    /// organizer. Flag off → <c>not_found</c>.
+    /// </summary>
+    Task<ApplicationResult<ApplicationDto>> CounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The organizer accepts or declines the open counter-offer (organizer only; behind
+    /// <c>booking.counter_offers</c>). Accept is a booking transaction on the counter schedule;
+    /// decline returns the application to <c>Pending</c>. Flag off → <c>not_found</c>.
+    /// </summary>
+    Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct = default);
 }
 
 /// <summary>A submit outcome: the application plus whether this call created it (vs. an idempotent replay).</summary>

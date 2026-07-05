@@ -98,8 +98,11 @@ Abuse controls: per-IP `auth` rate-limit policy (429 + `Retry-After`) + Turnstil
 
 **Applications** — submit requires auth + Turnstile + per-account
 `apply` rate limit + `Idempotency-Key` (replays return the original). State machine
-`Pending → NeedsInfo ⇄ → Approved | Declined | Withdrawn | Expired`; the *thread* drives
-NeedsInfo (provider message parks it, organizer answer returns it). Party-scoped reads —
+`Pending → NeedsInfo ⇄ → CounterOffered ⇄ → Approved | Declined | Withdrawn | Expired`; the
+*thread* drives NeedsInfo (provider message parks it, organizer answer returns it), while
+CounterOffered is driven by the counter-offer endpoints (host suggests a time → organizer
+accepts = booking on the counter schedule, or declines = back to Pending; messages never
+flip it; behind `booking.counter_offers`). Party-scoped reads —
 non-parties 404, and unknown ≡ unpublished on submit (no existence leak). Decisions
 restricted to `venue_managers`. 14-day expiry is a **lazy sweep on read** (no worker).
 `GET /manage/venues` tells clients whether to show a provider surface.

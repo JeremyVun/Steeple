@@ -39,6 +39,13 @@ public interface IApplicationRepository
     /// <summary>Appends a thread message (also flushing any pending changes to its tracked application).</summary>
     Task AddMessageAsync(ApplicationMessage message, CancellationToken ct = default);
 
+    /// <summary>
+    /// Marks a new counter-offer as inserted. Required because client-set Guid keys discovered
+    /// only via navigation fix-up are tracked as Modified, not Added — the row must be an INSERT.
+    /// The caller still owns the SaveAsync that commits it atomically with the status flip.
+    /// </summary>
+    void AddCounterOffer(ApplicationCounterOffer counter);
+
     /// <summary>Flushes mutations made to already-loaded applications (status flips, decisions, expiry).</summary>
     Task SaveAsync(CancellationToken ct = default);
 }

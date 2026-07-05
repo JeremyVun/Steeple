@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/theme.dart';
+import '../../../core/api/app_error.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../application/application_thread_providers.dart';
+import 'widgets/counter_offer_card.dart';
 
 /// The application ask/answer thread (MOBILE_CONTRACTS §7
 /// `applicationThread` route; push deep-link target). Reads through a local
@@ -25,6 +27,7 @@ class ApplicationThreadScreen extends ConsumerStatefulWidget {
 class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScreen> {
   final _messageController = TextEditingController();
   bool _sending = false;
+  bool _respondingToCounter = false;
 
   @override
   void dispose() {
@@ -51,8 +54,13 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
   Widget _buildThread(Application application) {
     final colors = context.steepleColors;
     final canWithdraw = application.statusValue == ApplicationStatus.pending ||
-        application.statusValue == ApplicationStatus.needsInfo;
+        application.statusValue == ApplicationStatus.needsInfo ||
+        application.statusValue == ApplicationStatus.counterOffered;
     final bookingId = application.bookingId;
+    final counter = application.counterOffer;
+    final counterOpen = application.statusValue == ApplicationStatus.counterOffered &&
+        counter != null &&
+        counter.isOpen;
 
     return Column(
       children: [
@@ -61,6 +69,19 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
             padding: const EdgeInsets.all(SteepleTokens.gutter),
             children: [
               _HeaderCard(application: application),
+              if (counterOpen) ...[
+                const SizedBox(height: SteepleTokens.space4),
+                CounterOfferCard(
+                  requested: application.schedule,
+                  offer: counter,
+                  busy: _respondingToCounter,
+                  onAccept: _confirmAcceptCounter,
+                  onDecline: _declineCounter,
+                ),
+              ] else if (counter != null && !counter.isOpen) ...[
+                const SizedBox(height: SteepleTokens.space4),
+                _CounterNote(offer: counter),
+              ],
               if (application.statusValue == ApplicationStatus.approved &&
                   bookingId != null) ...[
                 const SizedBox(height: SteepleTokens.space4),
@@ -149,6 +170,63 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
     }
   }
 
+  Future<void> _confirmAcceptCounter() async {
+    final application = ref.read(applicationThreadProvider(widget.applicationId)).value;
+    final offer = application?.counterOffer;
+    if (offer == null) return;
+    final offered = scheduleSummary(offer.schedule);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Accept this time?'),
+        content: Text('This books $offered; your original ask goes away.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Not yet'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _respondToCounter(accept: true);
+  }
+
+  Future<void> _declineCounter() => _respondToCounter(accept: false);
+
+  Future<void> _respondToCounter({required bool accept}) async {
+    setState(() => _respondingToCounter = true);
+    try {
+      final updated = await ref
+          .read(applicationThreadProvider(widget.applicationId).notifier)
+          .respondToCounter(accept: accept);
+      if (!mounted) return;
+      final message = accept
+          ? updated.statusValue == ApplicationStatus.approved
+              ? "You're booked — see you then."
+              : 'That time was just booked elsewhere, so this went back to the church.'
+          : 'Declined — your original request is back with the church.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (e) {
+      if (!mounted) return;
+      final code = e is AppError ? e.code : null;
+      final text = switch (code) {
+        'slot_taken' =>
+          'That time was just booked elsewhere — refresh to see the latest.',
+        'invalid_state' =>
+          "This suggestion isn't open anymore — refresh to see the latest.",
+        _ => "Couldn't send your response. Try again in a moment.",
+      };
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    } finally {
+      if (mounted) setState(() => _respondingToCounter = false);
+    }
+  }
+
   Future<void> _confirmWithdraw() async {
     final colors = context.steepleColors;
     final confirmed = await showDialog<bool>(
@@ -226,6 +304,50 @@ class _HeaderCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A muted note for a counter that is no longer open — the organizer already
+/// responded, or it lapsed/was superseded (CONTRACTS §5).
+class _CounterNote extends StatelessWidget {
+  const _CounterNote({required this.offer});
+
+  final CounterOffer offer;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    final text = switch (offer.statusValue) {
+      CounterOfferStatus.accepted =>
+        'You accepted the church’s suggested time (${scheduleSummary(offer.schedule)}).',
+      CounterOfferStatus.declinedByOrganizer =>
+        'You declined the church’s suggested time; your original request is back with them.',
+      CounterOfferStatus.superseded =>
+        'The church replaced an earlier suggested time.',
+      CounterOfferStatus.lapsed =>
+        'The church’s suggested time is no longer available.',
+      _ => 'The church suggested ${scheduleSummary(offer.schedule)}.',
+    };
+    return Container(
+      padding: const EdgeInsets.all(SteepleTokens.space3),
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
+        borderRadius: BorderRadius.circular(SteepleTokens.radiusMd),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.schedule_rounded, color: colors.textTertiary, size: 18),
+          const SizedBox(width: SteepleTokens.space2),
+          Expanded(
+            child: Text(
+              text,
+              style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+            ),
+          ),
+        ],
       ),
     );
   }

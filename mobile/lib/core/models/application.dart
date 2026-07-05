@@ -129,6 +129,37 @@ abstract class ApplicationConflicts with _$ApplicationConflicts {
       );
 }
 
+/// A venue manager's proposed alternative schedule (CONTRACTS §5
+/// "Counter-offers"; additive — availability plan commit 8). Carried on
+/// [Application.counterOffer] as the latest non-superseded counter. At most one
+/// is ever `open` (server-enforced); history rows stay on the thread. Its
+/// [schedule] reuses the venue-local wall-clock [ProposedSchedule] shape.
+@freezed
+abstract class CounterOffer with _$CounterOffer {
+  const CounterOffer._();
+
+  const factory CounterOffer({
+    required String id,
+    required ProposedSchedule schedule,
+    String? message,
+
+    /// Wire token: `open | accepted | declinedByOrganizer | superseded |
+    /// lapsed`.
+    required String status,
+    required DateTime createdAtUtc,
+    DateTime? respondedAtUtc,
+  }) = _CounterOffer;
+
+  factory CounterOffer.fromJson(Map<String, dynamic> json) =>
+      _$CounterOfferFromJson(json);
+
+  CounterOfferStatus get statusValue =>
+      parseWireEnum(status, CounterOfferStatus.tokens, CounterOfferStatus.unknown);
+
+  /// True while the organizer can still accept or decline it.
+  bool get isOpen => statusValue == CounterOfferStatus.open;
+}
+
 /// An application as both parties see it (CONTRACTS §5). List endpoints
 /// return `messages: []` (the thread stays behind the detail fetch);
 /// `messageCount` is always set.
@@ -149,8 +180,8 @@ abstract class Application with _$Application {
     required ProposedSchedule schedule,
     required String intentText,
 
-    /// Wire token: `pending | needsInfo | approved | declined | withdrawn |
-    /// expired`.
+    /// Wire token: `pending | needsInfo | counterOffered | approved |
+    /// declined | withdrawn | expired`.
     required String status,
     required DateTime createdAtUtc,
     DateTime? decidedAtUtc,
@@ -165,6 +196,11 @@ abstract class Application with _$Application {
     /// the manager's detail read of a still-actionable application, null
     /// otherwise (lists, organizer reads, decided applications).
     ApplicationConflicts? conflicts,
+
+    /// The latest non-superseded counter-offer (CONTRACTS §5) — additive; null
+    /// unless a manager has suggested another time. Only ever `open` for one
+    /// counter; the application's own [status] is `counterOffered` while it is.
+    CounterOffer? counterOffer,
   }) = _Application;
 
   factory Application.fromJson(Map<String, dynamic> json) =>

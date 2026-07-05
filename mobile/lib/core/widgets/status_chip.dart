@@ -45,6 +45,7 @@ class StatusChip extends StatelessWidget {
       StatusDomain.application => switch (statusRaw) {
           'pending' => (c.warning, 'Pending'),
           'needsInfo' => (c.info, 'Needs info'),
+          'counterOffered' => (c.info, 'Time suggested'),
           'approved' => (c.success, 'Approved'),
           'declined' => (c.danger, 'Declined'),
           'withdrawn' => (c.neutral, 'Withdrawn'),

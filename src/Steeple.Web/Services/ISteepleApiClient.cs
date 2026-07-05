@@ -101,6 +101,17 @@ public interface ISteepleApiClient
     Task<(ApplicationDto? Application, string? ErrorCode)> WithdrawApplicationAsync(
         string accessToken, Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    /// Proposes an alternative schedule (venue manager, CONTRACTS §5). Like a submit, a
+    /// <c>409 schedule_unavailable</c> surfaces its per-date conflict payload in <c>Conflict</c>.
+    /// </summary>
+    Task<(ApplicationDto? Application, string? ErrorCode, ScheduleCheckResultDto? Conflict)> PostCounterOfferAsync(
+        string accessToken, Guid id, CounterOfferRequest request, CancellationToken ct = default);
+
+    /// <summary>Organizer accepts (<c>accept</c>, books the counter) or declines a counter-offer.</summary>
+    Task<(ApplicationDto? Application, string? ErrorCode)> RespondToCounterOfferAsync(
+        string accessToken, Guid id, string decision, CancellationToken ct = default);
+
     /// <summary>Venues the signed-in provider manages (labels a provider surface and routes it).</summary>
     Task<IReadOnlyList<ManagedVenueDto>> GetManagedVenuesAsync(string accessToken, CancellationToken ct = default);
 

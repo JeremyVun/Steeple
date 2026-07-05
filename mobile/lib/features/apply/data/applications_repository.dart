@@ -20,6 +20,13 @@ abstract class ApplicationsRepository {
   Future<ApplicationMessage> sendMessage(String id, String body);
 
   Future<Application> withdraw(String id);
+
+  /// `POST /api/v1/applications/{id}/counter-offer/respond` (CONTRACTS §5) —
+  /// the organizer accepts or declines an open counter. Accept books the
+  /// counter schedule (race → `409 slot_taken`, auto-declines); decline
+  /// returns the application to `pending`. `409 invalid_state` when no counter
+  /// is open.
+  Future<Application> respondToCounter(String id, {required bool accept});
 }
 
 class ApiApplicationsRepository implements ApplicationsRepository {
@@ -65,6 +72,13 @@ class ApiApplicationsRepository implements ApplicationsRepository {
   @override
   Future<Application> withdraw(String id) => _api.post(
         '/api/v1/applications/$id/withdraw',
+        decode: (data) => Application.fromJson(data as Map<String, dynamic>),
+      );
+
+  @override
+  Future<Application> respondToCounter(String id, {required bool accept}) => _api.post(
+        '/api/v1/applications/$id/counter-offer/respond',
+        body: {'decision': accept ? 'accept' : 'decline'},
         decode: (data) => Application.fromJson(data as Map<String, dynamic>),
       );
 }

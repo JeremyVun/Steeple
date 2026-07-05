@@ -1434,6 +1434,73 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 .decision-form { display: grid; gap: 0.45rem; }
 .decision-actions { display: flex; gap: 0.6rem; margin-top: 0.5rem; }
 .decision-actions .btn { flex: 1 1 auto; }
+.decision-waiting {
+    margin: 0 0 0.8rem;
+    padding: 0.55rem 0.8rem;
+    background: var(--info-tint);
+    color: var(--info);
+    border-radius: var(--radius-sm);
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+/* Counter-offer (CONTRACTS §5 / DESIGN_SYSTEM §8.4 info pair) */
+.thread-note {
+    margin: 0 0 1rem;
+    padding: 0.55rem 0.85rem;
+    background: var(--paper-deep);
+    border-left: 3px solid var(--line-strong);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+}
+.counter-card {
+    background: var(--info-tint);
+    border: 1px solid var(--info);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+.counter-card-eyebrow {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: var(--info);
+    margin: 0 0 0.75rem;
+}
+.counter-diff { margin: 0 0 0.8rem; display: grid; gap: 0.55rem; }
+.counter-line { margin: 0; }
+.counter-line dt {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    color: var(--ink-faint);
+    margin: 0 0 0.15rem;
+}
+.counter-line dd { margin: 0; color: var(--ink); }
+.counter-line-was dd { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+.counter-line-offered dd { font-weight: 700; font-size: 1.05rem; }
+.counter-message {
+    margin: 0 0 0.85rem;
+    padding: 0.6rem 0.85rem;
+    background: var(--card);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    white-space: pre-line;
+}
+.counter-card-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-start; }
+.counter-card-actions .account-confirm { flex: 1 1 auto; }
+.counter-card-actions .account-confirm[open] { background: var(--card); border-radius: var(--radius-sm); padding: 0.75rem; }
+
+.counter-composer { margin-top: 1rem; border-top: 1px dashed var(--line-strong); padding-top: 0.9rem; }
+.counter-composer-toggle { display: inline-flex; cursor: pointer; list-style: none; }
+.counter-composer-toggle::-webkit-details-marker { display: none; }
+.counter-composer-body { margin-top: 0.9rem; display: grid; gap: 0.9rem; }
+.counter-form { display: grid; gap: 0.9rem; }
+.counter-snaps { display: grid; gap: 0.5rem; }
+.counter-snap { min-height: 40px; }
 .rating-card { display: grid; gap: 0.65rem; }
 .rating-line {
     display: flex;

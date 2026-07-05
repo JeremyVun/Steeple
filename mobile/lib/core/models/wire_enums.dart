@@ -11,6 +11,7 @@ library;
 enum ApplicationStatus {
   pending,
   needsInfo,
+  counterOffered,
   approved,
   declined,
   withdrawn,
@@ -20,10 +21,29 @@ enum ApplicationStatus {
   static const tokens = <String, ApplicationStatus>{
     'pending': ApplicationStatus.pending,
     'needsInfo': ApplicationStatus.needsInfo,
+    'counterOffered': ApplicationStatus.counterOffered,
     'approved': ApplicationStatus.approved,
     'declined': ApplicationStatus.declined,
     'withdrawn': ApplicationStatus.withdrawn,
     'expired': ApplicationStatus.expired,
+  };
+}
+
+/// `CounterOffer.status` (CONTRACTS §5 "Counter-offers").
+enum CounterOfferStatus {
+  open,
+  accepted,
+  declinedByOrganizer,
+  superseded,
+  lapsed,
+  unknown;
+
+  static const tokens = <String, CounterOfferStatus>{
+    'open': CounterOfferStatus.open,
+    'accepted': CounterOfferStatus.accepted,
+    'declinedByOrganizer': CounterOfferStatus.declinedByOrganizer,
+    'superseded': CounterOfferStatus.superseded,
+    'lapsed': CounterOfferStatus.lapsed,
   };
 }
 

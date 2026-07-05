@@ -13,13 +13,17 @@ namespace Steeple.Web.Controllers;
 [Authorize]
 public sealed class InboxController : SteepleControllerBase
 {
+    private const string CounterOffersFlag = "booking.counter_offers";
+
     private readonly ISteepleApiClient _api;
+    private readonly IFeatureFlags _flags;
     private readonly ILogger<InboxController> _logger;
 
     /// <summary>Creates the controller.</summary>
-    public InboxController(ISteepleApiClient api, ILogger<InboxController> logger)
+    public InboxController(ISteepleApiClient api, IFeatureFlags flags, ILogger<InboxController> logger)
     {
         _api = api;
+        _flags = flags;
         _logger = logger;
     }
 
@@ -153,9 +157,50 @@ public sealed class InboxController : SteepleControllerBase
             Application = application,
             ViewerIsOrganizer = true,
             ViewerId = viewerId,
+            CounterOffersEnabled = _flags.IsEnabled(CounterOffersFlag),
             Error = TempData["ThreadError"] as string,
             Flash = TempData["ThreadFlash"] as string,
         });
+    }
+
+    /// <summary>Organizer's response to a counter-offer: accept (books the offered time) or decline.</summary>
+    [HttpPost("/inbox/applications/{id:guid}/counter-offer/respond")]
+    public async Task<IActionResult> RespondToCounterOffer(Guid id, [FromForm] string decision, CancellationToken ct)
+    {
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        var wire = decision == "accept" ? "accept" : "decline";
+        try
+        {
+            var (application, errorCode) = await _api.RespondToCounterOfferAsync(accessToken, id, wire, ct);
+            if (application is not null)
+            {
+                TempData["ThreadFlash"] = wire == "accept"
+                    ? $"Booked — the new time with {application.VenueName} is confirmed."
+                    : $"Declined the suggested time — {application.VenueName} has been asked again.";
+            }
+            else
+            {
+                TempData["ThreadError"] = errorCode switch
+                {
+                    "slot_taken" => "That time was just taken — the venue has been notified.",
+                    "invalid_state" => "This suggestion is no longer open.",
+                    "rate_limited" => "You're responding quickly — give it a minute.",
+                    _ => "Couldn't record your response. Try again in a moment.",
+                };
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Counter-offer response failed.");
+            TempData["ThreadError"] = "Couldn't reach the server — try again in a moment.";
+        }
+
+        return Redirect(Url.Content($"~/inbox/applications/{id}"));
     }
 
     private async Task<(ApplicationDto? Application, string? ErrorCode)> PostMessageSafelyAsync(
