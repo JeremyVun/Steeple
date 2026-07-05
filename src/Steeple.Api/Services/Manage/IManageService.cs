@@ -18,6 +18,10 @@ public interface IManageService
     /// <summary>Applies the non-null fields; address changes re-geocode (geofenced).</summary>
     Task<ManageResult<ManagedVenueDetailDto>> UpdateVenueAsync(Guid callerId, Guid venueId, SaveVenueRequest request, CancellationToken ct = default);
 
+    /// <summary>Submits ownership / lease-authority evidence for operator verification.</summary>
+    Task<ManageResult<ManagedVenueDetailDto>> SubmitVenueVerificationAsync(
+        Guid callerId, Guid venueId, SubmitVenueVerificationRequest request, CancellationToken ct = default);
+
     /// <summary>Manager view of a room, or NotFound when the caller doesn't manage its venue.</summary>
     Task<ManageResult<ManagedRoomDto>> GetRoomAsync(Guid callerId, Guid roomId, CancellationToken ct = default);
 
@@ -65,4 +69,13 @@ public static class ManageErrorCodes
 
     /// <summary>Publishing is blocked because the room has zero photos.</summary>
     public const string NoPhotos = "no_photos";
+
+    /// <summary>Venue verification payload failed validation.</summary>
+    public const string InvalidVerification = "invalid_verification";
+
+    /// <summary>The venue is already verified.</summary>
+    public const string AlreadyVerified = "already_verified";
+
+    /// <summary>The venue already has a pending verification request.</summary>
+    public const string VerificationPending = "verification_pending";
 }

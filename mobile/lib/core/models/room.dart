@@ -10,6 +10,46 @@ import 'wire_tokens.dart';
 part 'room.freezed.dart';
 part 'room.g.dart';
 
+/// Visible star-rating aggregate for a venue/listing surface.
+@freezed
+abstract class RatingSummary with _$RatingSummary {
+  const factory RatingSummary({
+    required double averageStars,
+    required int count,
+  }) = _RatingSummary;
+
+  factory RatingSummary.fromJson(Map<String, dynamic> json) =>
+      _$RatingSummaryFromJson(json);
+}
+
+/// One public, revealed venue review comment.
+@freezed
+abstract class VenueReview with _$VenueReview {
+  const factory VenueReview({
+    required int stars,
+    String? comment,
+    required String raterName,
+    required DateTime createdAtUtc,
+  }) = _VenueReview;
+
+  factory VenueReview.fromJson(Map<String, dynamic> json) =>
+      _$VenueReviewFromJson(json);
+}
+
+/// Paginated public reviews for a venue (`GET /venues/{id}/ratings`).
+@freezed
+abstract class VenueReviewPage with _$VenueReviewPage {
+  const factory VenueReviewPage({
+    @Default(<VenueReview>[]) List<VenueReview> items,
+    required int totalCount,
+    required int page,
+    required int pageSize,
+  }) = _VenueReviewPage;
+
+  factory VenueReviewPage.fromJson(Map<String, dynamic> json) =>
+      _$VenueReviewPageFromJson(json);
+}
+
 /// A room projected as a search-result card (`GET /listings/search`,
 /// `ListingCard`).
 @freezed
@@ -32,6 +72,7 @@ abstract class RoomSummary with _$RoomSummary {
     @Default(<String>[]) List<String> activities,
     @Default(<String>[]) List<String> accessibility,
     double? distanceMeters,
+    RatingSummary? rating,
   }) = _RoomSummary;
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) =>
@@ -106,6 +147,7 @@ abstract class RoomDetail with _$RoomDetail {
     @Default(<String>[]) List<String> activities,
     @Default(<RoomPhoto>[]) List<RoomPhoto> photos,
     required VenueSummary venue,
+    RatingSummary? rating,
   }) = _RoomDetail;
 
   factory RoomDetail.fromJson(Map<String, dynamic> json) =>

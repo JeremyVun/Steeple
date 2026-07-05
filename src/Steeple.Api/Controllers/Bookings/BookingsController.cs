@@ -17,8 +17,13 @@ namespace Steeple.Api.Controllers.Bookings;
 public sealed class BookingsController : ControllerBase
 {
     private readonly IBookingService _bookings;
+    private readonly IRatingService _ratings;
 
-    public BookingsController(IBookingService bookings) => _bookings = bookings;
+    public BookingsController(IBookingService bookings, IRatingService ratings)
+    {
+        _bookings = bookings;
+        _ratings = ratings;
+    }
 
     /// <summary>The organizer's bookings, newest first (<c>?status=</c> filters by wire token).</summary>
     [HttpGet("me/bookings")]
@@ -65,12 +70,22 @@ public sealed class BookingsController : ControllerBase
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }
 
+    /// <summary>Submits the caller's one immutable star rating for a rateable booking.</summary>
+    [HttpPost("bookings/{id:guid}/ratings")]
+    [EnableRateLimiting(RateLimitPolicies.Apply)]
+    public async Task<IActionResult> Rate(Guid id, [FromBody] SubmitRatingRequest request, CancellationToken ct)
+    {
+        var result = await _ratings.SubmitAsync(id, User.GetUserId(), request, ct);
+        return result.Error is null ? NoContent() : ToProblem(result.Error);
+    }
+
     /// <summary>Maps a stable bookings error code onto the RFC 9457 envelope (CONTRACTS §2).</summary>
     private ObjectResult ToProblem(BookingError error)
     {
         var status = error.Code switch
         {
             BookingErrorCodes.InvalidState => StatusCodes.Status409Conflict,
+            BookingErrorCodes.InvalidRating => StatusCodes.Status400BadRequest,
             BookingErrorCodes.InvalidBooking => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status404NotFound,
         };

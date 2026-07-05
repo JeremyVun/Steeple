@@ -13,9 +13,825 @@ part of 'room.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
+mixin _$RatingSummary {
+
+ double get averageStars; int get count;
+/// Create a copy of RatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$RatingSummaryCopyWith<RatingSummary> get copyWith => _$RatingSummaryCopyWithImpl<RatingSummary>(this as RatingSummary, _$identity);
+
+  /// Serializes this RatingSummary to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RatingSummary&&(identical(other.averageStars, averageStars) || other.averageStars == averageStars)&&(identical(other.count, count) || other.count == count));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,averageStars,count);
+
+@override
+String toString() {
+  return 'RatingSummary(averageStars: $averageStars, count: $count)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $RatingSummaryCopyWith<$Res>  {
+  factory $RatingSummaryCopyWith(RatingSummary value, $Res Function(RatingSummary) _then) = _$RatingSummaryCopyWithImpl;
+@useResult
+$Res call({
+ double averageStars, int count
+});
+
+
+
+
+}
+/// @nodoc
+class _$RatingSummaryCopyWithImpl<$Res>
+    implements $RatingSummaryCopyWith<$Res> {
+  _$RatingSummaryCopyWithImpl(this._self, this._then);
+
+  final RatingSummary _self;
+  final $Res Function(RatingSummary) _then;
+
+/// Create a copy of RatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? averageStars = null,Object? count = null,}) {
+  return _then(_self.copyWith(
+averageStars: null == averageStars ? _self.averageStars : averageStars // ignore: cast_nullable_to_non_nullable
+as double,count: null == count ? _self.count : count // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [RatingSummary].
+extension RatingSummaryPatterns on RatingSummary {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _RatingSummary value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _RatingSummary() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _RatingSummary value)  $default,){
+final _that = this;
+switch (_that) {
+case _RatingSummary():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _RatingSummary value)?  $default,){
+final _that = this;
+switch (_that) {
+case _RatingSummary() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( double averageStars,  int count)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _RatingSummary() when $default != null:
+return $default(_that.averageStars,_that.count);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( double averageStars,  int count)  $default,) {final _that = this;
+switch (_that) {
+case _RatingSummary():
+return $default(_that.averageStars,_that.count);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( double averageStars,  int count)?  $default,) {final _that = this;
+switch (_that) {
+case _RatingSummary() when $default != null:
+return $default(_that.averageStars,_that.count);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _RatingSummary implements RatingSummary {
+  const _RatingSummary({required this.averageStars, required this.count});
+  factory _RatingSummary.fromJson(Map<String, dynamic> json) => _$RatingSummaryFromJson(json);
+
+@override final  double averageStars;
+@override final  int count;
+
+/// Create a copy of RatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$RatingSummaryCopyWith<_RatingSummary> get copyWith => __$RatingSummaryCopyWithImpl<_RatingSummary>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$RatingSummaryToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RatingSummary&&(identical(other.averageStars, averageStars) || other.averageStars == averageStars)&&(identical(other.count, count) || other.count == count));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,averageStars,count);
+
+@override
+String toString() {
+  return 'RatingSummary(averageStars: $averageStars, count: $count)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$RatingSummaryCopyWith<$Res> implements $RatingSummaryCopyWith<$Res> {
+  factory _$RatingSummaryCopyWith(_RatingSummary value, $Res Function(_RatingSummary) _then) = __$RatingSummaryCopyWithImpl;
+@override @useResult
+$Res call({
+ double averageStars, int count
+});
+
+
+
+
+}
+/// @nodoc
+class __$RatingSummaryCopyWithImpl<$Res>
+    implements _$RatingSummaryCopyWith<$Res> {
+  __$RatingSummaryCopyWithImpl(this._self, this._then);
+
+  final _RatingSummary _self;
+  final $Res Function(_RatingSummary) _then;
+
+/// Create a copy of RatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? averageStars = null,Object? count = null,}) {
+  return _then(_RatingSummary(
+averageStars: null == averageStars ? _self.averageStars : averageStars // ignore: cast_nullable_to_non_nullable
+as double,count: null == count ? _self.count : count // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$VenueReview {
+
+ int get stars; String? get comment; String get raterName; DateTime get createdAtUtc;
+/// Create a copy of VenueReview
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VenueReviewCopyWith<VenueReview> get copyWith => _$VenueReviewCopyWithImpl<VenueReview>(this as VenueReview, _$identity);
+
+  /// Serializes this VenueReview to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VenueReview&&(identical(other.stars, stars) || other.stars == stars)&&(identical(other.comment, comment) || other.comment == comment)&&(identical(other.raterName, raterName) || other.raterName == raterName)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,stars,comment,raterName,createdAtUtc);
+
+@override
+String toString() {
+  return 'VenueReview(stars: $stars, comment: $comment, raterName: $raterName, createdAtUtc: $createdAtUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VenueReviewCopyWith<$Res>  {
+  factory $VenueReviewCopyWith(VenueReview value, $Res Function(VenueReview) _then) = _$VenueReviewCopyWithImpl;
+@useResult
+$Res call({
+ int stars, String? comment, String raterName, DateTime createdAtUtc
+});
+
+
+
+
+}
+/// @nodoc
+class _$VenueReviewCopyWithImpl<$Res>
+    implements $VenueReviewCopyWith<$Res> {
+  _$VenueReviewCopyWithImpl(this._self, this._then);
+
+  final VenueReview _self;
+  final $Res Function(VenueReview) _then;
+
+/// Create a copy of VenueReview
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? stars = null,Object? comment = freezed,Object? raterName = null,Object? createdAtUtc = null,}) {
+  return _then(_self.copyWith(
+stars: null == stars ? _self.stars : stars // ignore: cast_nullable_to_non_nullable
+as int,comment: freezed == comment ? _self.comment : comment // ignore: cast_nullable_to_non_nullable
+as String?,raterName: null == raterName ? _self.raterName : raterName // ignore: cast_nullable_to_non_nullable
+as String,createdAtUtc: null == createdAtUtc ? _self.createdAtUtc : createdAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [VenueReview].
+extension VenueReviewPatterns on VenueReview {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VenueReview value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _VenueReview() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VenueReview value)  $default,){
+final _that = this;
+switch (_that) {
+case _VenueReview():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VenueReview value)?  $default,){
+final _that = this;
+switch (_that) {
+case _VenueReview() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int stars,  String? comment,  String raterName,  DateTime createdAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _VenueReview() when $default != null:
+return $default(_that.stars,_that.comment,_that.raterName,_that.createdAtUtc);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int stars,  String? comment,  String raterName,  DateTime createdAtUtc)  $default,) {final _that = this;
+switch (_that) {
+case _VenueReview():
+return $default(_that.stars,_that.comment,_that.raterName,_that.createdAtUtc);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int stars,  String? comment,  String raterName,  DateTime createdAtUtc)?  $default,) {final _that = this;
+switch (_that) {
+case _VenueReview() when $default != null:
+return $default(_that.stars,_that.comment,_that.raterName,_that.createdAtUtc);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _VenueReview implements VenueReview {
+  const _VenueReview({required this.stars, this.comment, required this.raterName, required this.createdAtUtc});
+  factory _VenueReview.fromJson(Map<String, dynamic> json) => _$VenueReviewFromJson(json);
+
+@override final  int stars;
+@override final  String? comment;
+@override final  String raterName;
+@override final  DateTime createdAtUtc;
+
+/// Create a copy of VenueReview
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$VenueReviewCopyWith<_VenueReview> get copyWith => __$VenueReviewCopyWithImpl<_VenueReview>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$VenueReviewToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VenueReview&&(identical(other.stars, stars) || other.stars == stars)&&(identical(other.comment, comment) || other.comment == comment)&&(identical(other.raterName, raterName) || other.raterName == raterName)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,stars,comment,raterName,createdAtUtc);
+
+@override
+String toString() {
+  return 'VenueReview(stars: $stars, comment: $comment, raterName: $raterName, createdAtUtc: $createdAtUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$VenueReviewCopyWith<$Res> implements $VenueReviewCopyWith<$Res> {
+  factory _$VenueReviewCopyWith(_VenueReview value, $Res Function(_VenueReview) _then) = __$VenueReviewCopyWithImpl;
+@override @useResult
+$Res call({
+ int stars, String? comment, String raterName, DateTime createdAtUtc
+});
+
+
+
+
+}
+/// @nodoc
+class __$VenueReviewCopyWithImpl<$Res>
+    implements _$VenueReviewCopyWith<$Res> {
+  __$VenueReviewCopyWithImpl(this._self, this._then);
+
+  final _VenueReview _self;
+  final $Res Function(_VenueReview) _then;
+
+/// Create a copy of VenueReview
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? stars = null,Object? comment = freezed,Object? raterName = null,Object? createdAtUtc = null,}) {
+  return _then(_VenueReview(
+stars: null == stars ? _self.stars : stars // ignore: cast_nullable_to_non_nullable
+as int,comment: freezed == comment ? _self.comment : comment // ignore: cast_nullable_to_non_nullable
+as String?,raterName: null == raterName ? _self.raterName : raterName // ignore: cast_nullable_to_non_nullable
+as String,createdAtUtc: null == createdAtUtc ? _self.createdAtUtc : createdAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$VenueReviewPage {
+
+ List<VenueReview> get items; int get totalCount; int get page; int get pageSize;
+/// Create a copy of VenueReviewPage
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VenueReviewPageCopyWith<VenueReviewPage> get copyWith => _$VenueReviewPageCopyWithImpl<VenueReviewPage>(this as VenueReviewPage, _$identity);
+
+  /// Serializes this VenueReviewPage to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VenueReviewPage&&const DeepCollectionEquality().equals(other.items, items)&&(identical(other.totalCount, totalCount) || other.totalCount == totalCount)&&(identical(other.page, page) || other.page == page)&&(identical(other.pageSize, pageSize) || other.pageSize == pageSize));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(items),totalCount,page,pageSize);
+
+@override
+String toString() {
+  return 'VenueReviewPage(items: $items, totalCount: $totalCount, page: $page, pageSize: $pageSize)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VenueReviewPageCopyWith<$Res>  {
+  factory $VenueReviewPageCopyWith(VenueReviewPage value, $Res Function(VenueReviewPage) _then) = _$VenueReviewPageCopyWithImpl;
+@useResult
+$Res call({
+ List<VenueReview> items, int totalCount, int page, int pageSize
+});
+
+
+
+
+}
+/// @nodoc
+class _$VenueReviewPageCopyWithImpl<$Res>
+    implements $VenueReviewPageCopyWith<$Res> {
+  _$VenueReviewPageCopyWithImpl(this._self, this._then);
+
+  final VenueReviewPage _self;
+  final $Res Function(VenueReviewPage) _then;
+
+/// Create a copy of VenueReviewPage
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? items = null,Object? totalCount = null,Object? page = null,Object? pageSize = null,}) {
+  return _then(_self.copyWith(
+items: null == items ? _self.items : items // ignore: cast_nullable_to_non_nullable
+as List<VenueReview>,totalCount: null == totalCount ? _self.totalCount : totalCount // ignore: cast_nullable_to_non_nullable
+as int,page: null == page ? _self.page : page // ignore: cast_nullable_to_non_nullable
+as int,pageSize: null == pageSize ? _self.pageSize : pageSize // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [VenueReviewPage].
+extension VenueReviewPagePatterns on VenueReviewPage {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _VenueReviewPage value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _VenueReviewPage() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _VenueReviewPage value)  $default,){
+final _that = this;
+switch (_that) {
+case _VenueReviewPage():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _VenueReviewPage value)?  $default,){
+final _that = this;
+switch (_that) {
+case _VenueReviewPage() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( List<VenueReview> items,  int totalCount,  int page,  int pageSize)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _VenueReviewPage() when $default != null:
+return $default(_that.items,_that.totalCount,_that.page,_that.pageSize);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( List<VenueReview> items,  int totalCount,  int page,  int pageSize)  $default,) {final _that = this;
+switch (_that) {
+case _VenueReviewPage():
+return $default(_that.items,_that.totalCount,_that.page,_that.pageSize);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( List<VenueReview> items,  int totalCount,  int page,  int pageSize)?  $default,) {final _that = this;
+switch (_that) {
+case _VenueReviewPage() when $default != null:
+return $default(_that.items,_that.totalCount,_that.page,_that.pageSize);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _VenueReviewPage implements VenueReviewPage {
+  const _VenueReviewPage({final  List<VenueReview> items = const <VenueReview>[], required this.totalCount, required this.page, required this.pageSize}): _items = items;
+  factory _VenueReviewPage.fromJson(Map<String, dynamic> json) => _$VenueReviewPageFromJson(json);
+
+ final  List<VenueReview> _items;
+@override@JsonKey() List<VenueReview> get items {
+  if (_items is EqualUnmodifiableListView) return _items;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_items);
+}
+
+@override final  int totalCount;
+@override final  int page;
+@override final  int pageSize;
+
+/// Create a copy of VenueReviewPage
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$VenueReviewPageCopyWith<_VenueReviewPage> get copyWith => __$VenueReviewPageCopyWithImpl<_VenueReviewPage>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$VenueReviewPageToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _VenueReviewPage&&const DeepCollectionEquality().equals(other._items, _items)&&(identical(other.totalCount, totalCount) || other.totalCount == totalCount)&&(identical(other.page, page) || other.page == page)&&(identical(other.pageSize, pageSize) || other.pageSize == pageSize));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_items),totalCount,page,pageSize);
+
+@override
+String toString() {
+  return 'VenueReviewPage(items: $items, totalCount: $totalCount, page: $page, pageSize: $pageSize)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$VenueReviewPageCopyWith<$Res> implements $VenueReviewPageCopyWith<$Res> {
+  factory _$VenueReviewPageCopyWith(_VenueReviewPage value, $Res Function(_VenueReviewPage) _then) = __$VenueReviewPageCopyWithImpl;
+@override @useResult
+$Res call({
+ List<VenueReview> items, int totalCount, int page, int pageSize
+});
+
+
+
+
+}
+/// @nodoc
+class __$VenueReviewPageCopyWithImpl<$Res>
+    implements _$VenueReviewPageCopyWith<$Res> {
+  __$VenueReviewPageCopyWithImpl(this._self, this._then);
+
+  final _VenueReviewPage _self;
+  final $Res Function(_VenueReviewPage) _then;
+
+/// Create a copy of VenueReviewPage
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? items = null,Object? totalCount = null,Object? page = null,Object? pageSize = null,}) {
+  return _then(_VenueReviewPage(
+items: null == items ? _self._items : items // ignore: cast_nullable_to_non_nullable
+as List<VenueReview>,totalCount: null == totalCount ? _self.totalCount : totalCount // ignore: cast_nullable_to_non_nullable
+as int,page: null == page ? _self.page : page // ignore: cast_nullable_to_non_nullable
+as int,pageSize: null == pageSize ? _self.pageSize : pageSize // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
 mixin _$RoomSummary {
 
- String get roomId; String get venueId; String get roomSlug; String get venueSlug; String get venueName; String get suburb; String get roomName; String? get primaryPhotoUrl; int get capacity; bool get isFree; double? get pricePerHour; String get currency; double get latitude; double get longitude; List<String> get activities; List<String> get accessibility; double? get distanceMeters;
+ String get roomId; String get venueId; String get roomSlug; String get venueSlug; String get venueName; String get suburb; String get roomName; String? get primaryPhotoUrl; int get capacity; bool get isFree; double? get pricePerHour; String get currency; double get latitude; double get longitude; List<String> get activities; List<String> get accessibility; double? get distanceMeters; RatingSummary? get rating;
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -28,16 +844,16 @@ $RoomSummaryCopyWith<RoomSummary> get copyWith => _$RoomSummaryCopyWithImpl<Room
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,isFree,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(accessibility),distanceMeters);
+int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,isFree,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(accessibility),distanceMeters,rating);
 
 @override
 String toString() {
-  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters)';
+  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating)';
 }
 
 
@@ -48,11 +864,11 @@ abstract mixin class $RoomSummaryCopyWith<$Res>  {
   factory $RoomSummaryCopyWith(RoomSummary value, $Res Function(RoomSummary) _then) = _$RoomSummaryCopyWithImpl;
 @useResult
 $Res call({
- String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, bool isFree, double? pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters
+ String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, bool isFree, double? pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating
 });
 
 
-
+$RatingSummaryCopyWith<$Res>? get rating;
 
 }
 /// @nodoc
@@ -65,7 +881,7 @@ class _$RoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,}) {
   return _then(_self.copyWith(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -84,10 +900,23 @@ as double,longitude: null == longitude ? _self.longitude : longitude // ignore: 
 as double,activities: null == activities ? _self.activities : activities // ignore: cast_nullable_to_non_nullable
 as List<String>,accessibility: null == accessibility ? _self.accessibility : accessibility // ignore: cast_nullable_to_non_nullable
 as List<String>,distanceMeters: freezed == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
-as double?,
+as double?,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
+as RatingSummary?,
   ));
 }
+/// Create a copy of RoomSummary
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$RatingSummaryCopyWith<$Res>? get rating {
+    if (_self.rating == null) {
+    return null;
+  }
 
+  return $RatingSummaryCopyWith<$Res>(_self.rating!, (value) {
+    return _then(_self.copyWith(rating: value));
+  });
+}
 }
 
 
@@ -169,10 +998,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _RoomSummary() when $default != null:
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating);case _:
   return orElse();
 
 }
@@ -190,10 +1019,10 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating)  $default,) {final _that = this;
 switch (_that) {
 case _RoomSummary():
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -210,10 +1039,10 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating)?  $default,) {final _that = this;
 switch (_that) {
 case _RoomSummary() when $default != null:
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating);case _:
   return null;
 
 }
@@ -225,7 +1054,7 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 @JsonSerializable()
 
 class _RoomSummary implements RoomSummary {
-  const _RoomSummary({required this.roomId, required this.venueId, required this.roomSlug, required this.venueSlug, required this.venueName, required this.suburb, required this.roomName, this.primaryPhotoUrl, required this.capacity, required this.isFree, this.pricePerHour, required this.currency, required this.latitude, required this.longitude, final  List<String> activities = const <String>[], final  List<String> accessibility = const <String>[], this.distanceMeters}): _activities = activities,_accessibility = accessibility;
+  const _RoomSummary({required this.roomId, required this.venueId, required this.roomSlug, required this.venueSlug, required this.venueName, required this.suburb, required this.roomName, this.primaryPhotoUrl, required this.capacity, required this.isFree, this.pricePerHour, required this.currency, required this.latitude, required this.longitude, final  List<String> activities = const <String>[], final  List<String> accessibility = const <String>[], this.distanceMeters, this.rating}): _activities = activities,_accessibility = accessibility;
   factory _RoomSummary.fromJson(Map<String, dynamic> json) => _$RoomSummaryFromJson(json);
 
 @override final  String roomId;
@@ -257,6 +1086,7 @@ class _RoomSummary implements RoomSummary {
 }
 
 @override final  double? distanceMeters;
+@override final  RatingSummary? rating;
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
@@ -271,16 +1101,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,isFree,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_accessibility),distanceMeters);
+int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,isFree,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_accessibility),distanceMeters,rating);
 
 @override
 String toString() {
-  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters)';
+  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating)';
 }
 
 
@@ -291,11 +1121,11 @@ abstract mixin class _$RoomSummaryCopyWith<$Res> implements $RoomSummaryCopyWith
   factory _$RoomSummaryCopyWith(_RoomSummary value, $Res Function(_RoomSummary) _then) = __$RoomSummaryCopyWithImpl;
 @override @useResult
 $Res call({
- String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, bool isFree, double? pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters
+ String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, bool isFree, double? pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating
 });
 
 
-
+@override $RatingSummaryCopyWith<$Res>? get rating;
 
 }
 /// @nodoc
@@ -308,7 +1138,7 @@ class __$RoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,}) {
   return _then(_RoomSummary(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -327,11 +1157,24 @@ as double,longitude: null == longitude ? _self.longitude : longitude // ignore: 
 as double,activities: null == activities ? _self._activities : activities // ignore: cast_nullable_to_non_nullable
 as List<String>,accessibility: null == accessibility ? _self._accessibility : accessibility // ignore: cast_nullable_to_non_nullable
 as List<String>,distanceMeters: freezed == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
-as double?,
+as double?,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
+as RatingSummary?,
   ));
 }
 
+/// Create a copy of RoomSummary
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$RatingSummaryCopyWith<$Res>? get rating {
+    if (_self.rating == null) {
+    return null;
+  }
 
+  return $RatingSummaryCopyWith<$Res>(_self.rating!, (value) {
+    return _then(_self.copyWith(rating: value));
+  });
+}
 }
 
 
@@ -920,7 +1763,7 @@ as double,
 /// @nodoc
 mixin _$RoomDetail {
 
- String get roomId; String get roomSlug; String get roomName; String get description; int get capacity; bool get isFree; double? get pricePerHour; String get currency; String get houseRules; List<String> get amenities; List<String> get accessibility; List<String> get activities; List<RoomPhoto> get photos; VenueSummary get venue;
+ String get roomId; String get roomSlug; String get roomName; String get description; int get capacity; bool get isFree; double? get pricePerHour; String get currency; String get houseRules; List<String> get amenities; List<String> get accessibility; List<String> get activities; List<RoomPhoto> get photos; VenueSummary get venue; RatingSummary? get rating;
 /// Create a copy of RoomDetail
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -933,16 +1776,16 @@ $RoomDetailCopyWith<RoomDetail> get copyWith => _$RoomDetailCopyWithImpl<RoomDet
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomDetail&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.description, description) || other.description == description)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules)&&const DeepCollectionEquality().equals(other.amenities, amenities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.photos, photos)&&(identical(other.venue, venue) || other.venue == venue));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomDetail&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.description, description) || other.description == description)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules)&&const DeepCollectionEquality().equals(other.amenities, amenities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.photos, photos)&&(identical(other.venue, venue) || other.venue == venue)&&(identical(other.rating, rating) || other.rating == rating));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,roomSlug,roomName,description,capacity,isFree,pricePerHour,currency,houseRules,const DeepCollectionEquality().hash(amenities),const DeepCollectionEquality().hash(accessibility),const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(photos),venue);
+int get hashCode => Object.hash(runtimeType,roomId,roomSlug,roomName,description,capacity,isFree,pricePerHour,currency,houseRules,const DeepCollectionEquality().hash(amenities),const DeepCollectionEquality().hash(accessibility),const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(photos),venue,rating);
 
 @override
 String toString() {
-  return 'RoomDetail(roomId: $roomId, roomSlug: $roomSlug, roomName: $roomName, description: $description, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules, amenities: $amenities, accessibility: $accessibility, activities: $activities, photos: $photos, venue: $venue)';
+  return 'RoomDetail(roomId: $roomId, roomSlug: $roomSlug, roomName: $roomName, description: $description, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules, amenities: $amenities, accessibility: $accessibility, activities: $activities, photos: $photos, venue: $venue, rating: $rating)';
 }
 
 
@@ -953,11 +1796,11 @@ abstract mixin class $RoomDetailCopyWith<$Res>  {
   factory $RoomDetailCopyWith(RoomDetail value, $Res Function(RoomDetail) _then) = _$RoomDetailCopyWithImpl;
 @useResult
 $Res call({
- String roomId, String roomSlug, String roomName, String description, int capacity, bool isFree, double? pricePerHour, String currency, String houseRules, List<String> amenities, List<String> accessibility, List<String> activities, List<RoomPhoto> photos, VenueSummary venue
+ String roomId, String roomSlug, String roomName, String description, int capacity, bool isFree, double? pricePerHour, String currency, String houseRules, List<String> amenities, List<String> accessibility, List<String> activities, List<RoomPhoto> photos, VenueSummary venue, RatingSummary? rating
 });
 
 
-$VenueSummaryCopyWith<$Res> get venue;
+$VenueSummaryCopyWith<$Res> get venue;$RatingSummaryCopyWith<$Res>? get rating;
 
 }
 /// @nodoc
@@ -970,7 +1813,7 @@ class _$RoomDetailCopyWithImpl<$Res>
 
 /// Create a copy of RoomDetail
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? roomSlug = null,Object? roomName = null,Object? description = null,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? amenities = null,Object? accessibility = null,Object? activities = null,Object? photos = null,Object? venue = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? roomSlug = null,Object? roomName = null,Object? description = null,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? amenities = null,Object? accessibility = null,Object? activities = null,Object? photos = null,Object? venue = null,Object? rating = freezed,}) {
   return _then(_self.copyWith(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,roomSlug: null == roomSlug ? _self.roomSlug : roomSlug // ignore: cast_nullable_to_non_nullable
@@ -986,7 +1829,8 @@ as List<String>,accessibility: null == accessibility ? _self.accessibility : acc
 as List<String>,activities: null == activities ? _self.activities : activities // ignore: cast_nullable_to_non_nullable
 as List<String>,photos: null == photos ? _self.photos : photos // ignore: cast_nullable_to_non_nullable
 as List<RoomPhoto>,venue: null == venue ? _self.venue : venue // ignore: cast_nullable_to_non_nullable
-as VenueSummary,
+as VenueSummary,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
+as RatingSummary?,
   ));
 }
 /// Create a copy of RoomDetail
@@ -997,6 +1841,18 @@ $VenueSummaryCopyWith<$Res> get venue {
   
   return $VenueSummaryCopyWith<$Res>(_self.venue, (value) {
     return _then(_self.copyWith(venue: value));
+  });
+}/// Create a copy of RoomDetail
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$RatingSummaryCopyWith<$Res>? get rating {
+    if (_self.rating == null) {
+    return null;
+  }
+
+  return $RatingSummaryCopyWith<$Res>(_self.rating!, (value) {
+    return _then(_self.copyWith(rating: value));
   });
 }
 }
@@ -1080,10 +1936,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue,  RatingSummary? rating)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _RoomDetail() when $default != null:
-return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue);case _:
+return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue,_that.rating);case _:
   return orElse();
 
 }
@@ -1101,10 +1957,10 @@ return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue,  RatingSummary? rating)  $default,) {final _that = this;
 switch (_that) {
 case _RoomDetail():
-return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue);case _:
+return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue,_that.rating);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1121,10 +1977,10 @@ return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_th
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String roomSlug,  String roomName,  String description,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String houseRules,  List<String> amenities,  List<String> accessibility,  List<String> activities,  List<RoomPhoto> photos,  VenueSummary venue,  RatingSummary? rating)?  $default,) {final _that = this;
 switch (_that) {
 case _RoomDetail() when $default != null:
-return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue);case _:
+return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.houseRules,_that.amenities,_that.accessibility,_that.activities,_that.photos,_that.venue,_that.rating);case _:
   return null;
 
 }
@@ -1136,7 +1992,7 @@ return $default(_that.roomId,_that.roomSlug,_that.roomName,_that.description,_th
 @JsonSerializable()
 
 class _RoomDetail implements RoomDetail {
-  const _RoomDetail({required this.roomId, required this.roomSlug, required this.roomName, required this.description, required this.capacity, required this.isFree, this.pricePerHour, required this.currency, required this.houseRules, final  List<String> amenities = const <String>[], final  List<String> accessibility = const <String>[], final  List<String> activities = const <String>[], final  List<RoomPhoto> photos = const <RoomPhoto>[], required this.venue}): _amenities = amenities,_accessibility = accessibility,_activities = activities,_photos = photos;
+  const _RoomDetail({required this.roomId, required this.roomSlug, required this.roomName, required this.description, required this.capacity, required this.isFree, this.pricePerHour, required this.currency, required this.houseRules, final  List<String> amenities = const <String>[], final  List<String> accessibility = const <String>[], final  List<String> activities = const <String>[], final  List<RoomPhoto> photos = const <RoomPhoto>[], required this.venue, this.rating}): _amenities = amenities,_accessibility = accessibility,_activities = activities,_photos = photos;
   factory _RoomDetail.fromJson(Map<String, dynamic> json) => _$RoomDetailFromJson(json);
 
 @override final  String roomId;
@@ -1177,6 +2033,7 @@ class _RoomDetail implements RoomDetail {
 }
 
 @override final  VenueSummary venue;
+@override final  RatingSummary? rating;
 
 /// Create a copy of RoomDetail
 /// with the given fields replaced by the non-null parameter values.
@@ -1191,16 +2048,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomDetail&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.description, description) || other.description == description)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules)&&const DeepCollectionEquality().equals(other._amenities, _amenities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._photos, _photos)&&(identical(other.venue, venue) || other.venue == venue));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomDetail&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.description, description) || other.description == description)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules)&&const DeepCollectionEquality().equals(other._amenities, _amenities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._photos, _photos)&&(identical(other.venue, venue) || other.venue == venue)&&(identical(other.rating, rating) || other.rating == rating));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,roomSlug,roomName,description,capacity,isFree,pricePerHour,currency,houseRules,const DeepCollectionEquality().hash(_amenities),const DeepCollectionEquality().hash(_accessibility),const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_photos),venue);
+int get hashCode => Object.hash(runtimeType,roomId,roomSlug,roomName,description,capacity,isFree,pricePerHour,currency,houseRules,const DeepCollectionEquality().hash(_amenities),const DeepCollectionEquality().hash(_accessibility),const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_photos),venue,rating);
 
 @override
 String toString() {
-  return 'RoomDetail(roomId: $roomId, roomSlug: $roomSlug, roomName: $roomName, description: $description, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules, amenities: $amenities, accessibility: $accessibility, activities: $activities, photos: $photos, venue: $venue)';
+  return 'RoomDetail(roomId: $roomId, roomSlug: $roomSlug, roomName: $roomName, description: $description, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules, amenities: $amenities, accessibility: $accessibility, activities: $activities, photos: $photos, venue: $venue, rating: $rating)';
 }
 
 
@@ -1211,11 +2068,11 @@ abstract mixin class _$RoomDetailCopyWith<$Res> implements $RoomDetailCopyWith<$
   factory _$RoomDetailCopyWith(_RoomDetail value, $Res Function(_RoomDetail) _then) = __$RoomDetailCopyWithImpl;
 @override @useResult
 $Res call({
- String roomId, String roomSlug, String roomName, String description, int capacity, bool isFree, double? pricePerHour, String currency, String houseRules, List<String> amenities, List<String> accessibility, List<String> activities, List<RoomPhoto> photos, VenueSummary venue
+ String roomId, String roomSlug, String roomName, String description, int capacity, bool isFree, double? pricePerHour, String currency, String houseRules, List<String> amenities, List<String> accessibility, List<String> activities, List<RoomPhoto> photos, VenueSummary venue, RatingSummary? rating
 });
 
 
-@override $VenueSummaryCopyWith<$Res> get venue;
+@override $VenueSummaryCopyWith<$Res> get venue;@override $RatingSummaryCopyWith<$Res>? get rating;
 
 }
 /// @nodoc
@@ -1228,7 +2085,7 @@ class __$RoomDetailCopyWithImpl<$Res>
 
 /// Create a copy of RoomDetail
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? roomSlug = null,Object? roomName = null,Object? description = null,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? amenities = null,Object? accessibility = null,Object? activities = null,Object? photos = null,Object? venue = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? roomSlug = null,Object? roomName = null,Object? description = null,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? amenities = null,Object? accessibility = null,Object? activities = null,Object? photos = null,Object? venue = null,Object? rating = freezed,}) {
   return _then(_RoomDetail(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,roomSlug: null == roomSlug ? _self.roomSlug : roomSlug // ignore: cast_nullable_to_non_nullable
@@ -1244,7 +2101,8 @@ as List<String>,accessibility: null == accessibility ? _self._accessibility : ac
 as List<String>,activities: null == activities ? _self._activities : activities // ignore: cast_nullable_to_non_nullable
 as List<String>,photos: null == photos ? _self._photos : photos // ignore: cast_nullable_to_non_nullable
 as List<RoomPhoto>,venue: null == venue ? _self.venue : venue // ignore: cast_nullable_to_non_nullable
-as VenueSummary,
+as VenueSummary,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
+as RatingSummary?,
   ));
 }
 
@@ -1256,6 +2114,18 @@ $VenueSummaryCopyWith<$Res> get venue {
   
   return $VenueSummaryCopyWith<$Res>(_self.venue, (value) {
     return _then(_self.copyWith(venue: value));
+  });
+}/// Create a copy of RoomDetail
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$RatingSummaryCopyWith<$Res>? get rating {
+    if (_self.rating == null) {
+    return null;
+  }
+
+  return $RatingSummaryCopyWith<$Res>(_self.rating!, (value) {
+    return _then(_self.copyWith(rating: value));
   });
 }
 }

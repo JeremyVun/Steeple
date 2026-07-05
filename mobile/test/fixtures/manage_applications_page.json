@@ -9,7 +9,13 @@
       "roomSlug": "sunday-school-annex",
       "organizer": {
         "id": "99999999-9999-4999-8999-999999999999",
-        "displayName": "Priya Patel"
+        "displayName": "Priya Patel",
+        "ratingSummary": {
+          "averageStars": 4.5,
+          "ratingCount": 2,
+          "noShowCount": 0,
+          "completedBookings": 3
+        }
       },
       "activityType": "children",
       "groupSize": 15,
@@ -39,7 +45,8 @@
       "roomSlug": "fellowship-hall",
       "organizer": {
         "id": "77777777-7777-4777-8777-777777777777",
-        "displayName": "Marcus Lee"
+        "displayName": "Marcus Lee",
+        "ratingSummary": null
       },
       "activityType": "community",
       "groupSize": 40,

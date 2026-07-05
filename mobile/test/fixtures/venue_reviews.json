@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "stars": 5,
+      "comment": "The hall was clean, easy to access, and perfect for our Tuesday group.",
+      "raterName": "Priya Patel",
+      "createdAtUtc": "2026-09-16T14:00:00Z"
+    },
+    {
+      "stars": 4,
+      "comment": "Helpful host and good parking. The kitchen was a little tight for our setup.",
+      "raterName": "Maria Santos",
+      "createdAtUtc": "2026-08-03T19:30:00Z"
+    }
+  ],
+  "totalCount": 2,
+  "page": 1,
+  "pageSize": 10
+}

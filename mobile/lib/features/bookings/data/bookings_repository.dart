@@ -15,8 +15,7 @@ abstract class BookingsRepository {
   /// Either party marks the other on a past, non-cancelled occurrence.
   Future<void> markNoShow(String occurrenceId);
 
-  /// `POST /bookings/{id}/ratings` — 🔲 server-side (Phase 6); wired here so
-  /// the client is ready the day the endpoint ships.
+  /// Submits the caller's immutable booking rating.
   Future<void> rate(String bookingId, {required int stars, String? comment});
 }
 
@@ -27,32 +26,32 @@ class ApiBookingsRepository implements BookingsRepository {
 
   @override
   Future<Paged<Booking>> mine({int page = 1}) => _api.get(
-        '/api/v1/me/bookings',
-        query: {'page': page},
-        decode: (data) => Paged.fromJson(data as Map<String, dynamic>, Booking.fromJson),
-      );
+    '/api/v1/me/bookings',
+    query: {'page': page},
+    decode: (data) =>
+        Paged.fromJson(data as Map<String, dynamic>, Booking.fromJson),
+  );
 
   @override
   Future<Booking> byId(String id) => _api.get(
-        '/api/v1/bookings/$id',
-        decode: (data) => Booking.fromJson(data as Map<String, dynamic>),
-      );
+    '/api/v1/bookings/$id',
+    decode: (data) => Booking.fromJson(data as Map<String, dynamic>),
+  );
 
   @override
   Future<Booking> cancel(String id, {String? reason}) => _api.post(
-        '/api/v1/bookings/$id/cancel',
-        body: {'reason': ?reason},
-        decode: (data) => Booking.fromJson(data as Map<String, dynamic>),
-      );
+    '/api/v1/bookings/$id/cancel',
+    body: {'reason': ?reason},
+    decode: (data) => Booking.fromJson(data as Map<String, dynamic>),
+  );
 
   @override
-  Future<void> markNoShow(String occurrenceId) => _api.post(
-        '/api/v1/occurrences/$occurrenceId/no-show',
-        decode: (_) {},
-      );
+  Future<void> markNoShow(String occurrenceId) =>
+      _api.post('/api/v1/occurrences/$occurrenceId/no-show', decode: (_) {});
 
   @override
-  Future<void> rate(String bookingId, {required int stars, String? comment}) => _api.post(
+  Future<void> rate(String bookingId, {required int stars, String? comment}) =>
+      _api.post(
         '/api/v1/bookings/$bookingId/ratings',
         body: {'stars': stars, 'comment': ?comment},
         decode: (_) {},

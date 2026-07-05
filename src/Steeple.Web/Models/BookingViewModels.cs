@@ -45,6 +45,15 @@ public static class BookingDisplay
         "cancelled" => booking.CancelledAtUtc is { } at ? $"Cancelled {ApplicationDisplay.RelativeTime(at)}" : "Cancelled",
         _ => "",
     };
+
+    /// <summary>Formats a star average without noisy trailing zeroes.</summary>
+    public static string RatingAverage(double average) => average.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Accessible compact star label for submitted ratings.</summary>
+    public static string StarsLabel(int stars) => $"{stars} star{(stars == 1 ? "" : "s")}";
+
+    /// <summary>Visual star run for a 1..5 submitted score.</summary>
+    public static string StarsVisual(int stars) => new string('★', Math.Clamp(stars, 1, 5));
 }
 
 /// <summary>View model for the organizer bookings list (and, with <see cref="IsProviderView"/>, the provider's).</summary>
@@ -105,4 +114,15 @@ public sealed class BookingDetailViewModel
 
     /// <summary>The name of the other party (who gets notified by viewer actions).</summary>
     public string OtherPartyName => ViewerIsOrganizer ? Booking.VenueName : Booking.OrganizerName;
+
+    /// <summary>The rating this viewer submitted, if visible.</summary>
+    public SubmittedRatingDto? OwnRating =>
+        ViewerIsOrganizer ? Booking.Ratings?.ByOrganizer : Booking.Ratings?.ByVenue;
+
+    /// <summary>The other party's rating, if revealed.</summary>
+    public SubmittedRatingDto? OtherRating =>
+        ViewerIsOrganizer ? Booking.Ratings?.ByVenue : Booking.Ratings?.ByOrganizer;
+
+    /// <summary>Label for the target of the viewer's rating.</summary>
+    public string RatingTargetName => ViewerIsOrganizer ? Booking.VenueName : Booking.OrganizerName;
 }

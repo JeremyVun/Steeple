@@ -6,6 +6,53 @@ part of 'room.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+_RatingSummary _$RatingSummaryFromJson(Map<String, dynamic> json) =>
+    _RatingSummary(
+      averageStars: (json['averageStars'] as num).toDouble(),
+      count: (json['count'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$RatingSummaryToJson(_RatingSummary instance) =>
+    <String, dynamic>{
+      'averageStars': instance.averageStars,
+      'count': instance.count,
+    };
+
+_VenueReview _$VenueReviewFromJson(Map<String, dynamic> json) => _VenueReview(
+  stars: (json['stars'] as num).toInt(),
+  comment: json['comment'] as String?,
+  raterName: json['raterName'] as String,
+  createdAtUtc: DateTime.parse(json['createdAtUtc'] as String),
+);
+
+Map<String, dynamic> _$VenueReviewToJson(_VenueReview instance) =>
+    <String, dynamic>{
+      'stars': instance.stars,
+      'comment': instance.comment,
+      'raterName': instance.raterName,
+      'createdAtUtc': instance.createdAtUtc.toIso8601String(),
+    };
+
+_VenueReviewPage _$VenueReviewPageFromJson(Map<String, dynamic> json) =>
+    _VenueReviewPage(
+      items:
+          (json['items'] as List<dynamic>?)
+              ?.map((e) => VenueReview.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <VenueReview>[],
+      totalCount: (json['totalCount'] as num).toInt(),
+      page: (json['page'] as num).toInt(),
+      pageSize: (json['pageSize'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$VenueReviewPageToJson(_VenueReviewPage instance) =>
+    <String, dynamic>{
+      'items': instance.items,
+      'totalCount': instance.totalCount,
+      'page': instance.page,
+      'pageSize': instance.pageSize,
+    };
+
 _RoomSummary _$RoomSummaryFromJson(Map<String, dynamic> json) => _RoomSummary(
   roomId: json['roomId'] as String,
   venueId: json['venueId'] as String,
@@ -32,6 +79,9 @@ _RoomSummary _$RoomSummaryFromJson(Map<String, dynamic> json) => _RoomSummary(
           .toList() ??
       const <String>[],
   distanceMeters: (json['distanceMeters'] as num?)?.toDouble(),
+  rating: json['rating'] == null
+      ? null
+      : RatingSummary.fromJson(json['rating'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
@@ -53,6 +103,7 @@ Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
       'activities': instance.activities,
       'accessibility': instance.accessibility,
       'distanceMeters': instance.distanceMeters,
+      'rating': instance.rating,
     };
 
 _RoomPhoto _$RoomPhotoFromJson(Map<String, dynamic> json) => _RoomPhoto(
@@ -139,6 +190,9 @@ _RoomDetail _$RoomDetailFromJson(Map<String, dynamic> json) => _RoomDetail(
           .toList() ??
       const <RoomPhoto>[],
   venue: VenueSummary.fromJson(json['venue'] as Map<String, dynamic>),
+  rating: json['rating'] == null
+      ? null
+      : RatingSummary.fromJson(json['rating'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$RoomDetailToJson(_RoomDetail instance) =>
@@ -157,4 +211,5 @@ Map<String, dynamic> _$RoomDetailToJson(_RoomDetail instance) =>
       'activities': instance.activities,
       'photos': instance.photos,
       'venue': instance.venue,
+      'rating': instance.rating,
     };

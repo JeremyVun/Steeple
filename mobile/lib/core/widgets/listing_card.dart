@@ -25,6 +25,7 @@ class ListingCard extends StatelessWidget {
     final colors = context.steepleColors;
     final tags = summary.activities.map(wireTokenLabel).toList();
     final overflowCount = tags.length - _maxTags;
+    final rating = summary.rating;
 
     final semanticLabel = [
       summary.roomName,
@@ -94,6 +95,16 @@ class ListingCard extends StatelessWidget {
                           style:
                               SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
                         ),
+                        if (rating != null) ...[
+                          const SizedBox(height: SteepleTokens.space1),
+                          Text(
+                            '★ ${rating.averageStars.toStringAsFixed(1)} (${rating.count})',
+                            style: SteepleTypography.bodySm.copyWith(
+                              color: colors.accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: SteepleTokens.space1),
                         Text.rich(
                           TextSpan(

@@ -66,4 +66,7 @@ public class Booking
 
     /// <summary>The materialized occurrences of this booking.</summary>
     public ICollection<BookingOccurrence> Occurrences { get; set; } = new List<BookingOccurrence>();
+
+    /// <summary>The two possible directional ratings for this booking.</summary>
+    public ICollection<Rating> Ratings { get; set; } = new List<Rating>();
 }

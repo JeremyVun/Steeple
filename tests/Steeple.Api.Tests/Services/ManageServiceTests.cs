@@ -274,6 +274,68 @@ public class ManageServiceTests
         Assert.Equal("Renamed Venue", repo.Venues.Single().Name);
     }
 
+    // ----- Venue verification ------------------------------------------------------------------
+
+    [Fact]
+    public async Task SubmitVenueVerificationAsync_ValidRequest_CreatesPendingRequest()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        var service = CreateService(repo, managers, out var analytics);
+
+        var result = await service.SubmitVenueVerificationAsync(manager.Id, venue.Id, NewVerificationRequest());
+
+        Assert.Null(result.Error);
+        Assert.Equal("pending", result.Value!.VerificationStatus);
+        var stored = Assert.Single(repo.VerificationRequests);
+        Assert.Equal(VenueVerificationStatus.Pending, stored.Status);
+        Assert.Equal(manager.Id, stored.RequestedByUserId);
+        Assert.Equal(FixedNow, stored.RequestedAtUtc);
+        Assert.Single(stored.Documents);
+        Assert.Contains(analytics.Events, e => e.EventType == "venue_verification_requested");
+    }
+
+    [Fact]
+    public async Task SubmitVenueVerificationAsync_AlreadyVerified_ReturnsAlreadyVerified()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        venue.IsIdentityVerified = true;
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.SubmitVenueVerificationAsync(manager.Id, venue.Id, NewVerificationRequest());
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.AlreadyVerified, result.Error!.Code);
+        Assert.Empty(repo.VerificationRequests);
+    }
+
+    [Fact]
+    public async Task SubmitVenueVerificationAsync_PendingRequestExists_ReturnsVerificationPending()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        repo.VerificationRequests.Add(NewPendingVerification(venue.Id, manager.Id));
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.SubmitVenueVerificationAsync(manager.Id, venue.Id, NewVerificationRequest());
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.VerificationPending, result.Error!.Code);
+        Assert.Single(repo.VerificationRequests);
+    }
+
+    [Fact]
+    public async Task SubmitVenueVerificationAsync_InvalidDocumentUrl_ReturnsInvalidVerification()
+    {
+        var (repo, managers, venue, _, manager) = NewScenario();
+        var service = CreateService(repo, managers, out _);
+        var request = NewVerificationRequest(url: "not-a-url");
+
+        var result = await service.SubmitVenueVerificationAsync(manager.Id, venue.Id, request);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ManageErrorCodes.InvalidVerification, result.Error!.Code);
+        Assert.Empty(repo.VerificationRequests);
+    }
+
     // ----- Party scoping ------------------------------------------------------------------------
 
     [Fact]
@@ -373,6 +435,26 @@ public class ManageServiceTests
             ParkingInfo: null,
             TransitInfo: null);
 
+    private static SubmitVenueVerificationRequest NewVerificationRequest(string url = "https://docs.example.org/lease.pdf") =>
+        new(
+            ContactName: "Casey Manager",
+            ContactEmail: "casey@example.com",
+            EvidenceSummary: "Signed lease agreement authorizing us to list the fellowship hall for community use.",
+            AttestedAuthority: true,
+            Documents: [new VenueVerificationDocumentRequest("Lease agreement", url)]);
+
+    private static VenueVerificationRequest NewPendingVerification(Guid venueId, Guid userId) => new()
+    {
+        Id = Guid.NewGuid(),
+        VenueId = venueId,
+        RequestedByUserId = userId,
+        Status = VenueVerificationStatus.Pending,
+        ContactName = "Casey Manager",
+        EvidenceSummary = "Lease agreement is attached for review.",
+        AttestedAuthority = true,
+        RequestedAtUtc = FixedNow.AddHours(-1),
+    };
+
     private static ManageService CreateService(
         FakeManageRepository repo,
         FakeVenueManagerRepository managers,
@@ -471,6 +553,8 @@ public class ManageServiceTests
 
         public List<Room> Rooms { get; } = [];
 
+        public List<VenueVerificationRequest> VerificationRequests { get; } = [];
+
         public bool HasFutureConfirmedOccurrences { get; set; }
 
         public Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default)
@@ -479,6 +563,7 @@ public class ManageServiceTests
             if (venue is not null)
             {
                 venue.Rooms = Rooms.Where(r => r.VenueId == venueId).ToList();
+                venue.VerificationRequests = VerificationRequests.Where(r => r.VenueId == venueId).ToList();
             }
 
             return Task.FromResult(venue);
@@ -501,6 +586,12 @@ public class ManageServiceTests
             return Task.CompletedTask;
         }
 
+        public Task AddVenueVerificationRequestAsync(VenueVerificationRequest request, CancellationToken ct = default)
+        {
+            VerificationRequests.Add(request);
+            return Task.CompletedTask;
+        }
+
         public Task AddRoomAsync(Room room, CancellationToken ct = default)
         {
             Rooms.Add(room);
@@ -520,5 +611,9 @@ public class ManageServiceTests
 
         public Task<bool> HasPublishedRoomsAsync(Guid venueId, CancellationToken ct = default) =>
             Task.FromResult(Rooms.Any(r => r.VenueId == venueId && r.Status == RoomStatus.Published));
+
+        public Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default) =>
+            Task.FromResult(VerificationRequests.Any(
+                r => r.VenueId == venueId && r.Status == VenueVerificationStatus.Pending));
     }
 }

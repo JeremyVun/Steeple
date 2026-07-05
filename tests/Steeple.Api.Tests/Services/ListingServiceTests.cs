@@ -62,7 +62,7 @@ public class ListingServiceTests
     }
 
     private static ListingService CreateService(Room room) =>
-        new(new StubRoomRepository(room), CreatePolicy(), new NullAnalyticsSink());
+        new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new NullAnalyticsSink(), new FixedTimeProvider());
 
     private static Room CreateRoom(RoomStatus status, double latitude = InAreaLatitude, double longitude = InAreaLongitude)
     {
@@ -129,5 +129,33 @@ public class ListingServiceTests
     {
         public Task TrackAsync(string eventType, object? payload = null, string? sessionId = null, CancellationToken ct = default) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FixedTimeProvider : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(2026, 7, 4, 12, 0, 0, TimeSpan.Zero);
+    }
+
+    private sealed class FakeRatingService : IRatingService
+    {
+        public Task<BookingResult<RatingSubmissionResult>> SubmitAsync(
+            Guid bookingId, Guid callerId, SubmitRatingRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, BookingRatingsDto>> GetBookingOverviewsAsync(
+            IReadOnlyList<Booking> bookings, Guid callerId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, BookingRatingsDto>>(new Dictionary<Guid, BookingRatingsDto>());
+
+        public Task<IReadOnlyDictionary<Guid, RatingSummaryDto>> GetVenueSummariesAsync(
+            IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, RatingSummaryDto>>(new Dictionary<Guid, RatingSummaryDto>());
+
+        public Task<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>> GetOrganizerSummariesAsync(
+            IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>>(new Dictionary<Guid, OrganizerRatingSummaryDto>());
+
+        public Task<VenueReviewPageDto> GetVenueReviewsAsync(
+            Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(new VenueReviewPageDto([], 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 50)));
     }
 }

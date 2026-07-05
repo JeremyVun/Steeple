@@ -87,14 +87,22 @@ Response `ListingSearchResult`:
 
 `RoomSummary`: `roomId, venueId, roomSlug, venueSlug, roomName, venueName, suburb,
 primaryPhotoUrl?, capacity, isFree, pricePerHour?, currency, latitude, longitude,
-activities[], accessibility[], distanceMeters?`
+activities[], accessibility[], distanceMeters?, rating?{averageStars, count}`. `rating`
+is the venue-level aggregate across all rooms and appears only when at least one rating is
+revealed.
 
 ### `GET /api/v1/listings/by-slug/{venueSlug}/{roomSlug}` ✅ · `GET /api/v1/listings/{id}` ✅
 Response `RoomDetail`: summary fields + `description, houseRules, amenities[],
 photos[{url, caption?, isPrimary, sortOrder}]`, `venue{name, slug, venueType, addressLine,
 suburb, postcode, contactEmail?, parkingInfo, transitInfo, isIdentityVerified, latitude,
-longitude}`. 404 (ProblemDetails) when unknown, **not Published** (Draft/Unlisted never
+longitude}`, `rating?{averageStars, count}`. 404 (ProblemDetails) when unknown, **not Published** (Draft/Unlisted never
 leak via direct URL), or **outside the geofence** (defense in depth).
+
+### `GET /api/v1/venues/{id}/ratings` ✅
+Public, revealed venue review comments, newest first. Returns an empty page unless the venue has
+at least one Published room inside the beachhead. Hidden rows and unrevealed double-blind ratings
+are excluded. Response:
+`{items:[{stars, comment?, raterName, createdAtUtc}], totalCount, page, pageSize}`.
 
 ### `GET /api/v1/suburbs` ✅ → `["Vienna", …]` · `GET /api/v1/sitemap` ✅ → `[{venueSlug, roomSlug, lastModifiedUtc}]` · `GET /api/v1/geofence` ✅ → `{areaName, center, beachhead}`
 
@@ -152,7 +160,8 @@ identically — no existence leak), `404 geofence_rejected` (reserved, defense i
 `429 rate_limited` (per-account `apply` policy, shared with messages).
 
 `Application` ✅: `{ id, roomId, roomName, venueName, venueSlug, roomSlug,
-organizer{id, displayName /* ratingSummary arrives Phase 6 */}, activityType, groupSize,
+organizer{id, displayName, ratingSummary?{averageStars, ratingCount, noShowCount,
+completedBookings}}, activityType, groupSize,
 schedule{…}, intentText, status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
 bookingId? /* set once approved — the booking it created */, messageCount,
 messages: [{id, senderId, body, sentAtUtc}] }`
@@ -181,7 +190,8 @@ venueTimezone, organizerId, organizerName, type: "oneOff"|"recurring", startDate
 schedule{…}, status: "confirmed"|"completed"|"cancelled", createdAtUtc,
 cancelledBy?, cancelledAtUtc?, cancelReason?,
 nextOccurrence? /* the next live occurrence — set on lists too */,
-occurrences: [{id, startUtc, endUtc, localDate, status: "scheduled"|"occurred"|"noShow"|"cancelled", noShowMarkedBy?}] }`
+occurrences: [{id, startUtc, endUtc, localDate, status: "scheduled"|"occurred"|"noShow"|"cancelled", noShowMarkedBy?}],
+ratings?{byOrganizer?{stars, comment?, createdAtUtc}, byVenue?{stars, comment?, createdAtUtc}, canRate, rateByUtc?} }`
 List endpoints return `occurrences: []` (the set stays behind the detail fetch);
 `nextOccurrence` is always populated where one exists. `localDate` and `schedule` are
 venue-local; `startUtc/endUtc` are the DST-correct instants. Reads apply the lazy sweeps
@@ -198,7 +208,12 @@ no background worker.
 - `POST /api/v1/occurrences/{id}/no-show` ✅ — no body; either party marks the other on a
   past, non-cancelled occurrence (feeds ratings, Phase 6). `409 invalid_state` when future,
   cancelled, or already marked.
-- `POST /api/v1/bookings/{id}/ratings` 🔲 — `{stars: 1..5, comment?}` after term/occurrence completion (Phase 6).
+- `POST /api/v1/bookings/{id}/ratings` ✅ — `{stars: 1..5, comment?}` (`comment` ≤1000
+  chars, trimmed, whitespace-only stored as null); party-scoped, direction inferred
+  from the caller (organizer → venue, venue manager → organizer), one immutable row per
+  direction. Opens after the booking has a past `occurred`/`noShow` occurrence; closes 14 days
+  after completion/cancellation. `204` on success. Errors: `400 invalid_rating`,
+  `409 invalid_state`, `404 not_found`, `429 rate_limited`.
 
 ### Notifications (inbox = truth) ✅
 `GET /api/v1/me/notifications?after=<cursor>&pageSize=` →
@@ -210,7 +225,9 @@ listingDeclined` (additive).
 `payload` for the application types: `{applicationId, roomId, roomName, venueName, venueSlug,
 roomSlug, organizerName, status, deepLink}` (deepLink = the §9 canonical path); for
 `bookingCancelled`/`renewalDue`: the same display fields with `bookingId` and
-`deepLink: "/bookings/{id}"`; for `listingApproved`/`listingDeclined` (written by Admin on a
+`deepLink: "/bookings/{id}"`; for `ratingReceived`: the same booking display fields with
+`bookingId` and `deepLink: "/bookings/{id}"` but no stars/comment; for
+`listingApproved`/`listingDeclined` (written by Admin on a
 moderation decision, §6): `{roomId, roomName, venueName, venueSlug, roomSlug, status: "published"
 | "declined", note?, deepLink}` (`note` is the operator's optional decline/approve comment;
 `deepLink` is `/space/{venueSlug}/{roomSlug}` on approval, `/inbox` on decline).
@@ -226,8 +243,9 @@ All routes are venue-manager-scoped: an id the caller doesn't manage answers `40
 identical to an unknown id (no existence leak). Rate limits: `manage` policy (30/min/account) on
 every write below except photo upload, which uses `media` (12/min/account, the expensive image
 pipeline). Errors are ProblemDetails with `code` ∈ `not_found | invalid_venue | invalid_room |
-invalid_photo | invalid_image | geofence_rejected | has_active_bookings | no_photos` (409 for
-`has_active_bookings`, 404 for `not_found`, 400 for the rest).
+invalid_photo | invalid_image | invalid_verification | geofence_rejected | has_active_bookings |
+no_photos | already_verified | verification_pending` (409 for `has_active_bookings`,
+`already_verified`, `verification_pending`; 404 for `not_found`; 400 for the rest).
 
 **Manage-only `status` tokens** (never on public reads — §2.1): `draft | published | unlisted`.
 
@@ -245,7 +263,9 @@ Edits a provider makes to an already-published room apply immediately (never blo
 - `GET /api/v1/manage/venues` ✅ → `[{id, name, slug}]` — venues the caller manages (§5).
 - `GET /api/v1/manage/venues/{id}` ✅ → `ManagedVenueDetailDto`: `{id, name, slug, description,
   venueType, addressLine, suburb, postcode, contactEmail?, parkingInfo, transitInfo, latitude,
-  longitude, timezone, isIdentityVerified, rooms: [ManagedRoomSummaryDto]}`.
+  longitude, timezone, isIdentityVerified, verificationStatus, verificationRequestedAtUtc?,
+  rooms: [ManagedRoomSummaryDto]}`. `verificationStatus` ∈ `unverified | pending | verified |
+  declined` and summarizes the latest host verification request plus the venue's verified flag.
 - `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address/suburb/postcode
   required on create); the caller becomes the first `venue_manager`. Address is geocoded
   server-side (`IGeocodingGateway`) and geofence-checked → `400 geofence_rejected` outside the
@@ -253,6 +273,13 @@ Edits a provider makes to an already-published room apply immediately (never blo
 - `PATCH /api/v1/manage/venues/{id}` ✅ — same `SaveVenueRequest` shape; `null` fields mean
   "unchanged". Address-affecting changes re-geocode (same geofence check) and stamp
   `ProviderEditedAtUtc`.
+- `POST /api/v1/manage/venues/{id}/verification` ✅ — `SubmitVenueVerificationRequest`:
+  `{contactName, contactEmail?, evidenceSummary, attestedAuthority, documents:[{label,url}]}`
+  where `documents` has 1–5 HTTP(S) links to externally hosted/signed proof documents (lease,
+  deed, authorization letter, etc.). The API stores labels/links and review metadata only; it
+  does **not** store raw document contents. `200 ManagedVenueDetailDto` with
+  `verificationStatus: "pending"`. Errors: `400 invalid_verification`, `409 already_verified`,
+  `409 verification_pending`.
 
 ### Rooms
 - `GET /api/v1/manage/rooms/{id}` ✅ → `ManagedRoomDto`: `{id, venueId, venueName, venueSlug,
@@ -314,9 +341,11 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `sso_started` ✅ / `sso_completed` ✅ | web BFF¹ / server | provider?, surface, trigger / provider, surface, isNewUser |
 | `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path) |
 | `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount / cancelledBy / markedBy |
-| `rating_submitted` 🔲 | server | rateeType, stars |
+| `rating_submitted` ✅ | server | rateeType, stars, hasComment |
 | `notification_sent` ✅ / `notification_opened` ✅ | server / client | type, channel, recipientCount |
 | `venue_created` ✅ / `room_created` ✅ | server | venueId, suburb / roomId, venueId |
+| `venue_verification_requested` ✅ | server | venueId, documentCount |
+| `venue_verification_decided` ✅ | Admin (stdout only) | venueId, requestId, outcome (approved/declined), actor |
 | `listing_publish_requested` ✅ | server | roomId, venueId |
 | `photo_uploaded` ✅ | server | roomId, photoId |
 | `listing_moderated` ✅ | Admin (stdout only — not `IAnalyticsSink`; same log-line shape) | roomId, outcome (approved/declined), actor |

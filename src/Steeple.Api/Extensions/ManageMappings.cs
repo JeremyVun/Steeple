@@ -22,6 +22,11 @@ public static class ManageMappings
             Longitude: venue.Longitude,
             Timezone: venue.Timezone,
             IsIdentityVerified: venue.IsIdentityVerified,
+            VerificationStatus: VerificationStatus(venue),
+            VerificationRequestedAtUtc: venue.VerificationRequests
+                .OrderByDescending(r => r.RequestedAtUtc)
+                .FirstOrDefault()
+                ?.RequestedAtUtc,
             Rooms: venue.Rooms
                 .OrderBy(r => r.Name)
                 .Select(r => r.ToManagedSummaryDto())
@@ -70,4 +75,23 @@ public static class ManageMappings
                 .Select(p => p.ToDto())
                 .ToList(),
             UpdatedAtUtc: room.UpdatedAtUtc);
+
+    private static string VerificationStatus(Venue venue)
+    {
+        if (venue.IsIdentityVerified)
+        {
+            return "verified";
+        }
+
+        return venue.VerificationRequests
+            .OrderByDescending(r => r.RequestedAtUtc)
+            .FirstOrDefault()
+            ?.Status switch
+            {
+                VenueVerificationStatus.Pending => "pending",
+                VenueVerificationStatus.Declined => "declined",
+                VenueVerificationStatus.Approved => "verified",
+                _ => "unverified",
+            };
+    }
 }

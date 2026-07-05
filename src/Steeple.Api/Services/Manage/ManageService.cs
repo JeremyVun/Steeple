@@ -170,6 +170,68 @@ public sealed class ManageService : IManageService
     }
 
     /// <inheritdoc />
+    public async Task<ManageResult<ManagedVenueDetailDto>> SubmitVenueVerificationAsync(
+        Guid callerId, Guid venueId, SubmitVenueVerificationRequest request, CancellationToken ct = default)
+    {
+        var (venue, error) = await LoadScopedVenueAsync(callerId, venueId, ct).ConfigureAwait(false);
+        if (error is not null)
+        {
+            return new ManageResult<ManagedVenueDetailDto>(null, error);
+        }
+
+        if (venue!.IsIdentityVerified)
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(
+                ManageErrorCodes.AlreadyVerified, "This venue is already verified.");
+        }
+
+        if (await _repository.HasPendingVenueVerificationRequestAsync(venue.Id, ct).ConfigureAwait(false))
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(
+                ManageErrorCodes.VerificationPending, "This venue already has a verification request in review.");
+        }
+
+        var contactName = request.ContactName?.Trim() ?? "";
+        var contactEmail = NormalizeOptional(request.ContactEmail);
+        var evidenceSummary = request.EvidenceSummary?.Trim() ?? "";
+        var documents = request.Documents ?? [];
+
+        if (ValidateVerificationFields(contactName, contactEmail, evidenceSummary, request.AttestedAuthority, documents) is { } invalid)
+        {
+            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVerification, invalid);
+        }
+
+        var now = _clock.GetUtcNow();
+        var verification = new VenueVerificationRequest
+        {
+            Id = Guid.NewGuid(),
+            VenueId = venue.Id,
+            RequestedByUserId = callerId,
+            Status = VenueVerificationStatus.Pending,
+            ContactName = contactName,
+            ContactEmail = contactEmail,
+            EvidenceSummary = evidenceSummary,
+            AttestedAuthority = true,
+            RequestedAtUtc = now,
+            Documents = documents
+                .Select(d => new VenueVerificationDocument
+                {
+                    Id = Guid.NewGuid(),
+                    Label = d.Label!.Trim(),
+                    ExternalUrl = d.Url!.Trim(),
+                    CreatedAtUtc = now,
+                })
+                .ToList(),
+        };
+
+        venue.VerificationRequests.Add(verification);
+        await _repository.AddVenueVerificationRequestAsync(verification, ct).ConfigureAwait(false);
+        await TrackSafelyAsync("venue_verification_requested", new { venueId = venue.Id, documentCount = verification.Documents.Count }).ConfigureAwait(false);
+
+        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto());
+    }
+
+    /// <inheritdoc />
     public async Task<ManageResult<ManagedRoomDto>> GetRoomAsync(Guid callerId, Guid roomId, CancellationToken ct = default)
     {
         var (room, error) = await LoadScopedRoomAsync(callerId, roomId, ct).ConfigureAwait(false);
@@ -427,6 +489,32 @@ public sealed class ManageService : IManageService
         return null;
     }
 
+    private static string? ValidateVerificationFields(
+        string contactName,
+        string? contactEmail,
+        string evidenceSummary,
+        bool attestedAuthority,
+        IReadOnlyList<VenueVerificationDocumentRequest> documents)
+    {
+        if (!attestedAuthority) return "Confirm you are authorized to list or lease rooms for this venue.";
+        if (contactName.Length is 0 or > 200) return "Enter a contact name (up to 200 characters).";
+        if (contactEmail is { Length: > 0 } email && (email.Length > 320 || !email.Contains('@')))
+            return "That contact email doesn't look right.";
+        if (evidenceSummary.Length is < 20 or > 4000)
+            return "Summarize the ownership or lease-authority evidence in 20 to 4000 characters.";
+        if (documents.Count is 0 or > 5) return "Add between 1 and 5 document links.";
+
+        foreach (var document in documents)
+        {
+            var label = document.Label?.Trim() ?? "";
+            var url = document.Url?.Trim() ?? "";
+            if (label.Length is 0 or > 200) return "Each document needs a label up to 200 characters.";
+            if (url.Length is 0 or > 1000 || !IsHttpUrl(url)) return "Each document link must be a valid https:// or http:// URL.";
+        }
+
+        return null;
+    }
+
     private static string? ValidateRoomFields(string name, string description, int capacity, SaveRoomRequest request)
     {
         if (name.Length is 0 or > 200) return "Give the room a name (up to 200 characters).";
@@ -454,6 +542,10 @@ public sealed class ManageService : IManageService
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static bool IsHttpUrl(string value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var uri)
+        && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 
     private async Task TrackSafelyAsync(string eventType, object payload)
     {

@@ -35,6 +35,7 @@
     <Using Include="Steeple.Api.Services.Identity" />
     <Using Include="Steeple.Api.Services.Applications" />
     <Using Include="Steeple.Api.Services.Bookings" />
+    <Using Include="Steeple.Api.Services.Ratings" />
     <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Services.Manage" />
     <Using Include="Steeple.Api.Services.Media" />

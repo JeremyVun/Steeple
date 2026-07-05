@@ -13,7 +13,11 @@ public static class BookingMappings
     /// occurrence set stays behind the detail endpoint; lists still carry
     /// <see cref="BookingDto.NextOccurrence"/> for "Next: Tue, Sep 8" affordances.
     /// </summary>
-    public static BookingDto ToDto(this Booking booking, bool includeOccurrences, DateTimeOffset nowUtc)
+    public static BookingDto ToDto(
+        this Booking booking,
+        bool includeOccurrences,
+        DateTimeOffset nowUtc,
+        BookingRatingsDto? ratings = null)
     {
         var room = booking.Room ?? throw new InvalidOperationException("Booking loaded without its room.");
         var venue = room.Venue ?? throw new InvalidOperationException("Booking loaded without its venue.");
@@ -43,7 +47,8 @@ public static class BookingMappings
             CancelledAtUtc: booking.CancelledAtUtc,
             CancelReason: booking.CancelReason,
             NextOccurrence: next?.ToDto(),
-            Occurrences: includeOccurrences ? occurrences.Select(o => o.ToDto()).ToList() : []);
+            Occurrences: includeOccurrences ? occurrences.Select(o => o.ToDto()).ToList() : [],
+            Ratings: ratings);
     }
 
     /// <summary>Maps one occurrence.</summary>

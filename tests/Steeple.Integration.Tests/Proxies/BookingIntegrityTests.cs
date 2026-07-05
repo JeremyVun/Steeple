@@ -206,6 +206,7 @@ public class BookingIntegrityTests
     private static BookingService CreateBookingService(SteepleDbContext db) => new(
         new EfBookingRepository(db),
         new NullVenueManagers(),
+        new NullRatings(),
         new NullNotifications(),
         new NullAnalytics(),
         new FixedTimeProvider(FixedNow));
@@ -293,6 +294,29 @@ public class BookingIntegrityTests
         public Task NotifyAsync(
             IReadOnlyList<NotificationRecipient> recipients, NotificationType type, object payload,
             EmailContent? email, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class NullRatings : IRatingService
+    {
+        public Task<BookingResult<RatingSubmissionResult>> SubmitAsync(
+            Guid bookingId, Guid callerId, SubmitRatingRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, BookingRatingsDto>> GetBookingOverviewsAsync(
+            IReadOnlyList<Booking> bookings, Guid callerId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, BookingRatingsDto>>(new Dictionary<Guid, BookingRatingsDto>());
+
+        public Task<IReadOnlyDictionary<Guid, RatingSummaryDto>> GetVenueSummariesAsync(
+            IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, RatingSummaryDto>>(new Dictionary<Guid, RatingSummaryDto>());
+
+        public Task<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>> GetOrganizerSummariesAsync(
+            IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>>(new Dictionary<Guid, OrganizerRatingSummaryDto>());
+
+        public Task<VenueReviewPageDto> GetVenueReviewsAsync(
+            Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(new VenueReviewPageDto([], 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 50)));
     }
 
     private sealed class NullAnalytics : IAnalyticsSink

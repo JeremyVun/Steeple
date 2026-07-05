@@ -37,6 +37,16 @@ public sealed class SteepleApiClient : ISteepleApiClient
         await _http.GetFromJsonAsync<GeofenceContextDto>("api/v1/geofence", ct)
         ?? throw new InvalidOperationException("The API returned no geofence context.");
 
+    public async Task<VenueReviewPageDto> GetVenueReviewsAsync(
+        Guid venueId, int page = 1, int pageSize = 10, CancellationToken ct = default)
+    {
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 50);
+        return await _http.GetFromJsonAsync<VenueReviewPageDto>(
+            $"api/v1/venues/{venueId}/ratings?page={safePage}&pageSize={safePageSize}", ct)
+            ?? new VenueReviewPageDto([], 0, safePage, safePageSize);
+    }
+
     public async Task<(SessionResponse? Session, string? ErrorCode)> CreateSessionAsync(
         CreateSessionRequest request, CancellationToken ct = default)
     {
@@ -146,6 +156,14 @@ public sealed class SteepleApiClient : ISteepleApiClient
         return await ReadResultAsync<ManagedVenueDetailDto>(response, ct);
     }
 
+    public async Task<(ManagedVenueDetailDto? Venue, string? ErrorCode)> SubmitVenueVerificationAsync(
+        string accessToken, Guid id, SubmitVenueVerificationRequest request, CancellationToken ct = default)
+    {
+        using var httpRequest = AuthorizedRequest(HttpMethod.Post, $"api/v1/manage/venues/{id}/verification", accessToken, request);
+        using var response = await _http.SendAsync(httpRequest, ct);
+        return await ReadResultAsync<ManagedVenueDetailDto>(response, ct);
+    }
+
     public Task<ManagedRoomDto?> GetManagedRoomAsync(string accessToken, Guid id, CancellationToken ct = default) =>
         GetAuthorizedOrNullAsync<ManagedRoomDto>($"api/v1/manage/rooms/{id}", accessToken, ct);
 
@@ -234,6 +252,18 @@ public sealed class SteepleApiClient : ISteepleApiClient
         using var request = AuthorizedRequest(HttpMethod.Post, $"api/v1/occurrences/{occurrenceId}/no-show", accessToken, body: null);
         using var response = await _http.SendAsync(request, ct);
         return await ReadBookingResultAsync(response, ct);
+    }
+
+    public async Task<string?> SubmitRatingAsync(
+        string accessToken, Guid bookingId, int stars, string? comment, CancellationToken ct = default)
+    {
+        using var request = AuthorizedRequest(
+            HttpMethod.Post,
+            $"api/v1/bookings/{bookingId}/ratings",
+            accessToken,
+            new SubmitRatingRequest(stars, comment));
+        using var response = await _http.SendAsync(request, ct);
+        return response.IsSuccessStatusCode ? null : await ReadProblemCodeAsync(response, ct) ?? "api_error";
     }
 
     private static async Task<(BookingDto? Booking, string? ErrorCode)> ReadBookingResultAsync(

@@ -1132,6 +1132,37 @@ img { max-width: 100%; display: block; }
     border: 1px solid var(--line-strong);
 }
 
+.admin-document-list {
+    margin: 0.45rem 0 0;
+    padding-left: 1.1rem;
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+}
+
+.admin-document-list li + li {
+    margin-top: 0.25rem;
+}
+
+.admin-document-list a {
+    color: var(--sage-deep);
+    font-weight: 700;
+}
+
+.admin-review-comment {
+    margin: 0.45rem 0 0;
+    max-width: 40rem;
+    color: var(--ink-soft);
+    white-space: pre-line;
+}
+
+.admin-muted-row {
+    opacity: 0.68;
+}
+
+.admin-status-muted {
+    color: var(--ink-faint);
+}
+
 /* Applications panel + venue-manager linking (ROADMAP Phase 2) */
 .admin-empty {
     margin: 0;

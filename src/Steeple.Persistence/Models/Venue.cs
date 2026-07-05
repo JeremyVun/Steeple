@@ -74,6 +74,9 @@ public class Venue
     /// <summary>Rooms belonging to this venue.</summary>
     public ICollection<Room> Rooms { get; set; } = new List<Room>();
 
+    /// <summary>Ownership / lease-authority verification requests for this venue.</summary>
+    public ICollection<VenueVerificationRequest> VerificationRequests { get; set; } = new List<VenueVerificationRequest>();
+
     /// <summary>
     /// Computed geographic location. Not persisted — the EF configuration ignores this property.
     /// </summary>

@@ -14,6 +14,8 @@
   "longitude": -77.2653,
   "timezone": "America/New_York",
   "isIdentityVerified": true,
+  "verificationStatus": "verified",
+  "verificationRequestedAtUtc": null,
   "rooms": [
     {
       "id": "22222222-2222-4222-8222-222222222222",

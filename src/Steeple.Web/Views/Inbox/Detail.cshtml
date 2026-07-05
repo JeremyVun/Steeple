@@ -74,6 +74,17 @@
                         <text>· decided @ApplicationDisplay.RelativeTime(decided)</text>
                     }
                 </p>
+                @if (!Model.ViewerIsOrganizer && app.Organizer.RatingSummary is { } summary)
+                {
+                    <p class="request-trust">
+                        <span aria-hidden="true">★</span> @BookingDisplay.RatingAverage(summary.AverageStars) (@summary.RatingCount)
+                        · @summary.CompletedBookings completed
+                        @if (summary.NoShowCount > 0)
+                        {
+                            <text> · @summary.NoShowCount no-show@(summary.NoShowCount == 1 ? "" : "s")</text>
+                        }
+                    </p>
+                }
             </div>
 
             @if (app.Messages.Count > 0)

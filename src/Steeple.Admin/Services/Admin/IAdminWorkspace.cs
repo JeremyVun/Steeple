@@ -38,9 +38,18 @@ public interface IAdminWorkspace
     /// </summary>
     string? DecidePublishRequest(Guid roomId, bool approve, string? note, string operatorUser);
 
+    /// <summary>
+    /// Decides a host's venue ownership / lease-authority verification request. Approval stamps
+    /// the venue as identity verified; decline leaves it unverified and records the operator note.
+    /// </summary>
+    string? DecideVenueVerification(Guid requestId, bool approve, string? note, string operatorUser);
+
     /// <summary>Clears the provider-edited flag on a room (edited-listings review feed).</summary>
     void MarkRoomReviewed(Guid roomId, string operatorUser);
 
     /// <summary>Clears the provider-edited flag on a venue (edited-listings review feed).</summary>
     void MarkVenueReviewed(Guid venueId, string operatorUser);
+
+    /// <summary>Hides or restores a review comment from public rating reads and aggregates.</summary>
+    void SetRatingHidden(Guid ratingId, bool hidden, string operatorUser);
 }

@@ -37,6 +37,12 @@
     <div class="card-body">
         <h3 class="card-title">@Model.RoomName</h3>
         <p class="card-venue">@Model.VenueName</p>
+        @if (Model.Rating is { } rating)
+        {
+            <p class="card-rating" aria-label="@BookingDisplay.RatingAverage(rating.AverageStars) out of 5 stars from @rating.Count ratings">
+                <span aria-hidden="true">★</span> @BookingDisplay.RatingAverage(rating.AverageStars) (@rating.Count)
+            </p>
+        }
 
         <p class="card-meta">
             <span class="card-capacity">Up to @Model.Capacity</span>

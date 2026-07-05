@@ -141,6 +141,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IBookingRepository, EfBookingRepository>();
 
+        // Ratings module (Phase 6 Slice 1): ratings, review comments, double-blind reveal, aggregates.
+        services.AddScoped<IRatingService, RatingService>();
+        services.AddScoped<IRatingRepository, EfRatingRepository>();
+
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();

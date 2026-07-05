@@ -11,6 +11,10 @@
   "amenities": ["parking", "kitchen", "restrooms", "wifi", "tables", "chairs", "stage"],
   "accessibility": ["stepFreeAccess", "accessibleRestroom", "accessibleParking"],
   "activities": ["community", "arts", "music"],
+  "rating": {
+    "averageStars": 4.75,
+    "count": 4
+  },
   "photos": [
     {
       "url": "https://cdn.steeple.app/rooms/fellowship-hall/primary.jpg",

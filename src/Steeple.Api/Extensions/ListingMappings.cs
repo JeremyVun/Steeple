@@ -12,7 +12,10 @@ public static class ListingMappings
     /// room's <see cref="Room.Venue"/>; <paramref name="distanceMeters"/> is supplied by the caller
     /// when a search center is present.
     /// </summary>
-    public static RoomSummaryDto ToSummaryDto(this Room room, double? distanceMeters = null)
+    public static RoomSummaryDto ToSummaryDto(
+        this Room room,
+        double? distanceMeters = null,
+        RatingSummaryDto? rating = null)
     {
         var venue = room.Venue;
         return new RoomSummaryDto(
@@ -32,13 +35,14 @@ public static class ListingMappings
             Longitude: venue?.Longitude ?? 0d,
             Activities: room.AcceptedActivityTypes.ToNameList(),
             Accessibility: room.AccessibilityFeatures.ToNameList(),
-            DistanceMeters: distanceMeters);
+            DistanceMeters: distanceMeters,
+            Rating: rating);
     }
 
     /// <summary>
     /// Maps a <see cref="Room"/> (with its venue and photos loaded) to the full detail DTO.
     /// </summary>
-    public static RoomDetailDto ToDetailDto(this Room room) =>
+    public static RoomDetailDto ToDetailDto(this Room room, RatingSummaryDto? rating = null) =>
         new(
             RoomId: room.Id,
             RoomSlug: room.Slug,
@@ -59,7 +63,8 @@ public static class ListingMappings
                 .ToList(),
             Venue: room.Venue is { } venue
                 ? venue.ToSummaryDto()
-                : throw new InvalidOperationException($"Room {room.Id} has no loaded venue for detail mapping."));
+                : throw new InvalidOperationException($"Room {room.Id} has no loaded venue for detail mapping."),
+            Rating: rating);
 
     /// <summary>Maps a <see cref="Venue"/> to its presentation summary (no rooms collection).</summary>
     public static VenueSummaryDto ToSummaryDto(this Venue venue) =>

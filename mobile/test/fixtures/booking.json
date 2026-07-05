@@ -58,5 +58,15 @@
       "status": "scheduled",
       "noShowMarkedBy": null
     }
-  ]
+  ],
+  "ratings": {
+    "byOrganizer": null,
+    "byVenue": {
+      "stars": 5,
+      "comment": "Priya left the room tidy and kept the schedule exactly.",
+      "createdAtUtc": "2026-09-16T14:00:00Z"
+    },
+    "canRate": true,
+    "rateByUtc": "2026-12-29T15:30:00Z"
+  }
 }

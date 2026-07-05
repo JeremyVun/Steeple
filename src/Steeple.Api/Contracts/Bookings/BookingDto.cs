@@ -28,7 +28,18 @@ public record BookingDto(
     DateTimeOffset? CancelledAtUtc,
     string? CancelReason,
     OccurrenceDto? NextOccurrence,
-    IReadOnlyList<OccurrenceDto> Occurrences);
+    IReadOnlyList<OccurrenceDto> Occurrences,
+    BookingRatingsDto? Ratings);
+
+/// <summary>Viewer-scoped rating state for the booking detail/list surfaces.</summary>
+public record BookingRatingsDto(
+    SubmittedRatingDto? ByOrganizer,
+    SubmittedRatingDto? ByVenue,
+    bool CanRate,
+    DateTimeOffset? RateByUtc);
+
+/// <summary>A submitted rating visible to the current caller.</summary>
+public record SubmittedRatingDto(int Stars, string? Comment, DateTimeOffset CreatedAtUtc);
 
 /// <summary>One materialized occurrence of a booking.</summary>
 public record OccurrenceDto(
@@ -49,3 +60,6 @@ public record BookingListResult(
 /// <summary><c>POST /api/v1/bookings/{id}/cancel</c> body.</summary>
 /// <param name="Reason">Optional reason shown to the other party (≤500 chars).</param>
 public record CancelBookingRequest(string? Reason);
+
+/// <summary><c>POST /api/v1/bookings/{id}/ratings</c> body.</summary>
+public record SubmitRatingRequest(int Stars, string? Comment = null);

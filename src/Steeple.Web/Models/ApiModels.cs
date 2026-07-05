@@ -47,6 +47,19 @@ public enum AccessibilityFeature
 /// <summary>A room photo as rendered on a card / detail page.</summary>
 public record RoomPhotoDto(Guid Id, string Url, string? ThumbUrl, string? CardUrl, string? Caption, bool IsPrimary, int SortOrder);
 
+/// <summary>Visible star-rating aggregate for a venue/listing surface.</summary>
+public record RatingSummaryDto(double AverageStars, int Count);
+
+/// <summary>One public, revealed venue review comment.</summary>
+public record VenueReviewDto(int Stars, string? Comment, string RaterName, DateTimeOffset CreatedAtUtc);
+
+/// <summary>Paginated public reviews for a venue.</summary>
+public record VenueReviewPageDto(
+    IReadOnlyList<VenueReviewDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
 /// <summary>A room projected as a search-result card.</summary>
 public record RoomSummaryDto(
     Guid RoomId,
@@ -65,7 +78,8 @@ public record RoomSummaryDto(
     double Longitude,
     IReadOnlyList<string> Activities,
     IReadOnlyList<string> Accessibility,
-    double? DistanceMeters);
+    double? DistanceMeters,
+    RatingSummaryDto? Rating);
 
 /// <summary>A venue projected for listing/detail presentation.</summary>
 public record VenueSummaryDto(
@@ -98,7 +112,8 @@ public record RoomDetailDto(
     IReadOnlyList<string> Accessibility,
     IReadOnlyList<string> Activities,
     IReadOnlyList<RoomPhotoDto> Photos,
-    VenueSummaryDto Venue);
+    VenueSummaryDto Venue,
+    RatingSummaryDto? Rating);
 
 /// <summary>A single sitemap URL: a published listing's slug path plus a last-modified stamp.</summary>
 public record SitemapEntry(string VenueSlug, string RoomSlug, DateTimeOffset LastModifiedUtc);
@@ -192,8 +207,15 @@ public record SubmitApplicationRequest(
     string IntentText,
     string? TurnstileToken);
 
-/// <summary>The applying organizer as shown to the provider (rating summary arrives in Phase 6).</summary>
-public record OrganizerDto(Guid Id, string DisplayName);
+/// <summary>The applying organizer as shown to the provider.</summary>
+public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);
+
+/// <summary>Organizer reputation summary shown to venue managers once at least one rating is revealed.</summary>
+public record OrganizerRatingSummaryDto(
+    double AverageStars,
+    int RatingCount,
+    int NoShowCount,
+    int CompletedBookings);
 
 /// <summary>One message on the application's ask/answer thread.</summary>
 public record ApplicationMessageDto(Guid Id, Guid SenderId, string Body, DateTimeOffset SentAtUtc);
@@ -280,6 +302,8 @@ public record ManagedVenueDetailDto(
     double Longitude,
     string Timezone,
     bool IsIdentityVerified,
+    string VerificationStatus,
+    DateTimeOffset? VerificationRequestedAtUtc,
     IReadOnlyList<ManagedRoomSummaryDto> Rooms);
 
 /// <summary>Full room detail for the provider's manage screens.</summary>
@@ -315,6 +339,17 @@ public record SaveVenueRequest(
     string? ContactEmail,
     string? ParkingInfo,
     string? TransitInfo);
+
+/// <summary>One document link supplied with a venue verification request.</summary>
+public record VenueVerificationDocumentRequest(string? Label, string? Url);
+
+/// <summary><c>POST /api/v1/manage/venues/{id}/verification</c> body.</summary>
+public record SubmitVenueVerificationRequest(
+    string? ContactName,
+    string? ContactEmail,
+    string? EvidenceSummary,
+    bool AttestedAuthority,
+    IReadOnlyList<VenueVerificationDocumentRequest>? Documents);
 
 /// <summary><c>POST /api/v1/manage/venues/{venueId}/rooms</c> / <c>PATCH /api/v1/manage/rooms/{id}</c> body.</summary>
 public record SaveRoomRequest(
@@ -360,7 +395,18 @@ public record BookingDto(
     DateTimeOffset? CancelledAtUtc,
     string? CancelReason,
     OccurrenceDto? NextOccurrence,
-    IReadOnlyList<OccurrenceDto> Occurrences);
+    IReadOnlyList<OccurrenceDto> Occurrences,
+    BookingRatingsDto? Ratings);
+
+/// <summary>Viewer-scoped rating state for a booking.</summary>
+public record BookingRatingsDto(
+    SubmittedRatingDto? ByOrganizer,
+    SubmittedRatingDto? ByVenue,
+    bool CanRate,
+    DateTimeOffset? RateByUtc);
+
+/// <summary>A submitted rating visible to the current caller.</summary>
+public record SubmittedRatingDto(int Stars, string? Comment, DateTimeOffset CreatedAtUtc);
 
 /// <summary>One materialized occurrence of a booking.</summary>
 public record OccurrenceDto(
@@ -381,6 +427,9 @@ public record BookingListResult(
 /// <summary><c>POST /api/v1/bookings/{id}/cancel</c> body.</summary>
 /// <param name="Reason">Optional reason shown to the other party (≤500 chars).</param>
 public record CancelBookingRequest(string? Reason);
+
+/// <summary><c>POST /api/v1/bookings/{id}/ratings</c> body.</summary>
+public record SubmitRatingRequest(int Stars, string? Comment = null);
 
 /// <summary>Model-bindable search request captured from the query string (drives the sticky filter UI).</summary>
 public class ListingSearchQuery

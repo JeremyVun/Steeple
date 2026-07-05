@@ -44,13 +44,27 @@ abstract class ProposedSchedule with _$ProposedSchedule {
       parseWireEnum(frequency, ScheduleFrequency.tokens, ScheduleFrequency.unknown);
 }
 
-/// The applying organizer as shown to the provider (rating summary arrives
-/// Phase 6).
+/// Provider-facing organizer reputation summary.
+@freezed
+abstract class OrganizerRatingSummary with _$OrganizerRatingSummary {
+  const factory OrganizerRatingSummary({
+    required double averageStars,
+    required int ratingCount,
+    required int noShowCount,
+    required int completedBookings,
+  }) = _OrganizerRatingSummary;
+
+  factory OrganizerRatingSummary.fromJson(Map<String, dynamic> json) =>
+      _$OrganizerRatingSummaryFromJson(json);
+}
+
+/// The applying organizer as shown to the provider.
 @freezed
 abstract class Organizer with _$Organizer {
   const factory Organizer({
     required String id,
     required String displayName,
+    OrganizerRatingSummary? ratingSummary,
   }) = _Organizer;
 
   factory Organizer.fromJson(Map<String, dynamic> json) =>

@@ -73,7 +73,50 @@ public sealed class VenueEditorViewModel
 {
     public required ManagedVenueDetailDto Venue { get; init; }
     public required VenueFormViewModel Form { get; init; }
+    public required VenueVerificationFormViewModel VerificationForm { get; init; }
     public string? Flash { get; init; }
+}
+
+/// <summary>Host proof-of-authority form on the venue editor.</summary>
+public sealed class VenueVerificationFormViewModel
+{
+    public Guid VenueId { get; set; }
+    public string ContactName { get; set; } = "";
+    public string ContactEmail { get; set; } = "";
+    public string EvidenceSummary { get; set; } = "";
+    public bool AttestedAuthority { get; set; }
+    public string Document1Label { get; set; } = "";
+    public string Document1Url { get; set; } = "";
+    public string Document2Label { get; set; } = "";
+    public string Document2Url { get; set; } = "";
+    public string Document3Label { get; set; } = "";
+    public string Document3Url { get; set; } = "";
+    public string? Error { get; set; }
+
+    public static VenueVerificationFormViewModel ForVenue(ManagedVenueDetailDto venue) => new()
+    {
+        VenueId = venue.Id,
+        ContactEmail = venue.ContactEmail ?? "",
+    };
+
+    public SubmitVenueVerificationRequest ToRequest()
+    {
+        var documents = new[]
+            {
+                new VenueVerificationDocumentRequest(Document1Label.Trim(), Document1Url.Trim()),
+                new VenueVerificationDocumentRequest(Document2Label.Trim(), Document2Url.Trim()),
+                new VenueVerificationDocumentRequest(Document3Label.Trim(), Document3Url.Trim()),
+            }
+            .Where(d => !string.IsNullOrWhiteSpace(d.Label) || !string.IsNullOrWhiteSpace(d.Url))
+            .ToList();
+
+        return new SubmitVenueVerificationRequest(
+            ContactName: ContactName.Trim(),
+            ContactEmail: string.IsNullOrWhiteSpace(ContactEmail) ? null : ContactEmail.Trim(),
+            EvidenceSummary: EvidenceSummary.Trim(),
+            AttestedAuthority: AttestedAuthority,
+            Documents: documents);
+    }
 }
 
 /// <summary>

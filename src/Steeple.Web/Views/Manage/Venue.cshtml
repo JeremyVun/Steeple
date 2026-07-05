@@ -1,6 +1,7 @@
 @model VenueEditorViewModel
 @{
     var venue = Model.Venue;
+    var (verificationRole, verificationLabel) = VerificationStatusChip(venue);
 }
 
 <section class="inbox-page wrap">
@@ -69,6 +70,91 @@
                 </form>
             </div>
         </section>
+
+        <section class="card manage-card" aria-labelledby="venue-verification-heading">
+            <div class="card-body">
+                <div class="manage-status-line">
+                    <h2 id="venue-verification-heading">Venue verification</h2>
+                    <span class="status-chip status-@verificationRole">@verificationLabel</span>
+                </div>
+
+                @if (venue.VerificationStatus == "verified")
+                {
+                    <p class="field-help">This venue is verified for ownership or lease authority.</p>
+                }
+                else if (venue.VerificationStatus == "pending")
+                {
+                    <p class="field-help">Submitted @venue.VerificationRequestedAtUtc?.ToString("MMM d, yyyy"). We review verification before a venue's first listing goes live.</p>
+                }
+                else
+                {
+                    @if (Model.VerificationForm.Error is not null)
+                    {
+                        <p class="auth-error" role="alert">@Model.VerificationForm.Error</p>
+                    }
+                    <form method="post" action="@Url.Content($"~/manage/venues/{venue.Id}/verification")" class="manage-form">
+                        @Html.AntiForgeryToken()
+                        <div class="form-row">
+                            <label class="form-field">
+                                <span>Contact name</span>
+                                <input class="form-input" name="ContactName" value="@Model.VerificationForm.ContactName" maxlength="200" required />
+                            </label>
+                            <label class="form-field">
+                                <span>Contact email <span class="field-optional">(optional)</span></span>
+                                <input class="form-input" type="email" name="ContactEmail" value="@Model.VerificationForm.ContactEmail" maxlength="320" />
+                            </label>
+                        </div>
+                        <label class="form-field">
+                            <span>Ownership or lease authority</span>
+                            <textarea class="form-input" name="EvidenceSummary" rows="4" maxlength="4000" required>@Model.VerificationForm.EvidenceSummary</textarea>
+                        </label>
+                        <fieldset class="form-fieldset">
+                            <legend>Document links</legend>
+                            <div class="form-row">
+                                <label class="form-field">
+                                    <span>Document 1 label</span>
+                                    <input class="form-input" name="Document1Label" value="@Model.VerificationForm.Document1Label" maxlength="200" required />
+                                </label>
+                                <label class="form-field">
+                                    <span>Document 1 URL</span>
+                                    <input class="form-input" type="url" name="Document1Url" value="@Model.VerificationForm.Document1Url" maxlength="1000" required />
+                                </label>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-field">
+                                    <span>Document 2 label <span class="field-optional">(optional)</span></span>
+                                    <input class="form-input" name="Document2Label" value="@Model.VerificationForm.Document2Label" maxlength="200" />
+                                </label>
+                                <label class="form-field">
+                                    <span>Document 2 URL <span class="field-optional">(optional)</span></span>
+                                    <input class="form-input" type="url" name="Document2Url" value="@Model.VerificationForm.Document2Url" maxlength="1000" />
+                                </label>
+                            </div>
+                            <div class="form-row">
+                                <label class="form-field">
+                                    <span>Document 3 label <span class="field-optional">(optional)</span></span>
+                                    <input class="form-input" name="Document3Label" value="@Model.VerificationForm.Document3Label" maxlength="200" />
+                                </label>
+                                <label class="form-field">
+                                    <span>Document 3 URL <span class="field-optional">(optional)</span></span>
+                                    <input class="form-input" type="url" name="Document3Url" value="@Model.VerificationForm.Document3Url" maxlength="1000" />
+                                </label>
+                            </div>
+                        </fieldset>
+                        <label class="form-field manage-check">
+                            <span>
+                                <input type="checkbox" name="AttestedAuthority" value="true" @(Model.VerificationForm.AttestedAuthority ? "checked" : "") required />
+                                I confirm I am authorized to list or lease rooms for this venue.
+                            </span>
+                        </label>
+                        <input type="hidden" name="AttestedAuthority" value="false" />
+                        <div class="form-field manage-form-actions">
+                            <button class="btn btn-primary" type="submit">Submit for verification</button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </section>
     </div>
 </section>
 
@@ -81,4 +167,13 @@
         { Status: "unlisted" } => ("neutral", "Unlisted"),
         _ => ("neutral", "Draft"),
     };
+
+    private static (string Role, string Label) VerificationStatusChip(ManagedVenueDetailDto venue) =>
+        venue.VerificationStatus switch
+        {
+            "verified" => ("success", "Verified"),
+            "pending" => ("warning", "Verification in review"),
+            "declined" => ("danger", "Verification declined"),
+            _ => ("neutral", "Unverified"),
+        };
 }

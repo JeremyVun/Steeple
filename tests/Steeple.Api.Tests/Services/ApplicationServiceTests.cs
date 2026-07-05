@@ -515,7 +515,7 @@ public class ApplicationServiceTests
         turnstile = new FakeTurnstileVerifier();
         analytics = new FakeAnalyticsSink();
         return new ApplicationService(
-            repo, managers, bookings ?? new FakeBookingService(), notifications, turnstile, analytics,
+            repo, managers, bookings ?? new FakeBookingService(), new FakeRatingService(), notifications, turnstile, analytics,
             new FixedTimeProvider(FixedNow));
     }
 
@@ -605,6 +605,29 @@ public class ApplicationServiceTests
             Calls.Add((recipients, type, payload, email));
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeRatingService : IRatingService
+    {
+        public Task<BookingResult<RatingSubmissionResult>> SubmitAsync(
+            Guid bookingId, Guid callerId, SubmitRatingRequest request, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, BookingRatingsDto>> GetBookingOverviewsAsync(
+            IReadOnlyList<Booking> bookings, Guid callerId, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, BookingRatingsDto>>(new Dictionary<Guid, BookingRatingsDto>());
+
+        public Task<IReadOnlyDictionary<Guid, RatingSummaryDto>> GetVenueSummariesAsync(
+            IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, RatingSummaryDto>>(new Dictionary<Guid, RatingSummaryDto>());
+
+        public Task<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>> GetOrganizerSummariesAsync(
+            IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>>(new Dictionary<Guid, OrganizerRatingSummaryDto>());
+
+        public Task<VenueReviewPageDto> GetVenueReviewsAsync(
+            Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult(new VenueReviewPageDto([], 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 50)));
     }
 
     /// <summary>

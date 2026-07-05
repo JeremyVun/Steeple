@@ -168,6 +168,42 @@ public sealed class BookingsController : SteepleControllerBase
         return Redirect(Url.Content($"~/bookings/{id}"));
     }
 
+    /// <summary>Submits the viewer's rating for the booking.</summary>
+    [HttpPost("/bookings/{id:guid}/ratings")]
+    public async Task<IActionResult> Rate(Guid id, [FromForm] int stars, [FromForm] string? comment, CancellationToken ct)
+    {
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        try
+        {
+            var errorCode = await _api.SubmitRatingAsync(accessToken, id, stars, comment, ct);
+            if (errorCode is null)
+            {
+                TempData["BookingFlash"] = "Rating saved.";
+            }
+            else
+            {
+                TempData["BookingError"] = errorCode switch
+                {
+                    "invalid_rating" => "Choose a rating from 1 to 5 stars and keep comments under 1000 characters.",
+                    "invalid_state" => "This booking can't be rated right now, or you've already rated it.",
+                    _ => "Couldn't save the rating. Try again in a moment.",
+                };
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Rating submission failed.");
+            TempData["BookingError"] = "Couldn't reach the server — try again in a moment.";
+        }
+
+        return Redirect(Url.Content($"~/bookings/{id}"));
+    }
+
     private async Task<string?> AccessTokenOrNullAsync() =>
         await HttpContext.GetTokenAsync(SteepleCookieEvents.AccessTokenName);
 

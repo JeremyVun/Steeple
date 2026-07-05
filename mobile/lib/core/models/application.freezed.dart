@@ -303,9 +303,281 @@ as String,
 
 
 /// @nodoc
+mixin _$OrganizerRatingSummary {
+
+ double get averageStars; int get ratingCount; int get noShowCount; int get completedBookings;
+/// Create a copy of OrganizerRatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OrganizerRatingSummaryCopyWith<OrganizerRatingSummary> get copyWith => _$OrganizerRatingSummaryCopyWithImpl<OrganizerRatingSummary>(this as OrganizerRatingSummary, _$identity);
+
+  /// Serializes this OrganizerRatingSummary to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OrganizerRatingSummary&&(identical(other.averageStars, averageStars) || other.averageStars == averageStars)&&(identical(other.ratingCount, ratingCount) || other.ratingCount == ratingCount)&&(identical(other.noShowCount, noShowCount) || other.noShowCount == noShowCount)&&(identical(other.completedBookings, completedBookings) || other.completedBookings == completedBookings));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,averageStars,ratingCount,noShowCount,completedBookings);
+
+@override
+String toString() {
+  return 'OrganizerRatingSummary(averageStars: $averageStars, ratingCount: $ratingCount, noShowCount: $noShowCount, completedBookings: $completedBookings)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OrganizerRatingSummaryCopyWith<$Res>  {
+  factory $OrganizerRatingSummaryCopyWith(OrganizerRatingSummary value, $Res Function(OrganizerRatingSummary) _then) = _$OrganizerRatingSummaryCopyWithImpl;
+@useResult
+$Res call({
+ double averageStars, int ratingCount, int noShowCount, int completedBookings
+});
+
+
+
+
+}
+/// @nodoc
+class _$OrganizerRatingSummaryCopyWithImpl<$Res>
+    implements $OrganizerRatingSummaryCopyWith<$Res> {
+  _$OrganizerRatingSummaryCopyWithImpl(this._self, this._then);
+
+  final OrganizerRatingSummary _self;
+  final $Res Function(OrganizerRatingSummary) _then;
+
+/// Create a copy of OrganizerRatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? averageStars = null,Object? ratingCount = null,Object? noShowCount = null,Object? completedBookings = null,}) {
+  return _then(_self.copyWith(
+averageStars: null == averageStars ? _self.averageStars : averageStars // ignore: cast_nullable_to_non_nullable
+as double,ratingCount: null == ratingCount ? _self.ratingCount : ratingCount // ignore: cast_nullable_to_non_nullable
+as int,noShowCount: null == noShowCount ? _self.noShowCount : noShowCount // ignore: cast_nullable_to_non_nullable
+as int,completedBookings: null == completedBookings ? _self.completedBookings : completedBookings // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [OrganizerRatingSummary].
+extension OrganizerRatingSummaryPatterns on OrganizerRatingSummary {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _OrganizerRatingSummary value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _OrganizerRatingSummary value)  $default,){
+final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _OrganizerRatingSummary value)?  $default,){
+final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( double averageStars,  int ratingCount,  int noShowCount,  int completedBookings)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary() when $default != null:
+return $default(_that.averageStars,_that.ratingCount,_that.noShowCount,_that.completedBookings);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( double averageStars,  int ratingCount,  int noShowCount,  int completedBookings)  $default,) {final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary():
+return $default(_that.averageStars,_that.ratingCount,_that.noShowCount,_that.completedBookings);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( double averageStars,  int ratingCount,  int noShowCount,  int completedBookings)?  $default,) {final _that = this;
+switch (_that) {
+case _OrganizerRatingSummary() when $default != null:
+return $default(_that.averageStars,_that.ratingCount,_that.noShowCount,_that.completedBookings);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _OrganizerRatingSummary implements OrganizerRatingSummary {
+  const _OrganizerRatingSummary({required this.averageStars, required this.ratingCount, required this.noShowCount, required this.completedBookings});
+  factory _OrganizerRatingSummary.fromJson(Map<String, dynamic> json) => _$OrganizerRatingSummaryFromJson(json);
+
+@override final  double averageStars;
+@override final  int ratingCount;
+@override final  int noShowCount;
+@override final  int completedBookings;
+
+/// Create a copy of OrganizerRatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$OrganizerRatingSummaryCopyWith<_OrganizerRatingSummary> get copyWith => __$OrganizerRatingSummaryCopyWithImpl<_OrganizerRatingSummary>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$OrganizerRatingSummaryToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _OrganizerRatingSummary&&(identical(other.averageStars, averageStars) || other.averageStars == averageStars)&&(identical(other.ratingCount, ratingCount) || other.ratingCount == ratingCount)&&(identical(other.noShowCount, noShowCount) || other.noShowCount == noShowCount)&&(identical(other.completedBookings, completedBookings) || other.completedBookings == completedBookings));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,averageStars,ratingCount,noShowCount,completedBookings);
+
+@override
+String toString() {
+  return 'OrganizerRatingSummary(averageStars: $averageStars, ratingCount: $ratingCount, noShowCount: $noShowCount, completedBookings: $completedBookings)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$OrganizerRatingSummaryCopyWith<$Res> implements $OrganizerRatingSummaryCopyWith<$Res> {
+  factory _$OrganizerRatingSummaryCopyWith(_OrganizerRatingSummary value, $Res Function(_OrganizerRatingSummary) _then) = __$OrganizerRatingSummaryCopyWithImpl;
+@override @useResult
+$Res call({
+ double averageStars, int ratingCount, int noShowCount, int completedBookings
+});
+
+
+
+
+}
+/// @nodoc
+class __$OrganizerRatingSummaryCopyWithImpl<$Res>
+    implements _$OrganizerRatingSummaryCopyWith<$Res> {
+  __$OrganizerRatingSummaryCopyWithImpl(this._self, this._then);
+
+  final _OrganizerRatingSummary _self;
+  final $Res Function(_OrganizerRatingSummary) _then;
+
+/// Create a copy of OrganizerRatingSummary
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? averageStars = null,Object? ratingCount = null,Object? noShowCount = null,Object? completedBookings = null,}) {
+  return _then(_OrganizerRatingSummary(
+averageStars: null == averageStars ? _self.averageStars : averageStars // ignore: cast_nullable_to_non_nullable
+as double,ratingCount: null == ratingCount ? _self.ratingCount : ratingCount // ignore: cast_nullable_to_non_nullable
+as int,noShowCount: null == noShowCount ? _self.noShowCount : noShowCount // ignore: cast_nullable_to_non_nullable
+as int,completedBookings: null == completedBookings ? _self.completedBookings : completedBookings // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
 mixin _$Organizer {
 
- String get id; String get displayName;
+ String get id; String get displayName; OrganizerRatingSummary? get ratingSummary;
 /// Create a copy of Organizer
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -318,16 +590,16 @@ $OrganizerCopyWith<Organizer> get copyWith => _$OrganizerCopyWithImpl<Organizer>
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Organizer&&(identical(other.id, id) || other.id == id)&&(identical(other.displayName, displayName) || other.displayName == displayName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Organizer&&(identical(other.id, id) || other.id == id)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.ratingSummary, ratingSummary) || other.ratingSummary == ratingSummary));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,displayName);
+int get hashCode => Object.hash(runtimeType,id,displayName,ratingSummary);
 
 @override
 String toString() {
-  return 'Organizer(id: $id, displayName: $displayName)';
+  return 'Organizer(id: $id, displayName: $displayName, ratingSummary: $ratingSummary)';
 }
 
 
@@ -338,11 +610,11 @@ abstract mixin class $OrganizerCopyWith<$Res>  {
   factory $OrganizerCopyWith(Organizer value, $Res Function(Organizer) _then) = _$OrganizerCopyWithImpl;
 @useResult
 $Res call({
- String id, String displayName
+ String id, String displayName, OrganizerRatingSummary? ratingSummary
 });
 
 
-
+$OrganizerRatingSummaryCopyWith<$Res>? get ratingSummary;
 
 }
 /// @nodoc
@@ -355,14 +627,27 @@ class _$OrganizerCopyWithImpl<$Res>
 
 /// Create a copy of Organizer
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? displayName = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? displayName = null,Object? ratingSummary = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,displayName: null == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
-as String,
+as String,ratingSummary: freezed == ratingSummary ? _self.ratingSummary : ratingSummary // ignore: cast_nullable_to_non_nullable
+as OrganizerRatingSummary?,
   ));
 }
+/// Create a copy of Organizer
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$OrganizerRatingSummaryCopyWith<$Res>? get ratingSummary {
+    if (_self.ratingSummary == null) {
+    return null;
+  }
 
+  return $OrganizerRatingSummaryCopyWith<$Res>(_self.ratingSummary!, (value) {
+    return _then(_self.copyWith(ratingSummary: value));
+  });
+}
 }
 
 
@@ -444,10 +729,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String displayName)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String displayName,  OrganizerRatingSummary? ratingSummary)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Organizer() when $default != null:
-return $default(_that.id,_that.displayName);case _:
+return $default(_that.id,_that.displayName,_that.ratingSummary);case _:
   return orElse();
 
 }
@@ -465,10 +750,10 @@ return $default(_that.id,_that.displayName);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String displayName)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String displayName,  OrganizerRatingSummary? ratingSummary)  $default,) {final _that = this;
 switch (_that) {
 case _Organizer():
-return $default(_that.id,_that.displayName);case _:
+return $default(_that.id,_that.displayName,_that.ratingSummary);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -485,10 +770,10 @@ return $default(_that.id,_that.displayName);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String displayName)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String displayName,  OrganizerRatingSummary? ratingSummary)?  $default,) {final _that = this;
 switch (_that) {
 case _Organizer() when $default != null:
-return $default(_that.id,_that.displayName);case _:
+return $default(_that.id,_that.displayName,_that.ratingSummary);case _:
   return null;
 
 }
@@ -500,11 +785,12 @@ return $default(_that.id,_that.displayName);case _:
 @JsonSerializable()
 
 class _Organizer implements Organizer {
-  const _Organizer({required this.id, required this.displayName});
+  const _Organizer({required this.id, required this.displayName, this.ratingSummary});
   factory _Organizer.fromJson(Map<String, dynamic> json) => _$OrganizerFromJson(json);
 
 @override final  String id;
 @override final  String displayName;
+@override final  OrganizerRatingSummary? ratingSummary;
 
 /// Create a copy of Organizer
 /// with the given fields replaced by the non-null parameter values.
@@ -519,16 +805,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Organizer&&(identical(other.id, id) || other.id == id)&&(identical(other.displayName, displayName) || other.displayName == displayName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Organizer&&(identical(other.id, id) || other.id == id)&&(identical(other.displayName, displayName) || other.displayName == displayName)&&(identical(other.ratingSummary, ratingSummary) || other.ratingSummary == ratingSummary));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,displayName);
+int get hashCode => Object.hash(runtimeType,id,displayName,ratingSummary);
 
 @override
 String toString() {
-  return 'Organizer(id: $id, displayName: $displayName)';
+  return 'Organizer(id: $id, displayName: $displayName, ratingSummary: $ratingSummary)';
 }
 
 
@@ -539,11 +825,11 @@ abstract mixin class _$OrganizerCopyWith<$Res> implements $OrganizerCopyWith<$Re
   factory _$OrganizerCopyWith(_Organizer value, $Res Function(_Organizer) _then) = __$OrganizerCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String displayName
+ String id, String displayName, OrganizerRatingSummary? ratingSummary
 });
 
 
-
+@override $OrganizerRatingSummaryCopyWith<$Res>? get ratingSummary;
 
 }
 /// @nodoc
@@ -556,15 +842,28 @@ class __$OrganizerCopyWithImpl<$Res>
 
 /// Create a copy of Organizer
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? displayName = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? displayName = null,Object? ratingSummary = freezed,}) {
   return _then(_Organizer(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,displayName: null == displayName ? _self.displayName : displayName // ignore: cast_nullable_to_non_nullable
-as String,
+as String,ratingSummary: freezed == ratingSummary ? _self.ratingSummary : ratingSummary // ignore: cast_nullable_to_non_nullable
+as OrganizerRatingSummary?,
   ));
 }
 
+/// Create a copy of Organizer
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$OrganizerRatingSummaryCopyWith<$Res>? get ratingSummary {
+    if (_self.ratingSummary == null) {
+    return null;
+  }
 
+  return $OrganizerRatingSummaryCopyWith<$Res>(_self.ratingSummary!, (value) {
+    return _then(_self.copyWith(ratingSummary: value));
+  });
+}
 }
 
 

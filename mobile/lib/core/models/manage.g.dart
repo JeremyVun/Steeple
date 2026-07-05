@@ -72,6 +72,10 @@ _ManagedVenueDetail _$ManagedVenueDetailFromJson(Map<String, dynamic> json) =>
       longitude: (json['longitude'] as num).toDouble(),
       timezone: json['timezone'] as String,
       isIdentityVerified: json['isIdentityVerified'] as bool,
+      verificationStatus: json['verificationStatus'] as String? ?? 'unverified',
+      verificationRequestedAtUtc: json['verificationRequestedAtUtc'] == null
+          ? null
+          : DateTime.parse(json['verificationRequestedAtUtc'] as String),
       rooms:
           (json['rooms'] as List<dynamic>?)
               ?.map(
@@ -98,6 +102,9 @@ Map<String, dynamic> _$ManagedVenueDetailToJson(_ManagedVenueDetail instance) =>
       'longitude': instance.longitude,
       'timezone': instance.timezone,
       'isIdentityVerified': instance.isIdentityVerified,
+      'verificationStatus': instance.verificationStatus,
+      'verificationRequestedAtUtc': instance.verificationRequestedAtUtc
+          ?.toIso8601String(),
       'rooms': instance.rooms,
     };
 

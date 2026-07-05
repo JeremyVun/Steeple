@@ -16,8 +16,12 @@ the day real users arrive: renewal loop closed, SEO finished, production config 
 
 ## Slice 1 — Ratings & reviews (two-way, post-completion)
 
+> **Completed 2026-07-05:** star ratings, optional review comments, double-blind reveal,
+> rating aggregates, booking/application/listing/mobile surfaces, public review pagination,
+> Admin comment moderation, and `rating_submitted` are built.
+
 The centerpiece. Seams already reserved: `IRatingRepository` module slot (SYSTEM_DESIGN
-§4), `bookings 1─* ratings` (§5), `POST /api/v1/bookings/{id}/ratings` 🔲 (CONTRACTS §5),
+§4), `bookings 1─* ratings` (§5), `POST /api/v1/bookings/{id}/ratings` ✅ (CONTRACTS §5),
 `rating_submitted` event 🔲 (§7), `ratingReceived` notification type (already in the
 enum), `organizer.ratingSummary` comment slot in `ApplicationDto`, and no-show marks
 "feed ratings" (Bookings module).
@@ -51,7 +55,7 @@ enum), `organizer.ratingSummary` comment slot in `ApplicationDto`, and no-show m
 | Listing cards (search) | `rating {averageStars, count}` additive field, shown from the first revealed rating (signal is scarce; don't threshold it away) |
 | Booking detail (both) | Rate CTA when eligible; own submitted rating; other side's once revealed |
 
-### Data model — changeset `007-ratings.sql`
+### Data model — changeset `008-ratings.sql` (`007` was used by venue verification)
 
 ```
 ratings: Id, BookingId FK, RaterId FK users, RateeType int (1 organizer | 2 venue),

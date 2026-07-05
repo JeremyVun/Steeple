@@ -81,6 +81,8 @@ abstract class ManagedVenueDetail with _$ManagedVenueDetail {
     required double longitude,
     required String timezone,
     required bool isIdentityVerified,
+    @Default('unverified') String verificationStatus,
+    DateTime? verificationRequestedAtUtc,
     @Default(<ManagedRoomSummary>[]) List<ManagedRoomSummary> rooms,
   }) = _ManagedVenueDetail;
 

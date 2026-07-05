@@ -82,6 +82,9 @@ public static class BookingErrorCodes
     /// <summary>A request field failed validation (unknown status token, oversize reason…).</summary>
     public const string InvalidBooking = "invalid_booking";
 
+    /// <summary>A rating request field failed validation.</summary>
+    public const string InvalidRating = "invalid_rating";
+
     /// <summary>The action isn't valid in the booking's/occurrence's current state.</summary>
     public const string InvalidState = "invalid_state";
 }

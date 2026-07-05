@@ -13,6 +13,595 @@ part of 'booking.dart';
 T _$identity<T>(T value) => value;
 
 /// @nodoc
+mixin _$SubmittedRating {
+
+ int get stars; String? get comment; DateTime get createdAtUtc;
+/// Create a copy of SubmittedRating
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$SubmittedRatingCopyWith<SubmittedRating> get copyWith => _$SubmittedRatingCopyWithImpl<SubmittedRating>(this as SubmittedRating, _$identity);
+
+  /// Serializes this SubmittedRating to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is SubmittedRating&&(identical(other.stars, stars) || other.stars == stars)&&(identical(other.comment, comment) || other.comment == comment)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,stars,comment,createdAtUtc);
+
+@override
+String toString() {
+  return 'SubmittedRating(stars: $stars, comment: $comment, createdAtUtc: $createdAtUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $SubmittedRatingCopyWith<$Res>  {
+  factory $SubmittedRatingCopyWith(SubmittedRating value, $Res Function(SubmittedRating) _then) = _$SubmittedRatingCopyWithImpl;
+@useResult
+$Res call({
+ int stars, String? comment, DateTime createdAtUtc
+});
+
+
+
+
+}
+/// @nodoc
+class _$SubmittedRatingCopyWithImpl<$Res>
+    implements $SubmittedRatingCopyWith<$Res> {
+  _$SubmittedRatingCopyWithImpl(this._self, this._then);
+
+  final SubmittedRating _self;
+  final $Res Function(SubmittedRating) _then;
+
+/// Create a copy of SubmittedRating
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? stars = null,Object? comment = freezed,Object? createdAtUtc = null,}) {
+  return _then(_self.copyWith(
+stars: null == stars ? _self.stars : stars // ignore: cast_nullable_to_non_nullable
+as int,comment: freezed == comment ? _self.comment : comment // ignore: cast_nullable_to_non_nullable
+as String?,createdAtUtc: null == createdAtUtc ? _self.createdAtUtc : createdAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [SubmittedRating].
+extension SubmittedRatingPatterns on SubmittedRating {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _SubmittedRating value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _SubmittedRating() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _SubmittedRating value)  $default,){
+final _that = this;
+switch (_that) {
+case _SubmittedRating():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _SubmittedRating value)?  $default,){
+final _that = this;
+switch (_that) {
+case _SubmittedRating() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int stars,  String? comment,  DateTime createdAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _SubmittedRating() when $default != null:
+return $default(_that.stars,_that.comment,_that.createdAtUtc);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int stars,  String? comment,  DateTime createdAtUtc)  $default,) {final _that = this;
+switch (_that) {
+case _SubmittedRating():
+return $default(_that.stars,_that.comment,_that.createdAtUtc);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int stars,  String? comment,  DateTime createdAtUtc)?  $default,) {final _that = this;
+switch (_that) {
+case _SubmittedRating() when $default != null:
+return $default(_that.stars,_that.comment,_that.createdAtUtc);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _SubmittedRating implements SubmittedRating {
+  const _SubmittedRating({required this.stars, this.comment, required this.createdAtUtc});
+  factory _SubmittedRating.fromJson(Map<String, dynamic> json) => _$SubmittedRatingFromJson(json);
+
+@override final  int stars;
+@override final  String? comment;
+@override final  DateTime createdAtUtc;
+
+/// Create a copy of SubmittedRating
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$SubmittedRatingCopyWith<_SubmittedRating> get copyWith => __$SubmittedRatingCopyWithImpl<_SubmittedRating>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$SubmittedRatingToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _SubmittedRating&&(identical(other.stars, stars) || other.stars == stars)&&(identical(other.comment, comment) || other.comment == comment)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,stars,comment,createdAtUtc);
+
+@override
+String toString() {
+  return 'SubmittedRating(stars: $stars, comment: $comment, createdAtUtc: $createdAtUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$SubmittedRatingCopyWith<$Res> implements $SubmittedRatingCopyWith<$Res> {
+  factory _$SubmittedRatingCopyWith(_SubmittedRating value, $Res Function(_SubmittedRating) _then) = __$SubmittedRatingCopyWithImpl;
+@override @useResult
+$Res call({
+ int stars, String? comment, DateTime createdAtUtc
+});
+
+
+
+
+}
+/// @nodoc
+class __$SubmittedRatingCopyWithImpl<$Res>
+    implements _$SubmittedRatingCopyWith<$Res> {
+  __$SubmittedRatingCopyWithImpl(this._self, this._then);
+
+  final _SubmittedRating _self;
+  final $Res Function(_SubmittedRating) _then;
+
+/// Create a copy of SubmittedRating
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? stars = null,Object? comment = freezed,Object? createdAtUtc = null,}) {
+  return _then(_SubmittedRating(
+stars: null == stars ? _self.stars : stars // ignore: cast_nullable_to_non_nullable
+as int,comment: freezed == comment ? _self.comment : comment // ignore: cast_nullable_to_non_nullable
+as String?,createdAtUtc: null == createdAtUtc ? _self.createdAtUtc : createdAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
+mixin _$BookingRatings {
+
+ SubmittedRating? get byOrganizer; SubmittedRating? get byVenue; bool get canRate; DateTime? get rateByUtc;
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$BookingRatingsCopyWith<BookingRatings> get copyWith => _$BookingRatingsCopyWithImpl<BookingRatings>(this as BookingRatings, _$identity);
+
+  /// Serializes this BookingRatings to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is BookingRatings&&(identical(other.byOrganizer, byOrganizer) || other.byOrganizer == byOrganizer)&&(identical(other.byVenue, byVenue) || other.byVenue == byVenue)&&(identical(other.canRate, canRate) || other.canRate == canRate)&&(identical(other.rateByUtc, rateByUtc) || other.rateByUtc == rateByUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,byOrganizer,byVenue,canRate,rateByUtc);
+
+@override
+String toString() {
+  return 'BookingRatings(byOrganizer: $byOrganizer, byVenue: $byVenue, canRate: $canRate, rateByUtc: $rateByUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $BookingRatingsCopyWith<$Res>  {
+  factory $BookingRatingsCopyWith(BookingRatings value, $Res Function(BookingRatings) _then) = _$BookingRatingsCopyWithImpl;
+@useResult
+$Res call({
+ SubmittedRating? byOrganizer, SubmittedRating? byVenue, bool canRate, DateTime? rateByUtc
+});
+
+
+$SubmittedRatingCopyWith<$Res>? get byOrganizer;$SubmittedRatingCopyWith<$Res>? get byVenue;
+
+}
+/// @nodoc
+class _$BookingRatingsCopyWithImpl<$Res>
+    implements $BookingRatingsCopyWith<$Res> {
+  _$BookingRatingsCopyWithImpl(this._self, this._then);
+
+  final BookingRatings _self;
+  final $Res Function(BookingRatings) _then;
+
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? byOrganizer = freezed,Object? byVenue = freezed,Object? canRate = null,Object? rateByUtc = freezed,}) {
+  return _then(_self.copyWith(
+byOrganizer: freezed == byOrganizer ? _self.byOrganizer : byOrganizer // ignore: cast_nullable_to_non_nullable
+as SubmittedRating?,byVenue: freezed == byVenue ? _self.byVenue : byVenue // ignore: cast_nullable_to_non_nullable
+as SubmittedRating?,canRate: null == canRate ? _self.canRate : canRate // ignore: cast_nullable_to_non_nullable
+as bool,rateByUtc: freezed == rateByUtc ? _self.rateByUtc : rateByUtc // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SubmittedRatingCopyWith<$Res>? get byOrganizer {
+    if (_self.byOrganizer == null) {
+    return null;
+  }
+
+  return $SubmittedRatingCopyWith<$Res>(_self.byOrganizer!, (value) {
+    return _then(_self.copyWith(byOrganizer: value));
+  });
+}/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SubmittedRatingCopyWith<$Res>? get byVenue {
+    if (_self.byVenue == null) {
+    return null;
+  }
+
+  return $SubmittedRatingCopyWith<$Res>(_self.byVenue!, (value) {
+    return _then(_self.copyWith(byVenue: value));
+  });
+}
+}
+
+
+/// Adds pattern-matching-related methods to [BookingRatings].
+extension BookingRatingsPatterns on BookingRatings {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _BookingRatings value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _BookingRatings() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _BookingRatings value)  $default,){
+final _that = this;
+switch (_that) {
+case _BookingRatings():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _BookingRatings value)?  $default,){
+final _that = this;
+switch (_that) {
+case _BookingRatings() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( SubmittedRating? byOrganizer,  SubmittedRating? byVenue,  bool canRate,  DateTime? rateByUtc)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _BookingRatings() when $default != null:
+return $default(_that.byOrganizer,_that.byVenue,_that.canRate,_that.rateByUtc);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( SubmittedRating? byOrganizer,  SubmittedRating? byVenue,  bool canRate,  DateTime? rateByUtc)  $default,) {final _that = this;
+switch (_that) {
+case _BookingRatings():
+return $default(_that.byOrganizer,_that.byVenue,_that.canRate,_that.rateByUtc);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( SubmittedRating? byOrganizer,  SubmittedRating? byVenue,  bool canRate,  DateTime? rateByUtc)?  $default,) {final _that = this;
+switch (_that) {
+case _BookingRatings() when $default != null:
+return $default(_that.byOrganizer,_that.byVenue,_that.canRate,_that.rateByUtc);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _BookingRatings implements BookingRatings {
+  const _BookingRatings({this.byOrganizer, this.byVenue, required this.canRate, this.rateByUtc});
+  factory _BookingRatings.fromJson(Map<String, dynamic> json) => _$BookingRatingsFromJson(json);
+
+@override final  SubmittedRating? byOrganizer;
+@override final  SubmittedRating? byVenue;
+@override final  bool canRate;
+@override final  DateTime? rateByUtc;
+
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$BookingRatingsCopyWith<_BookingRatings> get copyWith => __$BookingRatingsCopyWithImpl<_BookingRatings>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$BookingRatingsToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _BookingRatings&&(identical(other.byOrganizer, byOrganizer) || other.byOrganizer == byOrganizer)&&(identical(other.byVenue, byVenue) || other.byVenue == byVenue)&&(identical(other.canRate, canRate) || other.canRate == canRate)&&(identical(other.rateByUtc, rateByUtc) || other.rateByUtc == rateByUtc));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,byOrganizer,byVenue,canRate,rateByUtc);
+
+@override
+String toString() {
+  return 'BookingRatings(byOrganizer: $byOrganizer, byVenue: $byVenue, canRate: $canRate, rateByUtc: $rateByUtc)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$BookingRatingsCopyWith<$Res> implements $BookingRatingsCopyWith<$Res> {
+  factory _$BookingRatingsCopyWith(_BookingRatings value, $Res Function(_BookingRatings) _then) = __$BookingRatingsCopyWithImpl;
+@override @useResult
+$Res call({
+ SubmittedRating? byOrganizer, SubmittedRating? byVenue, bool canRate, DateTime? rateByUtc
+});
+
+
+@override $SubmittedRatingCopyWith<$Res>? get byOrganizer;@override $SubmittedRatingCopyWith<$Res>? get byVenue;
+
+}
+/// @nodoc
+class __$BookingRatingsCopyWithImpl<$Res>
+    implements _$BookingRatingsCopyWith<$Res> {
+  __$BookingRatingsCopyWithImpl(this._self, this._then);
+
+  final _BookingRatings _self;
+  final $Res Function(_BookingRatings) _then;
+
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? byOrganizer = freezed,Object? byVenue = freezed,Object? canRate = null,Object? rateByUtc = freezed,}) {
+  return _then(_BookingRatings(
+byOrganizer: freezed == byOrganizer ? _self.byOrganizer : byOrganizer // ignore: cast_nullable_to_non_nullable
+as SubmittedRating?,byVenue: freezed == byVenue ? _self.byVenue : byVenue // ignore: cast_nullable_to_non_nullable
+as SubmittedRating?,canRate: null == canRate ? _self.canRate : canRate // ignore: cast_nullable_to_non_nullable
+as bool,rateByUtc: freezed == rateByUtc ? _self.rateByUtc : rateByUtc // ignore: cast_nullable_to_non_nullable
+as DateTime?,
+  ));
+}
+
+/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SubmittedRatingCopyWith<$Res>? get byOrganizer {
+    if (_self.byOrganizer == null) {
+    return null;
+  }
+
+  return $SubmittedRatingCopyWith<$Res>(_self.byOrganizer!, (value) {
+    return _then(_self.copyWith(byOrganizer: value));
+  });
+}/// Create a copy of BookingRatings
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$SubmittedRatingCopyWith<$Res>? get byVenue {
+    if (_self.byVenue == null) {
+    return null;
+  }
+
+  return $SubmittedRatingCopyWith<$Res>(_self.byVenue!, (value) {
+    return _then(_self.copyWith(byVenue: value));
+  });
+}
+}
+
+
+/// @nodoc
 mixin _$Occurrence {
 
  String get id; DateTime get startUtc; DateTime get endUtc;/// `yyyy-MM-dd`, venue-local.
@@ -302,7 +891,7 @@ mixin _$Booking {
  String get startDate;/// `yyyy-MM-dd`, venue-local.
  String get endDate; ProposedSchedule get schedule;/// Wire token: `confirmed | completed | cancelled`.
  String get status; DateTime get createdAtUtc; String? get cancelledBy; DateTime? get cancelledAtUtc; String? get cancelReason;/// The next live occurrence — set on lists too.
- Occurrence? get nextOccurrence; List<Occurrence> get occurrences;
+ Occurrence? get nextOccurrence; List<Occurrence> get occurrences; BookingRatings? get ratings;
 /// Create a copy of Booking
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -315,16 +904,16 @@ $BookingCopyWith<Booking> get copyWith => _$BookingCopyWithImpl<Booking>(this as
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Booking&&(identical(other.id, id) || other.id == id)&&(identical(other.applicationId, applicationId) || other.applicationId == applicationId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueTimezone, venueTimezone) || other.venueTimezone == venueTimezone)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.organizerName, organizerName) || other.organizerName == organizerName)&&(identical(other.type, type) || other.type == type)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.cancelledBy, cancelledBy) || other.cancelledBy == cancelledBy)&&(identical(other.cancelledAtUtc, cancelledAtUtc) || other.cancelledAtUtc == cancelledAtUtc)&&(identical(other.cancelReason, cancelReason) || other.cancelReason == cancelReason)&&(identical(other.nextOccurrence, nextOccurrence) || other.nextOccurrence == nextOccurrence)&&const DeepCollectionEquality().equals(other.occurrences, occurrences));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Booking&&(identical(other.id, id) || other.id == id)&&(identical(other.applicationId, applicationId) || other.applicationId == applicationId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueTimezone, venueTimezone) || other.venueTimezone == venueTimezone)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.organizerName, organizerName) || other.organizerName == organizerName)&&(identical(other.type, type) || other.type == type)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.cancelledBy, cancelledBy) || other.cancelledBy == cancelledBy)&&(identical(other.cancelledAtUtc, cancelledAtUtc) || other.cancelledAtUtc == cancelledAtUtc)&&(identical(other.cancelReason, cancelReason) || other.cancelReason == cancelReason)&&(identical(other.nextOccurrence, nextOccurrence) || other.nextOccurrence == nextOccurrence)&&const DeepCollectionEquality().equals(other.occurrences, occurrences)&&(identical(other.ratings, ratings) || other.ratings == ratings));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,applicationId,roomId,roomName,venueName,venueSlug,roomSlug,venueTimezone,organizerId,organizerName,type,startDate,endDate,schedule,status,createdAtUtc,cancelledBy,cancelledAtUtc,cancelReason,nextOccurrence,const DeepCollectionEquality().hash(occurrences)]);
+int get hashCode => Object.hashAll([runtimeType,id,applicationId,roomId,roomName,venueName,venueSlug,roomSlug,venueTimezone,organizerId,organizerName,type,startDate,endDate,schedule,status,createdAtUtc,cancelledBy,cancelledAtUtc,cancelReason,nextOccurrence,const DeepCollectionEquality().hash(occurrences),ratings]);
 
 @override
 String toString() {
-  return 'Booking(id: $id, applicationId: $applicationId, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, venueTimezone: $venueTimezone, organizerId: $organizerId, organizerName: $organizerName, type: $type, startDate: $startDate, endDate: $endDate, schedule: $schedule, status: $status, createdAtUtc: $createdAtUtc, cancelledBy: $cancelledBy, cancelledAtUtc: $cancelledAtUtc, cancelReason: $cancelReason, nextOccurrence: $nextOccurrence, occurrences: $occurrences)';
+  return 'Booking(id: $id, applicationId: $applicationId, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, venueTimezone: $venueTimezone, organizerId: $organizerId, organizerName: $organizerName, type: $type, startDate: $startDate, endDate: $endDate, schedule: $schedule, status: $status, createdAtUtc: $createdAtUtc, cancelledBy: $cancelledBy, cancelledAtUtc: $cancelledAtUtc, cancelReason: $cancelReason, nextOccurrence: $nextOccurrence, occurrences: $occurrences, ratings: $ratings)';
 }
 
 
@@ -335,11 +924,11 @@ abstract mixin class $BookingCopyWith<$Res>  {
   factory $BookingCopyWith(Booking value, $Res Function(Booking) _then) = _$BookingCopyWithImpl;
 @useResult
 $Res call({
- String id, String applicationId, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, String venueTimezone, String organizerId, String organizerName, String type, String startDate, String endDate, ProposedSchedule schedule, String status, DateTime createdAtUtc, String? cancelledBy, DateTime? cancelledAtUtc, String? cancelReason, Occurrence? nextOccurrence, List<Occurrence> occurrences
+ String id, String applicationId, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, String venueTimezone, String organizerId, String organizerName, String type, String startDate, String endDate, ProposedSchedule schedule, String status, DateTime createdAtUtc, String? cancelledBy, DateTime? cancelledAtUtc, String? cancelReason, Occurrence? nextOccurrence, List<Occurrence> occurrences, BookingRatings? ratings
 });
 
 
-$ProposedScheduleCopyWith<$Res> get schedule;$OccurrenceCopyWith<$Res>? get nextOccurrence;
+$ProposedScheduleCopyWith<$Res> get schedule;$OccurrenceCopyWith<$Res>? get nextOccurrence;$BookingRatingsCopyWith<$Res>? get ratings;
 
 }
 /// @nodoc
@@ -352,7 +941,7 @@ class _$BookingCopyWithImpl<$Res>
 
 /// Create a copy of Booking
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? applicationId = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? venueTimezone = null,Object? organizerId = null,Object? organizerName = null,Object? type = null,Object? startDate = null,Object? endDate = null,Object? schedule = null,Object? status = null,Object? createdAtUtc = null,Object? cancelledBy = freezed,Object? cancelledAtUtc = freezed,Object? cancelReason = freezed,Object? nextOccurrence = freezed,Object? occurrences = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? applicationId = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? venueTimezone = null,Object? organizerId = null,Object? organizerName = null,Object? type = null,Object? startDate = null,Object? endDate = null,Object? schedule = null,Object? status = null,Object? createdAtUtc = null,Object? cancelledBy = freezed,Object? cancelledAtUtc = freezed,Object? cancelReason = freezed,Object? nextOccurrence = freezed,Object? occurrences = null,Object? ratings = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,applicationId: null == applicationId ? _self.applicationId : applicationId // ignore: cast_nullable_to_non_nullable
@@ -375,7 +964,8 @@ as String?,cancelledAtUtc: freezed == cancelledAtUtc ? _self.cancelledAtUtc : ca
 as DateTime?,cancelReason: freezed == cancelReason ? _self.cancelReason : cancelReason // ignore: cast_nullable_to_non_nullable
 as String?,nextOccurrence: freezed == nextOccurrence ? _self.nextOccurrence : nextOccurrence // ignore: cast_nullable_to_non_nullable
 as Occurrence?,occurrences: null == occurrences ? _self.occurrences : occurrences // ignore: cast_nullable_to_non_nullable
-as List<Occurrence>,
+as List<Occurrence>,ratings: freezed == ratings ? _self.ratings : ratings // ignore: cast_nullable_to_non_nullable
+as BookingRatings?,
   ));
 }
 /// Create a copy of Booking
@@ -398,6 +988,18 @@ $OccurrenceCopyWith<$Res>? get nextOccurrence {
 
   return $OccurrenceCopyWith<$Res>(_self.nextOccurrence!, (value) {
     return _then(_self.copyWith(nextOccurrence: value));
+  });
+}/// Create a copy of Booking
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$BookingRatingsCopyWith<$Res>? get ratings {
+    if (_self.ratings == null) {
+    return null;
+  }
+
+  return $BookingRatingsCopyWith<$Res>(_self.ratings!, (value) {
+    return _then(_self.copyWith(ratings: value));
   });
 }
 }
@@ -481,10 +1083,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences,  BookingRatings? ratings)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Booking() when $default != null:
-return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences);case _:
+return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences,_that.ratings);case _:
   return orElse();
 
 }
@@ -502,10 +1104,10 @@ return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.v
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences,  BookingRatings? ratings)  $default,) {final _that = this;
 switch (_that) {
 case _Booking():
-return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences);case _:
+return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences,_that.ratings);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -522,10 +1124,10 @@ return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.v
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String applicationId,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  String venueTimezone,  String organizerId,  String organizerName,  String type,  String startDate,  String endDate,  ProposedSchedule schedule,  String status,  DateTime createdAtUtc,  String? cancelledBy,  DateTime? cancelledAtUtc,  String? cancelReason,  Occurrence? nextOccurrence,  List<Occurrence> occurrences,  BookingRatings? ratings)?  $default,) {final _that = this;
 switch (_that) {
 case _Booking() when $default != null:
-return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences);case _:
+return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.venueTimezone,_that.organizerId,_that.organizerName,_that.type,_that.startDate,_that.endDate,_that.schedule,_that.status,_that.createdAtUtc,_that.cancelledBy,_that.cancelledAtUtc,_that.cancelReason,_that.nextOccurrence,_that.occurrences,_that.ratings);case _:
   return null;
 
 }
@@ -537,7 +1139,7 @@ return $default(_that.id,_that.applicationId,_that.roomId,_that.roomName,_that.v
 @JsonSerializable()
 
 class _Booking extends Booking {
-  const _Booking({required this.id, required this.applicationId, required this.roomId, required this.roomName, required this.venueName, required this.venueSlug, required this.roomSlug, required this.venueTimezone, required this.organizerId, required this.organizerName, required this.type, required this.startDate, required this.endDate, required this.schedule, required this.status, required this.createdAtUtc, this.cancelledBy, this.cancelledAtUtc, this.cancelReason, this.nextOccurrence, final  List<Occurrence> occurrences = const <Occurrence>[]}): _occurrences = occurrences,super._();
+  const _Booking({required this.id, required this.applicationId, required this.roomId, required this.roomName, required this.venueName, required this.venueSlug, required this.roomSlug, required this.venueTimezone, required this.organizerId, required this.organizerName, required this.type, required this.startDate, required this.endDate, required this.schedule, required this.status, required this.createdAtUtc, this.cancelledBy, this.cancelledAtUtc, this.cancelReason, this.nextOccurrence, final  List<Occurrence> occurrences = const <Occurrence>[], this.ratings}): _occurrences = occurrences,super._();
   factory _Booking.fromJson(Map<String, dynamic> json) => _$BookingFromJson(json);
 
 @override final  String id;
@@ -572,6 +1174,7 @@ class _Booking extends Booking {
   return EqualUnmodifiableListView(_occurrences);
 }
 
+@override final  BookingRatings? ratings;
 
 /// Create a copy of Booking
 /// with the given fields replaced by the non-null parameter values.
@@ -586,16 +1189,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Booking&&(identical(other.id, id) || other.id == id)&&(identical(other.applicationId, applicationId) || other.applicationId == applicationId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueTimezone, venueTimezone) || other.venueTimezone == venueTimezone)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.organizerName, organizerName) || other.organizerName == organizerName)&&(identical(other.type, type) || other.type == type)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.cancelledBy, cancelledBy) || other.cancelledBy == cancelledBy)&&(identical(other.cancelledAtUtc, cancelledAtUtc) || other.cancelledAtUtc == cancelledAtUtc)&&(identical(other.cancelReason, cancelReason) || other.cancelReason == cancelReason)&&(identical(other.nextOccurrence, nextOccurrence) || other.nextOccurrence == nextOccurrence)&&const DeepCollectionEquality().equals(other._occurrences, _occurrences));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Booking&&(identical(other.id, id) || other.id == id)&&(identical(other.applicationId, applicationId) || other.applicationId == applicationId)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueTimezone, venueTimezone) || other.venueTimezone == venueTimezone)&&(identical(other.organizerId, organizerId) || other.organizerId == organizerId)&&(identical(other.organizerName, organizerName) || other.organizerName == organizerName)&&(identical(other.type, type) || other.type == type)&&(identical(other.startDate, startDate) || other.startDate == startDate)&&(identical(other.endDate, endDate) || other.endDate == endDate)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.cancelledBy, cancelledBy) || other.cancelledBy == cancelledBy)&&(identical(other.cancelledAtUtc, cancelledAtUtc) || other.cancelledAtUtc == cancelledAtUtc)&&(identical(other.cancelReason, cancelReason) || other.cancelReason == cancelReason)&&(identical(other.nextOccurrence, nextOccurrence) || other.nextOccurrence == nextOccurrence)&&const DeepCollectionEquality().equals(other._occurrences, _occurrences)&&(identical(other.ratings, ratings) || other.ratings == ratings));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,applicationId,roomId,roomName,venueName,venueSlug,roomSlug,venueTimezone,organizerId,organizerName,type,startDate,endDate,schedule,status,createdAtUtc,cancelledBy,cancelledAtUtc,cancelReason,nextOccurrence,const DeepCollectionEquality().hash(_occurrences)]);
+int get hashCode => Object.hashAll([runtimeType,id,applicationId,roomId,roomName,venueName,venueSlug,roomSlug,venueTimezone,organizerId,organizerName,type,startDate,endDate,schedule,status,createdAtUtc,cancelledBy,cancelledAtUtc,cancelReason,nextOccurrence,const DeepCollectionEquality().hash(_occurrences),ratings]);
 
 @override
 String toString() {
-  return 'Booking(id: $id, applicationId: $applicationId, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, venueTimezone: $venueTimezone, organizerId: $organizerId, organizerName: $organizerName, type: $type, startDate: $startDate, endDate: $endDate, schedule: $schedule, status: $status, createdAtUtc: $createdAtUtc, cancelledBy: $cancelledBy, cancelledAtUtc: $cancelledAtUtc, cancelReason: $cancelReason, nextOccurrence: $nextOccurrence, occurrences: $occurrences)';
+  return 'Booking(id: $id, applicationId: $applicationId, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, venueTimezone: $venueTimezone, organizerId: $organizerId, organizerName: $organizerName, type: $type, startDate: $startDate, endDate: $endDate, schedule: $schedule, status: $status, createdAtUtc: $createdAtUtc, cancelledBy: $cancelledBy, cancelledAtUtc: $cancelledAtUtc, cancelReason: $cancelReason, nextOccurrence: $nextOccurrence, occurrences: $occurrences, ratings: $ratings)';
 }
 
 
@@ -606,11 +1209,11 @@ abstract mixin class _$BookingCopyWith<$Res> implements $BookingCopyWith<$Res> {
   factory _$BookingCopyWith(_Booking value, $Res Function(_Booking) _then) = __$BookingCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String applicationId, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, String venueTimezone, String organizerId, String organizerName, String type, String startDate, String endDate, ProposedSchedule schedule, String status, DateTime createdAtUtc, String? cancelledBy, DateTime? cancelledAtUtc, String? cancelReason, Occurrence? nextOccurrence, List<Occurrence> occurrences
+ String id, String applicationId, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, String venueTimezone, String organizerId, String organizerName, String type, String startDate, String endDate, ProposedSchedule schedule, String status, DateTime createdAtUtc, String? cancelledBy, DateTime? cancelledAtUtc, String? cancelReason, Occurrence? nextOccurrence, List<Occurrence> occurrences, BookingRatings? ratings
 });
 
 
-@override $ProposedScheduleCopyWith<$Res> get schedule;@override $OccurrenceCopyWith<$Res>? get nextOccurrence;
+@override $ProposedScheduleCopyWith<$Res> get schedule;@override $OccurrenceCopyWith<$Res>? get nextOccurrence;@override $BookingRatingsCopyWith<$Res>? get ratings;
 
 }
 /// @nodoc
@@ -623,7 +1226,7 @@ class __$BookingCopyWithImpl<$Res>
 
 /// Create a copy of Booking
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? applicationId = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? venueTimezone = null,Object? organizerId = null,Object? organizerName = null,Object? type = null,Object? startDate = null,Object? endDate = null,Object? schedule = null,Object? status = null,Object? createdAtUtc = null,Object? cancelledBy = freezed,Object? cancelledAtUtc = freezed,Object? cancelReason = freezed,Object? nextOccurrence = freezed,Object? occurrences = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? applicationId = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? venueTimezone = null,Object? organizerId = null,Object? organizerName = null,Object? type = null,Object? startDate = null,Object? endDate = null,Object? schedule = null,Object? status = null,Object? createdAtUtc = null,Object? cancelledBy = freezed,Object? cancelledAtUtc = freezed,Object? cancelReason = freezed,Object? nextOccurrence = freezed,Object? occurrences = null,Object? ratings = freezed,}) {
   return _then(_Booking(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,applicationId: null == applicationId ? _self.applicationId : applicationId // ignore: cast_nullable_to_non_nullable
@@ -646,7 +1249,8 @@ as String?,cancelledAtUtc: freezed == cancelledAtUtc ? _self.cancelledAtUtc : ca
 as DateTime?,cancelReason: freezed == cancelReason ? _self.cancelReason : cancelReason // ignore: cast_nullable_to_non_nullable
 as String?,nextOccurrence: freezed == nextOccurrence ? _self.nextOccurrence : nextOccurrence // ignore: cast_nullable_to_non_nullable
 as Occurrence?,occurrences: null == occurrences ? _self._occurrences : occurrences // ignore: cast_nullable_to_non_nullable
-as List<Occurrence>,
+as List<Occurrence>,ratings: freezed == ratings ? _self.ratings : ratings // ignore: cast_nullable_to_non_nullable
+as BookingRatings?,
   ));
 }
 
@@ -670,6 +1274,18 @@ $OccurrenceCopyWith<$Res>? get nextOccurrence {
 
   return $OccurrenceCopyWith<$Res>(_self.nextOccurrence!, (value) {
     return _then(_self.copyWith(nextOccurrence: value));
+  });
+}/// Create a copy of Booking
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$BookingRatingsCopyWith<$Res>? get ratings {
+    if (_self.ratings == null) {
+    return null;
+  }
+
+  return $BookingRatingsCopyWith<$Res>(_self.ratings!, (value) {
+    return _then(_self.copyWith(ratings: value));
   });
 }
 }

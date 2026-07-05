@@ -15,6 +15,9 @@ public interface IManageRepository
     /// <summary>Adds a venue and links <paramref name="managerUserId"/> as its first manager, atomically.</summary>
     Task AddVenueWithManagerAsync(Venue venue, Guid managerUserId, CancellationToken ct = default);
 
+    /// <summary>Adds a venue verification request with its document metadata.</summary>
+    Task AddVenueVerificationRequestAsync(VenueVerificationRequest request, CancellationToken ct = default);
+
     /// <summary>Adds a room to an existing venue.</summary>
     Task AddRoomAsync(Room room, CancellationToken ct = default);
 
@@ -38,4 +41,7 @@ public interface IManageRepository
     /// in-memory snapshot) so a room published concurrently between load and save isn't missed.
     /// </summary>
     Task<bool> HasPublishedRoomsAsync(Guid venueId, CancellationToken ct = default);
+
+    /// <summary>Whether the venue already has an undecided verification request.</summary>
+    Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default);
 }

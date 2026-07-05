@@ -15,6 +15,20 @@ public record SaveVenueRequest(
     string? ParkingInfo,
     string? TransitInfo);
 
+/// <summary>One document link supplied with a venue verification request.</summary>
+public record VenueVerificationDocumentRequest(string? Label, string? Url);
+
+/// <summary>
+/// Host-submitted proof that they own the venue or are authorized to lease/list its rooms.
+/// The API stores labels and external/signed links only, not raw document contents.
+/// </summary>
+public record SubmitVenueVerificationRequest(
+    string? ContactName,
+    string? ContactEmail,
+    string? EvidenceSummary,
+    bool AttestedAuthority,
+    IReadOnlyList<VenueVerificationDocumentRequest>? Documents);
+
 /// <summary>
 /// Create/update payload for a managed room (CONTRACTS §6). Null means "unchanged" on PATCH;
 /// a non-positive <paramref name="PricePerHour"/> means free (matching the public IsFree rule).

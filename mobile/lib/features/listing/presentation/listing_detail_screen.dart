@@ -54,6 +54,7 @@ class _Detail extends ConsumerWidget {
     final applyEnabled =
         ref.watch(flagsProvider).isEnabled(FlagKeys.applyEnabled, orElse: true);
     final venue = room.venue;
+    final rating = room.rating;
 
     Widget section(String title, Widget child) => Padding(
           padding: const EdgeInsets.only(top: SteepleTokens.space6),
@@ -109,6 +110,16 @@ class _Detail extends ConsumerWidget {
                       '${venue.name} · ${venue.suburb}',
                       style: SteepleTypography.body.copyWith(color: colors.textSecondary),
                     ),
+                    if (rating != null) ...[
+                      const SizedBox(height: SteepleTokens.space1),
+                      Text(
+                        '★ ${rating.averageStars.toStringAsFixed(1)} (${rating.count})',
+                        style: SteepleTypography.bodySm.copyWith(
+                          color: colors.accent,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                     Text(
                       'Up to ${room.capacity} people',
                       style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),

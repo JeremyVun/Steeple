@@ -316,6 +316,7 @@ public sealed class ManageController : SteepleControllerBase
             {
                 Venue = venue,
                 Form = RestoreVenueForm(venue),
+                VerificationForm = RestoreVerificationForm(venue),
                 Flash = TempData["ManageFlash"] as string,
             });
         }
@@ -355,6 +356,42 @@ public sealed class ManageController : SteepleControllerBase
         {
             _logger.LogWarning(ex, "Venue update failed.");
             TempData["ManageError"] = "Couldn't reach the server — try again in a moment.";
+        }
+
+        return Redirect(Url.Content($"~/manage/venues/{id}"));
+    }
+
+    /// <summary>Submits venue ownership / lease-authority evidence for Admin review.</summary>
+    [RequireManageEnabled]
+    [HttpPost("/manage/venues/{id:guid}/verification")]
+    public async Task<IActionResult> SubmitVenueVerification(Guid id, VenueVerificationFormViewModel form, CancellationToken ct)
+    {
+
+        var accessToken = await AccessTokenOrNullAsync();
+        if (accessToken is null)
+        {
+            return await SignOutToLoginAsync();
+        }
+
+        form.VenueId = id;
+        try
+        {
+            var (venue, errorCode) = await _api.SubmitVenueVerificationAsync(accessToken, id, form.ToRequest(), ct);
+            if (venue is null)
+            {
+                TempData["VerificationError"] = VerificationErrorMessage(errorCode);
+                StashVerificationForm(id, form);
+            }
+            else
+            {
+                TempData["ManageFlash"] = "Verification request submitted — we'll review the documents before the venue's first listing goes live.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Venue verification submit failed.");
+            TempData["VerificationError"] = "Couldn't reach the server — try again in a moment.";
+            StashVerificationForm(id, form);
         }
 
         return Redirect(Url.Content($"~/manage/venues/{id}"));
@@ -650,6 +687,15 @@ public sealed class ManageController : SteepleControllerBase
         _ => "Couldn't save the venue. Try again in a moment.",
     };
 
+    private static string VerificationErrorMessage(string? errorCode) => errorCode switch
+    {
+        "already_verified" => "This venue is already verified.",
+        "verification_pending" => "This venue already has a verification request in review.",
+        "invalid_verification" => "Check the verification details — include your authority, a short summary, and at least one valid document link.",
+        "rate_limited" => "You're submitting quickly — give it a minute.",
+        _ => "Couldn't submit the verification request. Try again in a moment.",
+    };
+
     private static string RoomErrorMessage(string? errorCode) => errorCode switch
     {
         "invalid_room" => "Check the room details — a required field is missing or out of range.",
@@ -665,6 +711,15 @@ public sealed class ManageController : SteepleControllerBase
 
     private VenueFormViewModel RestoreVenueForm(ManagedVenueDetailDto venue) =>
         RestoreForm($"VenueForm:{venue.Id}", () => VenueFormViewModel.From(venue), (f, e) => f.Error = e);
+
+    private void StashVerificationForm(Guid id, VenueVerificationFormViewModel form) =>
+        StashForm($"VenueVerificationForm:{id}", form);
+
+    private VenueVerificationFormViewModel RestoreVerificationForm(ManagedVenueDetailDto venue) =>
+        RestoreForm(
+            $"VenueVerificationForm:{venue.Id}",
+            () => VenueVerificationFormViewModel.ForVenue(venue),
+            (f, _) => f.Error = TempData["VerificationError"] as string);
 
     private void StashRoomForm(Guid id, RoomFormViewModel form) => StashForm($"RoomForm:{id}", form);
 

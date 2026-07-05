@@ -16,6 +16,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="Activities">Accepted activity types as string tokens.</param>
 /// <param name="Photos">Room photos.</param>
 /// <param name="Venue">The owning venue.</param>
+/// <param name="Rating">Venue-level visible star-rating aggregate, if any ratings are revealed.</param>
 public record RoomDetailDto(
     Guid RoomId,
     string RoomSlug,
@@ -30,4 +31,5 @@ public record RoomDetailDto(
     IReadOnlyList<string> Accessibility,
     IReadOnlyList<string> Activities,
     IReadOnlyList<RoomPhotoDto> Photos,
-    VenueSummaryDto Venue);
+    VenueSummaryDto Venue,
+    RatingSummaryDto? Rating);

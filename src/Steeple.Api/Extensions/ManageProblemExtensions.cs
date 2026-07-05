@@ -13,8 +13,10 @@ public static class ManageProblemExtensions
         var status = error.Code switch
         {
             ManageErrorCodes.HasActiveBookings => StatusCodes.Status409Conflict,
+            ManageErrorCodes.AlreadyVerified => StatusCodes.Status409Conflict,
+            ManageErrorCodes.VerificationPending => StatusCodes.Status409Conflict,
             ManageErrorCodes.NotFound => StatusCodes.Status404NotFound,
-            // invalid_venue / invalid_room / invalid_photo / invalid_image / geofence_rejected / no_photos
+            // invalid_venue / invalid_room / invalid_photo / invalid_image / geofence_rejected / no_photos / invalid_verification
             _ => StatusCodes.Status400BadRequest,
         };
 

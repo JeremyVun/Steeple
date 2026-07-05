@@ -43,6 +43,12 @@
         : null;
     var hasGettingThere = !string.IsNullOrWhiteSpace(venue.ParkingInfo)
         || !string.IsNullOrWhiteSpace(venue.TransitInfo);
+    var reviews = ViewData["VenueReviews"] as VenueReviewPageDto
+        ?? new VenueReviewPageDto([], 0, 1, 5);
+    var hasReviewPrevious = reviews.Page > 1;
+    var hasReviewNext = reviews.Page * reviews.PageSize < reviews.TotalCount;
+    var previousReviewsUrl = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}?reviewsPage={reviews.Page - 1}#reviews");
+    var nextReviewsUrl = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}?reviewsPage={reviews.Page + 1}#reviews");
 
     // schema.org JSON-LD: the room as a Place, contained in the venue (a PlaceOfWorship for
     // churches), with address, geo, capacity, amenities and free/paid signal — for local rich
@@ -189,6 +195,12 @@
                         <span class="badge badge-price">$@Model.PricePerHour.Value.ToString("0.##")/hr</span>
                     }
                     <span class="keyfact">Up to @Model.Capacity people</span>
+                    @if (Model.Rating is { } rating)
+                    {
+                        <span class="keyfact keyfact-rating" aria-label="@BookingDisplay.RatingAverage(rating.AverageStars) out of 5 stars from @rating.Count ratings">
+                            <span aria-hidden="true">★</span> @BookingDisplay.RatingAverage(rating.AverageStars) (@rating.Count)
+                        </span>
+                    }
                 </div>
                 @if (Model.Activities.Count > 0)
                 {
@@ -214,6 +226,49 @@
                 <section class="detail-section">
                     <h2>House rules</h2>
                     <p class="detail-prose">@Model.HouseRules</p>
+                </section>
+            }
+
+            @if (reviews.TotalCount > 0)
+            {
+                <section class="detail-section" id="reviews">
+                    <h2>Reviews</h2>
+                    @if (Model.Rating is { } reviewRating)
+                    {
+                        <p class="reviews-summary">
+                            <span aria-hidden="true">★</span> @BookingDisplay.RatingAverage(reviewRating.AverageStars) average from @reviewRating.Count rating@(reviewRating.Count == 1 ? "" : "s")
+                        </p>
+                    }
+                    <ol class="review-list" role="list">
+                        @foreach (var review in reviews.Items)
+                        {
+                            <li class="review-item">
+                                <div class="review-head">
+                                    <strong aria-label="@BookingDisplay.StarsLabel(review.Stars)">@BookingDisplay.StarsVisual(review.Stars)</strong>
+                                    <span>@review.RaterName</span>
+                                    <time datetime="@review.CreatedAtUtc.ToString("O")">@review.CreatedAtUtc.ToString("MMM d, yyyy")</time>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(review.Comment))
+                                {
+                                    <p class="review-comment">@review.Comment</p>
+                                }
+                            </li>
+                        }
+                    </ol>
+                    @if (hasReviewPrevious || hasReviewNext)
+                    {
+                        <nav class="review-pager" aria-label="Review pages">
+                            @if (hasReviewPrevious)
+                            {
+                                <a class="btn btn-ghost btn-sm" href="@previousReviewsUrl">Previous</a>
+                            }
+                            <span>Page @reviews.Page of @Math.Max(1, (int)Math.Ceiling(reviews.TotalCount / (double)reviews.PageSize))</span>
+                            @if (hasReviewNext)
+                            {
+                                <a class="btn btn-ghost btn-sm" href="@nextReviewsUrl">Next</a>
+                            }
+                        </nav>
+                    }
                 </section>
             }
 

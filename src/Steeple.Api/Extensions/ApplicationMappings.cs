@@ -11,7 +11,10 @@ public static class ApplicationMappings
     /// Maps an application. List projections pass <paramref name="includeThread"/> false — the
     /// thread stays behind the detail endpoint; lists carry only the count.
     /// </summary>
-    public static ApplicationDto ToDto(this Application application, bool includeThread)
+    public static ApplicationDto ToDto(
+        this Application application,
+        bool includeThread,
+        OrganizerRatingSummaryDto? organizerRatingSummary = null)
     {
         var room = application.Room ?? throw new InvalidOperationException("Application loaded without its room.");
         var venue = room.Venue ?? throw new InvalidOperationException("Application loaded without its venue.");
@@ -26,7 +29,7 @@ public static class ApplicationMappings
             VenueName: venue.Name,
             VenueSlug: venue.Slug,
             RoomSlug: room.Slug,
-            Organizer: new OrganizerDto(organizer.Id, organizer.DisplayName),
+            Organizer: new OrganizerDto(organizer.Id, organizer.DisplayName, organizerRatingSummary),
             ActivityType: FlagEnumExtensions.ToCamelCaseToken(application.ActivityType.ToString()),
             GroupSize: application.GroupSize,
             Schedule: application.ToScheduleDto(),

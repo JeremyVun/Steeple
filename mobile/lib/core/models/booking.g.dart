@@ -6,6 +6,44 @@ part of 'booking.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+_SubmittedRating _$SubmittedRatingFromJson(Map<String, dynamic> json) =>
+    _SubmittedRating(
+      stars: (json['stars'] as num).toInt(),
+      comment: json['comment'] as String?,
+      createdAtUtc: DateTime.parse(json['createdAtUtc'] as String),
+    );
+
+Map<String, dynamic> _$SubmittedRatingToJson(_SubmittedRating instance) =>
+    <String, dynamic>{
+      'stars': instance.stars,
+      'comment': instance.comment,
+      'createdAtUtc': instance.createdAtUtc.toIso8601String(),
+    };
+
+_BookingRatings _$BookingRatingsFromJson(Map<String, dynamic> json) =>
+    _BookingRatings(
+      byOrganizer: json['byOrganizer'] == null
+          ? null
+          : SubmittedRating.fromJson(
+              json['byOrganizer'] as Map<String, dynamic>,
+            ),
+      byVenue: json['byVenue'] == null
+          ? null
+          : SubmittedRating.fromJson(json['byVenue'] as Map<String, dynamic>),
+      canRate: json['canRate'] as bool,
+      rateByUtc: json['rateByUtc'] == null
+          ? null
+          : DateTime.parse(json['rateByUtc'] as String),
+    );
+
+Map<String, dynamic> _$BookingRatingsToJson(_BookingRatings instance) =>
+    <String, dynamic>{
+      'byOrganizer': instance.byOrganizer,
+      'byVenue': instance.byVenue,
+      'canRate': instance.canRate,
+      'rateByUtc': instance.rateByUtc?.toIso8601String(),
+    };
+
 _Occurrence _$OccurrenceFromJson(Map<String, dynamic> json) => _Occurrence(
   id: json['id'] as String,
   startUtc: DateTime.parse(json['startUtc'] as String),
@@ -55,6 +93,9 @@ _Booking _$BookingFromJson(Map<String, dynamic> json) => _Booking(
           ?.map((e) => Occurrence.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const <Occurrence>[],
+  ratings: json['ratings'] == null
+      ? null
+      : BookingRatings.fromJson(json['ratings'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
@@ -79,4 +120,5 @@ Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
   'cancelReason': instance.cancelReason,
   'nextOccurrence': instance.nextOccurrence,
   'occurrences': instance.occurrences,
+  'ratings': instance.ratings,
 };

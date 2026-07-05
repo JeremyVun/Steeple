@@ -61,6 +61,17 @@ else
                             @DiscoveryViewModel.Humanize(app.ActivityType) · @app.GroupSize people ·
                             @ApplicationDisplay.DescribeSchedule(app.Schedule)
                         </p>
+                        @if (Model.IsProviderView && app.Organizer.RatingSummary is { } summary)
+                        {
+                            <p class="inbox-row-trust">
+                                <span aria-hidden="true">★</span> @BookingDisplay.RatingAverage(summary.AverageStars) (@summary.RatingCount)
+                                · @summary.CompletedBookings completed
+                                @if (summary.NoShowCount > 0)
+                                {
+                                    <text> · @summary.NoShowCount no-show@(summary.NoShowCount == 1 ? "" : "s")</text>
+                                }
+                            </p>
+                        }
                     </div>
                     <div class="inbox-row-side">
                         <partial name="_StatusChip" model="app.Status" />

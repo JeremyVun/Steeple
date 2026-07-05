@@ -107,6 +107,66 @@
         </div>
 
         <aside class="thread-aside">
+            @if (booking.Ratings is { } ratings)
+            {
+                <div class="decision-card rating-card">
+                    <p class="decision-heading">Ratings</p>
+                    @if (Model.OwnRating is { } own)
+                    {
+                        <p class="rating-line">
+                            <span>Your rating for @Model.RatingTargetName</span>
+                            <strong aria-label="@BookingDisplay.StarsLabel(own.Stars)">@BookingDisplay.StarsVisual(own.Stars)</strong>
+                        </p>
+                        @if (!string.IsNullOrWhiteSpace(own.Comment))
+                        {
+                            <p class="rating-comment">@own.Comment</p>
+                        }
+                    }
+                    else if (ratings.CanRate)
+                    {
+                        <form method="post" action="@Url.Content($"~/bookings/{booking.Id}/ratings")" class="rating-form">
+                            @Html.AntiForgeryToken()
+                            <fieldset>
+                                <legend>Rate @Model.RatingTargetName</legend>
+                                <div class="rating-options" role="radiogroup">
+                                    @for (var i = 1; i <= 5; i++)
+                                    {
+                                        <label class="rating-option">
+                                            <input type="radio" name="stars" value="@i" required />
+                                            <span>@i</span>
+                                        </label>
+                                    }
+                                </div>
+                            </fieldset>
+                            <label class="field-label" for="rating-comment">Review (optional)</label>
+                            <textarea class="form-input" id="rating-comment" name="comment" rows="3" maxlength="1000"
+                                      placeholder="What should the other side know for next time?"></textarea>
+                            @if (ratings.RateByUtc is { } by)
+                            {
+                                <p class="decision-note">Rate by @by.ToString("MMM d, yyyy").</p>
+                            }
+                            <button type="submit" class="btn btn-primary btn-block">Save rating</button>
+                        </form>
+                    }
+
+                    @if (Model.OtherRating is { } other)
+                    {
+                        <p class="rating-line">
+                            <span>@Model.OtherPartyName's rating</span>
+                            <strong aria-label="@BookingDisplay.StarsLabel(other.Stars)">@BookingDisplay.StarsVisual(other.Stars)</strong>
+                        </p>
+                        @if (!string.IsNullOrWhiteSpace(other.Comment))
+                        {
+                            <p class="rating-comment">@other.Comment</p>
+                        }
+                    }
+                    else if (Model.OwnRating is not null)
+                    {
+                        <p class="decision-note">Their rating is hidden for now.</p>
+                    }
+                </div>
+            }
+
             @if (booking.Status == "cancelled")
             {
                 <div class="withdraw-card">

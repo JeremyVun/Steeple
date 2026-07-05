@@ -25,6 +25,9 @@ public interface ISteepleApiClient
     /// <summary>Served-area context (name, center, beachhead) for framing the map and copy.</summary>
     Task<GeofenceContextDto> GetGeofenceAsync(CancellationToken ct = default);
 
+    /// <summary>Public, revealed review comments for a venue.</summary>
+    Task<VenueReviewPageDto> GetVenueReviewsAsync(Guid venueId, int page = 1, int pageSize = 10, CancellationToken ct = default);
+
     // --- Identity (the BFF's server-side calls; the browser never sees API tokens) ---
 
     /// <summary>
@@ -97,6 +100,10 @@ public interface ISteepleApiClient
     Task<(ManagedVenueDetailDto? Venue, string? ErrorCode)> UpdateVenueAsync(
         string accessToken, Guid id, SaveVenueRequest request, CancellationToken ct = default);
 
+    /// <summary>Submits ownership / lease-authority evidence for a managed venue.</summary>
+    Task<(ManagedVenueDetailDto? Venue, string? ErrorCode)> SubmitVenueVerificationAsync(
+        string accessToken, Guid id, SubmitVenueVerificationRequest request, CancellationToken ct = default);
+
     /// <summary>Full room detail for the provider's manage screens, or <c>null</c> when not found.</summary>
     Task<ManagedRoomDto?> GetManagedRoomAsync(string accessToken, Guid id, CancellationToken ct = default);
 
@@ -137,4 +144,7 @@ public interface ISteepleApiClient
     /// <summary>Marks a past occurrence as a no-show (either party marks the other).</summary>
     Task<(BookingDto? Booking, string? ErrorCode)> MarkNoShowAsync(
         string accessToken, Guid occurrenceId, CancellationToken ct = default);
+
+    /// <summary>Submits the caller's immutable rating for a booking.</summary>
+    Task<string?> SubmitRatingAsync(string accessToken, Guid bookingId, int stars, string? comment, CancellationToken ct = default);
 }

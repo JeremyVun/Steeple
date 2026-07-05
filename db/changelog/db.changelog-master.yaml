@@ -20,3 +20,9 @@ databaseChangeLog:
   - include:
       file: 006-manage.sql
       relativeToChangelogFile: true
+  - include:
+      file: 007-venue-verification.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 008-ratings.sql
+      relativeToChangelogFile: true

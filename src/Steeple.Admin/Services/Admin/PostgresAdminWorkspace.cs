@@ -137,14 +137,26 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 a.CreatedAtUtc))
             .ToList();
 
-        // Phase 5 moderation queue: publish requests + provider-edited live listings.
-        var publishRequests = db.Rooms
+        // Phase 5 moderation queue: publish requests + provider-edited live listings. Venue
+        // verification requests share the panel because listing approval is now gated on them.
+        var publishRequestRooms = db.Rooms
             .AsNoTracking()
             .Include(r => r.Venue)
             .Include(r => r.Photos)
             .Where(r => r.PublishRequestedAtUtc != null)
             .OrderBy(r => r.PublishRequestedAtUtc)
+            .ToList();
+
+        var publishVenueIds = publishRequestRooms.Select(r => r.VenueId).Distinct().ToList();
+        var latestVerificationByVenue = db.VenueVerificationRequests
+            .AsNoTracking()
+            .Where(r => publishVenueIds.Contains(r.VenueId))
+            .OrderByDescending(r => r.RequestedAtUtc)
             .ToList()
+            .GroupBy(r => r.VenueId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        var publishRequests = publishRequestRooms
             .Select(r => new AdminPublishRequestRow(
                 r.Id,
                 r.Venue!.Name,
@@ -154,11 +166,39 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 r.PricePerHour == null || r.PricePerHour <= 0m ? "Free" : "$" + ((int)r.PricePerHour) + "/hr",
                 r.Photos.Count,
                 r.PublishRequestedAtUtc!.Value,
+                DisplayVenueVerificationStatus(
+                    r.Venue.IsIdentityVerified,
+                    latestVerificationByVenue.GetValueOrDefault(r.VenueId)?.Status),
                 r.Description,
                 r.Photos
                     .OrderBy(p => p.SortOrder)
                     .Take(4)
                     .Select(p => p.ThumbUrl ?? p.Url)
+                    .ToList()))
+            .ToList();
+
+        var verificationRequests = db.VenueVerificationRequests
+            .AsNoTracking()
+            .Include(r => r.Venue)
+            .Include(r => r.RequestedByUser)
+            .Include(r => r.Documents)
+            .Where(r => r.Status == VenueVerificationStatus.Pending)
+            .OrderBy(r => r.RequestedAtUtc)
+            .ToList()
+            .Select(r => new AdminVenueVerificationRequestRow(
+                r.Id,
+                r.VenueId,
+                r.Venue!.Name,
+                r.Venue.Suburb,
+                r.RequestedByUser?.DisplayName ?? "Unknown host",
+                r.RequestedByUser?.Email ?? "—",
+                r.ContactName,
+                r.ContactEmail,
+                r.EvidenceSummary,
+                r.RequestedAtUtc,
+                r.Documents
+                    .OrderBy(d => d.CreatedAtUtc)
+                    .Select(d => new AdminVenueVerificationDocumentRow(d.Label, d.ExternalUrl))
                     .ToList()))
             .ToList();
 
@@ -175,9 +215,34 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
             .ToList()
             .Select(v => new AdminEditedListingRow(v.Id, true, v.Name, null, v.ProviderEditedAtUtc!.Value));
 
+        var ratingComments = db.Ratings
+            .AsNoTracking()
+            .Include(r => r.Booking!).ThenInclude(b => b.Room!).ThenInclude(r => r.Venue)
+            .Include(r => r.Rater)
+            .Include(r => r.Organizer)
+            .Where(r => r.Comment != null && r.Comment != "")
+            .OrderByDescending(r => r.CreatedAtUtc)
+            .Take(100)
+            .ToList()
+            .Select(r => new AdminRatingCommentRow(
+                r.Id,
+                r.Booking?.Room?.Venue?.Name ?? "Unknown venue",
+                r.Booking?.Room?.Name ?? "Unknown room",
+                r.Rater?.DisplayName ?? "Unknown user",
+                r.RateeType == RatingRateeType.Venue
+                    ? r.Booking?.Room?.Venue?.Name ?? "Venue"
+                    : r.Organizer?.DisplayName ?? "Organizer",
+                r.Stars,
+                r.Comment!,
+                r.CreatedAtUtc,
+                r.HiddenAtUtc))
+            .ToList();
+
         var moderation = new AdminModerationViewModel(
             publishRequests,
-            editedRooms.Concat(editedVenues).OrderBy(e => e.EditedAt).ToList());
+            verificationRequests,
+            editedRooms.Concat(editedVenues).OrderBy(e => e.EditedAt).ToList(),
+            ratingComments);
 
         var venueManagers = db.VenueManagers
             .AsNoTracking()
@@ -232,8 +297,8 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 Metrics:
                 [
                     new("Pending applications", pendingApplications.ToString(), "Awaiting a decision", pendingApplications > 0 ? "warn" : "good"),
-                    new("Moderation queue", (publishRequests.Count + moderation.EditedListings.Count).ToString(),
-                        "Publish requests + edited listings", publishRequests.Count > 0 ? "warn" : "good"),
+                    new("Moderation queue", (publishRequests.Count + verificationRequests.Count + moderation.EditedListings.Count).ToString(),
+                        "Publish, verification, edited listings", publishRequests.Count + verificationRequests.Count > 0 ? "warn" : "good"),
                     new("Published listings", publishedCount.ToString(), "Live in discovery", "good"),
                     new("Accounts", userCount.ToString(), "SSO sign-ups", "good"),
                     new("Tracked events", events.Count.ToString(), "Legacy Postgres stream (pre-Loki)", "good"),
@@ -387,6 +452,11 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
             return "That publish request is gone — someone else may have decided it.";
         }
 
+        if (approve && !room.Venue!.IsIdentityVerified)
+        {
+            return $"Verify {room.Venue.Name}'s ownership or lease authority before approving a listing.";
+        }
+
         var now = DateTimeOffset.UtcNow;
         room.PublishRequestedAtUtc = null;
         if (approve)
@@ -447,6 +517,51 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
     }
 
     /// <inheritdoc />
+    public string? DecideVenueVerification(Guid requestId, bool approve, string? note, string operatorUser)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SteepleDbContext>();
+
+        var request = db.VenueVerificationRequests
+            .Include(r => r.Venue)
+            .FirstOrDefault(r => r.Id == requestId);
+        if (request is null || request.Status != VenueVerificationStatus.Pending)
+        {
+            return "That verification request is gone — someone else may have decided it.";
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        request.Status = approve ? VenueVerificationStatus.Approved : VenueVerificationStatus.Declined;
+        request.DecidedAtUtc = now;
+        request.DecidedBy = operatorUser;
+        request.DecisionNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (approve)
+        {
+            request.Venue!.IsIdentityVerified = true;
+            request.Venue.UpdatedAtUtc = now;
+        }
+
+        db.SaveChanges();
+
+        _logger.LogInformation(
+            "analytics_event {EventType} {OccurredAtUtc} {SessionId} {PayloadJson}",
+            "venue_verification_decided",
+            now.ToString("o"),
+            "admin",
+            System.Text.Json.JsonSerializer.Serialize(
+                new
+                {
+                    venueId = request.VenueId,
+                    requestId = request.Id,
+                    outcome = approve ? "approved" : "declined",
+                    actor = operatorUser,
+                },
+                PayloadJsonOptions));
+
+        return null;
+    }
+
+    /// <inheritdoc />
     public void MarkRoomReviewed(Guid roomId, string operatorUser)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -464,6 +579,21 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
         db.Venues.Where(v => v.Id == venueId)
             .ExecuteUpdate(s => s.SetProperty(v => v.ProviderEditedAtUtc, (DateTimeOffset?)null));
         _logger.LogInformation("Moderation: {Actor} marked venue {VenueId} reviewed.", operatorUser, venueId);
+    }
+
+    /// <inheritdoc />
+    public void SetRatingHidden(Guid ratingId, bool hidden, string operatorUser)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<SteepleDbContext>();
+        var hiddenAt = hidden ? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
+        db.Ratings.Where(r => r.Id == ratingId)
+            .ExecuteUpdate(s => s.SetProperty(r => r.HiddenAtUtc, hiddenAt));
+        _logger.LogInformation(
+            "Moderation: {Actor} {Action} rating {RatingId}.",
+            operatorUser,
+            hidden ? "hid" : "restored",
+            ratingId);
     }
 
     /// <inheritdoc />
@@ -516,6 +646,21 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
         RoomStatus.Unlisted => "Paused",
         _ => status.ToString(),
     };
+
+    private static string DisplayVenueVerificationStatus(bool isVerified, VenueVerificationStatus? latestRequestStatus)
+    {
+        if (isVerified)
+        {
+            return "Verified";
+        }
+
+        return latestRequestStatus switch
+        {
+            VenueVerificationStatus.Pending => "Verification pending",
+            VenueVerificationStatus.Declined => "Verification declined",
+            _ => "Unverified",
+        };
+    }
 
     private static RoomStatus? ParseStatus(string status) => status switch
     {

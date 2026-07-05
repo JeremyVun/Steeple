@@ -71,6 +71,13 @@ public class ManageServiceIntegrationTests
         Amenities: null,
         Accessibility: null);
 
+    private static SubmitVenueVerificationRequest NewVerificationRequest() => new(
+        ContactName: "Provider Pat",
+        ContactEmail: "pat@example.com",
+        EvidenceSummary: "Signed facilities lease authorizing this manager to list rooms for community use.",
+        AttestedAuthority: true,
+        Documents: [new VenueVerificationDocumentRequest("Facilities lease", "https://docs.example.org/facilities-lease.pdf")]);
+
     // ----- CRUD happy path: create venue -> create room -> request publish -------------------
 
     [Fact]
@@ -161,6 +168,44 @@ public class ManageServiceIntegrationTests
         {
             var venue = await verifyDb.Venues.SingleAsync(v => v.Id == venueId);
             Assert.Equal("New Community Venue", venue.Name); // unchanged
+        }
+    }
+
+    [Fact]
+    public async Task SubmitVenueVerificationAsync_ValidRequest_PersistsDocumentsAndPendingStatus()
+    {
+        var provider = NewUser();
+        await using (var seedDb = CreateContext())
+        {
+            seedDb.Users.Add(provider);
+            await seedDb.SaveChangesAsync();
+        }
+
+        Guid venueId;
+        await using (var db = CreateContext())
+        {
+            var service = CreateService(db);
+            var venueResult = await service.CreateVenueAsync(provider.Id, NewSaveVenueRequest("Verification Test Venue"));
+            venueId = venueResult.Value!.Id;
+
+            var result = await service.SubmitVenueVerificationAsync(provider.Id, venueId, NewVerificationRequest());
+
+            Assert.Null(result.Error);
+            Assert.Equal("pending", result.Value!.VerificationStatus);
+            Assert.False(result.Value.IsIdentityVerified);
+        }
+
+        await using (var verifyDb = CreateContext())
+        {
+            var request = await verifyDb.VenueVerificationRequests
+                .Include(r => r.Documents)
+                .SingleAsync(r => r.VenueId == venueId);
+
+            Assert.Equal(provider.Id, request.RequestedByUserId);
+            Assert.Equal(VenueVerificationStatus.Pending, request.Status);
+            Assert.True(request.AttestedAuthority);
+            Assert.Single(request.Documents);
+            Assert.Equal("Facilities lease", request.Documents.Single().Label);
         }
     }
 

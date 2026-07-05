@@ -60,8 +60,26 @@ public sealed record AdminPublishRequestRow(
     string Price,
     int PhotoCount,
     DateTimeOffset RequestedAt,
+    string VenueVerificationStatus,
     string Description,
     IReadOnlyList<string> PhotoThumbUrls);
+
+/// <summary>A host's ownership / lease-authority verification request awaiting review.</summary>
+public sealed record AdminVenueVerificationRequestRow(
+    Guid RequestId,
+    Guid VenueId,
+    string Venue,
+    string Suburb,
+    string RequestedByName,
+    string RequestedByEmail,
+    string ContactName,
+    string? ContactEmail,
+    string EvidenceSummary,
+    DateTimeOffset RequestedAt,
+    IReadOnlyList<AdminVenueVerificationDocumentRow> Documents);
+
+/// <summary>One document link inside an Admin venue-verification request.</summary>
+public sealed record AdminVenueVerificationDocumentRow(string Label, string ExternalUrl);
 
 /// <summary>A live listing (room) or venue edited by its provider since the last operator review.</summary>
 public sealed record AdminEditedListingRow(
@@ -71,9 +89,23 @@ public sealed record AdminEditedListingRow(
     string? Room,
     DateTimeOffset EditedAt);
 
+/// <summary>A submitted review comment visible to Admin moderation.</summary>
+public sealed record AdminRatingCommentRow(
+    Guid Id,
+    string Venue,
+    string Room,
+    string RaterName,
+    string RatedSide,
+    int Stars,
+    string Comment,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? HiddenAt);
+
 public sealed record AdminModerationViewModel(
     IReadOnlyList<AdminPublishRequestRow> PublishRequests,
-    IReadOnlyList<AdminEditedListingRow> EditedListings);
+    IReadOnlyList<AdminVenueVerificationRequestRow> VerificationRequests,
+    IReadOnlyList<AdminEditedListingRow> EditedListings,
+    IReadOnlyList<AdminRatingCommentRow> RatingComments);
 
 public sealed record AdminVenueManagerRow(
     Guid Id,

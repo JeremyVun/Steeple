@@ -19,6 +19,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="Activities">Accepted activity types as string tokens.</param>
 /// <param name="Accessibility">Accessibility features as string tokens.</param>
 /// <param name="DistanceMeters">Distance from the search center in metres, if computed.</param>
+/// <param name="Rating">Venue-level visible star-rating aggregate, if any ratings are revealed.</param>
 public record RoomSummaryDto(
     Guid RoomId,
     Guid VenueId,
@@ -36,4 +37,5 @@ public record RoomSummaryDto(
     double Longitude,
     IReadOnlyList<string> Activities,
     IReadOnlyList<string> Accessibility,
-    double? DistanceMeters);
+    double? DistanceMeters,
+    RatingSummaryDto? Rating);

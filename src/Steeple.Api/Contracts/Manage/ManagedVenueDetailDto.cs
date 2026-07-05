@@ -19,4 +19,6 @@ public record ManagedVenueDetailDto(
     double Longitude,
     string Timezone,
     bool IsIdentityVerified,
+    string VerificationStatus,
+    DateTimeOffset? VerificationRequestedAtUtc,
     IReadOnlyList<ManagedRoomSummaryDto> Rooms);

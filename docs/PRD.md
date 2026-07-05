@@ -216,6 +216,7 @@ The irreducible end-to-end loop, so the founder can put a working demo in real h
 - **No-shows & cancellations.** Either side can cancel with notice; the other party is notified and the slot is freed. No-shows are markable and **feed the two-way trust/rating profile** — for free bookings the deterrent is *reputational*, since there is no money to forfeit. *Needs: cancel flow + notice window + notifications + no-show marking (both directions).*
 - **Double-booking.** Once a slot is approved/confirmed it is **locked** and cannot be booked again. Concurrent applications for the same slot resolve **first-approval-wins**; the rest are auto-declined and notified. *Needs: availability/calendar integrity + concurrency handling.*
 - **Listing pulled / edited mid-recurring-booking.** **Confirmed recurring bookings are protected** — removing or editing a listing does not silently cancel existing commitments; ending one requires an explicit cancellation with notice that notifies the organizer. *Needs: listing lifecycle that honors active bookings + graceful cancellation path.*
+- **Fake / spoofed listings.** A host must submit proof of ownership or lease/listing authority before Admin can approve a venue's first listing. Steeple stores review metadata and links to externally hosted proof documents, not raw sensitive document contents.
 
 **Handled by two-way reviews & ratings:**
 
@@ -225,7 +226,7 @@ The irreducible end-to-end loop, so the founder can put a working demo in real h
 **Consciously deferred — with honest caveats:**
 
 - **Off-platform leakage** (church + organizer transact directly after the first match, especially on recurring bookings). *Ratings do **not** address this — it is a revenue-leakage issue, not a UX one. Acceptable to defer because the free-as-hero, tiny-take economics make the motive to defect low. Revisit if/when paid bookings dominate.*
-- **Fake / spoofed listings.** *In early v1 this is effectively prevented by **concierge supply onboarding** (the founder personally lists known churches), not by ratings. At scale, supplier verification + ratings take over.*
+- **Forged supplier evidence.** Verification reduces spoofed listings but does not make Steeple a title company or legal authority; suspicious documents still require founder/operator judgment and, where needed, off-platform follow-up with the institution.
 
 ## Architecture (POC)
 

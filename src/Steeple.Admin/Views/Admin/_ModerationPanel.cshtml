@@ -27,6 +27,7 @@
                             <th>Capacity</th>
                             <th>Price</th>
                             <th>Photos</th>
+                            <th>Venue verification</th>
                             <th>Requested</th>
                             <th>Decision</th>
                         </tr>
@@ -56,6 +57,7 @@
                             <td>@request.Capacity</td>
                             <td>@request.Price</td>
                             <td>@(request.PhotoCount == 0 ? "none ⚠" : request.PhotoCount.ToString())</td>
+                            <td><span class="admin-status">@request.VenueVerificationStatus</span></td>
                             <td>@request.RequestedAt.ToString("MMM d, HH:mm")</td>
                             <td>
                                 <form class="admin-inline-form"
@@ -64,6 +66,67 @@
                                     <input type="text" name="note" placeholder="Note to the church (optional)"
                                            aria-label="Note to the church for @request.Venue @request.Room" />
                                     <button type="submit" name="decision" value="approve">Approve &amp; publish</button>
+                                    <button type="submit" name="decision" value="decline" class="admin-link-danger">Decline</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-verification-requests-heading">
+        <h3 id="admin-verification-requests-heading">Venue verification</h3>
+        <p class="admin-hint">Review proof that a host owns the venue or is authorized to lease/list its rooms. Approval unlocks listing approval for that venue.</p>
+        @if (queue.VerificationRequests.Count == 0)
+        {
+            <p class="admin-empty">No venues are waiting for ownership or lease-authority review.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Venue</th>
+                            <th>Host</th>
+                            <th>Evidence</th>
+                            <th>Requested</th>
+                            <th>Decision</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var request in queue.VerificationRequests)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@request.Venue</strong>
+                                <span>@request.Suburb</span>
+                            </td>
+                            <td>
+                                <strong>@request.ContactName</strong>
+                                <span>@(request.ContactEmail ?? request.RequestedByEmail)</span>
+                                <span>Submitted by @request.RequestedByName</span>
+                            </td>
+                            <td>
+                                <p class="admin-preview-description">@request.EvidenceSummary</p>
+                                <ul class="admin-document-list">
+                                    @foreach (var document in request.Documents)
+                                    {
+                                        <li><a href="@document.ExternalUrl" target="_blank" rel="noopener noreferrer">@document.Label</a></li>
+                                    }
+                                </ul>
+                            </td>
+                            <td>@request.RequestedAt.ToString("MMM d, HH:mm")</td>
+                            <td>
+                                <form class="admin-inline-form"
+                                      hx-post="@Url.Content($"~/admin/moderation/verification/{request.RequestId}/decide")"
+                                      hx-target="#admin-moderation-panel" hx-swap="outerHTML">
+                                    <input type="text" name="note" placeholder="Operator note (optional)"
+                                           aria-label="Verification note for @request.Venue" />
+                                    <button type="submit" name="decision" value="approve">Verify venue</button>
                                     <button type="submit" name="decision" value="decline" class="admin-link-danger">Decline</button>
                                 </form>
                             </td>
@@ -109,6 +172,69 @@
                                     <input type="hidden" name="id" value="@edited.Id" />
                                     <input type="hidden" name="kind" value="@(edited.IsVenue ? "venue" : "room")" />
                                     <button type="submit">Mark reviewed</button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-rating-comments-heading">
+        <h3 id="admin-rating-comments-heading">Review comments</h3>
+        <p class="admin-hint">Recent public review comments. Hiding a comment removes its whole rating from public reviews and aggregates; restoring makes it eligible again under the double-blind reveal rule.</p>
+        @if (queue.RatingComments.Count == 0)
+        {
+            <p class="admin-empty">No review comments have been submitted yet.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Review</th>
+                            <th>Listing</th>
+                            <th>Submitted</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var rating in queue.RatingComments)
+                    {
+                        var isHidden = rating.HiddenAt is not null;
+                        <tr class="@(isHidden ? "admin-muted-row" : "")">
+                            <td>
+                                <strong>@(new string('★', Math.Clamp(rating.Stars, 1, 5)))</strong>
+                                <span>@rating.RaterName &rarr; @rating.RatedSide</span>
+                                <p class="admin-review-comment">@rating.Comment</p>
+                            </td>
+                            <td>
+                                <strong>@rating.Venue</strong>
+                                <span>@rating.Room</span>
+                            </td>
+                            <td>@rating.CreatedAt.ToString("MMM d, HH:mm")</td>
+                            <td>
+                                @if (isHidden)
+                                {
+                                    <span class="admin-status admin-status-muted">Hidden</span>
+                                }
+                                else
+                                {
+                                    <span class="admin-status">Visible</span>
+                                }
+                            </td>
+                            <td>
+                                <form class="admin-inline-form"
+                                      hx-post="@Url.Content($"~/admin/moderation/ratings/{rating.Id}/visibility")"
+                                      hx-target="#admin-moderation-panel" hx-swap="outerHTML">
+                                    <input type="hidden" name="hidden" value="@(isHidden ? "false" : "true")" />
+                                    <button type="submit" class="@(isHidden ? "" : "admin-link-danger")">
+                                        @(isHidden ? "Restore" : "Hide")
+                                    </button>
                                 </form>
                             </td>
                         </tr>

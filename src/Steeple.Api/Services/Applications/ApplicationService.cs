@@ -24,6 +24,7 @@ public sealed class ApplicationService : IApplicationService
     private readonly IApplicationRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IBookingService _bookings;
+    private readonly IRatingService _ratings;
     private readonly INotificationDispatcher _notifications;
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
@@ -34,6 +35,7 @@ public sealed class ApplicationService : IApplicationService
         IApplicationRepository repository,
         IVenueManagerRepository venueManagers,
         IBookingService bookings,
+        IRatingService ratings,
         INotificationDispatcher notifications,
         ITurnstileVerifier turnstile,
         IAnalyticsSink analytics,
@@ -42,6 +44,7 @@ public sealed class ApplicationService : IApplicationService
         _repository = repository;
         _venueManagers = venueManagers;
         _bookings = bookings;
+        _ratings = ratings;
         _notifications = notifications;
         _turnstile = turnstile;
         _analytics = analytics;
@@ -182,8 +185,12 @@ public sealed class ApplicationService : IApplicationService
 
         await SweepExpiredAsync(items, ct).ConfigureAwait(false);
 
+        var summaries = await GetOrganizerSummariesAsync(items, ct).ConfigureAwait(false);
         return ApplicationResult<ApplicationListResult>.Ok(new ApplicationListResult(
-            items.Select(a => a.ToDto(includeThread: false)).ToList(), total, page, pageSize));
+            items.Select(a => a.ToDto(includeThread: false, summaries.GetValueOrDefault(a.OrganizerId))).ToList(),
+            total,
+            page,
+            pageSize));
     }
 
     /// <inheritdoc />
@@ -196,7 +203,10 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application!], ct).ConfigureAwait(false);
-        return ApplicationResult<ApplicationDto>.Ok(application!.ToDto(includeThread: true));
+        var summary = application!.OrganizerId == callerId
+            ? null
+            : (await GetOrganizerSummariesAsync([application], ct).ConfigureAwait(false)).GetValueOrDefault(application.OrganizerId);
+        return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true, summary));
     }
 
     /// <inheritdoc />
@@ -260,8 +270,11 @@ public sealed class ApplicationService : IApplicationService
             await NotifyOrganizerAsync(application, NotificationType.ApplicationMessage, email, ct).ConfigureAwait(false);
         }
 
-        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false);
-        return ApplicationResult<ApplicationDto>.Ok((refreshed ?? application).ToDto(includeThread: true));
+        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
+        var summary = refreshed.OrganizerId == callerId
+            ? null
+            : (await GetOrganizerSummariesAsync([refreshed], ct).ConfigureAwait(false)).GetValueOrDefault(refreshed.OrganizerId);
+        return ApplicationResult<ApplicationDto>.Ok(refreshed.ToDto(includeThread: true, summary));
     }
 
     /// <inheritdoc />
@@ -393,8 +406,11 @@ public sealed class ApplicationService : IApplicationService
             },
             ct).ConfigureAwait(false);
 
-        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false);
-        return ApplicationResult<ApplicationDto>.Ok((refreshed ?? application).ToDto(includeThread: true));
+        var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
+        var summary = refreshed.OrganizerId == callerId
+            ? null
+            : (await GetOrganizerSummariesAsync([refreshed], ct).ConfigureAwait(false)).GetValueOrDefault(refreshed.OrganizerId);
+        return ApplicationResult<ApplicationDto>.Ok(refreshed.ToDto(includeThread: true, summary));
     }
 
     /// <inheritdoc />
@@ -427,6 +443,14 @@ public sealed class ApplicationService : IApplicationService
     }
 
     // ----- Party scoping & state helpers --------------------------------------------------------
+
+    private async Task<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>> GetOrganizerSummariesAsync(
+        IReadOnlyList<Application> applications,
+        CancellationToken ct)
+    {
+        var organizerIds = applications.Select(a => a.OrganizerId).Distinct().ToList();
+        return await _ratings.GetOrganizerSummariesAsync(organizerIds, _clock.GetUtcNow(), ct).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Loads the application and verifies the caller is a party (organizer or a manager of the

@@ -64,7 +64,7 @@ public sealed class DiscoveryController : SteepleControllerBase
     /// Shareable listing detail page, addressed by venue + room slug (the canonical URL).
     /// </summary>
     [HttpGet("space/{venueSlug}/{roomSlug}")]
-    public async Task<IActionResult> Detail(string venueSlug, string roomSlug, CancellationToken ct)
+    public async Task<IActionResult> Detail(string venueSlug, string roomSlug, [FromQuery] int reviewsPage = 1, CancellationToken ct = default)
     {
         EnsureSessionId();
         var dto = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
@@ -83,6 +83,9 @@ public sealed class DiscoveryController : SteepleControllerBase
         {
             ViewData["OgImage"] = primaryPhoto;
         }
+        ViewData["VenueReviews"] = await _api
+            .GetVenueReviewsAsync(dto.Venue.VenueId, reviewsPage, pageSize: 5, ct)
+            .ConfigureAwait(false);
         SetPreconnectOrigins(dto.Photos.Select(p => p.Url));
 
         return View(dto);

@@ -25,9 +25,10 @@ class MyBookingsNotifier extends AsyncNotifier<List<Booking>> {
   }
 }
 
-final myBookingsProvider = AsyncNotifierProvider<MyBookingsNotifier, List<Booking>>(
-  MyBookingsNotifier.new,
-);
+final myBookingsProvider =
+    AsyncNotifierProvider<MyBookingsNotifier, List<Booking>>(
+      MyBookingsNotifier.new,
+    );
 
 /// Keyed by booking id; family instances are kept alive so returning to a
 /// detail screen after a background refresh doesn't refetch needlessly.
@@ -48,7 +49,9 @@ class BookingDetailNotifier extends AsyncNotifier<Booking> {
   }
 
   Future<void> cancel({String? reason}) async {
-    final updated = await ref.read(bookingsRepositoryProvider).cancel(bookingId, reason: reason);
+    final updated = await ref
+        .read(bookingsRepositoryProvider)
+        .cancel(bookingId, reason: reason);
     state = AsyncData(updated);
   }
 
@@ -56,8 +59,34 @@ class BookingDetailNotifier extends AsyncNotifier<Booking> {
     await ref.read(bookingsRepositoryProvider).markNoShow(occurrenceId);
     await refresh();
   }
+
+  Future<void> rate(int stars, {String? comment}) async {
+    await ref
+        .read(bookingsRepositoryProvider)
+        .rate(bookingId, stars: stars, comment: comment);
+    final current = state.value;
+    final ratings = current?.ratings;
+    if (current == null || ratings == null) {
+      await refresh();
+      return;
+    }
+
+    state = AsyncData(
+      current.copyWith(
+        ratings: ratings.copyWith(
+          byOrganizer: SubmittedRating(
+            stars: stars,
+            comment: comment,
+            createdAtUtc: DateTime.now().toUtc(),
+          ),
+          canRate: false,
+        ),
+      ),
+    );
+  }
 }
 
-final bookingDetailProvider = AsyncNotifierProvider.family<BookingDetailNotifier, Booking, String>(
-  BookingDetailNotifier.new,
-);
+final bookingDetailProvider =
+    AsyncNotifierProvider.family<BookingDetailNotifier, Booking, String>(
+      BookingDetailNotifier.new,
+    );

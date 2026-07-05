@@ -12,17 +12,23 @@ public sealed class ListingService : IListingService
 
     private readonly IRoomRepository _rooms;
     private readonly IGeofencePolicy _geofence;
+    private readonly IRatingService _ratings;
     private readonly IAnalyticsSink _analytics;
+    private readonly TimeProvider _clock;
 
     /// <summary>Creates the service from its repository, geofence, and analytics ports.</summary>
     public ListingService(
         IRoomRepository rooms,
         IGeofencePolicy geofence,
-        IAnalyticsSink analytics)
+        IRatingService ratings,
+        IAnalyticsSink analytics,
+        TimeProvider clock)
     {
         _rooms = rooms;
         _geofence = geofence;
+        _ratings = ratings;
         _analytics = analytics;
+        _clock = clock;
     }
 
     /// <inheritdoc />
@@ -53,6 +59,12 @@ public sealed class ListingService : IListingService
 
         var rooms = await _rooms.SearchAsync(criteria, ct).ConfigureAwait(false);
         var totalCount = await _rooms.CountAsync(criteria, ct).ConfigureAwait(false);
+        var ratingSummaries = await _ratings
+            .GetVenueSummariesAsync(
+                rooms.Select(r => r.VenueId).Distinct().ToList(),
+                _clock.GetUtcNow(),
+                ct)
+            .ConfigureAwait(false);
 
         IEnumerable<RoomSummaryDto> items;
         if (searchCenter is { } c)
@@ -64,14 +76,14 @@ public sealed class ListingService : IListingService
                     var distance = venue is null
                         ? (double?)null
                         : GeoMath.DistanceMeters(c.Latitude, c.Longitude, venue.Latitude, venue.Longitude);
-                    return room.ToSummaryDto(distance);
+                    return room.ToSummaryDto(distance, ratingSummaries.GetValueOrDefault(room.VenueId));
                 })
                 .OrderBy(dto => dto.DistanceMeters ?? double.MaxValue);
         }
         else
         {
             items = rooms
-                .Select(room => room.ToSummaryDto())
+                .Select(room => room.ToSummaryDto(rating: ratingSummaries.GetValueOrDefault(room.VenueId)))
                 .OrderBy(dto => dto.VenueName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(dto => dto.RoomName, StringComparer.OrdinalIgnoreCase);
         }
@@ -152,11 +164,14 @@ public sealed class ListingService : IListingService
             return null;
         }
 
-        var dto = room.ToDetailDto();
+        var ratingSummaries = await _ratings
+            .GetVenueSummariesAsync([venue.Id], _clock.GetUtcNow(), ct)
+            .ConfigureAwait(false);
+        var dto = room.ToDetailDto(ratingSummaries.GetValueOrDefault(venue.Id));
 
         await TrackSafelyAsync(
             "listing_viewed",
-            new { roomId = room.Id },
+            new { roomId = room.Id, venueId = venue.Id },
             ct).ConfigureAwait(false);
 
         return dto;

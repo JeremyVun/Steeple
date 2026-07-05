@@ -34,6 +34,7 @@
     <Using Include="Steeple.Api.Services.Identity" />
     <Using Include="Steeple.Api.Services.Applications" />
     <Using Include="Steeple.Api.Services.Bookings" />
+    <Using Include="Steeple.Api.Services.Ratings" />
     <Using Include="Steeple.Api.Services.Manage" />
     <Using Include="Steeple.Api.Services.Media" />
     <Using Include="Steeple.Api.Services.Notifications" />
@@ -41,6 +42,7 @@
     <Using Include="Steeple.Api.Proxies.Identity" />
     <Using Include="Steeple.Api.Proxies.Applications" />
     <Using Include="Steeple.Api.Proxies.Bookings" />
+    <Using Include="Steeple.Api.Proxies.Ratings" />
     <Using Include="Steeple.Api.Proxies.Manage" />
     <Using Include="Steeple.Api.Proxies.Media" />
     <Using Include="Steeple.Api.Proxies.Notifications" />

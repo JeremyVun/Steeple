@@ -42,6 +42,12 @@ public class SteepleDbContext : DbContext
     /// <summary>Venue-manager authorization links (who may act for a venue).</summary>
     public DbSet<VenueManager> VenueManagers => Set<VenueManager>();
 
+    /// <summary>Host-submitted venue ownership / lease-authority verification requests.</summary>
+    public DbSet<VenueVerificationRequest> VenueVerificationRequests => Set<VenueVerificationRequest>();
+
+    /// <summary>Document metadata attached to venue verification requests.</summary>
+    public DbSet<VenueVerificationDocument> VenueVerificationDocuments => Set<VenueVerificationDocument>();
+
     /// <summary>Organizer applications for a room's proposed schedule.</summary>
     public DbSet<Application> Applications => Set<Application>();
 
@@ -59,6 +65,9 @@ public class SteepleDbContext : DbContext
 
     /// <summary>Materialized UTC occurrences protected by the exclusion constraint.</summary>
     public DbSet<BookingOccurrence> BookingOccurrences => Set<BookingOccurrence>();
+
+    /// <summary>Immutable two-way booking ratings.</summary>
+    public DbSet<Rating> Ratings => Set<Rating>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -8,6 +8,12 @@ abstract class ListingRepository {
   Future<RoomDetail> bySlug(String venueSlug, String roomSlug);
 
   Future<RoomDetail> byId(String id);
+
+  Future<VenueReviewPage> reviews(
+    String venueId, {
+    int page = 1,
+    int pageSize = 10,
+  });
 }
 
 class ApiListingRepository implements ListingRepository {
@@ -17,13 +23,24 @@ class ApiListingRepository implements ListingRepository {
 
   @override
   Future<RoomDetail> bySlug(String venueSlug, String roomSlug) => _api.get(
-        '/api/v1/listings/by-slug/$venueSlug/$roomSlug',
-        decode: (data) => RoomDetail.fromJson(data as Map<String, dynamic>),
-      );
+    '/api/v1/listings/by-slug/$venueSlug/$roomSlug',
+    decode: (data) => RoomDetail.fromJson(data as Map<String, dynamic>),
+  );
 
   @override
   Future<RoomDetail> byId(String id) => _api.get(
-        '/api/v1/listings/$id',
-        decode: (data) => RoomDetail.fromJson(data as Map<String, dynamic>),
-      );
+    '/api/v1/listings/$id',
+    decode: (data) => RoomDetail.fromJson(data as Map<String, dynamic>),
+  );
+
+  @override
+  Future<VenueReviewPage> reviews(
+    String venueId, {
+    int page = 1,
+    int pageSize = 10,
+  }) => _api.get(
+    '/api/v1/venues/$venueId/ratings',
+    query: {'page': page, 'pageSize': pageSize},
+    decode: (data) => VenueReviewPage.fromJson(data as Map<String, dynamic>),
+  );
 }

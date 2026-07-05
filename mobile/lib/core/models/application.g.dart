@@ -26,13 +26,40 @@ Map<String, dynamic> _$ProposedScheduleToJson(_ProposedSchedule instance) =>
       'endTime': instance.endTime,
     };
 
+_OrganizerRatingSummary _$OrganizerRatingSummaryFromJson(
+  Map<String, dynamic> json,
+) => _OrganizerRatingSummary(
+  averageStars: (json['averageStars'] as num).toDouble(),
+  ratingCount: (json['ratingCount'] as num).toInt(),
+  noShowCount: (json['noShowCount'] as num).toInt(),
+  completedBookings: (json['completedBookings'] as num).toInt(),
+);
+
+Map<String, dynamic> _$OrganizerRatingSummaryToJson(
+  _OrganizerRatingSummary instance,
+) => <String, dynamic>{
+  'averageStars': instance.averageStars,
+  'ratingCount': instance.ratingCount,
+  'noShowCount': instance.noShowCount,
+  'completedBookings': instance.completedBookings,
+};
+
 _Organizer _$OrganizerFromJson(Map<String, dynamic> json) => _Organizer(
   id: json['id'] as String,
   displayName: json['displayName'] as String,
+  ratingSummary: json['ratingSummary'] == null
+      ? null
+      : OrganizerRatingSummary.fromJson(
+          json['ratingSummary'] as Map<String, dynamic>,
+        ),
 );
 
 Map<String, dynamic> _$OrganizerToJson(_Organizer instance) =>
-    <String, dynamic>{'id': instance.id, 'displayName': instance.displayName};
+    <String, dynamic>{
+      'id': instance.id,
+      'displayName': instance.displayName,
+      'ratingSummary': instance.ratingSummary,
+    };
 
 _ApplicationMessage _$ApplicationMessageFromJson(Map<String, dynamic> json) =>
     _ApplicationMessage(

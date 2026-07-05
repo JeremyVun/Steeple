@@ -18,11 +18,12 @@ screen, FCM push, the analytics/flags client proxies, Web's `/.well-known` deep-
 Remaining Phase 4 work is release/ops, not code (Firebase project, store setup).
 
 **Phase 5 (code) as of 2026-07-04:** provider self-service — the **Manage** module (venue/room
-CRUD, real Google geocoding, moderation-gated publish) and the **Media** module (EXIF-stripped
-JPEG variants → DO Spaces or local disk) are both built; see their sections below and
-`CONTRACTS.md` §6 for the wire shapes. Admin gained a moderation panel.
+CRUD, host ownership/lease-authority verification requests, real Google geocoding,
+moderation-gated publish) and the **Media** module (EXIF-stripped JPEG variants → DO Spaces or
+local disk) are both built; see their sections below and `CONTRACTS.md` §6 for the wire shapes.
+Admin gained a moderation panel.
 
-**Not built yet:** ratings, WebP image variants (deferred — SYSTEM_DESIGN §17), flags SDK
+**Not built yet:** WebP image variants (deferred — SYSTEM_DESIGN §17), flags SDK
 wiring (config-backed `IFeatureFlags` interim, in Web/Api/Admin), search day/time availability
 filters, mobile client-side Turnstile (apply sends an empty token; only enforced where a secret
 is configured), mobile `manage` screens (data layer + contracts exist; screens are the
@@ -121,15 +122,30 @@ recurring term entering its last 14 days gets its one renewal nudge
 notice window** are freed, nearer ones stand; other party notified. No-show: either party
 marks the other on a past, non-cancelled occurrence (feeds ratings in Phase 6).
 
-**Manage** (provider self-service, Phase 5) — venue-manager-scoped venue/room CRUD; wire
-shapes and endpoint list are `CONTRACTS.md` §6. `SaveVenueRequest`/`SaveRoomRequest` treat
-`null` fields as "unchanged" on PATCH. Address create/edit geocodes via `IGeocodingGateway`
-and re-checks the geofence (`400 geofence_rejected` outside it). Slugs (`Utils/Slugs.cs`) are
-derived once from the name and **immutable** — renames never break a shared listing URL.
+**Ratings** — Phase 6 Slice 1. `POST /bookings/{id}/ratings` writes one immutable
+rating per booking direction (`RateeType = Venue` for organizer→venue,
+`Organizer` for venue-manager→organizer), inferred from the authenticated party. Eligibility
+opens after the first `Occurred`/`NoShow` occurrence and closes 14 days after the booking's
+completion/cancellation window; writes use the same `apply` rate-limit policy. Visibility is
+double-blind and computed at read time: a row contributes to booking displays, listing
+aggregates, and organizer summaries only once both directions exist or the window closes.
+Optional comments (≤1000 chars) are immutable with the rating; public venue review pages show
+revealed, non-hidden venue-directed comments newest-first. Admin can hide/unhide rating rows via
+`HiddenAtUtc`; hidden rows drop out of aggregates and public/booking displays.
+
+**Manage** (provider self-service, Phase 5) — venue-manager-scoped venue/room CRUD plus host
+ownership/lease-authority verification; wire shapes and endpoint list are `CONTRACTS.md` §6.
+`SaveVenueRequest`/`SaveRoomRequest` treat `null` fields as "unchanged" on PATCH. Address
+create/edit geocodes via `IGeocodingGateway` and re-checks the geofence (`400
+geofence_rejected` outside it). Verification requests store evidence summaries and
+externally-hosted/signed document links only, not raw deed/lease/ID contents; Admin approval
+sets `venues.IsIdentityVerified`. Slugs (`Utils/Slugs.cs`) are derived once from the name and
+**immutable** — renames never break a shared listing URL.
 **Moderation model:** a room that has never been approved (`FirstPublishedAtUtc IS NULL`)
 asking for `published` instead stamps `PublishRequestedAtUtc` and waits in the Admin queue;
-approval sets `Published` + stamps `FirstPublishedAtUtc` (once, ever). After that,
-unlist/relist is entirely provider-controlled — no further gate. Edits to an already-published
+approval requires the venue to be verified, then sets `Published` + stamps
+`FirstPublishedAtUtc` (once, ever). After that, unlist/relist is entirely provider-controlled
+— no further gate. Edits to an already-published
 room apply immediately but stamp `ProviderEditedAtUtc`, which is Admin's after-the-fact review
 signal, not a block. Both timestamp columns (006-manage.sql) carry partial indexes so the
 Admin queue/feed scans stay cheap. Writes run behind the `manage` rate-limit policy
@@ -186,11 +202,14 @@ email (the concierge step that makes a church account a provider); manual applic
 force-status repair (operator override, no notifications); bulk listing status changes
 honor bookings (rooms with upcoming confirmed occurrences can't leave Published) and
 stamp `UpdatedAtUtc`. **Moderation panel** (`/admin/moderation`): lists rooms with a pending
-`PublishRequestedAtUtc` (approve/decline, optional note) and the `ProviderEditedAtUtc` review
-feed (mark-reviewed clears the stamp, no other effect); every decision writes a
+`PublishRequestedAtUtc` (approve/decline, optional note), pending venue verification requests
+(approve marks `IsIdentityVerified`, decline records the operator note), and the
+`ProviderEditedAtUtc` review feed (mark-reviewed clears the stamp, no other effect). Listing
+approval is blocked until the venue is verified. Every listing decision writes a
 `listingApproved`/`listingDeclined` inbox row to the venue's managers directly (Admin has no
 email/push fan-out of its own — the inbox row is the whole notification) and logs a
-`listing_moderated` stdout line in the same shape as `IAnalyticsSink`. Both POST actions
+`listing_moderated` stdout line in the same shape as `IAnalyticsSink`; verification decisions
+log `venue_verification_decided`. POST actions
 attribute to the forwarded `Remote-User` header, falling back to `"local-dev"` when absent
 (local runs have no edge proxy in front). Users/flags panels are still placeholders.
 
@@ -218,6 +237,7 @@ Venue 1─* Room 1─* RoomPhoto
 users 1─* user_logins (unique (Provider, Subject))    users 1─* refresh_tokens (hashed, rotating)
 users 1─* user_agreements (per-version ToS/Privacy)   users 1─* notifications (inbox = truth)
 users 1─* devices                                     venues 1─* venue_managers *─1 users
+venues 1─* venue_verification_requests 1─* venue_verification_documents
 
 rooms 1─* applications *─1 users (organizer)
   ActivityType, GroupSize, venue-local schedule (dates/times + optional DayOfWeek),
@@ -228,6 +248,7 @@ applications 1─0..1 bookings (created only by approval; unique ApplicationId; 
   bookings 1─* booking_occurrences (denormalized RoomId; UTC StartUtc/EndUtc; venue-local LocalDate)
     EXCLUDE USING gist ("RoomId" WITH =, tstzrange("StartUtc","EndUtc") WITH &&)
       WHERE ("Status" <> 3)      ← cancelled rows leave the constraint = cancellation frees slots
+  bookings 1─* ratings (unique (BookingId, RateeType); Stars 1..5; Comment?; HiddenAtUtc?; VenueId/OrganizerId denormalized)
 ```
 
 - **No double-booking:** occurrence rows exist only for confirmed bookings; the
@@ -265,7 +286,8 @@ Web: `/` (map + filterable grid), `/search` (HTMX partial), `/space/{venueSlug}/
 (+ `/apply`), `/listings/{id}` (canonical redirect), `/login`, `/account`, `/inbox`,
 `/manage/applications`, `/bookings`, `/manage/bookings`,
 `/manage/venues/{new,id}` (+ room/photo forms, flag `web.manage_enabled`).
-Admin: `/admin/moderation` (publish-request decisions + provider-edit review feed).
+Admin: `/admin/moderation` (publish-request decisions, venue verification, provider-edit review
+feed, review-comment hide/unhide).
 
 API: full specs in `CONTRACTS.md` — Discovery §3, Identity §4, Applications /
 Notifications / Bookings §5, Manage §6.

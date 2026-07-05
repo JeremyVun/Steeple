@@ -60,6 +60,16 @@ public sealed class ManageVenuesController : ControllerBase
         return result.Error is null ? Ok(result.Value) : this.ToManageProblem(result.Error);
     }
 
+    /// <summary>Submits ownership / lease-authority evidence for operator verification.</summary>
+    [HttpPost("{id:guid}/verification")]
+    [EnableRateLimiting(RateLimitPolicies.Manage)]
+    public async Task<ActionResult<ManagedVenueDetailDto>> SubmitVerification(
+        Guid id, [FromBody] SubmitVenueVerificationRequest request, CancellationToken ct)
+    {
+        var result = await _manage.SubmitVenueVerificationAsync(User.GetUserId(), id, request, ct);
+        return result.Error is null ? Ok(result.Value) : this.ToManageProblem(result.Error);
+    }
+
     /// <summary>Creates a room in Draft under a managed venue.</summary>
     [HttpPost("{id:guid}/rooms")]
     [EnableRateLimiting(RateLimitPolicies.Manage)]

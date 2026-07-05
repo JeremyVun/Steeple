@@ -585,7 +585,7 @@ as DateTime,
 mixin _$ManagedVenueDetail {
 
  String get id; String get name; String get slug; String get description;/// Wire token: `church | publicSpace | other`.
- String get venueType; String get addressLine; String get suburb; String get postcode; String? get contactEmail; String get parkingInfo; String get transitInfo; double get latitude; double get longitude; String get timezone; bool get isIdentityVerified; List<ManagedRoomSummary> get rooms;
+ String get venueType; String get addressLine; String get suburb; String get postcode; String? get contactEmail; String get parkingInfo; String get transitInfo; double get latitude; double get longitude; String get timezone; bool get isIdentityVerified; String get verificationStatus; DateTime? get verificationRequestedAtUtc; List<ManagedRoomSummary> get rooms;
 /// Create a copy of ManagedVenueDetail
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -598,16 +598,16 @@ $ManagedVenueDetailCopyWith<ManagedVenueDetail> get copyWith => _$ManagedVenueDe
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ManagedVenueDetail&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.description, description) || other.description == description)&&(identical(other.venueType, venueType) || other.venueType == venueType)&&(identical(other.addressLine, addressLine) || other.addressLine == addressLine)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.postcode, postcode) || other.postcode == postcode)&&(identical(other.contactEmail, contactEmail) || other.contactEmail == contactEmail)&&(identical(other.parkingInfo, parkingInfo) || other.parkingInfo == parkingInfo)&&(identical(other.transitInfo, transitInfo) || other.transitInfo == transitInfo)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.isIdentityVerified, isIdentityVerified) || other.isIdentityVerified == isIdentityVerified)&&const DeepCollectionEquality().equals(other.rooms, rooms));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ManagedVenueDetail&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.description, description) || other.description == description)&&(identical(other.venueType, venueType) || other.venueType == venueType)&&(identical(other.addressLine, addressLine) || other.addressLine == addressLine)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.postcode, postcode) || other.postcode == postcode)&&(identical(other.contactEmail, contactEmail) || other.contactEmail == contactEmail)&&(identical(other.parkingInfo, parkingInfo) || other.parkingInfo == parkingInfo)&&(identical(other.transitInfo, transitInfo) || other.transitInfo == transitInfo)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.isIdentityVerified, isIdentityVerified) || other.isIdentityVerified == isIdentityVerified)&&(identical(other.verificationStatus, verificationStatus) || other.verificationStatus == verificationStatus)&&(identical(other.verificationRequestedAtUtc, verificationRequestedAtUtc) || other.verificationRequestedAtUtc == verificationRequestedAtUtc)&&const DeepCollectionEquality().equals(other.rooms, rooms));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,slug,description,venueType,addressLine,suburb,postcode,contactEmail,parkingInfo,transitInfo,latitude,longitude,timezone,isIdentityVerified,const DeepCollectionEquality().hash(rooms));
+int get hashCode => Object.hash(runtimeType,id,name,slug,description,venueType,addressLine,suburb,postcode,contactEmail,parkingInfo,transitInfo,latitude,longitude,timezone,isIdentityVerified,verificationStatus,verificationRequestedAtUtc,const DeepCollectionEquality().hash(rooms));
 
 @override
 String toString() {
-  return 'ManagedVenueDetail(id: $id, name: $name, slug: $slug, description: $description, venueType: $venueType, addressLine: $addressLine, suburb: $suburb, postcode: $postcode, contactEmail: $contactEmail, parkingInfo: $parkingInfo, transitInfo: $transitInfo, latitude: $latitude, longitude: $longitude, timezone: $timezone, isIdentityVerified: $isIdentityVerified, rooms: $rooms)';
+  return 'ManagedVenueDetail(id: $id, name: $name, slug: $slug, description: $description, venueType: $venueType, addressLine: $addressLine, suburb: $suburb, postcode: $postcode, contactEmail: $contactEmail, parkingInfo: $parkingInfo, transitInfo: $transitInfo, latitude: $latitude, longitude: $longitude, timezone: $timezone, isIdentityVerified: $isIdentityVerified, verificationStatus: $verificationStatus, verificationRequestedAtUtc: $verificationRequestedAtUtc, rooms: $rooms)';
 }
 
 
@@ -618,7 +618,7 @@ abstract mixin class $ManagedVenueDetailCopyWith<$Res>  {
   factory $ManagedVenueDetailCopyWith(ManagedVenueDetail value, $Res Function(ManagedVenueDetail) _then) = _$ManagedVenueDetailCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String slug, String description, String venueType, String addressLine, String suburb, String postcode, String? contactEmail, String parkingInfo, String transitInfo, double latitude, double longitude, String timezone, bool isIdentityVerified, List<ManagedRoomSummary> rooms
+ String id, String name, String slug, String description, String venueType, String addressLine, String suburb, String postcode, String? contactEmail, String parkingInfo, String transitInfo, double latitude, double longitude, String timezone, bool isIdentityVerified, String verificationStatus, DateTime? verificationRequestedAtUtc, List<ManagedRoomSummary> rooms
 });
 
 
@@ -635,7 +635,7 @@ class _$ManagedVenueDetailCopyWithImpl<$Res>
 
 /// Create a copy of ManagedVenueDetail
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? description = null,Object? venueType = null,Object? addressLine = null,Object? suburb = null,Object? postcode = null,Object? contactEmail = freezed,Object? parkingInfo = null,Object? transitInfo = null,Object? latitude = null,Object? longitude = null,Object? timezone = null,Object? isIdentityVerified = null,Object? rooms = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? description = null,Object? venueType = null,Object? addressLine = null,Object? suburb = null,Object? postcode = null,Object? contactEmail = freezed,Object? parkingInfo = null,Object? transitInfo = null,Object? latitude = null,Object? longitude = null,Object? timezone = null,Object? isIdentityVerified = null,Object? verificationStatus = null,Object? verificationRequestedAtUtc = freezed,Object? rooms = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -652,7 +652,9 @@ as String,latitude: null == latitude ? _self.latitude : latitude // ignore: cast
 as double,longitude: null == longitude ? _self.longitude : longitude // ignore: cast_nullable_to_non_nullable
 as double,timezone: null == timezone ? _self.timezone : timezone // ignore: cast_nullable_to_non_nullable
 as String,isIdentityVerified: null == isIdentityVerified ? _self.isIdentityVerified : isIdentityVerified // ignore: cast_nullable_to_non_nullable
-as bool,rooms: null == rooms ? _self.rooms : rooms // ignore: cast_nullable_to_non_nullable
+as bool,verificationStatus: null == verificationStatus ? _self.verificationStatus : verificationStatus // ignore: cast_nullable_to_non_nullable
+as String,verificationRequestedAtUtc: freezed == verificationRequestedAtUtc ? _self.verificationRequestedAtUtc : verificationRequestedAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime?,rooms: null == rooms ? _self.rooms : rooms // ignore: cast_nullable_to_non_nullable
 as List<ManagedRoomSummary>,
   ));
 }
@@ -738,10 +740,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  List<ManagedRoomSummary> rooms)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  String verificationStatus,  DateTime? verificationRequestedAtUtc,  List<ManagedRoomSummary> rooms)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ManagedVenueDetail() when $default != null:
-return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.rooms);case _:
+return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.verificationStatus,_that.verificationRequestedAtUtc,_that.rooms);case _:
   return orElse();
 
 }
@@ -759,10 +761,10 @@ return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  List<ManagedRoomSummary> rooms)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  String verificationStatus,  DateTime? verificationRequestedAtUtc,  List<ManagedRoomSummary> rooms)  $default,) {final _that = this;
 switch (_that) {
 case _ManagedVenueDetail():
-return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.rooms);case _:
+return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.verificationStatus,_that.verificationRequestedAtUtc,_that.rooms);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -779,10 +781,10 @@ return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  List<ManagedRoomSummary> rooms)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String slug,  String description,  String venueType,  String addressLine,  String suburb,  String postcode,  String? contactEmail,  String parkingInfo,  String transitInfo,  double latitude,  double longitude,  String timezone,  bool isIdentityVerified,  String verificationStatus,  DateTime? verificationRequestedAtUtc,  List<ManagedRoomSummary> rooms)?  $default,) {final _that = this;
 switch (_that) {
 case _ManagedVenueDetail() when $default != null:
-return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.rooms);case _:
+return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType,_that.addressLine,_that.suburb,_that.postcode,_that.contactEmail,_that.parkingInfo,_that.transitInfo,_that.latitude,_that.longitude,_that.timezone,_that.isIdentityVerified,_that.verificationStatus,_that.verificationRequestedAtUtc,_that.rooms);case _:
   return null;
 
 }
@@ -794,7 +796,7 @@ return $default(_that.id,_that.name,_that.slug,_that.description,_that.venueType
 @JsonSerializable()
 
 class _ManagedVenueDetail extends ManagedVenueDetail {
-  const _ManagedVenueDetail({required this.id, required this.name, required this.slug, required this.description, required this.venueType, required this.addressLine, required this.suburb, required this.postcode, this.contactEmail, required this.parkingInfo, required this.transitInfo, required this.latitude, required this.longitude, required this.timezone, required this.isIdentityVerified, final  List<ManagedRoomSummary> rooms = const <ManagedRoomSummary>[]}): _rooms = rooms,super._();
+  const _ManagedVenueDetail({required this.id, required this.name, required this.slug, required this.description, required this.venueType, required this.addressLine, required this.suburb, required this.postcode, this.contactEmail, required this.parkingInfo, required this.transitInfo, required this.latitude, required this.longitude, required this.timezone, required this.isIdentityVerified, this.verificationStatus = 'unverified', this.verificationRequestedAtUtc, final  List<ManagedRoomSummary> rooms = const <ManagedRoomSummary>[]}): _rooms = rooms,super._();
   factory _ManagedVenueDetail.fromJson(Map<String, dynamic> json) => _$ManagedVenueDetailFromJson(json);
 
 @override final  String id;
@@ -813,6 +815,8 @@ class _ManagedVenueDetail extends ManagedVenueDetail {
 @override final  double longitude;
 @override final  String timezone;
 @override final  bool isIdentityVerified;
+@override@JsonKey() final  String verificationStatus;
+@override final  DateTime? verificationRequestedAtUtc;
  final  List<ManagedRoomSummary> _rooms;
 @override@JsonKey() List<ManagedRoomSummary> get rooms {
   if (_rooms is EqualUnmodifiableListView) return _rooms;
@@ -834,16 +838,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ManagedVenueDetail&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.description, description) || other.description == description)&&(identical(other.venueType, venueType) || other.venueType == venueType)&&(identical(other.addressLine, addressLine) || other.addressLine == addressLine)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.postcode, postcode) || other.postcode == postcode)&&(identical(other.contactEmail, contactEmail) || other.contactEmail == contactEmail)&&(identical(other.parkingInfo, parkingInfo) || other.parkingInfo == parkingInfo)&&(identical(other.transitInfo, transitInfo) || other.transitInfo == transitInfo)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.isIdentityVerified, isIdentityVerified) || other.isIdentityVerified == isIdentityVerified)&&const DeepCollectionEquality().equals(other._rooms, _rooms));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ManagedVenueDetail&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.description, description) || other.description == description)&&(identical(other.venueType, venueType) || other.venueType == venueType)&&(identical(other.addressLine, addressLine) || other.addressLine == addressLine)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.postcode, postcode) || other.postcode == postcode)&&(identical(other.contactEmail, contactEmail) || other.contactEmail == contactEmail)&&(identical(other.parkingInfo, parkingInfo) || other.parkingInfo == parkingInfo)&&(identical(other.transitInfo, transitInfo) || other.transitInfo == transitInfo)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&(identical(other.timezone, timezone) || other.timezone == timezone)&&(identical(other.isIdentityVerified, isIdentityVerified) || other.isIdentityVerified == isIdentityVerified)&&(identical(other.verificationStatus, verificationStatus) || other.verificationStatus == verificationStatus)&&(identical(other.verificationRequestedAtUtc, verificationRequestedAtUtc) || other.verificationRequestedAtUtc == verificationRequestedAtUtc)&&const DeepCollectionEquality().equals(other._rooms, _rooms));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,slug,description,venueType,addressLine,suburb,postcode,contactEmail,parkingInfo,transitInfo,latitude,longitude,timezone,isIdentityVerified,const DeepCollectionEquality().hash(_rooms));
+int get hashCode => Object.hash(runtimeType,id,name,slug,description,venueType,addressLine,suburb,postcode,contactEmail,parkingInfo,transitInfo,latitude,longitude,timezone,isIdentityVerified,verificationStatus,verificationRequestedAtUtc,const DeepCollectionEquality().hash(_rooms));
 
 @override
 String toString() {
-  return 'ManagedVenueDetail(id: $id, name: $name, slug: $slug, description: $description, venueType: $venueType, addressLine: $addressLine, suburb: $suburb, postcode: $postcode, contactEmail: $contactEmail, parkingInfo: $parkingInfo, transitInfo: $transitInfo, latitude: $latitude, longitude: $longitude, timezone: $timezone, isIdentityVerified: $isIdentityVerified, rooms: $rooms)';
+  return 'ManagedVenueDetail(id: $id, name: $name, slug: $slug, description: $description, venueType: $venueType, addressLine: $addressLine, suburb: $suburb, postcode: $postcode, contactEmail: $contactEmail, parkingInfo: $parkingInfo, transitInfo: $transitInfo, latitude: $latitude, longitude: $longitude, timezone: $timezone, isIdentityVerified: $isIdentityVerified, verificationStatus: $verificationStatus, verificationRequestedAtUtc: $verificationRequestedAtUtc, rooms: $rooms)';
 }
 
 
@@ -854,7 +858,7 @@ abstract mixin class _$ManagedVenueDetailCopyWith<$Res> implements $ManagedVenue
   factory _$ManagedVenueDetailCopyWith(_ManagedVenueDetail value, $Res Function(_ManagedVenueDetail) _then) = __$ManagedVenueDetailCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String slug, String description, String venueType, String addressLine, String suburb, String postcode, String? contactEmail, String parkingInfo, String transitInfo, double latitude, double longitude, String timezone, bool isIdentityVerified, List<ManagedRoomSummary> rooms
+ String id, String name, String slug, String description, String venueType, String addressLine, String suburb, String postcode, String? contactEmail, String parkingInfo, String transitInfo, double latitude, double longitude, String timezone, bool isIdentityVerified, String verificationStatus, DateTime? verificationRequestedAtUtc, List<ManagedRoomSummary> rooms
 });
 
 
@@ -871,7 +875,7 @@ class __$ManagedVenueDetailCopyWithImpl<$Res>
 
 /// Create a copy of ManagedVenueDetail
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? description = null,Object? venueType = null,Object? addressLine = null,Object? suburb = null,Object? postcode = null,Object? contactEmail = freezed,Object? parkingInfo = null,Object? transitInfo = null,Object? latitude = null,Object? longitude = null,Object? timezone = null,Object? isIdentityVerified = null,Object? rooms = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? description = null,Object? venueType = null,Object? addressLine = null,Object? suburb = null,Object? postcode = null,Object? contactEmail = freezed,Object? parkingInfo = null,Object? transitInfo = null,Object? latitude = null,Object? longitude = null,Object? timezone = null,Object? isIdentityVerified = null,Object? verificationStatus = null,Object? verificationRequestedAtUtc = freezed,Object? rooms = null,}) {
   return _then(_ManagedVenueDetail(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -888,7 +892,9 @@ as String,latitude: null == latitude ? _self.latitude : latitude // ignore: cast
 as double,longitude: null == longitude ? _self.longitude : longitude // ignore: cast_nullable_to_non_nullable
 as double,timezone: null == timezone ? _self.timezone : timezone // ignore: cast_nullable_to_non_nullable
 as String,isIdentityVerified: null == isIdentityVerified ? _self.isIdentityVerified : isIdentityVerified // ignore: cast_nullable_to_non_nullable
-as bool,rooms: null == rooms ? _self._rooms : rooms // ignore: cast_nullable_to_non_nullable
+as bool,verificationStatus: null == verificationStatus ? _self.verificationStatus : verificationStatus // ignore: cast_nullable_to_non_nullable
+as String,verificationRequestedAtUtc: freezed == verificationRequestedAtUtc ? _self.verificationRequestedAtUtc : verificationRequestedAtUtc // ignore: cast_nullable_to_non_nullable
+as DateTime?,rooms: null == rooms ? _self._rooms : rooms // ignore: cast_nullable_to_non_nullable
 as List<ManagedRoomSummary>,
   ));
 }

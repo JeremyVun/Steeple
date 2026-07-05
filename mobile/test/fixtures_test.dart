@@ -16,12 +16,15 @@ Map<String, dynamic> _loadJson(String name) {
 void main() {
   group('listing_search.json', () {
     test('round-trips ListingSearchResult', () {
-      final result = ListingSearchResult.fromJson(_loadJson('listing_search.json'));
+      final result = ListingSearchResult.fromJson(
+        _loadJson('listing_search.json'),
+      );
 
       expect(result.totalCount, 3);
       expect(result.items, hasLength(3));
       expect(result.items[0].isFree, isFalse);
       expect(result.items[1].isFree, isTrue);
+      expect(result.items[0].rating?.averageStars, 4.75);
       expect(result.center?.latitude, closeTo(38.9012, 0.0001));
       expect(result.appliedBounds.minLat, closeTo(38.85, 0.0001));
     });
@@ -34,6 +37,7 @@ void main() {
       expect(detail.roomName, 'Fellowship Hall');
       expect(detail.venue.name, 'Grace Community Church');
       expect(detail.venue.venueTypeValue, VenueType.church);
+      expect(detail.rating?.count, 4);
       expect(detail.amenities, contains('kitchen'));
       expect(detail.photos, hasLength(2));
     });
@@ -64,9 +68,13 @@ void main() {
       final application = Application.fromJson(_loadJson('application.json'));
 
       expect(application.statusValue, ApplicationStatus.approved);
-      expect(application.schedule.frequencyValue, ScheduleFrequency.recurringWeekly);
+      expect(
+        application.schedule.frequencyValue,
+        ScheduleFrequency.recurringWeekly,
+      );
       expect(application.messages, hasLength(2));
       expect(application.bookingId, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+      expect(application.organizer.ratingSummary?.ratingCount, 2);
     });
 
     test('tolerates an unknown status token and unrecognized fields', () {
@@ -91,6 +99,20 @@ void main() {
       expect(booking.occurrences, hasLength(3));
       expect(booking.nextOccurrence?.statusValue, OccurrenceStatus.scheduled);
       expect(booking.occurrences[0].statusValue, OccurrenceStatus.occurred);
+      expect(booking.ratings?.byVenue?.stars, 5);
+      expect(booking.ratings?.byVenue?.comment, contains('tidy'));
+      expect(booking.ratings?.canRate, isTrue);
+    });
+  });
+
+  group('venue_reviews.json', () {
+    test('round-trips VenueReviewPage', () {
+      final reviews = VenueReviewPage.fromJson(_loadJson('venue_reviews.json'));
+
+      expect(reviews.totalCount, 2);
+      expect(reviews.items, hasLength(2));
+      expect(reviews.items[0].stars, 5);
+      expect(reviews.items[0].comment, contains('clean'));
     });
   });
 
@@ -104,15 +126,21 @@ void main() {
       expect(page.items, hasLength(4));
       expect(page.nextCursor, isNotNull);
       expect(page.items[0].typeValue, NotificationType.renewalDue);
-      expect(page.items[0].payload.bookingId, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+      expect(
+        page.items[0].payload.bookingId,
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      );
       expect(page.items[2].typeValue, NotificationType.applicationApproved);
-      expect(page.items[2].payload.deepLink,
-          '/inbox/applications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+      expect(
+        page.items[2].payload.deepLink,
+        '/inbox/applications/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      );
     });
 
     test('tolerates an unrecognized notification type', () {
       final json = _loadJson('notifications_page.json');
-      final items = (json['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final items = (json['items'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       items[0]['type'] = 'somethingBrandNew';
 
       final notification = AppNotification.fromJson(items[0]);
@@ -134,10 +162,14 @@ void main() {
 
   group('managed_venues.json', () {
     test('round-trips a List<ManagedVenue>', () {
-      final raw = jsonDecode(File('test/fixtures/managed_venues.json').readAsStringSync())
-          as List<dynamic>;
-      final venues =
-          raw.map((e) => ManagedVenue.fromJson(e as Map<String, dynamic>)).toList();
+      final raw =
+          jsonDecode(
+                File('test/fixtures/managed_venues.json').readAsStringSync(),
+              )
+              as List<dynamic>;
+      final venues = raw
+          .map((e) => ManagedVenue.fromJson(e as Map<String, dynamic>))
+          .toList();
 
       expect(venues, hasLength(2));
       expect(venues[0].name, 'Grace Community Church');
@@ -147,8 +179,9 @@ void main() {
 
   group('managed_venue_detail.json', () {
     test('round-trips ManagedVenueDetail', () {
-      final detail =
-          ManagedVenueDetail.fromJson(_loadJson('managed_venue_detail.json'));
+      final detail = ManagedVenueDetail.fromJson(
+        _loadJson('managed_venue_detail.json'),
+      );
 
       expect(detail.name, 'Grace Community Church');
       expect(detail.venueTypeValue, VenueType.church);
@@ -196,14 +229,16 @@ void main() {
       expect(page.items[0].statusValue, ApplicationStatus.approved);
       expect(page.items[1].statusValue, ApplicationStatus.pending);
       expect(page.items[1].bookingId, isNull);
+      expect(page.items[0].organizer.ratingSummary?.completedBookings, 3);
     });
   });
 
   group('flags.json', () {
     test('decodes as a platform flag snapshot', () {
       final raw = File('test/fixtures/flags.json').readAsStringSync();
-      final flags = (jsonDecode(raw) as Map<String, dynamic>)
-          .map((key, value) => MapEntry(key, value as bool));
+      final flags = (jsonDecode(raw) as Map<String, dynamic>).map(
+        (key, value) => MapEntry(key, value as bool),
+      );
 
       expect(flags['mobile.apply_enabled'], isTrue);
       expect(flags['mobile.manage_enabled'], isFalse);

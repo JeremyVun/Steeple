@@ -15,6 +15,7 @@ public sealed class EfManageRepository : IManageRepository
         _db.Venues
             .Include(v => v.Rooms)
             .ThenInclude(r => r.Photos)
+            .Include(v => v.VerificationRequests)
             .FirstOrDefaultAsync(v => v.Id == venueId, ct);
 
     /// <inheritdoc />
@@ -37,6 +38,13 @@ public sealed class EfManageRepository : IManageRepository
         });
 
         // One SaveChanges = one transaction: a venue never exists without its first manager.
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task AddVenueVerificationRequestAsync(VenueVerificationRequest request, CancellationToken ct = default)
+    {
+        _db.VenueVerificationRequests.Add(request);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
@@ -65,4 +73,9 @@ public sealed class EfManageRepository : IManageRepository
     /// <inheritdoc />
     public Task<bool> HasPublishedRoomsAsync(Guid venueId, CancellationToken ct = default) =>
         _db.Rooms.AnyAsync(r => r.VenueId == venueId && r.Status == RoomStatus.Published, ct);
+
+    /// <inheritdoc />
+    public Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default) =>
+        _db.VenueVerificationRequests.AnyAsync(
+            r => r.VenueId == venueId && r.Status == VenueVerificationStatus.Pending, ct);
 }

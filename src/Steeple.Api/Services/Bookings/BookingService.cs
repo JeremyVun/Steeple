@@ -25,6 +25,7 @@ public sealed class BookingService : IBookingService
 
     private readonly IBookingRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
+    private readonly IRatingService _ratings;
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
@@ -33,12 +34,14 @@ public sealed class BookingService : IBookingService
     public BookingService(
         IBookingRepository repository,
         IVenueManagerRepository venueManagers,
+        IRatingService ratings,
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
         TimeProvider clock)
     {
         _repository = repository;
         _venueManagers = venueManagers;
+        _ratings = ratings;
         _notifications = notifications;
         _analytics = analytics;
         _clock = clock;
@@ -133,8 +136,8 @@ public sealed class BookingService : IBookingService
 
         var now = await SweepAsync(items, ct).ConfigureAwait(false);
 
-        return BookingResult<BookingListResult>.Ok(new BookingListResult(
-            items.Select(b => b.ToDto(includeOccurrences: false, now)).ToList(), total, page, pageSize));
+        var dtos = await ToDtosWithRatingsAsync(items, organizerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
+        return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
     }
 
     /// <inheritdoc />
@@ -161,8 +164,8 @@ public sealed class BookingService : IBookingService
 
         var now = await SweepAsync(items, ct).ConfigureAwait(false);
 
-        return BookingResult<BookingListResult>.Ok(new BookingListResult(
-            items.Select(b => b.ToDto(includeOccurrences: false, now)).ToList(), total, page, pageSize));
+        var dtos = await ToDtosWithRatingsAsync(items, managerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
+        return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
     }
 
     /// <inheritdoc />
@@ -174,8 +177,10 @@ public sealed class BookingService : IBookingService
             return BookingResult<BookingDto>.Fail(error.Code, error.Detail);
         }
 
-        var now = await SweepAsync([booking!], ct).ConfigureAwait(false);
-        return BookingResult<BookingDto>.Ok(booking!.ToDto(includeOccurrences: true, now));
+        var scopedBooking = booking!;
+        var now = await SweepAsync([scopedBooking], ct).ConfigureAwait(false);
+        var ratings = await _ratings.GetBookingOverviewsAsync([scopedBooking], callerId, now, ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(scopedBooking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(scopedBooking.Id)));
     }
 
     /// <inheritdoc />
@@ -241,7 +246,8 @@ public sealed class BookingService : IBookingService
             },
             ct).ConfigureAwait(false);
 
-        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now));
+        var ratings = await _ratings.GetBookingOverviewsAsync([booking], callerId, now, ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(booking.Id)));
     }
 
     /// <inheritdoc />
@@ -293,10 +299,24 @@ public sealed class BookingService : IBookingService
             },
             ct).ConfigureAwait(false);
 
-        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now));
+        var ratings = await _ratings.GetBookingOverviewsAsync([booking], callerId, now, ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(booking.Id)));
     }
 
     // ----- Party scoping & lazy sweeps -----------------------------------------------------------
+
+    private async Task<IReadOnlyList<BookingDto>> ToDtosWithRatingsAsync(
+        IReadOnlyList<Booking> bookings,
+        Guid callerId,
+        bool includeOccurrences,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var ratings = await _ratings.GetBookingOverviewsAsync(bookings, callerId, now, ct).ConfigureAwait(false);
+        return bookings
+            .Select(b => b.ToDto(includeOccurrences, now, ratings.GetValueOrDefault(b.Id)))
+            .ToList();
+    }
 
     /// <summary>
     /// Loads the booking and verifies the caller is a party (organizer or a manager of the room's

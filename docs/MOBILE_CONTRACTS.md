@@ -150,7 +150,7 @@ features can import them without touching `app/router.dart` (§2 dependency cont
 | `inbox` | `/inbox` | Inbox | ✔ | Notifications list |
 | `applicationThread` | `/inbox/applications/:id` | Inbox | ✔ | Push deep-link target; thread + status + actions |
 | `bookings` | `/bookings` | Bookings | ✔ | |
-| `bookingDetail` | `/bookings/:id` | Bookings | ✔ | Occurrences, cancel, renewal nudge |
+| `bookingDetail` | `/bookings/:id` | Bookings | ✔ | Occurrences, cancel, renewal nudge, star rating |
 | `profile` | `/profile` | Profile | – | Signed-out: sign-in CTA + legal links; signed-in: account, agreements, delete |
 | `signIn` | `/signin` | (modal) | – | Query `from` = post-auth redirect |
 | `forceUpgrade` | `/upgrade` | (blocking) | – | Unskippable when `mobile.force_upgrade` is on |
@@ -185,6 +185,7 @@ abstract class DiscoveryRepository {
 abstract class ListingRepository {
   Future<RoomDetail> bySlug(String venueSlug, String roomSlug);  // GET /listings/by-slug/…
   Future<RoomDetail> byId(String id);                            // GET /listings/{id}
+  Future<VenueReviewPage> reviews(String venueId, {int page = 1, int pageSize = 10}); // GET /venues/{id}/ratings
 }
 // features/apply/data + features/inbox/data
 abstract class ApplicationsRepository {

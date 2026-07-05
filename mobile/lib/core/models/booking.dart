@@ -10,6 +10,33 @@ import 'wire_tokens.dart';
 part 'booking.freezed.dart';
 part 'booking.g.dart';
 
+/// A submitted star rating visible to the current caller.
+@freezed
+abstract class SubmittedRating with _$SubmittedRating {
+  const factory SubmittedRating({
+    required int stars,
+    String? comment,
+    required DateTime createdAtUtc,
+  }) = _SubmittedRating;
+
+  factory SubmittedRating.fromJson(Map<String, dynamic> json) =>
+      _$SubmittedRatingFromJson(json);
+}
+
+/// Viewer-scoped rating state for a booking.
+@freezed
+abstract class BookingRatings with _$BookingRatings {
+  const factory BookingRatings({
+    SubmittedRating? byOrganizer,
+    SubmittedRating? byVenue,
+    required bool canRate,
+    DateTime? rateByUtc,
+  }) = _BookingRatings;
+
+  factory BookingRatings.fromJson(Map<String, dynamic> json) =>
+      _$BookingRatingsFromJson(json);
+}
+
 /// One materialized occurrence of a booking.
 @freezed
 abstract class Occurrence with _$Occurrence {
@@ -75,12 +102,14 @@ abstract class Booking with _$Booking {
     /// The next live occurrence — set on lists too.
     Occurrence? nextOccurrence,
     @Default(<Occurrence>[]) List<Occurrence> occurrences,
+    BookingRatings? ratings,
   }) = _Booking;
 
   factory Booking.fromJson(Map<String, dynamic> json) =>
       _$BookingFromJson(json);
 
-  BookingType get typeValue => parseWireEnum(type, BookingType.tokens, BookingType.unknown);
+  BookingType get typeValue =>
+      parseWireEnum(type, BookingType.tokens, BookingType.unknown);
 
   BookingStatus get statusValue =>
       parseWireEnum(status, BookingStatus.tokens, BookingStatus.unknown);

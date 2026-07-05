@@ -102,7 +102,7 @@ Modules (target set — ✅ built · 🔲 planned):
 | **Notifications** ✅ | inbox rows (truth), fan-out to push + email | `IPushGateway` (FCM), `IEmailGateway` |
 | **Manage** ✅ | provider self-service venue/room CRUD, moderation gate | `IVenueManagerRepository`, `IManageRepository`, `IGeocodingGateway` |
 | **Media** ✅ | photo upload → variants → Spaces (or local disk in dev) | `IMediaStore`, `IImageProcessor` |
-| **Ratings** 🔲 | two-way ratings, response-rate stats | `IRatingRepository` |
+| **Ratings** ✅/🔲 | ratings, review comments, double-blind reveal; response-rate stats planned | `IRatingRepository` |
 | **Ingest** ✅ | `POST /api/v1/events` analytics ingest → stdout | `IAnalyticsSink` |
 
 **Module rules** (what keeps extraction cheap): a module's services may depend on another
@@ -113,11 +113,10 @@ never reference `Steeple.Persistence` types.
 
 ## 5. Domain model
 
-The as-built model (venues → rooms → applications → bookings, identity, notifications)
-and its DB-enforced invariants live in `ARCHITECTURE.md`. Remaining target additions:
-
-- `bookings 1─* ratings (RaterId, RateeType Organizer|Venue, Stars, Comment)` — Phase 6
-  (full design: `docs/backlog/phase-6-reputation-and-launch.md`).
+The as-built model (venues → rooms → applications → bookings → ratings, identity,
+notifications) and its DB-enforced invariants live in `ARCHITECTURE.md`. Remaining target
+addition in this reputation area: response-rate stats (full design:
+`docs/backlog/phase-6-reputation-and-launch.md`).
 
 ## 6. Identity & auth
 

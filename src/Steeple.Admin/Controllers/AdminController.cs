@@ -62,6 +62,14 @@ public sealed class AdminController : Controller
         return PartialView("_ModerationPanel", _workspace.Snapshot());
     }
 
+    [HttpPost("moderation/verification/{requestId:guid}/decide")]
+    public IActionResult DecideVenueVerification(Guid requestId, [FromForm] string decision, [FromForm] string? note)
+    {
+        ViewData["ModerationError"] = _workspace.DecideVenueVerification(
+            requestId, decision == "approve", note, OperatorUser());
+        return PartialView("_ModerationPanel", _workspace.Snapshot());
+    }
+
     [HttpPost("moderation/reviewed")]
     public IActionResult MarkReviewed([FromForm] Guid id, [FromForm] string kind)
     {
@@ -74,6 +82,13 @@ public sealed class AdminController : Controller
             _workspace.MarkRoomReviewed(id, OperatorUser());
         }
 
+        return PartialView("_ModerationPanel", _workspace.Snapshot());
+    }
+
+    [HttpPost("moderation/ratings/{ratingId:guid}/visibility")]
+    public IActionResult RatingVisibility(Guid ratingId, [FromForm] bool hidden)
+    {
+        _workspace.SetRatingHidden(ratingId, hidden, OperatorUser());
         return PartialView("_ModerationPanel", _workspace.Snapshot());
     }
 
