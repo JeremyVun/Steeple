@@ -53,7 +53,6 @@ public sealed class ListingService : IListingService
         var criteria = new RoomSearchCriteria(
             Bounds: bounds,
             MinCapacity: query.MinCapacity,
-            FreeOnly: query.FreeOnly,
             Activities: query.Activities,
             Accessibility: query.Accessibility,
             Suburb: query.Suburb,
@@ -125,7 +124,6 @@ public sealed class ListingService : IListingService
             "search_performed",
             new
             {
-                freeOnly = query.FreeOnly,
                 minCapacity = query.MinCapacity,
                 suburb = string.IsNullOrWhiteSpace(query.Suburb) ? null : query.Suburb.Trim(),
                 activities = query.Activities.ToNameList(),

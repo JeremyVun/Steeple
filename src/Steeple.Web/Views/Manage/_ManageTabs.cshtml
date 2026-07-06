@@ -1,6 +1,8 @@
 @model string
-@* The provider area's section tabs; the model is the active key. *@
-<nav class="inbox-tabs" aria-label="Hosting sections">
+@* The provider area's section tabs; the model is the active key.
+   Rendered on every /manage page as a section bar above the title so its
+   position never shifts with heading length. *@
+<nav class="inbox-tabs manage-tabs" aria-label="Hosting sections">
     <a class="inbox-tab@(Model == "spaces" ? " is-active" : "")" href="~/manage"
        aria-current="@(Model == "spaces" ? "page" : null)">Your spaces</a>
     <a class="inbox-tab@(Model == "requests" ? " is-active" : "")" href="~/manage/applications"

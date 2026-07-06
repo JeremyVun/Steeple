@@ -1,0 +1,11 @@
+description: Search with filters and open a listing showing price and availability.
+story: |
+  You're looking for a hall for a weekly kids' art club — about 15 children —
+  somewhere around Vienna. Use the search to narrow things down to places that
+  welcome children's activities, and open the listing that looks best. Have a
+  good look at what it costs and when it's open before you finish.
+success:
+  - console_errors: 0
+  - api_called: "GET /search*"
+  - url_matches: "/space/*"
+  - assert: The final page is a single room's listing and it shows an hourly price (e.g. "$45/hr"), a capacity, and a clear way to ask to book or contact the venue.

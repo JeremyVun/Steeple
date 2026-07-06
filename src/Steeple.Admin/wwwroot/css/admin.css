@@ -396,10 +396,6 @@ img { max-width: 100%; display: block; }
     letter-spacing: 0.02em;
     box-shadow: var(--shadow-sm);
 }
-.badge-free {
-    background: var(--sage);
-    color: #fff;
-}
 .badge-price {
     background: var(--card);
     color: var(--ink);
@@ -591,7 +587,6 @@ img { max-width: 100%; display: block; }
 .map-popup-link { font-weight: 700; font-size: 1rem; color: var(--ink); }
 .map-popup-venue { color: var(--ink-soft); font-size: 0.82rem; }
 .map-popup-price { font-weight: 700; color: var(--terracotta-deep); font-size: 0.85rem; }
-.map-popup-price.is-free { color: var(--sage-deep); }
 
 /* ---------- 404 ---------- */
 .notfound { text-align: center; padding-block: clamp(3rem, 9vw, 6rem); }

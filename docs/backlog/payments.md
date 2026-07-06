@@ -12,8 +12,9 @@
 
 **In scope when built:** paid bookings end-to-end — church onboards for payouts,
 organizer pays in-app, Steeple takes the invisible commission, refunds/cancellations
-follow a published policy. **Free bookings are untouched** — no card, no new friction,
-forever (free is the acquisition engine, not a payments edge case).
+follow a published policy. *(2026-07-07: free listings were removed product-wide —
+every booking now has a price, so "free bookings are untouched" is moot; the sub-floor
+offline tier below is the remaining no-money path.)*
 
 Non-negotiables (all inherited from PRD/SYSTEM_DESIGN, restated as constraints):
 

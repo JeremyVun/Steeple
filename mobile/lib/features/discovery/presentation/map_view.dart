@@ -14,7 +14,10 @@ import 'pin_bitmaps.dart';
 
 /// Beachhead fallback camera (Vienna, VA) until the geofence/search response
 /// supplies a center.
-const _fallbackCamera = CameraPosition(target: LatLng(38.9007, -77.2653), zoom: 13);
+const _fallbackCamera = CameraPosition(
+  target: LatLng(38.9007, -77.2653),
+  zoom: 13,
+);
 
 /// Map half of Explore: search-as-region-settles (debounce lives in the
 /// results provider), pre-rasterized pins, selected pin → [ListingCard]
@@ -45,7 +48,9 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
     final controller = _controller;
     if (controller == null) return;
     final region = await controller.getVisibleRegion();
-    ref.read(mapRegionProvider.notifier).settle(
+    ref
+        .read(mapRegionProvider.notifier)
+        .settle(
           BoundingBox(
             minLat: region.southwest.latitude,
             maxLat: region.northeast.latitude,
@@ -53,7 +58,9 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
             maxLng: region.northeast.longitude,
           ),
         );
-    ref.read(analyticsProvider).track(AnalyticsEvents.mapInteracted, {'kind': 'pan'});
+    ref.read(analyticsProvider).track(AnalyticsEvents.mapInteracted, {
+      'kind': 'pan',
+    });
   }
 
   @override
@@ -69,7 +76,8 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
           EmptyState(
             icon: Icons.map_rounded,
             title: 'Map unavailable',
-            body: 'This build has no maps key. '
+            body:
+                'This build has no maps key. '
                 'Switch back to the list to keep browsing.',
           ),
         ],
@@ -86,12 +94,12 @@ class _DiscoveryMapViewState extends ConsumerState<DiscoveryMapView> {
           Marker(
             markerId: MarkerId(room.roomId),
             position: LatLng(room.latitude, room.longitude),
-            icon: pins.of(isFree: room.isFree, selected: room.roomId == _selected?.roomId),
+            icon: pins.of(selected: room.roomId == _selected?.roomId),
             anchor: const Offset(0.5, 1),
             onTap: () {
-              ref
-                  .read(analyticsProvider)
-                  .track(AnalyticsEvents.mapInteracted, {'kind': 'pin'});
+              ref.read(analyticsProvider).track(AnalyticsEvents.mapInteracted, {
+                'kind': 'pin',
+              });
               setState(() => _selected = room);
             },
           ),

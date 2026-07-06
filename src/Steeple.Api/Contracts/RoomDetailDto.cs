@@ -7,8 +7,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="RoomName">Room display name.</param>
 /// <param name="Description">Free-text room description.</param>
 /// <param name="Capacity">Maximum occupancy.</param>
-/// <param name="IsFree">Whether the room is free to use.</param>
-/// <param name="PricePerHour">Hourly price, if any.</param>
+/// <param name="PricePerHour">Hourly price (always positive).</param>
 /// <param name="Currency">ISO currency code for the price.</param>
 /// <param name="HouseRules">House rules and usage conditions.</param>
 /// <param name="Amenities">Amenities as string tokens.</param>
@@ -27,8 +26,7 @@ public record RoomDetailDto(
     string RoomName,
     string Description,
     int Capacity,
-    bool IsFree,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     string HouseRules,
     IReadOnlyList<string> Amenities,

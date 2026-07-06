@@ -2,6 +2,12 @@
 
 > **Status:** Draft — sections resolved through discovery; the **POC scope, architecture, and stack are decided.** One **Open Question** remains (demand channels — needs founder input); other deferred items are recorded as **Deferred Decisions**. Pending product-owner sign-off.
 
+> **⚠️ Update (2026-07-07): free listings are removed.** Founder decision — free venues aren't
+> going to be a thing. Every room carries a required, host-set hourly price; there is no
+> "free vs. paid" filter and no FREE badge anywhere in the product. References to free-first
+> positioning, $0 pricing, free inventory as the acquisition engine, and the budget-constrained
+> free-seeker below are **historical context, superseded** — see SYSTEM_DESIGN §17 (2026-07-07).
+
 ---
 
 ## Overview
@@ -128,13 +134,13 @@ Kept deliberately simple for v1. Two primary personas — the **Organizer** (con
 
 **Organizer (demand)**
 - As an organizer, I want to **install the app and browse nearby spaces immediately, without signing up**, so that I can judge whether Steeple is worth my time before committing anything. *(low-friction install & browsing)*
-- As an organizer, I want to **filter by activity type** (children, sports, community, religious), **group size, day/time, and free vs. paid**, so that I only see spaces that genuinely fit my need. *(intent-based matching & filtering)*
+- As an organizer, I want to **filter by activity type** (children, sports, community, religious), **group size, and day/time**, so that I only see spaces that genuinely fit my need. *(intent-based matching & filtering)*
 - As an organizer, I want to book a space as **a one-off OR as a bounded recurring slot (with start + end dates)**, so that both single events and ongoing programs are covered, with a clear renewal point. *(one-off + bounded recurring)*
 - As an organizer, I want to **apply by describing my group and intent, signing in with Google/Apple only at that point**, so that I prove I'm genuine without friction before I'm even sure I want to book. *(managed trust, low friction)*
 - As an organizer, I want to be **notified when I'm approved, asked a question, or declined**, so that I know where I stand and can plan.
 
 **Church admin (supply)**
-- As a church admin, I want to **list one or several rooms**, each with its own photos, capacity, amenities, house rules, and price (including free), so that I can offer my different spaces appropriately. *(multiple rooms/listings, low-friction provision)*
+- As a church admin, I want to **list one or several rooms**, each with its own photos, capacity, amenities, house rules, and hourly price, so that I can offer my different spaces appropriately. *(multiple rooms/listings, low-friction provision)*
 - As a church admin, I want to **state which activities and groups I'll consider** (e.g. welcome children's and religious groups; no loud sports), so that I attract the right requests and filter out mismatches. *(intent matching)*
 - As a church admin, I want to be **notified of a new application**, see the **applicant's stated intent and trust signals**, and **approve, ask, or decline**, so that I stay in control of who enters our space. *(notifications, managed trust)*
 - As a church admin, I want **approved recurring bookings to repeat automatically**, so that I don't re-approve the same playgroup every week.
@@ -177,7 +183,7 @@ Kept deliberately simple for v1. Two primary personas — the **Organizer** (con
 The core v1 is a **polished, map-based marketplace** (not a flat directory — a directory would be "dead on arrival" in 2026; users expect a rich experience). Supply is **concierge-onboarded** by the founder (manually listing known churches, as in 2017) so the map is never empty — but the **demand-side product is fully built and productized**. Principle: *concierge supply, productized demand.* **Go-to-market: supply first** — concierge-onboard a cluster of churches in one NoVA suburb (the founder picks the specific suburb from her existing church/school network) so the map has density before demand arrives.
 
 - **Map-based search** of church/community spaces within a **single allowed beachhead area** (one NoVA suburb), with pins and listing previews.
-- **Filters:** proximity, day/time/recurrence, capacity/group size, free vs. paid, activity-fit, **accessibility**.
+- **Filters:** proximity, day/time/recurrence, capacity/group size, activity-fit, **accessibility**.
 - **Rich listing pages:** photos, capacity, amenities (parking, kitchen, restrooms, **step-free/accessible access**), house rules, identity-verification status (SSO).
 - **Application → approval flow** carrying intent (activity, group size, frequency) so suppliers can decide; supplier can approve, ask, or decline.
 - **Minimal trust layer:** **SSO (Sign in with Google/Apple)** at the *apply* step; written intent; basic ratings/history. (Phone OTP is a deferred paid step-up, not in the MVP.)

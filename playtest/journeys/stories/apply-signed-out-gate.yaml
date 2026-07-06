@@ -1,0 +1,15 @@
+description: Signed-out apply survives the sign-in gate and lands in the inbox thread.
+timeout: 8m
+story: |
+  You run a small toddler playgroup. You've heard the Fellowship Hall at Grace
+  Community Church of Vienna is lovely. Find it and ask to book it for a one-off
+  morning session about three weeks from now (any two-hour slot the calendar
+  shows as open). Describe your group honestly in the request. You don't have an
+  account — when the site asks you to sign in, use the dev sign-in with the email
+  "maria@steeple.test" and the name "Maria Lopez". Finish by confirming your
+  request went through and noting where you'll hear back.
+success:
+  - console_errors: 0
+  - api_called: "POST /space/*/apply"
+  - url_matches: "/inbox/applications/*"
+  - assert: The application thread shows the request as pending, with the date and time that were picked, and makes clear the venue will respond.

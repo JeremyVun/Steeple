@@ -2,11 +2,8 @@
 
 <section class="inbox-page wrap">
     <header class="inbox-head">
+        <partial name="_ManageTabs" model="@("requests")" />
         <h1>Requests for your spaces</h1>
-        <nav class="inbox-tabs" aria-label="Inbox sections">
-            <a class="inbox-tab" href="~/inbox">Asking</a>
-            <a class="inbox-tab is-active" href="~/manage/applications" aria-current="page">Hosting</a>
-        </nav>
     </header>
 
     <partial name="_ApplicationList" model="Model" />

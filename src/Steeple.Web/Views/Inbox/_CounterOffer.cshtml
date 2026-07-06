@@ -22,7 +22,7 @@
             @if (Model.CounterSnaps.Count > 0)
             {
                 <div class="counter-snaps">
-                    <p class="field-label">Nearby free windows — suggest one in a tap</p>
+                    <p class="field-label">Nearby open windows — suggest one in a tap</p>
                     <div class="chip-set">
                         @foreach (var chip in Model.CounterSnaps)
                         {
@@ -89,7 +89,7 @@
             <div class="form-field">
                 <label class="field-label" for="counter-message">Add a note (optional)</label>
                 <textarea class="form-input" id="counter-message" name="Message" rows="2" maxlength="2000"
-                          placeholder="E.g. that room's free earlier — would 6 PM suit?"></textarea>
+                          placeholder="E.g. that room's open earlier — would 6 PM suit?"></textarea>
             </div>
 
             <button type="submit" class="btn btn-primary">Suggest this time</button>

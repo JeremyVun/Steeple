@@ -249,7 +249,7 @@ cancellation frees the slot.
 Venue 1─* Room 1─* RoomPhoto
   slug, address, lat/long (indexed), IsIdentityVerified, venue type, Timezone (IANA),
   UpdatedAtUtc, ProviderEditedAtUtc (Phase 5)
-                        Room: capacity, price (null = FREE), house rules, flags enums as
+                        Room: capacity, price (NOT NULL, CHECK > 0), house rules, flags enums as
                         int bitmasks (Amenity / AccessibilityFeature / ActivityType),
                         Status (Draft/Published/Unlisted), UpdatedAtUtc,
                         PublishRequestedAtUtc / FirstPublishedAtUtc / ProviderEditedAtUtc

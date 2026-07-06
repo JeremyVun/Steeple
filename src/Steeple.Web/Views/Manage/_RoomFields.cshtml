@@ -27,10 +27,10 @@
         <p class="field-help">How many people fit comfortably.</p>
     </div>
     <div class="form-field">
-        <label class="field-label" for="room-price">Price per hour</label>
+        <label class="field-label" for="room-price">Price per hour (USD)</label>
         <input class="form-input form-input-sm" id="room-price" name="PricePerHour" inputmode="decimal"
-               value="@Model.PricePerHour" placeholder="0" />
-        <p class="field-help">Leave blank or 0 for free — free listings get a badge organizers love.</p>
+               value="@Model.PricePerHour" required placeholder="30" />
+        <p class="field-help">An hourly rate organizers can budget around — you can change it any time.</p>
     </div>
 </div>
 

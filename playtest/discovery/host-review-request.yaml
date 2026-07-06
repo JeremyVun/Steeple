@@ -1,0 +1,15 @@
+description: A host finds the waiting request and decides on it with confidence.
+story: |
+  You look after the buildings at Grace Community Church of Vienna. Someone has
+  asked to use one of your spaces. Find the request, understand who is asking
+  and for what, and deal with it the way you actually would — approve it, ask
+  them something first, or suggest a time that suits the church better. Finish
+  when you're confident about where things stand.
+persona: [pastor-dave-host]
+report:
+  - How long did it take to find the waiting request from wherever they landed after sign-in, and what did they try first?
+  - While reading the request, did they feel they knew enough about the applicant to decide? What was missing that they wanted?
+  - Were the three moves (approve / ask a question / suggest another time) all discoverable and clearly distinct? Which of them did they nearly miss?
+  - If they used the counter-offer path, did the suggested-time chips and the manual fields make sense together?
+  - After deciding, could they say what the organizer will now see and whether the time is locked? What told them — or failed to?
+  - Did anything in this flow feel riskier or more ambiguous than it should for someone protective of their building?

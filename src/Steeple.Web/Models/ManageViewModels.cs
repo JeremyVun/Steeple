@@ -155,7 +155,7 @@ public sealed class RoomFormViewModel
     public string Description { get; set; } = "";
     public int? Capacity { get; set; }
 
-    /// <summary>Empty = free (the API stores non-positive as free).</summary>
+    /// <summary>Required — every room has a positive hourly price.</summary>
     public string PricePerHour { get; set; } = "";
 
     public string HouseRules { get; set; } = "";
@@ -188,7 +188,7 @@ public sealed class RoomFormViewModel
         Name = room.Name,
         Description = room.Description,
         Capacity = room.Capacity,
-        PricePerHour = room.PricePerHour is { } price ? price.ToString("0.##") : "",
+        PricePerHour = room.PricePerHour.ToString("0.##"),
         HouseRules = room.HouseRules,
         Activities = [.. room.Activities],
         Amenities = [.. room.Amenities],
@@ -203,7 +203,9 @@ public sealed class RoomFormViewModel
         Name: Name.Trim(),
         Description: Description.Trim(),
         Capacity: Capacity,
-        PricePerHour: decimal.TryParse(PricePerHour, out var price) ? price : 0m,
+        // Blank/unparseable goes as null so the API's "set an hourly price" validation speaks,
+        // rather than a misleading zero.
+        PricePerHour: decimal.TryParse(PricePerHour, out var price) ? price : null,
         HouseRules: HouseRules.Trim(),
         Status: null,
         Activities: Activities,

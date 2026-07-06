@@ -98,6 +98,7 @@ public sealed class SiteController : SteepleControllerBase
         ViewData["SignInEnabled"] = _flags.IsEnabled("web.sign_in_enabled");
         ViewData["GoogleClientId"] = _auth.Google.ClientId;
         ViewData["AppleEnabled"] = !string.IsNullOrEmpty(_auth.Apple.ServicesId);
+        ViewData["DevLoginEnabled"] = _auth.DevLoginEnabled;
         ViewData["TurnstileSiteKey"] = _turnstile.SiteKey;
         return View();
     }

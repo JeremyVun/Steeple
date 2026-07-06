@@ -19,9 +19,23 @@ ASPNETCORE_ENVIRONMENT=Development Api__BaseUrl=http://localhost:5200 \
 
 Wait for readiness with `curl -s http://localhost:5200/api/v1/geofence` (anonymous, cheap).
 
-## Authenticated API calls without SSO
+## Authenticated calls without SSO — dev sign-in (preferred)
 
-There is no fake SSO verifier, but the dev JWT signing key is committed
+Development registers a **dev identity provider** (`Auth:DevLoginEnabled`, both apps'
+`appsettings.Development.json`; absent from base config so it never ships):
+
+- **API:** `POST /api/v1/auth/sessions` with `{"provider":"dev","idToken":"email|Name",
+  "turnstileToken":"x","device":{"platform":"web","label":"dev"}}` → full token pair.
+  Repeat sign-ins with the same email land on the same account.
+- **Web:** `/login` renders a "Dev sign-in" email form (POST `/auth/dev/callback`, antiforgery
+  applies) that issues the real `steeple.auth` cookie — so **web submit flows ARE drivable
+  headlessly/by browser automation now**: fetch `/login`, lift `__RequestVerificationToken`,
+  POST email + token with a cookie jar.
+- A brand-new dev user has no venues; insert a `venue_managers` row (below) to make one a host.
+
+## Authenticated API calls without SSO — minting JWTs directly (fallback)
+
+The dev JWT signing key is committed
 (`src/Steeple.Api/appsettings.Development.json`, `Auth:Jwt:SigningKey`), validation is
 signature-only (HS256, iss `steeple-api`, aud `steeple`, claims `sub`/`sid`/`name`), and no
 per-request session lookup happens. So:
@@ -38,9 +52,8 @@ Seeded room handy for flows: Fellowship Hall `10000000-0000-0000-0000-0000000000
 (venue `11111111-1111-1111-1111-111111111111`, slug `grace-community-vienna/fellowship-hall`,
 tz America/New_York). Draft room `renovation-annex` must stay 404 publicly.
 
-**Web submit flows can't be driven headlessly** — the `steeple.auth` cookie is
-DataProtection-encrypted and unforgeable. Verify Web GET renders + BFF mapping code, and
-drive the mutation at the API surface instead.
+The `steeple.auth` cookie is DataProtection-encrypted and unforgeable — never synthesize it;
+obtain it through the dev sign-in form above.
 
 ## Gotchas
 

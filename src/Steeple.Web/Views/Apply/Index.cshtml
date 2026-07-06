@@ -67,75 +67,95 @@
                     <p class="field-help">@room.RoomName seats up to @room.Capacity.</p>
                 </div>
 
-                <fieldset class="form-field form-fieldset">
-                    <legend class="field-label">How often</legend>
-                    <div class="freq-toggle" role="radiogroup">
-                        <label class="toggle-pill">
-                            <input type="radio" name="Frequency" value="oneOff" checked="@(!isWeekly)"
-                                   data-freq-radio data-schedule-field /> Just once
-                        </label>
-                        <label class="toggle-pill">
-                            <input type="radio" name="Frequency" value="recurringWeekly" checked="@isWeekly"
-                                   data-freq-radio data-schedule-field /> Weekly
-                        </label>
-                    </div>
-                </fieldset>
-
                 @if (Model.PickerEnabled)
                 {
                     var calMonth = Model.InitialMonth.ToString("yyyy-MM");
                     var calUrl = Url.Content($"~/space/{venue.Slug}/{room.RoomSlug}/apply/calendar?month={calMonth}")
                         + (form.StartDate is { } sd ? $"&selected={sd:yyyy-MM-dd}" : "");
-                    <div class="apply-picker" data-apply-picker>
+                    <div class="apply-picker" data-apply-picker
+                         data-day-url="@Url.Content($"~/space/{venue.Slug}/{room.RoomSlug}/apply/day")">
+                        <p class="field-label">When</p>
+                        <p class="apply-day-hint">Tap a date — tap more to ask for several days at once.</p>
                         <div id="apply-calendar-slot" class="apply-calendar-slot"
                              hx-get="@calUrl" hx-trigger="load" hx-target="this" hx-swap="innerHTML">
                             <p class="avail-preview-loading" role="status">Loading the calendar…</p>
                         </div>
+
+                        <div class="apply-repeat" data-repeat-block hidden>
+                            <label class="toggle-pill">
+                                <input type="checkbox" data-repeat-toggle /> Repeats weekly
+                            </label>
+                            <div class="apply-repeat-until" data-until-block hidden>
+                                <div class="chip-set until-presets" role="group" aria-label="How long the series runs">
+                                    <button type="button" class="chip-btn" data-until="56">8 weeks</button>
+                                    <button type="button" class="chip-btn" data-until="92">3 months</button>
+                                    <button type="button" class="chip-btn" data-until="0">Custom</button>
+                                </div>
+                                <label class="apply-until-field">
+                                    <span class="field-label">Until</span>
+                                    <input class="form-input" type="date" data-until-date />
+                                </label>
+                                <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
+                            </div>
+                        </div>
+
+                        <p class="apply-schedule-summary" data-schedule-summary aria-live="polite" hidden></p>
+
                         <div id="apply-day-windows" class="apply-day-windows">
-                            <p class="apply-day-hint">Pick a date on the calendar to see its free times.</p>
+                            <p class="apply-day-hint">Pick a date on the calendar to see its open times.</p>
                         </div>
                     </div>
                 }
 
-                <div class="form-row@(Model.PickerEnabled ? " apply-native-schedule" : "")">
-                    <div class="form-field apply-native-start" data-when-freq="oneOff recurringWeekly">
-                        <label class="field-label" for="apply-startdate" data-label-oneoff="Date" data-label-weekly="First date">@(isWeekly ? "First date" : "Date")</label>
-                        <input class="form-input" id="apply-startdate" name="StartDate" type="date"
-                               value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required
-                               data-schedule-field data-start-date />
-                    </div>
-                    <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
-                        <label class="field-label" for="apply-enddate">Until</label>
-                        <input class="form-input" id="apply-enddate" name="EndDate" type="date"
-                               value="@(form.EndDate?.ToString("yyyy-MM-dd"))"
-                               data-schedule-field data-end-date />
-                        @if (Model.PickerEnabled)
-                        {
-                            <div class="chip-set until-presets" role="group" aria-label="How long the series runs">
-                                <button type="button" class="chip-btn" data-until="56">8 weeks</button>
-                                <button type="button" class="chip-btn" data-until="92">3 months</button>
-                                <button type="button" class="chip-btn" data-until="0">Custom</button>
-                            </div>
-                        }
-                        <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
-                    </div>
-                </div>
-
-                <fieldset class="form-field form-fieldset" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
-                    <legend class="field-label">On these days</legend>
-                    <div class="chip-set">
-                        @foreach (var option in ApplyViewModel.DayOptions)
-                        {
-                            <label class="chip">
-                                <input type="checkbox" name="DaysOfWeek" value="@option.Value"
-                                       data-schedule-field data-weekday="@option.Value"
-                                       @(form.DaysOfWeek.Contains(option.Value) ? "checked" : "") />
-                                <span class="chip-text">@option.Label</span>
+                @* No-JS / picker-off fallback: these are also the canonical posted inputs the
+                   picker writes into (Frequency, StartDate, EndDate, DaysOfWeek). *@
+                <div class="apply-native-schedule">
+                    <fieldset class="form-field form-fieldset">
+                        <legend class="field-label">How often</legend>
+                        <div class="freq-toggle" role="radiogroup">
+                            <label class="toggle-pill">
+                                <input type="radio" name="Frequency" value="oneOff" checked="@(!isWeekly)"
+                                       data-freq-radio data-schedule-field /> Just once
                             </label>
-                        }
+                            <label class="toggle-pill">
+                                <input type="radio" name="Frequency" value="recurringWeekly" checked="@isWeekly"
+                                       data-freq-radio data-schedule-field /> Weekly
+                            </label>
+                        </div>
+                    </fieldset>
+
+                    <div class="form-row">
+                        <div class="form-field" data-when-freq="oneOff recurringWeekly">
+                            <label class="field-label" for="apply-startdate" data-label-oneoff="Date" data-label-weekly="First date">@(isWeekly ? "First date" : "Date")</label>
+                            <input class="form-input" id="apply-startdate" name="StartDate" type="date"
+                                   value="@(form.StartDate?.ToString("yyyy-MM-dd"))" required
+                                   data-schedule-field data-start-date />
+                        </div>
+                        <div class="form-field" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
+                            <label class="field-label" for="apply-enddate">Until</label>
+                            <input class="form-input" id="apply-enddate" name="EndDate" type="date"
+                                   value="@(form.EndDate?.ToString("yyyy-MM-dd"))"
+                                   data-schedule-field data-end-date />
+                            <p class="field-help">Weekly bookings run to a set end date — you can renew later.</p>
+                        </div>
                     </div>
-                    <p class="field-help">Pick one or more — "Tuesdays and Thursdays" is one request.</p>
-                </fieldset>
+
+                    <fieldset class="form-field form-fieldset" data-when-freq="recurringWeekly" hidden="@(!isWeekly)">
+                        <legend class="field-label">On these days</legend>
+                        <div class="chip-set">
+                            @foreach (var option in ApplyViewModel.DayOptions)
+                            {
+                                <label class="chip">
+                                    <input type="checkbox" name="DaysOfWeek" value="@option.Value"
+                                           data-schedule-field data-weekday="@option.Value"
+                                           @(form.DaysOfWeek.Contains(option.Value) ? "checked" : "") />
+                                    <span class="chip-text">@option.Label</span>
+                                </label>
+                            }
+                        </div>
+                        <p class="field-help">Pick one or more — "Tuesdays and Thursdays" is one request.</p>
+                    </fieldset>
+                </div>
 
                 <div class="apply-native-times">
                     <div class="form-row">
@@ -206,14 +226,7 @@
                     <p class="apply-summary-title">@room.RoomName</p>
                     <p class="apply-summary-venue">@venue.Name</p>
                     <p class="apply-summary-meta">
-                        @if (room.IsFree)
-                        {
-                            <span class="badge badge-free">Free to use</span>
-                        }
-                        else if (room.PricePerHour is decimal price)
-                        {
-                            <span class="badge badge-price">$@price.ToString("0.##")/hr</span>
-                        }
+                        <span class="badge badge-price">$@room.PricePerHour.ToString("0.##")/hr</span>
                         <span class="keyfact">Up to @room.Capacity people</span>
                     </p>
                     <a class="apply-summary-link" href="@spaceUrl">View the full listing</a>

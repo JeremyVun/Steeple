@@ -1,0 +1,10 @@
+# UX discovery study — persona runs mined for polish/cohesion findings, not pass/fail.
+# Serial: cases share the dev database and the reset hook.
+mode: discovery
+actor_model: gpt5_5
+timeout: 15m
+max_steps: 120
+parallel: 1
+app:
+  base_url: http://localhost:5187
+  init: ../shared/reset.sh

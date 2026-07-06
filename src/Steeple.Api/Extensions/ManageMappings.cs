@@ -41,7 +41,6 @@ public static class ManageMappings
             Status: FlagEnumExtensions.ToCamelCaseToken(room.Status.ToString()),
             PublishRequestedAtUtc: room.PublishRequestedAtUtc,
             Capacity: room.Capacity,
-            IsFree: room.IsFree,
             PricePerHour: room.PricePerHour,
             Currency: room.Currency,
             // Same cover-selection rule as public listings; thumb-sized for the manage list.

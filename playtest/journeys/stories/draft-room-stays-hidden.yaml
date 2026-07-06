@@ -1,0 +1,8 @@
+description: A draft room's direct link answers not-found with a way back to browsing.
+story: |
+  A friend texted you a link to a space called the "Renovation Annex" at Oakton
+  Baptist — the address ends in /space/oakton-baptist/renovation-annex. Open it
+  and see what's there. If it isn't available, find your way back to browsing
+  the other spaces.
+success:
+  - assert: The draft room's details were never shown — the page said the space wasn't found or available, and offered a way back to browsing, which worked.

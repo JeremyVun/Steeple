@@ -65,6 +65,7 @@ public class GuestAvailabilityIntegrationTests
             Slug = $"hall-{Guid.NewGuid():N}",
             Description = "A hall.",
             Capacity = 40,
+            PricePerHour = 30m,
             Status = RoomStatus.Published,
             CreatedAtUtc = FixedNow,
             UpdatedAtUtc = FixedNow,

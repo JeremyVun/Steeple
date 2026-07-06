@@ -158,6 +158,31 @@ public sealed class AuthController : SteepleControllerBase
             ct);
     }
 
+    /// <summary>
+    /// Development-only sign-in: exchanges an email (plus optional display name) at the API's
+    /// "dev" provider. Same-origin POST from the login page's dev form, so antiforgery applies.
+    /// 404s unless <c>Auth:DevLoginEnabled</c> is set (appsettings.Development.json only).
+    /// </summary>
+    [HttpPost("/auth/dev/callback")]
+    public async Task<IActionResult> DevCallback(
+        string email, string? displayName, string? returnUrl, CancellationToken ct)
+    {
+        if (!SignInAvailable() || !_auth.DevLoginEnabled)
+        {
+            return NotFound();
+        }
+
+        var idToken = string.IsNullOrWhiteSpace(displayName) ? email : $"{email}|{displayName.Trim()}";
+        return await ExchangeAndSignInAsync(
+            provider: "dev",
+            idToken: idToken,
+            nonce: null,
+            turnstileToken: null,
+            displayNameHint: displayName,
+            returnUrl: returnUrl,
+            ct);
+    }
+
     /// <summary>Signs out: revokes the API session (best-effort) and clears the auth cookie.</summary>
     [Authorize]
     [HttpPost("/auth/signout")]

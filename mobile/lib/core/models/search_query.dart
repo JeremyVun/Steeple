@@ -55,14 +55,13 @@ class WhenFilter {
     String? Function()? timeOfDay,
     String? Function()? startTime,
     String? Function()? endTime,
-  }) =>
-      WhenFilter(
-        date: date == null ? this.date : date(),
-        daysOfWeek: daysOfWeek ?? this.daysOfWeek,
-        timeOfDay: timeOfDay == null ? this.timeOfDay : timeOfDay(),
-        startTime: startTime == null ? this.startTime : startTime(),
-        endTime: endTime == null ? this.endTime : endTime(),
-      );
+  }) => WhenFilter(
+    date: date == null ? this.date : date(),
+    daysOfWeek: daysOfWeek ?? this.daysOfWeek,
+    timeOfDay: timeOfDay == null ? this.timeOfDay : timeOfDay(),
+    startTime: startTime == null ? this.startTime : startTime(),
+    endTime: endTime == null ? this.endTime : endTime(),
+  );
 }
 
 /// The one filter/search state (`searchFiltersProvider`, MOBILE_CONTRACTS §8).
@@ -81,7 +80,6 @@ class SearchQuery {
     this.maxLng,
     this.suburb,
     this.minCapacity,
-    this.freeOnly = false,
     this.activities = const <String>[],
     this.accessibility = const <String>[],
     this.date,
@@ -105,7 +103,6 @@ class SearchQuery {
 
   final String? suburb;
   final int? minCapacity;
-  final bool freeOnly;
   final List<String> activities;
   final List<String> accessibility;
 
@@ -132,7 +129,6 @@ class SearchQuery {
     double? maxLng,
     String? suburb,
     int? minCapacity,
-    bool? freeOnly,
     List<String>? activities,
     List<String>? accessibility,
     String? date,
@@ -143,35 +139,32 @@ class SearchQuery {
     int? durationMinutes,
     int? page,
     int? pageSize,
-  }) =>
-      SearchQuery(
-        centerLat: centerLat ?? this.centerLat,
-        centerLng: centerLng ?? this.centerLng,
-        radiusMeters: radiusMeters ?? this.radiusMeters,
-        minLat: minLat ?? this.minLat,
-        maxLat: maxLat ?? this.maxLat,
-        minLng: minLng ?? this.minLng,
-        maxLng: maxLng ?? this.maxLng,
-        suburb: suburb ?? this.suburb,
-        minCapacity: minCapacity ?? this.minCapacity,
-        freeOnly: freeOnly ?? this.freeOnly,
-        activities: activities ?? this.activities,
-        accessibility: accessibility ?? this.accessibility,
-        date: date ?? this.date,
-        daysOfWeek: daysOfWeek ?? this.daysOfWeek,
-        timeOfDay: timeOfDay ?? this.timeOfDay,
-        startTime: startTime ?? this.startTime,
-        endTime: endTime ?? this.endTime,
-        durationMinutes: durationMinutes ?? this.durationMinutes,
-        page: page ?? this.page,
-        pageSize: pageSize ?? this.pageSize,
-      );
+  }) => SearchQuery(
+    centerLat: centerLat ?? this.centerLat,
+    centerLng: centerLng ?? this.centerLng,
+    radiusMeters: radiusMeters ?? this.radiusMeters,
+    minLat: minLat ?? this.minLat,
+    maxLat: maxLat ?? this.maxLat,
+    minLng: minLng ?? this.minLng,
+    maxLng: maxLng ?? this.maxLng,
+    suburb: suburb ?? this.suburb,
+    minCapacity: minCapacity ?? this.minCapacity,
+    activities: activities ?? this.activities,
+    accessibility: accessibility ?? this.accessibility,
+    date: date ?? this.date,
+    daysOfWeek: daysOfWeek ?? this.daysOfWeek,
+    timeOfDay: timeOfDay ?? this.timeOfDay,
+    startTime: startTime ?? this.startTime,
+    endTime: endTime ?? this.endTime,
+    durationMinutes: durationMinutes ?? this.durationMinutes,
+    page: page ?? this.page,
+    pageSize: pageSize ?? this.pageSize,
+  );
 
   /// Builds the query-parameter map for `GET /listings/search`. Dio encodes
   /// `List<String>` values as repeated params, so `activities`/`accessibility`/
   /// `daysOfWeek` are passed through as lists rather than joined. Nulls and
-  /// defaults (`freeOnly: false`, `durationMinutes: 120`, `page: 1`,
-  /// `pageSize: 24`) are omitted.
+  /// defaults (`durationMinutes: 120`, `page: 1`, `pageSize: 24`) are omitted.
   Map<String, dynamic> toQueryParameters() {
     final params = <String, dynamic>{};
     if (centerLat != null) params['centerLat'] = centerLat;
@@ -183,7 +176,6 @@ class SearchQuery {
     if (maxLng != null) params['maxLng'] = maxLng;
     if (suburb != null) params['suburb'] = suburb;
     if (minCapacity != null) params['minCapacity'] = minCapacity;
-    if (freeOnly) params['freeOnly'] = true;
     if (activities.isNotEmpty) params['activities'] = activities;
     if (accessibility.isNotEmpty) params['accessibility'] = accessibility;
     if (date != null) params['date'] = date;

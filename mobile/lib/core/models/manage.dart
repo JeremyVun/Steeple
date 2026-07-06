@@ -41,8 +41,7 @@ abstract class ManagedRoomSummary with _$ManagedRoomSummary {
     required String status,
     DateTime? publishRequestedAtUtc,
     required int capacity,
-    required bool isFree,
-    double? pricePerHour,
+    required double pricePerHour,
     required String currency,
     String? primaryPhotoUrl,
     required int photoCount,
@@ -52,8 +51,11 @@ abstract class ManagedRoomSummary with _$ManagedRoomSummary {
   factory ManagedRoomSummary.fromJson(Map<String, dynamic> json) =>
       _$ManagedRoomSummaryFromJson(json);
 
-  ManagedRoomStatus get statusValue =>
-      parseWireEnum(status, ManagedRoomStatus.tokens, ManagedRoomStatus.unknown);
+  ManagedRoomStatus get statusValue => parseWireEnum(
+    status,
+    ManagedRoomStatus.tokens,
+    ManagedRoomStatus.unknown,
+  );
 }
 
 /// `GET /api/v1/manage/venues/{id}` — the venue's own fields plus its rooms
@@ -95,9 +97,7 @@ abstract class ManagedVenueDetail with _$ManagedVenueDetail {
 
 /// `GET /api/v1/manage/rooms/{id}` and the response of
 /// `PATCH /api/v1/manage/rooms/{id}` (§6) — the editable room in full,
-/// including its venue context and photos. No `isFree` field on the wire
-/// (unlike the public `RoomDetail`/`ManagedRoomSummary`) — [isFree] derives
-/// it the same way the API does: `pricePerHour <= 0` (or unset) means free.
+/// including its venue context and photos.
 @freezed
 abstract class ManagedRoom with _$ManagedRoom {
   const ManagedRoom._();
@@ -111,7 +111,7 @@ abstract class ManagedRoom with _$ManagedRoom {
     required String slug,
     required String description,
     required int capacity,
-    double? pricePerHour,
+    required double pricePerHour,
     required String currency,
     required String houseRules,
 
@@ -129,16 +129,18 @@ abstract class ManagedRoom with _$ManagedRoom {
   factory ManagedRoom.fromJson(Map<String, dynamic> json) =>
       _$ManagedRoomFromJson(json);
 
-  ManagedRoomStatus get statusValue =>
-      parseWireEnum(status, ManagedRoomStatus.tokens, ManagedRoomStatus.unknown);
-
-  bool get isFree => pricePerHour == null || pricePerHour! <= 0;
+  ManagedRoomStatus get statusValue => parseWireEnum(
+    status,
+    ManagedRoomStatus.tokens,
+    ManagedRoomStatus.unknown,
+  );
 }
 
 /// Client-side edit request for `PATCH /api/v1/manage/rooms/{id}` (§6) —
 /// never deserialized from the wire. Every field is "leave unchanged" when
-/// omitted, so [toJson] emits only the ones actually set; `pricePerHour <= 0`
-/// means free (server convention, mirrored — not enforced client-side).
+/// omitted, so [toJson] emits only the ones actually set. The edit form
+/// validates and sends a positive [pricePerHour] when saving room fields;
+/// status-only patches omit it.
 class ManagedRoomPatch {
   const ManagedRoomPatch({
     this.name,
@@ -165,14 +167,14 @@ class ManagedRoomPatch {
   final List<String>? accessibility;
 
   Map<String, dynamic> toJson() => {
-        if (name != null) 'name': name,
-        if (description != null) 'description': description,
-        if (capacity != null) 'capacity': capacity,
-        if (pricePerHour != null) 'pricePerHour': pricePerHour,
-        if (houseRules != null) 'houseRules': houseRules,
-        if (status != null) 'status': status,
-        if (activities != null) 'activities': activities,
-        if (amenities != null) 'amenities': amenities,
-        if (accessibility != null) 'accessibility': accessibility,
-      };
+    if (name != null) 'name': name,
+    if (description != null) 'description': description,
+    if (capacity != null) 'capacity': capacity,
+    if (pricePerHour != null) 'pricePerHour': pricePerHour,
+    if (houseRules != null) 'houseRules': houseRules,
+    if (status != null) 'status': status,
+    if (activities != null) 'activities': activities,
+    if (amenities != null) 'amenities': amenities,
+    if (accessibility != null) 'accessibility': accessibility,
+  };
 }

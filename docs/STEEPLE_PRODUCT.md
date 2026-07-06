@@ -3,6 +3,12 @@
 
 *An overview of what Steeple is, why it exists, who it serves, and how it sustains itself. A separate technical specification (the PRD) covers the build.*
 
+> **⚠️ Update (2026-07-07): free listings are removed.** Every room now carries a required,
+> host-set hourly price. The free-first framing woven through this brief ("usually for free",
+> "free is the whole point", "most bookings are free") is **historical context, superseded** —
+> see SYSTEM_DESIGN §17 (2026-07-07). The community-first, request→approve, trust-centered
+> framing all still stands.
+
 ---
 
 Steeple is a local marketplace for community space. Churches across a neighborhood open their spare halls, rooms, and kitchens — usually for free — to the playgroups, tutoring classes, clubs, and small non-profits nearby that need an affordable place to meet. It replaces the door-knocking and cold-calling that finding community space still depends on: an organizer searches a map of what's nearby, sees real photos and details, and sends the church a request; the church sees who's asking and what for, and says yes, asks a question, or declines.

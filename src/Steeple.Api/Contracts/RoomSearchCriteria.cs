@@ -6,7 +6,6 @@ namespace Steeple.Api.Contracts;
 /// </summary>
 /// <param name="Bounds">The (already clamped) geographic bounds to search within.</param>
 /// <param name="MinCapacity">Optional minimum room capacity.</param>
-/// <param name="FreeOnly">When <c>true</c>, only free rooms.</param>
 /// <param name="Activities">Activity types to filter by; <see cref="ActivityType.None"/> means no filter.</param>
 /// <param name="Accessibility">Accessibility features to filter by; <see cref="AccessibilityFeature.None"/> means no filter.</param>
 /// <param name="Suburb">Optional suburb/locality filter (case-insensitive exact match); <c>null</c>/blank means no filter.</param>
@@ -20,7 +19,6 @@ namespace Steeple.Api.Contracts;
 public record RoomSearchCriteria(
     BoundingBox Bounds,
     int? MinCapacity,
-    bool FreeOnly,
     ActivityType Activities,
     AccessibilityFeature Accessibility,
     string? Suburb,

@@ -10,8 +10,8 @@ import 'chips.dart';
 /// The one listing card (DESIGN_SYSTEM §8.5) — list rows AND map popups use
 /// this; a feature-local variant is a review defect (MOBILE_CONTRACTS §9).
 ///
-/// Anatomy: 4:3 photo (CDN thumb variant, decode sized to layout), FREE/price
-/// badge top-left, room name, venue + suburb, capacity, tag chips (max 3 +
+/// Anatomy: 4:3 photo (CDN thumb variant, decode sized to layout), price badge
+/// top-left, room name, venue + suburb, capacity, tag chips (max 3 +
 /// "+n"). One tap target with one semantic label.
 class ListingCard extends StatelessWidget {
   const ListingCard({required this.summary, this.onTap, super.key});
@@ -31,7 +31,7 @@ class ListingCard extends StatelessWidget {
     final semanticLabel = [
       summary.roomName,
       summary.venueName,
-      summary.isFree ? 'free' : 'paid',
+      '${_formatPrice(summary.pricePerHour, summary.currency)} per hour',
       'seats ${summary.capacity}',
     ].join(', ');
 
@@ -68,12 +68,10 @@ class ListingCard extends StatelessWidget {
                       Positioned(
                         top: SteepleTokens.space3,
                         left: SteepleTokens.space3,
-                        child: summary.isFree
-                            ? const FreeBadge()
-                            : PriceBadge(
-                                price: summary.pricePerHour ?? 0,
-                                currency: summary.currency,
-                              ),
+                        child: PriceBadge(
+                          price: summary.pricePerHour,
+                          currency: summary.currency,
+                        ),
                       ),
                     ],
                   ),
@@ -86,15 +84,18 @@ class ListingCard extends StatelessWidget {
                           summary.roomName,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                          style: SteepleTypography.title.copyWith(
+                            color: colors.textPrimary,
+                          ),
                         ),
                         const SizedBox(height: SteepleTokens.space1),
                         Text(
                           '${summary.venueName} · ${summary.suburb}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                          style: SteepleTypography.bodySm.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
                         if (rating != null) ...[
                           const SizedBox(height: SteepleTokens.space1),
@@ -123,12 +124,15 @@ class ListingCard extends StatelessWidget {
                             children: [
                               TextSpan(
                                 text: '${summary.capacity}',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ],
                           ),
-                          style:
-                              SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                          style: SteepleTypography.bodySm.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
                         if (tags.isNotEmpty) ...[
                           const SizedBox(height: SteepleTokens.space3),
@@ -136,9 +140,13 @@ class ListingCard extends StatelessWidget {
                             spacing: SteepleTokens.space2,
                             runSpacing: SteepleTokens.space1,
                             children: [
-                              for (final tag in tags.take(_maxTags)) TagChip(label: tag),
+                              for (final tag in tags.take(_maxTags))
+                                TagChip(label: tag),
                               if (overflowCount > 0)
-                                TagChip(label: '+$overflowCount', overflow: true),
+                                TagChip(
+                                  label: '+$overflowCount',
+                                  overflow: true,
+                                ),
                             ],
                           ),
                         ],
@@ -173,7 +181,8 @@ class _ListingPhoto extends StatelessWidget {
         // Decode at layout size so decode cost matches pixels on screen
         // (MOBILE_DESIGN §4 rule 2).
         memCacheWidth: constraints.maxWidth.isFinite
-            ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context)).round()
+            ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context))
+                  .round()
             : null,
         placeholder: (context, _) => _placeholder(context),
         errorWidget: (context, _, _) => _placeholder(context),
@@ -183,7 +192,9 @@ class _ListingPhoto extends StatelessWidget {
 
   Widget _placeholder(BuildContext context) {
     final colors = context.steepleColors;
-    final initial = summary.roomName.isEmpty ? '·' : summary.roomName[0].toUpperCase();
+    final initial = summary.roomName.isEmpty
+        ? '·'
+        : summary.roomName[0].toUpperCase();
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -205,10 +216,16 @@ class _ListingPhoto extends StatelessWidget {
   }
 }
 
-/// "Free 6:00–9:00 PM" (plus "· Sep 8" for a one-off search's matched date)
+/// "Open 6:00–9:00 PM" (plus "· Sep 8" for a one-off search's matched date)
 /// — the accent line for a card that came from a When filter (CONTRACTS §3).
 String _matchedWindowLabel(MatchedWindow window) {
   final range = timeRange12(window.startTime, window.endTime);
   final date = window.date;
-  return date == null ? 'Free $range' : 'Free $range · ${monthDay(date)}';
+  return date == null ? 'Open $range' : 'Open $range · ${monthDay(date)}';
+}
+
+String _formatPrice(double price, String currency) {
+  final symbol = currency == 'USD' ? r'$' : '$currency ';
+  final whole = price == price.roundToDouble();
+  return '$symbol${whole ? price.toStringAsFixed(0) : price.toStringAsFixed(2)}';
 }

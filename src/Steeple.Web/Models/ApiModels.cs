@@ -78,8 +78,7 @@ public record RoomSummaryDto(
     string RoomName,
     string? PrimaryPhotoUrl,
     int Capacity,
-    bool IsFree,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     double Latitude,
     double Longitude,
@@ -114,8 +113,7 @@ public record RoomDetailDto(
     string RoomName,
     string Description,
     int Capacity,
-    bool IsFree,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     string HouseRules,
     IReadOnlyList<string> Amenities,
@@ -320,8 +318,7 @@ public record ManagedRoomSummaryDto(
     string Status,
     DateTimeOffset? PublishRequestedAtUtc,
     int Capacity,
-    bool IsFree,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     string? PrimaryPhotoUrl,
     int PhotoCount,
@@ -460,7 +457,7 @@ public record ManagedRoomDto(
     string Slug,
     string Description,
     int Capacity,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     string HouseRules,
     string Status,
@@ -588,7 +585,6 @@ public class ListingSearchQuery
     public double? MaxLng { get; set; }
     public string? Suburb { get; set; }
     public int? MinCapacity { get; set; }
-    public bool FreeOnly { get; set; } = false;
     public ActivityType Activities { get; set; } = ActivityType.None;
     public AccessibilityFeature Accessibility { get; set; } = AccessibilityFeature.None;
     public int Page { get; set; } = 1;

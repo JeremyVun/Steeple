@@ -5,6 +5,7 @@
     var appleEnabled = (ViewData["AppleEnabled"] as bool?) == true;
     var turnstileSiteKey = ViewData["TurnstileSiteKey"] as string ?? "";
     var googleEnabled = googleClientId.Length > 0;
+    var devEnabled = (ViewData["DevLoginEnabled"] as bool?) == true;
     var authError = TempData["AuthError"] as string;
 }
 
@@ -31,7 +32,7 @@
                 venues directly — no sign-in needed.
             </p>
         }
-        else if (!googleEnabled && !appleEnabled)
+        else if (!googleEnabled && !appleEnabled && !devEnabled)
         {
             <p class="auth-note">Sign-in isn't available right now. Please try again later.</p>
         }
@@ -84,6 +85,29 @@
                     </form>
                 }
             </div>
+
+            @if (devEnabled)
+            {
+                @* Development-only sign-in (Auth:DevLoginEnabled — never set outside
+                   appsettings.Development.json). Stands in for SSO in the dev loop and
+                   automated playtests. *@
+                <form class="auth-dev" method="post" action="~/auth/dev/callback">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="returnUrl" value="@returnUrl" />
+                    <p class="field-label">Dev sign-in <span class="field-optional">Development only</span></p>
+                    <div class="form-field">
+                        <label class="field-label" for="dev-email">Email</label>
+                        <input class="form-input" id="dev-email" name="email" type="email" required
+                               placeholder="maria@example.com" />
+                    </div>
+                    <div class="form-field">
+                        <label class="field-label" for="dev-name">Name <span class="field-optional">optional</span></label>
+                        <input class="form-input" id="dev-name" name="displayName" maxlength="200"
+                               placeholder="Maria Lopez" />
+                    </div>
+                    <button type="submit" class="auth-btn">Continue as this person</button>
+                </form>
+            }
 
             <p class="auth-consent">
                 By continuing you agree to the

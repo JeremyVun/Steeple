@@ -9,6 +9,13 @@ public sealed class AuthFlowOptions
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Auth";
 
+    /// <summary>
+    /// Shows the dev sign-in form on /login and enables its callback. Set only in
+    /// <c>appsettings.Development.json</c> (mirrored by the API's <c>Auth:DevLoginEnabled</c>);
+    /// base config omits it, so no deployed environment renders the form.
+    /// </summary>
+    public bool DevLoginEnabled { get; set; }
+
     /// <summary>Google settings.</summary>
     public GoogleOptions Google { get; set; } = new();
 

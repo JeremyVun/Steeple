@@ -10,17 +10,28 @@ import '../providers.dart';
 /// Known filter tokens (CONTRACTS §2.1 registry). Unknown server additions
 /// simply don't appear as filters — search itself tolerates any token.
 const activityTokens = [
-  'children', 'sports', 'community', 'religious', 'arts', 'education', 'music', //
+  'children',
+  'sports',
+  'community',
+  'religious',
+  'arts',
+  'education',
+  'music', //
 ];
 const accessibilityTokens = [
-  'stepFreeAccess', 'accessibleRestroom', 'accessibleParking', 'hearingLoop', 'liftAccess', //
+  'stepFreeAccess',
+  'accessibleRestroom',
+  'accessibleParking',
+  'hearingLoop',
+  'liftAccess', //
 ];
 const _capacitySteps = [10, 25, 50, 100];
 
 /// Filters open as a bottom sheet, not a route (MOBILE_CONTRACTS §7).
 /// Multi-value matching is AND — "accepts all requested" — so the copy says
 /// "must have every one you pick".
-Future<void> showFilterSheet(BuildContext context) => showModalBottomSheet<void>(
+Future<void> showFilterSheet(BuildContext context) =>
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -38,10 +49,20 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   /// Weekday wire tokens, Sunday-first (matches the apply schedule's
   /// weekday multi-select — MOBILE_CONTRACTS §5).
   static const _days = [
-    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday', //
   ];
   static const _dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  static const _timeBands = [('morning', 'Morning'), ('afternoon', 'Afternoon'), ('evening', 'Evening')];
+  static const _timeBands = [
+    ('morning', 'Morning'),
+    ('afternoon', 'Afternoon'),
+    ('evening', 'Evening'),
+  ];
 
   /// Progressive disclosure for the weekly chips — starts open when a
   /// weekly selection already exists (e.g. sheet reopened).
@@ -50,7 +71,11 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
   @override
   void initState() {
     super.initState();
-    _weeklyExpanded = ref.read(searchFiltersProvider).when.daysOfWeek.isNotEmpty;
+    _weeklyExpanded = ref
+        .read(searchFiltersProvider)
+        .when
+        .daysOfWeek
+        .isNotEmpty;
   }
 
   String _fmtDate(DateTime d) =>
@@ -81,7 +106,10 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final parts = (current ?? (isEnd ? '17:00' : '09:00')).split(':');
     final picked = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])),
+      initialTime: TimeOfDay(
+        hour: int.parse(parts[0]),
+        minute: int.parse(parts[1]),
+      ),
     );
     if (picked == null) return;
     final hhmm = _fmtTime(picked);
@@ -99,15 +127,15 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
     final when = filters.when;
 
     Widget legend(String text) => Padding(
-          padding: const EdgeInsets.only(
-            top: SteepleTokens.space6,
-            bottom: SteepleTokens.space3,
-          ),
-          child: Text(
-            text.toUpperCase(),
-            style: SteepleTypography.label.copyWith(color: colors.textTertiary),
-          ),
-        );
+      padding: const EdgeInsets.only(
+        top: SteepleTokens.space6,
+        bottom: SteepleTokens.space3,
+      ),
+      child: Text(
+        text.toUpperCase(),
+        style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+      ),
+    );
 
     return DraggableScrollableSheet(
       expand: false,
@@ -118,22 +146,15 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
           Expanded(
             child: ListView(
               controller: scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: SteepleTokens.gutter),
+              padding: const EdgeInsets.symmetric(
+                horizontal: SteepleTokens.gutter,
+              ),
               children: [
                 Text(
                   'Filter spaces',
-                  style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
-                ),
-                legend('Cost'),
-                Wrap(
-                  spacing: SteepleTokens.space2,
-                  children: [
-                    FilterChipPill(
-                      label: 'Free only',
-                      selected: filters.freeOnly,
-                      onTap: () => notifier.setFreeOnly(!filters.freeOnly),
-                    ),
-                  ],
+                  style: SteepleTypography.headlineSerif.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
                 legend('When'),
                 Wrap(
@@ -157,14 +178,20 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                         onPressed: () => _pickDate(notifier),
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SteepleTokens.radiusSm),
+                            borderRadius: BorderRadius.circular(
+                              SteepleTokens.radiusSm,
+                            ),
                           ),
                           alignment: Alignment.centerLeft,
                         ),
                         child: Text(
-                          when.date == null ? 'Pick a date' : monthDay(when.date!),
+                          when.date == null
+                              ? 'Pick a date'
+                              : monthDay(when.date!),
                           style: SteepleTypography.bodySm.copyWith(
-                            color: when.date == null ? colors.textTertiary : colors.textPrimary,
+                            color: when.date == null
+                                ? colors.textTertiary
+                                : colors.textPrimary,
                           ),
                         ),
                       ),
@@ -175,7 +202,8 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 FilterChipPill(
                   label: 'Weekly on…',
                   selected: _weeklyExpanded,
-                  onTap: () => setState(() => _weeklyExpanded = !_weeklyExpanded),
+                  onTap: () =>
+                      setState(() => _weeklyExpanded = !_weeklyExpanded),
                 ),
                 if (_weeklyExpanded) ...[
                   const SizedBox(height: SteepleTokens.space2),
@@ -195,7 +223,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 const SizedBox(height: SteepleTokens.space3),
                 Text(
                   'Time of day',
-                  style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                  style: SteepleTypography.caption.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: SteepleTokens.space2),
                 Wrap(
@@ -217,10 +247,13 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => _pickCustomTime(notifier, when, isEnd: false),
+                        onPressed: () =>
+                            _pickCustomTime(notifier, when, isEnd: false),
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SteepleTokens.radiusSm),
+                            borderRadius: BorderRadius.circular(
+                              SteepleTokens.radiusSm,
+                            ),
                           ),
                           alignment: Alignment.centerLeft,
                         ),
@@ -239,10 +272,13 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                     const SizedBox(width: SteepleTokens.space2),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => _pickCustomTime(notifier, when, isEnd: true),
+                        onPressed: () =>
+                            _pickCustomTime(notifier, when, isEnd: true),
                         style: OutlinedButton.styleFrom(
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(SteepleTokens.radiusSm),
+                            borderRadius: BorderRadius.circular(
+                              SteepleTokens.radiusSm,
+                            ),
                           ),
                           alignment: Alignment.centerLeft,
                         ),
@@ -276,7 +312,9 @@ class _FilterSheetState extends ConsumerState<_FilterSheet> {
                 legend('Accessibility'),
                 Text(
                   'Spaces must have every feature you pick.',
-                  style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                  style: SteepleTypography.caption.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: SteepleTokens.space3),
                 Wrap(

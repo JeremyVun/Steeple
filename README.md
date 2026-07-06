@@ -1,8 +1,8 @@
 # Steeple
 
 > A hyperlocal, community-first marketplace connecting churches with spare halls to local
-> organizers (playgroups, classes, clubs, non-profits) who need affordable — often free —
-> nearby space. Proof-of-concept.
+> organizers (playgroups, classes, clubs, non-profits) who need affordable, nearby space.
+> Proof-of-concept.
 
 **Docs:** [`docs/PRD.md`](docs/PRD.md) (product requirements) ·
 [`docs/STEEPLE_PRODUCT.md`](docs/STEEPLE_PRODUCT.md) (brief) ·

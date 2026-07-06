@@ -17,7 +17,7 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
         builder.Property(r => r.Description).HasMaxLength(4000);
         builder.Property(r => r.HouseRules).HasMaxLength(4000);
 
-        builder.Property(r => r.PricePerHour).HasPrecision(10, 2);
+        builder.Property(r => r.PricePerHour).IsRequired().HasPrecision(10, 2);
         builder.Property(r => r.Currency).IsRequired().HasMaxLength(3);
 
         // Flag enums and status persist as their underlying int.
@@ -41,8 +41,5 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
             .WithOne(p => p.Room!)
             .HasForeignKey(p => p.RoomId)
             .OnDelete(DeleteBehavior.Cascade);
-
-        // Computed, not persisted.
-        builder.Ignore(r => r.IsFree);
     }
 }

@@ -33,7 +33,7 @@ abstract final class SteepleTypography {
     letterSpacing: -0.22,
   );
 
-  /// `priceSerif` — price displays ("FREE", "$25/hr"). Custom style: not a
+  /// `priceSerif` — price displays ("$25/hr"). Custom style: not a
   /// TextTheme slot; badge widgets reference it directly (22/26).
   static const priceSerif = TextStyle(
     fontFamily: SteepleTokens.serifFamily,
@@ -45,16 +45,32 @@ abstract final class SteepleTypography {
   );
 
   /// `titleLg` — app-bar titles, dialog titles (18/24).
-  static const titleLg = TextStyle(fontWeight: FontWeight.w600, fontSize: 18, height: 24 / 18);
+  static const titleLg = TextStyle(
+    fontWeight: FontWeight.w600,
+    fontSize: 18,
+    height: 24 / 18,
+  );
 
   /// `title` — card titles, list-row primary (16/22).
-  static const title = TextStyle(fontWeight: FontWeight.w600, fontSize: 16, height: 22 / 16);
+  static const title = TextStyle(
+    fontWeight: FontWeight.w600,
+    fontSize: 16,
+    height: 22 / 16,
+  );
 
   /// `body` — default body copy (16/24).
-  static const body = TextStyle(fontWeight: FontWeight.w400, fontSize: 16, height: 24 / 16);
+  static const body = TextStyle(
+    fontWeight: FontWeight.w400,
+    fontSize: 16,
+    height: 24 / 16,
+  );
 
   /// `bodySm` — card meta, secondary copy (14/20).
-  static const bodySm = TextStyle(fontWeight: FontWeight.w400, fontSize: 14, height: 20 / 14);
+  static const bodySm = TextStyle(
+    fontWeight: FontWeight.w400,
+    fontSize: 14,
+    height: 20 / 14,
+  );
 
   /// `label` — eyebrows, filter-group legends (12/16, +0.08em, UPPERCASE).
   /// Uppercasing is the caller's job (`text.toUpperCase()`) — never the serif.
@@ -66,21 +82,29 @@ abstract final class SteepleTypography {
   );
 
   /// `button` — all button labels (16/20).
-  static const button = TextStyle(fontWeight: FontWeight.w600, fontSize: 16, height: 20 / 16);
+  static const button = TextStyle(
+    fontWeight: FontWeight.w600,
+    fontSize: 16,
+    height: 20 / 16,
+  );
 
   /// `caption` — timestamps, photo captions, footnotes (12/16).
-  static const caption = TextStyle(fontWeight: FontWeight.w400, fontSize: 12, height: 16 / 12);
+  static const caption = TextStyle(
+    fontWeight: FontWeight.w400,
+    fontSize: 12,
+    height: 16 / 12,
+  );
 
   /// The §3 scale on Material slots (mapping fixed by DESIGN_SYSTEM §3 table).
   static TextTheme textTheme(Color textPrimary) => TextTheme(
-        headlineMedium: displaySerif.copyWith(color: textPrimary),
-        headlineSmall: headlineSerif.copyWith(color: textPrimary),
-        titleLarge: titleLg.copyWith(color: textPrimary),
-        titleMedium: title.copyWith(color: textPrimary),
-        bodyLarge: body.copyWith(color: textPrimary),
-        bodyMedium: bodySm.copyWith(color: textPrimary),
-        labelSmall: label.copyWith(color: textPrimary),
-        labelLarge: button.copyWith(color: textPrimary),
-        bodySmall: caption.copyWith(color: textPrimary),
-      );
+    headlineMedium: displaySerif.copyWith(color: textPrimary),
+    headlineSmall: headlineSerif.copyWith(color: textPrimary),
+    titleLarge: titleLg.copyWith(color: textPrimary),
+    titleMedium: title.copyWith(color: textPrimary),
+    bodyLarge: body.copyWith(color: textPrimary),
+    bodyMedium: bodySm.copyWith(color: textPrimary),
+    labelSmall: label.copyWith(color: textPrimary),
+    labelLarge: button.copyWith(color: textPrimary),
+    bodySmall: caption.copyWith(color: textPrimary),
+  );
 }

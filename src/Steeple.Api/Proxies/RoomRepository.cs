@@ -138,11 +138,6 @@ public class RoomRepository : IRoomRepository
             query = query.Where(r => r.Capacity >= minCapacity);
         }
 
-        if (criteria.FreeOnly)
-        {
-            query = query.Where(r => r.PricePerHour == null || r.PricePerHour <= 0m);
-        }
-
         if (criteria.Activities != ActivityType.None)
         {
             // Room must accept ALL requested activities. Cast to int so Npgsql can

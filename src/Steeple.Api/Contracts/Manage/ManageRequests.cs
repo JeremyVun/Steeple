@@ -31,8 +31,8 @@ public record SubmitVenueVerificationRequest(
     IReadOnlyList<VenueVerificationDocumentRequest>? Documents);
 
 /// <summary>
-/// Create/update payload for a managed room (CONTRACTS §6). Null means "unchanged" on PATCH;
-/// a non-positive <paramref name="PricePerHour"/> means free (matching the public IsFree rule).
+/// Create/update payload for a managed room (CONTRACTS §6). Null means "unchanged" on PATCH.
+/// <paramref name="PricePerHour"/> is required on create and must be positive whenever supplied.
 /// <paramref name="Status"/> accepts <c>draft | published | unlisted</c>; asking for
 /// <c>published</c> on a never-approved room records a publish request instead (moderation gate).
 /// </summary>

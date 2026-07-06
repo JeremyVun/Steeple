@@ -31,10 +31,10 @@
 
     @if (Model.NextFree is { } next)
     {
-        <p class="avail-nextfree"><span class="avail-nextfree-label">Next free:</span> @next</p>
+        <p class="avail-nextfree"><span class="avail-nextfree-label">Next open:</span> @next</p>
     }
     else
     {
-        <p class="avail-nextfree avail-nextfree-none">No free time in the next two weeks — send a request and ask.</p>
+        <p class="avail-nextfree avail-nextfree-none">No open time in the next two weeks — send a request and ask.</p>
     }
 </div>

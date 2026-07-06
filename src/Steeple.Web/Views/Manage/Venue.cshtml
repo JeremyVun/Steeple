@@ -6,8 +6,8 @@
 
 <section class="inbox-page wrap">
     <header class="inbox-head">
-        <h1>@venue.Name</h1>
         <partial name="_ManageTabs" model="@("spaces")" />
+        <h1>@venue.Name</h1>
     </header>
 
     <p class="manage-breadcrumb"><a href="~/manage">← Your spaces</a></p>
@@ -45,7 +45,7 @@
                                     }
                                     <span class="manage-room-name">
                                         <strong>@room.Name</strong>
-                                        <span class="card-meta">Up to @room.Capacity · @(room.IsFree ? "Free" : $"${room.PricePerHour:0.##}/hr") · @room.PhotoCount photo@(room.PhotoCount == 1 ? "" : "s")</span>
+                                        <span class="card-meta">Up to @room.Capacity · $@room.PricePerHour.ToString("0.##")/hr · @room.PhotoCount photo@(room.PhotoCount == 1 ? "" : "s")</span>
                                     </span>
                                     @{ var (role, label) = RoomStatusChip(room); }
                                     <span class="status-chip status-@role">@label</span>

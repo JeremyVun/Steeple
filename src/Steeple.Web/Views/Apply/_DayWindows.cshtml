@@ -17,9 +17,9 @@
     }
     else
     {
-        <p class="day-windows-lead">Free on <strong>@Model.DateLabel</strong> — pick a window, then a time:</p>
+        <p class="day-windows-lead">Open on <strong>@Model.DateLabel</strong> — pick a window, then a time:</p>
 
-        <div class="chip-set day-window-chips" role="group" aria-label="Free windows on @Model.DateLabel">
+        <div class="chip-set day-window-chips" role="group" aria-label="Open windows on @Model.DateLabel">
             @foreach (var w in Model.FreeWindows)
             {
                 <button type="button" class="chip-btn" data-window

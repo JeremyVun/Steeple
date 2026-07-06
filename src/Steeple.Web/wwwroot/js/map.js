@@ -42,17 +42,15 @@
             html += '<span class="map-popup-venue">' + esc(pin.venue) + "</span>";
         }
         if (pin.price) {
-            var cls = pin.free ? "map-popup-price is-free" : "map-popup-price";
-            html += '<span class="' + cls + '">' + esc(pin.price) + "</span>";
+            html += '<span class="map-popup-price">' + esc(pin.price) + "</span>";
         }
         html += "</div></div>";
         return html;
     }
 
     // A modern teardrop pin (Steeple palette) instead of Leaflet's default blue marker.
-    // Sage for free spaces, terracotta for paid — matching the badges used elsewhere.
-    function pinIcon(free) {
-        var color = free ? "#5B7553" : "#C0623F";
+    function pinIcon() {
+        var color = "#C0623F";
         var html =
             '<svg class="hs-pin-svg" width="30" height="40" viewBox="0 0 30 40" aria-hidden="true">' +
             '<path d="M15 1.5C7.82 1.5 2 7.18 2 14.2c0 9.2 11.1 22.2 12.2 23.5a1.05 1.05 0 0 0 1.6 0' +
@@ -83,7 +81,7 @@
             if (typeof pin.lat !== "number" || typeof pin.lng !== "number") {
                 return;
             }
-            L.marker([pin.lat, pin.lng], { icon: pinIcon(pin.free) })
+            L.marker([pin.lat, pin.lng], { icon: pinIcon() })
                 .addTo(markerLayer)
                 .bindPopup(popupHtml(pin));
         });

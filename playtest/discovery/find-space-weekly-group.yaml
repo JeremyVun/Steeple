@@ -1,0 +1,14 @@
+description: Find a fitting space for a weekly evening group, unprompted.
+story: |
+  You need a room for a weekly Tuesday-evening group — about 15 people —
+  starting next month, somewhere around Vienna, ideally with parking. Find the
+  space you'd actually pick, and get as far as being ready to ask for it. Stop
+  before submitting anything if you don't feel sure.
+persona: [maria-first-timer, sam-organized-planner]
+report:
+  - Walk through their path segment by segment through the search pill (Where / When / How many / Filters) — where did they hesitate, misread a control, or skip something the product expected them to use?
+  - Did the "When" control (date/weekly/time bands) read as one coherent thing, and did their time choice visibly carry through to the results and onto the listing?
+  - At the moment they compared candidates, what information did they want side by side that the cards didn't give them?
+  - Was hourly price ever unclear, missing where expected, or surprising between the card, the map popup, and the detail page?
+  - Did anything still suggest spaces might be free of charge (copy, badges, filters)? Free listings were removed from the product — any residue is a bug.
+  - What single change would most have shortened the path from landing to "this is the one"?

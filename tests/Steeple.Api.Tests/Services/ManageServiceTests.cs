@@ -571,6 +571,7 @@ public class ManageServiceTests
         Slug = $"fellowship-hall-{Guid.NewGuid():N}",
         Description = "A large hall.",
         Capacity = 50,
+        PricePerHour = 45m,
         Status = status,
         CreatedAtUtc = FixedNow,
         UpdatedAtUtc = FixedNow,

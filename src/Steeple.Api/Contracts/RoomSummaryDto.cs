@@ -11,8 +11,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="RoomName">Room display name.</param>
 /// <param name="PrimaryPhotoUrl">URL of the primary photo, if any.</param>
 /// <param name="Capacity">Maximum occupancy.</param>
-/// <param name="IsFree">Whether the room is free to use.</param>
-/// <param name="PricePerHour">Hourly price, if any.</param>
+/// <param name="PricePerHour">Hourly price (always positive).</param>
 /// <param name="Currency">ISO currency code for the price.</param>
 /// <param name="Latitude">Latitude in decimal degrees.</param>
 /// <param name="Longitude">Longitude in decimal degrees.</param>
@@ -32,8 +31,7 @@ public record RoomSummaryDto(
     string RoomName,
     string? PrimaryPhotoUrl,
     int Capacity,
-    bool IsFree,
-    decimal? PricePerHour,
+    decimal PricePerHour,
     string Currency,
     double Latitude,
     double Longitude,

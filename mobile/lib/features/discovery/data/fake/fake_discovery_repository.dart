@@ -5,20 +5,25 @@ import '../../../../core/models/models.dart';
 import '../discovery_repository.dart';
 
 /// Fixture-backed discovery (MOBILE_CONTRACTS §11). Applies the real filter
-/// semantics (freeOnly, minCapacity, AND-matching on activities/accessibility
-/// — CONTRACTS §3) over `listing_search.json` so filter UX is exercisable
+/// semantics (minCapacity, AND-matching on activities/accessibility —
+/// CONTRACTS §3) over `listing_search.json` so filter UX is exercisable
 /// offline.
 class FakeDiscoveryRepository implements DiscoveryRepository {
   FakeDiscoveryRepository({FixtureLoader? fixtures})
-      : fixtures = fixtures ?? FixtureLoader();
+    : fixtures = fixtures ?? FixtureLoader();
 
   final FixtureLoader fixtures;
 
   @override
-  Future<ListingSearchResult> search(SearchQuery query, {CancelToken? cancel}) async {
-    final all = await fixtures.load('listing_search', ListingSearchResult.fromJson);
+  Future<ListingSearchResult> search(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
+    final all = await fixtures.load(
+      'listing_search',
+      ListingSearchResult.fromJson,
+    );
     var items = all.items.where((room) {
-      if (query.freeOnly && !room.isFree) return false;
       final minCapacity = query.minCapacity;
       if (minCapacity != null && room.capacity < minCapacity) return false;
       // AND semantics: the room must accept/provide every requested token.
@@ -32,11 +37,17 @@ class FakeDiscoveryRepository implements DiscoveryRepository {
     // and result cards are exercisable offline.
     final hasWhen = query.date != null || query.daysOfWeek.isNotEmpty;
     if (hasWhen) {
-      final startTime = query.startTime ??
-          (query.timeOfDay == null ? null : timeOfDayBands[query.timeOfDay]?.$1) ??
+      final startTime =
+          query.startTime ??
+          (query.timeOfDay == null
+              ? null
+              : timeOfDayBands[query.timeOfDay]?.$1) ??
           '18:00';
-      final endTime = query.endTime ??
-          (query.timeOfDay == null ? null : timeOfDayBands[query.timeOfDay]?.$2) ??
+      final endTime =
+          query.endTime ??
+          (query.timeOfDay == null
+              ? null
+              : timeOfDayBands[query.timeOfDay]?.$2) ??
           '21:00';
       items = [
         for (final room in items.take(2))
@@ -62,7 +73,11 @@ class FakeDiscoveryRepository implements DiscoveryRepository {
   }
 
   @override
-  Future<List<String>> suburbs() async => const ['Vienna', 'Oakton', 'Dunn Loring'];
+  Future<List<String>> suburbs() async => const [
+    'Vienna',
+    'Oakton',
+    'Dunn Loring',
+  ];
 
   @override
   Future<GeofenceContext> geofence() =>

@@ -8,7 +8,6 @@ import '../providers.dart';
 /// compiles into a [SearchQuery] together with the current map region.
 class SearchFilters {
   const SearchFilters({
-    this.freeOnly = false,
     this.minCapacity,
     this.activities = const {},
     this.accessibility = const {},
@@ -16,7 +15,6 @@ class SearchFilters {
     this.when = const WhenFilter(),
   });
 
-  final bool freeOnly;
   final int? minCapacity;
   final Set<String> activities;
   final Set<String> accessibility;
@@ -24,7 +22,6 @@ class SearchFilters {
   final WhenFilter when;
 
   int get activeCount =>
-      (freeOnly ? 1 : 0) +
       (minCapacity == null ? 0 : 1) +
       activities.length +
       accessibility.length +
@@ -32,40 +29,36 @@ class SearchFilters {
       (when.isAny ? 0 : 1);
 
   SearchFilters copyWith({
-    bool? freeOnly,
     int? Function()? minCapacity,
     Set<String>? activities,
     Set<String>? accessibility,
     String? Function()? suburb,
     WhenFilter? when,
-  }) =>
-      SearchFilters(
-        freeOnly: freeOnly ?? this.freeOnly,
-        minCapacity: minCapacity == null ? this.minCapacity : minCapacity(),
-        activities: activities ?? this.activities,
-        accessibility: accessibility ?? this.accessibility,
-        suburb: suburb == null ? this.suburb : suburb(),
-        when: when ?? this.when,
-      );
+  }) => SearchFilters(
+    minCapacity: minCapacity == null ? this.minCapacity : minCapacity(),
+    activities: activities ?? this.activities,
+    accessibility: accessibility ?? this.accessibility,
+    suburb: suburb == null ? this.suburb : suburb(),
+    when: when ?? this.when,
+  );
 
   SearchQuery toQuery(BoundingBox? region) => SearchQuery(
-        minLat: region?.minLat,
-        maxLat: region?.maxLat,
-        minLng: region?.minLng,
-        maxLng: region?.maxLng,
-        suburb: suburb,
-        minCapacity: minCapacity,
-        freeOnly: freeOnly,
-        activities: activities.toList()..sort(),
-        accessibility: accessibility.toList()..sort(),
-        date: when.date,
-        daysOfWeek: when.daysOfWeek.toList()..sort(),
-        // timeOfDay and the explicit range are alternatives (CONTRACTS §3) —
-        // never send both.
-        timeOfDay: when.timeOfDay,
-        startTime: when.timeOfDay == null ? when.startTime : null,
-        endTime: when.timeOfDay == null ? when.endTime : null,
-      );
+    minLat: region?.minLat,
+    maxLat: region?.maxLat,
+    minLng: region?.minLng,
+    maxLng: region?.maxLng,
+    suburb: suburb,
+    minCapacity: minCapacity,
+    activities: activities.toList()..sort(),
+    accessibility: accessibility.toList()..sort(),
+    date: when.date,
+    daysOfWeek: when.daysOfWeek.toList()..sort(),
+    // timeOfDay and the explicit range are alternatives (CONTRACTS §3) —
+    // never send both.
+    timeOfDay: when.timeOfDay,
+    startTime: when.timeOfDay == null ? when.startTime : null,
+    endTime: when.timeOfDay == null ? when.endTime : null,
+  );
 }
 
 class SearchFiltersNotifier extends Notifier<SearchFilters> {
@@ -84,15 +77,14 @@ class SearchFiltersNotifier extends Notifier<SearchFilters> {
     state = state.copyWith(accessibility: next);
   }
 
-  void setFreeOnly(bool value) => state = state.copyWith(freeOnly: value);
-
-  void setMinCapacity(int? value) => state = state.copyWith(minCapacity: () => value);
+  void setMinCapacity(int? value) =>
+      state = state.copyWith(minCapacity: () => value);
 
   /// A one-off date pick clears any weekly selection (mutually exclusive,
   /// CONTRACTS §3).
   void setWhenDate(String? date) => state = state.copyWith(
-        when: state.when.copyWith(date: () => date, daysOfWeek: const {}),
-      );
+    when: state.when.copyWith(date: () => date, daysOfWeek: const {}),
+  );
 
   /// Toggling a weekday clears any one-off date (mutually exclusive).
   void toggleWhenDay(String token) {
@@ -106,20 +98,20 @@ class SearchFiltersNotifier extends Notifier<SearchFilters> {
   /// A time band and a custom range are alternatives — picking one clears
   /// the other.
   void setWhenTimeOfDay(String? band) => state = state.copyWith(
-        when: state.when.copyWith(
-          timeOfDay: () => band,
-          startTime: () => null,
-          endTime: () => null,
-        ),
-      );
+    when: state.when.copyWith(
+      timeOfDay: () => band,
+      startTime: () => null,
+      endTime: () => null,
+    ),
+  );
 
   void setWhenCustomRange(String? start, String? end) => state = state.copyWith(
-        when: state.when.copyWith(
-          timeOfDay: () => null,
-          startTime: () => start,
-          endTime: () => end,
-        ),
-      );
+    when: state.when.copyWith(
+      timeOfDay: () => null,
+      startTime: () => start,
+      endTime: () => end,
+    ),
+  );
 
   void clearWhen() => state = state.copyWith(when: const WhenFilter());
 
@@ -135,8 +127,9 @@ class MapRegionNotifier extends Notifier<BoundingBox?> {
   void settle(BoundingBox bounds) => state = bounds;
 }
 
-final mapRegionProvider =
-    NotifierProvider<MapRegionNotifier, BoundingBox?>(MapRegionNotifier.new);
+final mapRegionProvider = NotifierProvider<MapRegionNotifier, BoundingBox?>(
+  MapRegionNotifier.new,
+);
 
 /// Search results: debounces 350 ms (except the first load), cancels
 /// in-flight work on new input, and keeps the last result on screen while
@@ -157,7 +150,9 @@ class SearchResultsNotifier extends AsyncNotifier<ListingSearchResult> {
       // Debounce interactive changes only — never the cold start.
       await Future<void>.delayed(const Duration(milliseconds: 350));
     }
-    return ref.read(discoveryRepositoryProvider).search(filters.toQuery(region), cancel: cancel);
+    return ref
+        .read(discoveryRepositoryProvider)
+        .search(filters.toQuery(region), cancel: cancel);
   }
 
   Future<void> refresh() async {

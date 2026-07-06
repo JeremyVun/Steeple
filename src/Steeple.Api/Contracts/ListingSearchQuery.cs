@@ -41,9 +41,6 @@ public class ListingSearchQuery
     /// <summary>Optional minimum room capacity filter.</summary>
     public int? MinCapacity { get; set; }
 
-    /// <summary>When <c>true</c>, only free rooms are returned.</summary>
-    public bool FreeOnly { get; set; } = false;
-
     /// <summary>Activity types to filter by (bitwise flags); <see cref="ActivityType.None"/> means no filter.</summary>
     public ActivityType Activities { get; set; } = ActivityType.None;
 

@@ -33,7 +33,6 @@ public class RoomRepositoryTests
     private static RoomSearchCriteria Criteria(
         BoundingBox? bounds = null,
         int? minCapacity = null,
-        bool freeOnly = false,
         ActivityType activities = ActivityType.None,
         AccessibilityFeature accessibility = AccessibilityFeature.None,
         string? suburb = null,
@@ -43,7 +42,6 @@ public class RoomRepositoryTests
         new(
             Bounds: bounds ?? FullBeachheadBounds,
             MinCapacity: minCapacity,
-            FreeOnly: freeOnly,
             Activities: activities,
             Accessibility: accessibility,
             Suburb: suburb,
@@ -96,18 +94,16 @@ public class RoomRepositoryTests
     }
 
     [Fact]
-    public async Task SearchAsync_FreeOnly_ReturnsOnlyRoomsWithNoPrice()
+    public async Task SearchAsync_EveryRoom_HasPositivePrice()
     {
+        // Free listings were removed (010-require-price.sql): NOT NULL + CHECK (> 0) means
+        // no published room can surface without a real hourly price.
         await using var db = CreateContext();
         var repository = new RoomRepository(db);
 
-        var rooms = await repository.SearchAsync(Criteria(freeOnly: true));
+        var rooms = await repository.SearchAsync(Criteria());
 
-        Assert.Equal(3, rooms.Count);
-        Assert.All(rooms, r => Assert.True(r.PricePerHour is null or <= 0m));
-        Assert.Equal(
-            new[] { "community-lounge", "garden-meeting-room", "youth-activity-room" },
-            rooms.Select(r => r.Slug).OrderBy(s => s));
+        Assert.All(rooms, r => Assert.True(r.PricePerHour > 0m));
     }
 
     [Fact]

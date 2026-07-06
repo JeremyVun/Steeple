@@ -1,0 +1,7 @@
+# Web regression journeys — run against the dev loop (playtest/README.md).
+# Serial: every case starts from the same reset world (shared Postgres).
+actor_model: sonnet
+parallel: 1
+app:
+  base_url: http://localhost:5187
+  init: ../shared/reset.sh

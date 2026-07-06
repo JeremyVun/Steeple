@@ -286,7 +286,7 @@ mixin _$ManagedRoomSummary {
 
  String get id; String get name; String get slug;/// Wire token: `draft | published | unlisted` (additive — tolerate
 /// unknown).
- String get status; DateTime? get publishRequestedAtUtc; int get capacity; bool get isFree; double? get pricePerHour; String get currency; String? get primaryPhotoUrl; int get photoCount; DateTime get updatedAtUtc;
+ String get status; DateTime? get publishRequestedAtUtc; int get capacity; double get pricePerHour; String get currency; String? get primaryPhotoUrl; int get photoCount; DateTime get updatedAtUtc;
 /// Create a copy of ManagedRoomSummary
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -299,16 +299,16 @@ $ManagedRoomSummaryCopyWith<ManagedRoomSummary> get copyWith => _$ManagedRoomSum
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ManagedRoomSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.status, status) || other.status == status)&&(identical(other.publishRequestedAtUtc, publishRequestedAtUtc) || other.publishRequestedAtUtc == publishRequestedAtUtc)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.photoCount, photoCount) || other.photoCount == photoCount)&&(identical(other.updatedAtUtc, updatedAtUtc) || other.updatedAtUtc == updatedAtUtc));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ManagedRoomSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.status, status) || other.status == status)&&(identical(other.publishRequestedAtUtc, publishRequestedAtUtc) || other.publishRequestedAtUtc == publishRequestedAtUtc)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.photoCount, photoCount) || other.photoCount == photoCount)&&(identical(other.updatedAtUtc, updatedAtUtc) || other.updatedAtUtc == updatedAtUtc));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,slug,status,publishRequestedAtUtc,capacity,isFree,pricePerHour,currency,primaryPhotoUrl,photoCount,updatedAtUtc);
+int get hashCode => Object.hash(runtimeType,id,name,slug,status,publishRequestedAtUtc,capacity,pricePerHour,currency,primaryPhotoUrl,photoCount,updatedAtUtc);
 
 @override
 String toString() {
-  return 'ManagedRoomSummary(id: $id, name: $name, slug: $slug, status: $status, publishRequestedAtUtc: $publishRequestedAtUtc, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, primaryPhotoUrl: $primaryPhotoUrl, photoCount: $photoCount, updatedAtUtc: $updatedAtUtc)';
+  return 'ManagedRoomSummary(id: $id, name: $name, slug: $slug, status: $status, publishRequestedAtUtc: $publishRequestedAtUtc, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, primaryPhotoUrl: $primaryPhotoUrl, photoCount: $photoCount, updatedAtUtc: $updatedAtUtc)';
 }
 
 
@@ -319,7 +319,7 @@ abstract mixin class $ManagedRoomSummaryCopyWith<$Res>  {
   factory $ManagedRoomSummaryCopyWith(ManagedRoomSummary value, $Res Function(ManagedRoomSummary) _then) = _$ManagedRoomSummaryCopyWithImpl;
 @useResult
 $Res call({
- String id, String name, String slug, String status, DateTime? publishRequestedAtUtc, int capacity, bool isFree, double? pricePerHour, String currency, String? primaryPhotoUrl, int photoCount, DateTime updatedAtUtc
+ String id, String name, String slug, String status, DateTime? publishRequestedAtUtc, int capacity, double pricePerHour, String currency, String? primaryPhotoUrl, int photoCount, DateTime updatedAtUtc
 });
 
 
@@ -336,7 +336,7 @@ class _$ManagedRoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of ManagedRoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? primaryPhotoUrl = freezed,Object? photoCount = null,Object? updatedAtUtc = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? primaryPhotoUrl = freezed,Object? photoCount = null,Object? updatedAtUtc = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -344,9 +344,8 @@ as String,slug: null == slug ? _self.slug : slug // ignore: cast_nullable_to_non
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,publishRequestedAtUtc: freezed == publishRequestedAtUtc ? _self.publishRequestedAtUtc : publishRequestedAtUtc // ignore: cast_nullable_to_non_nullable
 as DateTime?,capacity: null == capacity ? _self.capacity : capacity // ignore: cast_nullable_to_non_nullable
-as int,isFree: null == isFree ? _self.isFree : isFree // ignore: cast_nullable_to_non_nullable
-as bool,pricePerHour: freezed == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
-as double?,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as int,pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,primaryPhotoUrl: freezed == primaryPhotoUrl ? _self.primaryPhotoUrl : primaryPhotoUrl // ignore: cast_nullable_to_non_nullable
 as String?,photoCount: null == photoCount ? _self.photoCount : photoCount // ignore: cast_nullable_to_non_nullable
 as int,updatedAtUtc: null == updatedAtUtc ? _self.updatedAtUtc : updatedAtUtc // ignore: cast_nullable_to_non_nullable
@@ -435,10 +434,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  double pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ManagedRoomSummary() when $default != null:
-return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
+return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
   return orElse();
 
 }
@@ -456,10 +455,10 @@ return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequest
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  double pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)  $default,) {final _that = this;
 switch (_that) {
 case _ManagedRoomSummary():
-return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
+return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -476,10 +475,10 @@ return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequest
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  bool isFree,  double? pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String name,  String slug,  String status,  DateTime? publishRequestedAtUtc,  int capacity,  double pricePerHour,  String currency,  String? primaryPhotoUrl,  int photoCount,  DateTime updatedAtUtc)?  $default,) {final _that = this;
 switch (_that) {
 case _ManagedRoomSummary() when $default != null:
-return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.isFree,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
+return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequestedAtUtc,_that.capacity,_that.pricePerHour,_that.currency,_that.primaryPhotoUrl,_that.photoCount,_that.updatedAtUtc);case _:
   return null;
 
 }
@@ -491,7 +490,7 @@ return $default(_that.id,_that.name,_that.slug,_that.status,_that.publishRequest
 @JsonSerializable()
 
 class _ManagedRoomSummary extends ManagedRoomSummary {
-  const _ManagedRoomSummary({required this.id, required this.name, required this.slug, required this.status, this.publishRequestedAtUtc, required this.capacity, required this.isFree, this.pricePerHour, required this.currency, this.primaryPhotoUrl, required this.photoCount, required this.updatedAtUtc}): super._();
+  const _ManagedRoomSummary({required this.id, required this.name, required this.slug, required this.status, this.publishRequestedAtUtc, required this.capacity, required this.pricePerHour, required this.currency, this.primaryPhotoUrl, required this.photoCount, required this.updatedAtUtc}): super._();
   factory _ManagedRoomSummary.fromJson(Map<String, dynamic> json) => _$ManagedRoomSummaryFromJson(json);
 
 @override final  String id;
@@ -502,8 +501,7 @@ class _ManagedRoomSummary extends ManagedRoomSummary {
 @override final  String status;
 @override final  DateTime? publishRequestedAtUtc;
 @override final  int capacity;
-@override final  bool isFree;
-@override final  double? pricePerHour;
+@override final  double pricePerHour;
 @override final  String currency;
 @override final  String? primaryPhotoUrl;
 @override final  int photoCount;
@@ -522,16 +520,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ManagedRoomSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.status, status) || other.status == status)&&(identical(other.publishRequestedAtUtc, publishRequestedAtUtc) || other.publishRequestedAtUtc == publishRequestedAtUtc)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.isFree, isFree) || other.isFree == isFree)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.photoCount, photoCount) || other.photoCount == photoCount)&&(identical(other.updatedAtUtc, updatedAtUtc) || other.updatedAtUtc == updatedAtUtc));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ManagedRoomSummary&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.slug, slug) || other.slug == slug)&&(identical(other.status, status) || other.status == status)&&(identical(other.publishRequestedAtUtc, publishRequestedAtUtc) || other.publishRequestedAtUtc == publishRequestedAtUtc)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.photoCount, photoCount) || other.photoCount == photoCount)&&(identical(other.updatedAtUtc, updatedAtUtc) || other.updatedAtUtc == updatedAtUtc));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,id,name,slug,status,publishRequestedAtUtc,capacity,isFree,pricePerHour,currency,primaryPhotoUrl,photoCount,updatedAtUtc);
+int get hashCode => Object.hash(runtimeType,id,name,slug,status,publishRequestedAtUtc,capacity,pricePerHour,currency,primaryPhotoUrl,photoCount,updatedAtUtc);
 
 @override
 String toString() {
-  return 'ManagedRoomSummary(id: $id, name: $name, slug: $slug, status: $status, publishRequestedAtUtc: $publishRequestedAtUtc, capacity: $capacity, isFree: $isFree, pricePerHour: $pricePerHour, currency: $currency, primaryPhotoUrl: $primaryPhotoUrl, photoCount: $photoCount, updatedAtUtc: $updatedAtUtc)';
+  return 'ManagedRoomSummary(id: $id, name: $name, slug: $slug, status: $status, publishRequestedAtUtc: $publishRequestedAtUtc, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, primaryPhotoUrl: $primaryPhotoUrl, photoCount: $photoCount, updatedAtUtc: $updatedAtUtc)';
 }
 
 
@@ -542,7 +540,7 @@ abstract mixin class _$ManagedRoomSummaryCopyWith<$Res> implements $ManagedRoomS
   factory _$ManagedRoomSummaryCopyWith(_ManagedRoomSummary value, $Res Function(_ManagedRoomSummary) _then) = __$ManagedRoomSummaryCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String name, String slug, String status, DateTime? publishRequestedAtUtc, int capacity, bool isFree, double? pricePerHour, String currency, String? primaryPhotoUrl, int photoCount, DateTime updatedAtUtc
+ String id, String name, String slug, String status, DateTime? publishRequestedAtUtc, int capacity, double pricePerHour, String currency, String? primaryPhotoUrl, int photoCount, DateTime updatedAtUtc
 });
 
 
@@ -559,7 +557,7 @@ class __$ManagedRoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of ManagedRoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? capacity = null,Object? isFree = null,Object? pricePerHour = freezed,Object? currency = null,Object? primaryPhotoUrl = freezed,Object? photoCount = null,Object? updatedAtUtc = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? slug = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? primaryPhotoUrl = freezed,Object? photoCount = null,Object? updatedAtUtc = null,}) {
   return _then(_ManagedRoomSummary(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
@@ -567,9 +565,8 @@ as String,slug: null == slug ? _self.slug : slug // ignore: cast_nullable_to_non
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,publishRequestedAtUtc: freezed == publishRequestedAtUtc ? _self.publishRequestedAtUtc : publishRequestedAtUtc // ignore: cast_nullable_to_non_nullable
 as DateTime?,capacity: null == capacity ? _self.capacity : capacity // ignore: cast_nullable_to_non_nullable
-as int,isFree: null == isFree ? _self.isFree : isFree // ignore: cast_nullable_to_non_nullable
-as bool,pricePerHour: freezed == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
-as double?,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as int,pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,primaryPhotoUrl: freezed == primaryPhotoUrl ? _self.primaryPhotoUrl : primaryPhotoUrl // ignore: cast_nullable_to_non_nullable
 as String?,photoCount: null == photoCount ? _self.photoCount : photoCount // ignore: cast_nullable_to_non_nullable
 as int,updatedAtUtc: null == updatedAtUtc ? _self.updatedAtUtc : updatedAtUtc // ignore: cast_nullable_to_non_nullable
@@ -906,7 +903,7 @@ as List<ManagedRoomSummary>,
 /// @nodoc
 mixin _$ManagedRoom {
 
- String get id; String get venueId; String get venueName; String get venueSlug; String get name; String get slug; String get description; int get capacity; double? get pricePerHour; String get currency; String get houseRules;/// Wire token: `draft | published | unlisted` (additive).
+ String get id; String get venueId; String get venueName; String get venueSlug; String get name; String get slug; String get description; int get capacity; double get pricePerHour; String get currency; String get houseRules;/// Wire token: `draft | published | unlisted` (additive).
  String get status; DateTime? get publishRequestedAtUtc; DateTime? get firstPublishedAtUtc; List<String> get activities; List<String> get amenities; List<String> get accessibility; List<RoomPhoto> get photos; DateTime get updatedAtUtc;
 /// Create a copy of ManagedRoom
 /// with the given fields replaced by the non-null parameter values.
@@ -940,7 +937,7 @@ abstract mixin class $ManagedRoomCopyWith<$Res>  {
   factory $ManagedRoomCopyWith(ManagedRoom value, $Res Function(ManagedRoom) _then) = _$ManagedRoomCopyWithImpl;
 @useResult
 $Res call({
- String id, String venueId, String venueName, String venueSlug, String name, String slug, String description, int capacity, double? pricePerHour, String currency, String houseRules, String status, DateTime? publishRequestedAtUtc, DateTime? firstPublishedAtUtc, List<String> activities, List<String> amenities, List<String> accessibility, List<RoomPhoto> photos, DateTime updatedAtUtc
+ String id, String venueId, String venueName, String venueSlug, String name, String slug, String description, int capacity, double pricePerHour, String currency, String houseRules, String status, DateTime? publishRequestedAtUtc, DateTime? firstPublishedAtUtc, List<String> activities, List<String> amenities, List<String> accessibility, List<RoomPhoto> photos, DateTime updatedAtUtc
 });
 
 
@@ -957,7 +954,7 @@ class _$ManagedRoomCopyWithImpl<$Res>
 
 /// Create a copy of ManagedRoom
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? venueId = null,Object? venueName = null,Object? venueSlug = null,Object? name = null,Object? slug = null,Object? description = null,Object? capacity = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? firstPublishedAtUtc = freezed,Object? activities = null,Object? amenities = null,Object? accessibility = null,Object? photos = null,Object? updatedAtUtc = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? venueId = null,Object? venueName = null,Object? venueSlug = null,Object? name = null,Object? slug = null,Object? description = null,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? houseRules = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? firstPublishedAtUtc = freezed,Object? activities = null,Object? amenities = null,Object? accessibility = null,Object? photos = null,Object? updatedAtUtc = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -967,8 +964,8 @@ as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non
 as String,slug: null == slug ? _self.slug : slug // ignore: cast_nullable_to_non_nullable
 as String,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String,capacity: null == capacity ? _self.capacity : capacity // ignore: cast_nullable_to_non_nullable
-as int,pricePerHour: freezed == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
-as double?,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as int,pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,houseRules: null == houseRules ? _self.houseRules : houseRules // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,publishRequestedAtUtc: freezed == publishRequestedAtUtc ? _self.publishRequestedAtUtc : publishRequestedAtUtc // ignore: cast_nullable_to_non_nullable
@@ -1063,7 +1060,7 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double? pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ManagedRoom() when $default != null:
 return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.name,_that.slug,_that.description,_that.capacity,_that.pricePerHour,_that.currency,_that.houseRules,_that.status,_that.publishRequestedAtUtc,_that.firstPublishedAtUtc,_that.activities,_that.amenities,_that.accessibility,_that.photos,_that.updatedAtUtc);case _:
@@ -1084,7 +1081,7 @@ return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.nam
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double? pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)  $default,) {final _that = this;
 switch (_that) {
 case _ManagedRoom():
 return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.name,_that.slug,_that.description,_that.capacity,_that.pricePerHour,_that.currency,_that.houseRules,_that.status,_that.publishRequestedAtUtc,_that.firstPublishedAtUtc,_that.activities,_that.amenities,_that.accessibility,_that.photos,_that.updatedAtUtc);case _:
@@ -1104,7 +1101,7 @@ return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.nam
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double? pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String venueId,  String venueName,  String venueSlug,  String name,  String slug,  String description,  int capacity,  double pricePerHour,  String currency,  String houseRules,  String status,  DateTime? publishRequestedAtUtc,  DateTime? firstPublishedAtUtc,  List<String> activities,  List<String> amenities,  List<String> accessibility,  List<RoomPhoto> photos,  DateTime updatedAtUtc)?  $default,) {final _that = this;
 switch (_that) {
 case _ManagedRoom() when $default != null:
 return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.name,_that.slug,_that.description,_that.capacity,_that.pricePerHour,_that.currency,_that.houseRules,_that.status,_that.publishRequestedAtUtc,_that.firstPublishedAtUtc,_that.activities,_that.amenities,_that.accessibility,_that.photos,_that.updatedAtUtc);case _:
@@ -1119,7 +1116,7 @@ return $default(_that.id,_that.venueId,_that.venueName,_that.venueSlug,_that.nam
 @JsonSerializable()
 
 class _ManagedRoom extends ManagedRoom {
-  const _ManagedRoom({required this.id, required this.venueId, required this.venueName, required this.venueSlug, required this.name, required this.slug, required this.description, required this.capacity, this.pricePerHour, required this.currency, required this.houseRules, required this.status, this.publishRequestedAtUtc, this.firstPublishedAtUtc, final  List<String> activities = const <String>[], final  List<String> amenities = const <String>[], final  List<String> accessibility = const <String>[], final  List<RoomPhoto> photos = const <RoomPhoto>[], required this.updatedAtUtc}): _activities = activities,_amenities = amenities,_accessibility = accessibility,_photos = photos,super._();
+  const _ManagedRoom({required this.id, required this.venueId, required this.venueName, required this.venueSlug, required this.name, required this.slug, required this.description, required this.capacity, required this.pricePerHour, required this.currency, required this.houseRules, required this.status, this.publishRequestedAtUtc, this.firstPublishedAtUtc, final  List<String> activities = const <String>[], final  List<String> amenities = const <String>[], final  List<String> accessibility = const <String>[], final  List<RoomPhoto> photos = const <RoomPhoto>[], required this.updatedAtUtc}): _activities = activities,_amenities = amenities,_accessibility = accessibility,_photos = photos,super._();
   factory _ManagedRoom.fromJson(Map<String, dynamic> json) => _$ManagedRoomFromJson(json);
 
 @override final  String id;
@@ -1130,7 +1127,7 @@ class _ManagedRoom extends ManagedRoom {
 @override final  String slug;
 @override final  String description;
 @override final  int capacity;
-@override final  double? pricePerHour;
+@override final  double pricePerHour;
 @override final  String currency;
 @override final  String houseRules;
 /// Wire token: `draft | published | unlisted` (additive).
@@ -1200,7 +1197,7 @@ abstract mixin class _$ManagedRoomCopyWith<$Res> implements $ManagedRoomCopyWith
   factory _$ManagedRoomCopyWith(_ManagedRoom value, $Res Function(_ManagedRoom) _then) = __$ManagedRoomCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String venueId, String venueName, String venueSlug, String name, String slug, String description, int capacity, double? pricePerHour, String currency, String houseRules, String status, DateTime? publishRequestedAtUtc, DateTime? firstPublishedAtUtc, List<String> activities, List<String> amenities, List<String> accessibility, List<RoomPhoto> photos, DateTime updatedAtUtc
+ String id, String venueId, String venueName, String venueSlug, String name, String slug, String description, int capacity, double pricePerHour, String currency, String houseRules, String status, DateTime? publishRequestedAtUtc, DateTime? firstPublishedAtUtc, List<String> activities, List<String> amenities, List<String> accessibility, List<RoomPhoto> photos, DateTime updatedAtUtc
 });
 
 
@@ -1217,7 +1214,7 @@ class __$ManagedRoomCopyWithImpl<$Res>
 
 /// Create a copy of ManagedRoom
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? venueId = null,Object? venueName = null,Object? venueSlug = null,Object? name = null,Object? slug = null,Object? description = null,Object? capacity = null,Object? pricePerHour = freezed,Object? currency = null,Object? houseRules = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? firstPublishedAtUtc = freezed,Object? activities = null,Object? amenities = null,Object? accessibility = null,Object? photos = null,Object? updatedAtUtc = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? venueId = null,Object? venueName = null,Object? venueSlug = null,Object? name = null,Object? slug = null,Object? description = null,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? houseRules = null,Object? status = null,Object? publishRequestedAtUtc = freezed,Object? firstPublishedAtUtc = freezed,Object? activities = null,Object? amenities = null,Object? accessibility = null,Object? photos = null,Object? updatedAtUtc = null,}) {
   return _then(_ManagedRoom(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -1227,8 +1224,8 @@ as String,name: null == name ? _self.name : name // ignore: cast_nullable_to_non
 as String,slug: null == slug ? _self.slug : slug // ignore: cast_nullable_to_non_nullable
 as String,description: null == description ? _self.description : description // ignore: cast_nullable_to_non_nullable
 as String,capacity: null == capacity ? _self.capacity : capacity // ignore: cast_nullable_to_non_nullable
-as int,pricePerHour: freezed == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
-as double?,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as int,pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
 as String,houseRules: null == houseRules ? _self.houseRules : houseRules // ignore: cast_nullable_to_non_nullable
 as String,status: null == status ? _self.status : status // ignore: cast_nullable_to_non_nullable
 as String,publishRequestedAtUtc: freezed == publishRequestedAtUtc ? _self.publishRequestedAtUtc : publishRequestedAtUtc // ignore: cast_nullable_to_non_nullable

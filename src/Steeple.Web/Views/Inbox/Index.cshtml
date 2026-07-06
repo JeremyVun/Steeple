@@ -5,10 +5,7 @@
         <h1>Your requests</h1>
         @if (Model.IsProvider)
         {
-            <nav class="inbox-tabs" aria-label="Inbox sections">
-                <a class="inbox-tab is-active" href="~/inbox" aria-current="page">Asking</a>
-                <a class="inbox-tab" href="~/manage/applications">Hosting</a>
-            </nav>
+            <a class="head-crosslink" href="~/manage/applications">Requests for your spaces →</a>
         }
     </header>
 

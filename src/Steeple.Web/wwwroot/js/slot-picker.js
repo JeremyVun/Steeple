@@ -1,8 +1,11 @@
-// Guest slot picker (DESIGN_SYSTEM §8.10-8.13). Enhances the apply form: the calendar, free-window
-// chips and range controls write into the canonical native inputs (StartDate/EndDate/StartTime/
-// EndTime/DaysOfWeek). HTMX loads the fragments and runs the debounced availability check; this file
-// only wires selection into those real inputs and drives keyboard/roving-tabindex on the grid.
-// CSP forbids inline scripts, so everything lives here. Never re-derives availability (§8.13).
+// Guest slot picker (DESIGN_SYSTEM §8.10-8.13). Enhances the apply form: the calendar is a
+// multi-select — picked dates derive the canonical native inputs (Frequency/StartDate/EndDate/
+// DaysOfWeek/StartTime/EndTime), which stay the posted source of truth. One date = a one-off
+// (with an optional "Repeats weekly" toggle below the calendar); several dates = a weekday
+// pattern across their date range (the wire's recurringWeekly), and the calendar paints every
+// date the request would cover so nothing is implied invisibly. HTMX loads the fragments and
+// runs the debounced availability check. CSP forbids inline scripts, so everything lives here.
+// Never re-derives availability (§8.13).
 (function () {
     "use strict";
 
@@ -11,20 +14,30 @@
         return;
     }
 
-    // With JS running, the calendar + windows drive the schedule; the native date/time fields
-    // collapse to the no-JS fallback (§8.9). The submit guard below re-reveals them if a value
-    // is missing, so browser validation never targets a hidden field.
+    // With JS running, the calendar + windows drive the schedule; the native frequency/date/day
+    // fields collapse to the no-JS fallback (§8.9). The submit guard below re-reveals them if a
+    // value is missing, so browser validation never targets a hidden field.
     form.classList.add("is-picker-active");
 
+    var picker = form.querySelector("[data-apply-picker]");
     var startDate = form.querySelector("[data-start-date]");
     var endDate = form.querySelector("[data-end-date]");
     var startTime = form.querySelector("[data-start-time]");
     var endTime = form.querySelector("[data-end-time]");
+    var repeatBlock = form.querySelector("[data-repeat-block]");
+    var repeatToggle = form.querySelector("[data-repeat-toggle]");
+    var untilBlock = form.querySelector("[data-until-block]");
+    var untilInput = form.querySelector("[data-until-date]");
+    var summaryEl = form.querySelector("[data-schedule-summary]");
     var DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    var DAY_LABELS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
+
+    // The explicit selection: wire dates (yyyy-MM-dd), kept sorted.
+    var selectedDates = [];
 
     // Writing a value programmatically must fire change so the HTMX availability check re-runs.
     function setNative(input, value) {
-        if (!input) { return; }
+        if (!input || input.value === value) { return; }
         input.value = value;
         input.dispatchEvent(new Event("change", { bubbles: true }));
     }
@@ -32,33 +45,141 @@
     function toMin(s) { var p = s.split(":"); return (+p[0]) * 60 + (+p[1]); }
     function fromMin(m) { var h = Math.floor(m / 60), mm = m % 60; return (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm; }
     function fmt12(s) { var p = s.split(":"), h = +p[0], ap = h < 12 ? "AM" : "PM", hr = h % 12 || 12; return hr + ":" + p[1] + " " + ap; }
+    function toDate(s) { return new Date(s + "T00:00:00"); }
     function wireDate(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day; }
-    function isWeekly() { var r = form.querySelector("[data-freq-radio]:checked"); return r && r.value === "recurringWeekly"; }
+    function fmtShort(s) { return toDate(s).toLocaleDateString(undefined, { day: "numeric", month: "short" }); }
+
+    function repeatOn() { return repeatToggle && repeatToggle.checked && selectedDates.length === 1; }
+    function isWeekly() { return selectedDates.length > 1 || repeatOn(); }
 
     function selectOne(el, groupSelector, scope) {
         (scope || form).querySelectorAll(groupSelector).forEach(function (b) { b.classList.remove("is-selected"); });
         el.classList.add("is-selected");
     }
 
-    // ----- Calendar: day tap seeds StartDate + pre-checks the weekday chip (weekly, §8.12) ----------
-    function markSelectedDay(btn) {
-        form.querySelectorAll("[data-avail-day]").forEach(function (d) {
-            d.classList.remove("is-selected");
-            d.setAttribute("aria-pressed", "false");
-            d.setAttribute("tabindex", "-1");
-        });
-        btn.classList.add("is-selected");
-        btn.setAttribute("aria-pressed", "true");
-        btn.setAttribute("tabindex", "0");
+    // ----- Derive the canonical schedule from the selection ----------------------------------------
+    function setFrequency(weekly) {
+        var radio = form.querySelector('[data-freq-radio][value="' + (weekly ? "recurringWeekly" : "oneOff") + '"]');
+        if (radio && !radio.checked) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
     }
 
-    function precheckWeekday(dateStr) {
-        if (!isWeekly()) { return; }
-        var anyChecked = form.querySelector("[data-weekday]:checked");
-        if (anyChecked) { return; }
-        var token = DAYS[new Date(dateStr + "T00:00:00").getDay()];
-        var chip = form.querySelector('[data-weekday="' + token + '"]');
-        if (chip) { chip.checked = true; chip.dispatchEvent(new Event("change", { bubbles: true })); }
+    function setWeekdayChips(weekdays) {
+        form.querySelectorAll("[data-weekday]").forEach(function (chip) {
+            var want = weekdays.indexOf(chip.getAttribute("data-weekday")) !== -1;
+            if (chip.checked !== want) {
+                chip.checked = want;
+                chip.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+        });
+    }
+
+    function selectionWeekdays() {
+        var days = [];
+        selectedDates.forEach(function (s) {
+            var t = DAYS[toDate(s).getDay()];
+            if (days.indexOf(t) === -1) { days.push(t); }
+        });
+        return days;
+    }
+
+    // Every date the request covers: the weekday pattern expanded across [first, last/until].
+    function seriesDates() {
+        if (selectedDates.length === 0) { return []; }
+        if (!isWeekly()) { return selectedDates.slice(); }
+        var last = repeatOn() && untilInput && untilInput.value ? untilInput.value : selectedDates[selectedDates.length - 1];
+        var weekdays = selectionWeekdays();
+        var out = [], d = toDate(selectedDates[0]), end = toDate(last), guard = 0;
+        while (d <= end && guard++ < 400) {
+            if (weekdays.indexOf(DAYS[d.getDay()]) !== -1) { out.push(wireDate(d)); }
+            d.setDate(d.getDate() + 1);
+        }
+        return out;
+    }
+
+    function deriveSchedule() {
+        selectedDates.sort();
+
+        // The repeat toggle only makes sense for a single picked date; a multi-date pick
+        // already *is* the recurrence pattern.
+        if (repeatBlock) {
+            repeatBlock.hidden = selectedDates.length !== 1;
+            if (selectedDates.length !== 1 && repeatToggle) { repeatToggle.checked = false; }
+        }
+        if (untilBlock) { untilBlock.hidden = !repeatOn(); }
+
+        var weekly = isWeekly();
+        setFrequency(weekly);
+        setNative(startDate, selectedDates[0] || "");
+        if (weekly) {
+            var series = seriesDates();
+            setNative(endDate, series.length ? series[series.length - 1] : "");
+            setWeekdayChips(selectionWeekdays());
+        } else {
+            setNative(endDate, "");
+            setWeekdayChips([]);
+        }
+
+        paintCalendar();
+        updateSummary();
+    }
+
+    // ----- Calendar painting (multi-select + derived series) ---------------------------------------
+    function paintCalendar() {
+        var series = seriesDates();
+        form.querySelectorAll("[data-avail-day]").forEach(function (cell) {
+            var d = cell.getAttribute("data-date");
+            var picked = selectedDates.indexOf(d) !== -1;
+            var inSeries = !picked && series.indexOf(d) !== -1;
+            cell.classList.toggle("is-selected", picked);
+            cell.classList.toggle("is-derived", inSeries);
+            cell.setAttribute("aria-pressed", picked ? "true" : "false");
+        });
+    }
+
+    function updateSummary() {
+        if (!summaryEl) { return; }
+        var series = seriesDates();
+        if (series.length === 0) { summaryEl.hidden = true; summaryEl.textContent = ""; return; }
+        var text;
+        var explicitOnly = !repeatOn() && series.length === selectedDates.length;
+        if (series.length === 1) {
+            text = toDate(series[0]).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+        } else if (explicitOnly) {
+            // The request covers exactly the tapped dates — say the dates, not a weekly pattern.
+            var span = (toDate(series[series.length - 1]) - toDate(series[0])) / 86400000;
+            var consecutive = span === series.length - 1;
+            var dates = consecutive
+                ? fmtShort(series[0]) + " – " + fmtShort(series[series.length - 1])
+                : series.slice(0, -1).map(fmtShort).join(", ") + " & " + fmtShort(series[series.length - 1]);
+            text = dates + " · " + series.length + " days, same time each day";
+        } else {
+            var dayNames = selectionWeekdays()
+                .slice().sort(function (a, b) { return DAYS.indexOf(a) - DAYS.indexOf(b); })
+                .map(function (t) { return DAY_LABELS[DAYS.indexOf(t)]; });
+            var sessions = series.length === 1 ? "1 session" : series.length + " sessions";
+            text = dayNames.join(" & ") + " · " + fmtShort(series[0]) + " – " + fmtShort(series[series.length - 1])
+                + " · " + sessions + (series.length > 1 ? ", same time each day" : "");
+        }
+        summaryEl.textContent = "Asking for: " + text;
+        summaryEl.hidden = false;
+    }
+
+    // ----- Day windows (free times for the last-tapped date) ---------------------------------------
+    function loadDayWindows(dateStr) {
+        var target = document.getElementById("apply-day-windows");
+        if (!picker || !target || !window.htmx) { return; }
+        window.htmx.ajax("GET", picker.getAttribute("data-day-url") + "?date=" + dateStr, { target: target, swap: "innerHTML" });
+    }
+
+    function resetDayWindows() {
+        var target = document.getElementById("apply-day-windows");
+        if (target) {
+            target.innerHTML = '<p class="apply-day-hint">Pick a date on the calendar to see its open times.</p>';
+        }
+        activeWindow = null;
     }
 
     // ----- Range controls (constrained to the chosen free window) -----------------------------------
@@ -97,14 +218,31 @@
         var hours = mins / 60;
         var dur = (hours === 1 ? "1 hour" : (Number.isInteger(hours) ? hours + " hours" : hours.toFixed(1) + " hours"));
         var label = windows ? windows.getAttribute("data-date") : "";
-        var dateLabel = label ? new Date(label + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "";
+        var dateLabel = label ? toDate(label).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }) : "";
         readout.textContent = dateLabel + " · " + fmt12(startTime.value) + "–" + fmt12(endTime.value) + " · " + dur;
     }
 
     // ----- Delegated interactions (fragments arrive via HTMX, so bind on the form) ------------------
     form.addEventListener("click", function (e) {
         var day = e.target.closest("[data-avail-day]");
-        if (day) { setNative(startDate, day.getAttribute("data-date")); markSelectedDay(day); precheckWeekday(day.getAttribute("data-date")); return; }
+        if (day) {
+            var d = day.getAttribute("data-date");
+            var i = selectedDates.indexOf(d);
+            if (i === -1) {
+                selectedDates.push(d);
+                loadDayWindows(d);
+            } else {
+                selectedDates.splice(i, 1);
+                // Keep the free-times panel on a date that's still part of the request.
+                if (selectedDates.length > 0) {
+                    loadDayWindows(selectedDates[selectedDates.length - 1]);
+                } else {
+                    resetDayWindows();
+                }
+            }
+            deriveSchedule();
+            return;
+        }
 
         var win = e.target.closest("[data-window]");
         if (win) {
@@ -124,11 +262,12 @@
         if (until) {
             selectOne(until, "[data-until]", until.closest("[role=group]"));
             var days = parseInt(until.getAttribute("data-until"), 10);
-            if (days > 0) {
-                var base = startDate.value ? new Date(startDate.value + "T00:00:00") : new Date();
+            if (days > 0 && untilInput) {
+                var base = selectedDates.length ? toDate(selectedDates[0]) : new Date();
                 base.setDate(base.getDate() + days);
-                setNative(endDate, wireDate(base));
-            } else { endDate.focus(); }
+                untilInput.value = wireDate(base);
+                deriveSchedule();
+            } else if (untilInput) { untilInput.focus(); }
             return;
         }
     });
@@ -136,18 +275,34 @@
     form.addEventListener("change", function (e) {
         if (e.target.matches("[data-range-start]")) { setNative(startTime, e.target.value); updateReadout(); }
         else if (e.target.matches("[data-range-end]")) { setNative(endTime, e.target.value); updateReadout(); }
+        else if (untilInput && e.target === untilInput) { deriveSchedule(); }
     });
 
-    // Switching to weekly after a date is already picked: seed that day's weekday chip (§8.12).
-    form.querySelectorAll("[data-freq-radio]").forEach(function (radio) {
-        radio.addEventListener("change", function () {
-            if (isWeekly() && startDate && startDate.value) { precheckWeekday(startDate.value); }
+    if (repeatToggle) {
+        repeatToggle.addEventListener("change", function () {
+            if (repeatToggle.checked && untilInput && !untilInput.value && selectedDates.length === 1) {
+                // Seed a sensible default series length (the 8-weeks preset).
+                var base = toDate(selectedDates[0]);
+                base.setDate(base.getDate() + 56);
+                untilInput.value = wireDate(base);
+                var preset = form.querySelector('[data-until="56"]');
+                if (preset) { selectOne(preset, "[data-until]", preset.closest("[role=group]")); }
+            }
+            deriveSchedule();
         });
+    }
+
+    // Month nav swaps in a fresh grid with no selection state — repaint from JS state.
+    form.addEventListener("htmx:afterSwap", function (e) {
+        if (e.target.closest && (e.target.closest("[data-apply-picker]") || e.target.matches("[data-apply-picker]"))) {
+            paintCalendar();
+        }
     });
 
     // ----- Submit guard: incomplete schedule → reveal the native fields and let validation run -----
     form.addEventListener("submit", function (e) {
-        var incomplete = [startDate, startTime, endTime].some(function (f) { return f && !f.value; });
+        var incomplete = [startDate, startTime, endTime].some(function (f) { return f && !f.value; })
+            || (isWeekly() && endDate && !endDate.value);
         if (incomplete) {
             form.classList.remove("is-picker-active");
             e.preventDefault();
@@ -176,4 +331,19 @@
         cells[next].setAttribute("tabindex", "0");
         cells[next].focus();
     });
+
+    // ----- Seed from a restored draft / When-carry prefill ------------------------------------------
+    (function init() {
+        var weeklyRadio = form.querySelector('[data-freq-radio][value="recurringWeekly"]');
+        // A weekly draft/prefill (When-carry or restored stash) arms the repeat toggle so the
+        // first tapped date stays a weekly series rather than silently collapsing to a one-off.
+        if (weeklyRadio && weeklyRadio.checked && repeatToggle) {
+            repeatToggle.checked = true;
+            if (untilInput && endDate && endDate.value) { untilInput.value = endDate.value; }
+        }
+        if (startDate && startDate.value) {
+            selectedDates = [startDate.value];
+            deriveSchedule();
+        }
+    })();
 })();

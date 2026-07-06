@@ -30,7 +30,7 @@ public sealed class DiscoveryController : SteepleControllerBase
         EnsureSessionId();
         var vm = await BuildViewModelAsync(query, includeSuburbs: true, ct);
         ViewData["Canonical"] = AbsoluteUrl("/");
-        ViewData["Description"] = $"Browse community halls and church spaces to hire in {vm.AreaName} — many of them free. Filter by size, accessibility, and what they're good for.";
+        ViewData["Description"] = $"Browse community halls and church spaces to hire in {vm.AreaName} — simple hourly rates. Filter by size, accessibility, and what they're good for.";
         return View(vm);
     }
 
@@ -220,9 +220,7 @@ public sealed class DiscoveryController : SteepleControllerBase
     /// <summary>Builds a concise meta description for a listing detail page.</summary>
     private string BuildListingDescription(RoomDetailDto d)
     {
-        var price = d.IsFree
-            ? "free to hire"
-            : (d.PricePerHour is decimal p ? $"${p:0.##}/hr" : "enquire for pricing");
+        var price = $"${d.PricePerHour:0.##}/hr";
         var where = string.IsNullOrWhiteSpace(d.Venue.Suburb) ? d.Venue.Name : $"{d.Venue.Name}, {d.Venue.Suburb}";
         return $"{d.RoomName} at {where} — up to {d.Capacity} people, {price}. Find and hire community space on {_brand.Name}.";
     }

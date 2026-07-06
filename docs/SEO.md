@@ -7,12 +7,12 @@
 
 ## Why SEO is load-bearing here
 - The PRD's open question is **demand awareness**. Ranking for hyperlocal intent
-  ("church hall hire near me", "free community space {suburb}", "cheap room hire {town}")
+  ("church hall hire near me", "affordable community space {suburb}", "cheap room hire {town}")
   is one of the few channels that creates awareness without paid spend — fits the lean ethos.
 - Listing pages are **shareable URLs** (`/space/{venue}/{room}`); shares + crawlable pages
   compound. Every concierge-onboarded church is a new indexable page in a tight geo.
-- We lead **community-first / free-first** — content angles ("free halls in {suburb}") that
-  commercial competitors don't target.
+- We lead **community-first** — content angles ("welcoming halls in {suburb}",
+  "affordable space for playgroups") that commercial competitors don't target.
 
 ## Current state (what the SSR/HTMX choice already buys us)
 - ✅ **Server-rendered HTML** (Razor + HTMX, no SPA) — fully crawlable, no JS-rendering gap.
@@ -49,7 +49,7 @@
 - Host/trailing-slash policy is a proxy-layer concern (out of `Steeple.Web` scope) — not done here.
 
 ### 4. Per-page metadata — ✅
-- Unique `<meta name="description">` per listing built from venue/room facts (capacity, free/price,
+- Unique `<meta name="description">` per listing built from venue/room facts (capacity, price,
   suburb) by `DiscoveryController.BuildListingDescription`, rendered via `ViewData["Description"]`
   in `_Layout.cshtml`. Home/search pages also set a contextual description.
 - Title: `ViewData["Title"]` (room/page name) composed with `" · {Brand.Name}"` in `_Layout.cshtml`.
@@ -65,13 +65,13 @@
   `System.Text.Json` (not string concatenation) into `Html.Raw`:
   - A `Place` for the room: `name`, `description`, `url` (canonical), `address` (`PostalAddress`),
     `geo` (`GeoCoordinates`), `maximumAttendeeCapacity`, `photo` (array), `amenityFeature`
-    (`LocationFeatureSpecification` per amenity *and* accessibility flag, humanized), and
-    `isAccessibleForFree`. `containedInPlace` is `PlaceOfWorship` when the venue's `venueType` is
-    `church`, else `Place`. When the room is paid, an `offers` (`Offer` + `UnitPriceSpecification`
-    with `price`/`priceCurrency`) is added; omitted when free.
+    (`LocationFeatureSpecification` per amenity *and* accessibility flag, humanized).
+    `containedInPlace` is `PlaceOfWorship` when the venue's `venueType` is `church`, else
+    `Place`. Every room emits an `offers` (`Offer` + `UnitPriceSpecification` with
+    `price`/`priceCurrency`) — prices are required product-wide.
   - A `BreadcrumbList` (Home → Venue → Room).
-  - Validated by round-tripping the extracted `<script>` contents through `json.tool` for both a
-    free and a paid listing — see verification below.
+  - Validated by round-tripping the extracted `<script>` contents through `json.tool` —
+    see verification below.
 
 ### 7. Area landing pages — 🔲 (as GTM expands)
 - Indexable `"Community & church halls in {Suburb}"` pages aggregating local listings —

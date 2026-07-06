@@ -1,0 +1,14 @@
+description: A host works out how to get a new room listed and visible.
+story: |
+  Your church wants to offer its parish hall on this platform. Starting from the
+  public site, work out how to list it: get the space set up as well as you can,
+  with a fair hourly rate, and find out what it would take for organizers to
+  actually see it. Go as far as the product lets you in one sitting.
+persona: [pastor-dave-host]
+report:
+  - Trace how they got from the public site into hosting — was there a moment they couldn't tell whether "become a host" was for them, or couldn't find the door at all?
+  - In the venue/room forms, which fields caused hesitation or got filled with a shrug? Did the required hourly price make sense, with no expectation of a "free" option lingering anywhere?
+  - Did the path to being publicly visible (photos, open hours, publish/review) read as a checklist they were working through, or as a wall they hit? Where did they learn what was still missing — before or after being blocked by it?
+  - Did the Manage area's navigation hold together — could they always answer "where am I, and how do I get back"?
+  - Which status words (draft, unlisted, pending review…) did they encounter, and did the screen explain the consequence of each in plain words when it mattered?
+  - Where did the sitting actually end — done, stuck, or "I'll ring someone" — and what was on screen at that moment?

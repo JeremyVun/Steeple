@@ -94,7 +94,7 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 r.Venue.Suburb,
                 r.Capacity,
                 DisplayStatus(r.Status),
-                r.PricePerHour == null || r.PricePerHour <= 0m ? "Free" : "$" + ((int)r.PricePerHour) + "/hr",
+                "$" + ((int)r.PricePerHour) + "/hr",
                 pendingByRoom.GetValueOrDefault(r.Id),
                 activeByRoom.GetValueOrDefault(r.Id)))
             .ToList();
@@ -163,7 +163,7 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 r.Name,
                 r.Venue.Suburb,
                 r.Capacity,
-                r.PricePerHour == null || r.PricePerHour <= 0m ? "Free" : "$" + ((int)r.PricePerHour) + "/hr",
+                "$" + ((int)r.PricePerHour) + "/hr",
                 r.Photos.Count,
                 r.PublishRequestedAtUtc!.Value,
                 DisplayVenueVerificationStatus(

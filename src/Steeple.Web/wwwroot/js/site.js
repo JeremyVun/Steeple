@@ -434,11 +434,90 @@
         summarize();
     }
 
+    // Discovery "Filters" control: the secondary facet row (price / activity / accessibility)
+    // collapses behind a counting trigger in the search pill. Same contract as the When popover —
+    // the chips are real form inputs that ride the HTMX swap; no JS leaves the row inline.
+    function initMoreControl() {
+        var control = document.querySelector("[data-more-control]");
+        if (!control) {
+            return;
+        }
+        var form = control.closest("form");
+        var trigger = form ? form.querySelector("[data-more-trigger]") : null;
+        var panel = control.querySelector("[data-more-panel]");
+        var foot = control.querySelector("[data-more-foot]");
+        var count = trigger ? trigger.querySelector("[data-more-count]") : null;
+        if (!trigger || !panel) {
+            return;
+        }
+
+        control.classList.add("more-enhanced");
+        trigger.hidden = false;
+        if (foot) { foot.hidden = false; }
+        panel.hidden = true;
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "More filters");
+        panel.setAttribute("tabindex", "-1");
+
+        function summarize() {
+            var n = panel.querySelectorAll("input:checked").length;
+            if (count) {
+                count.textContent = String(n);
+                count.hidden = n === 0;
+            }
+            trigger.classList.toggle("is-active", n > 0);
+        }
+
+        function setOpen(open) {
+            panel.hidden = !open;
+            trigger.setAttribute("aria-expanded", open ? "true" : "false");
+            if (open) { panel.focus({ preventScroll: true }); }
+        }
+        trigger.addEventListener("click", function () { setOpen(panel.hidden); });
+        document.addEventListener("click", function (e) {
+            if (panel.hidden) { return; }
+            if (!(e.target instanceof Element) || !e.target.isConnected) { return; }
+            if (!control.contains(e.target) && !trigger.contains(e.target)) {
+                setOpen(false);
+            }
+        });
+        panel.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                setOpen(false);
+                trigger.focus();
+            }
+        });
+        var done = control.querySelector("[data-more-done]");
+        if (done) {
+            done.addEventListener("click", function () {
+                setOpen(false);
+                trigger.focus();
+            });
+        }
+
+        var clearBtn = control.querySelector("[data-more-clear]");
+        if (clearBtn) {
+            clearBtn.addEventListener("click", function () {
+                var inputs = panel.querySelectorAll("input[type=checkbox]");
+                inputs.forEach(function (i) { i.checked = false; });
+                // One bubbled change is enough: HTMX re-serializes the whole form.
+                if (inputs.length) {
+                    inputs[0].dispatchEvent(new Event("change", { bubbles: true }));
+                }
+                summarize();
+            });
+        }
+
+        control.addEventListener("change", summarize);
+        summarize();
+    }
+
     function init() {
         initToggle();
         initCopyLink();
         initGallery();
         initWhenControl();
+        initMoreControl();
         syncFilterBarHeight();
         initStickyFilter();
     }

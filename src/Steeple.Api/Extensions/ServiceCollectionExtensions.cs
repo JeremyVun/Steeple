@@ -225,6 +225,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IIdTokenVerifier>(sp => sp.GetRequiredService<GoogleIdTokenVerifier>());
         services.AddSingleton<IIdTokenVerifier>(sp => sp.GetRequiredService<AppleIdTokenVerifier>());
 
+        // Dev sign-in (local loop + automated playtests): the flag lives only in
+        // appsettings.Development.json, so deployed environments never register the verifier
+        // and provider "dev" fails closed.
+        if (configuration.GetValue<bool>("Auth:DevLoginEnabled"))
+        {
+            services.AddSingleton<IIdTokenVerifier, DevIdTokenVerifier>();
+        }
+
         services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
         services.AddHttpClient<ITurnstileVerifier, CloudflareTurnstileVerifier>();
 

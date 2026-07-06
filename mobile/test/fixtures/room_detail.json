@@ -4,7 +4,6 @@
   "roomName": "Fellowship Hall",
   "description": "A bright, high-ceilinged hall with a small stage and adjoining kitchen — well suited to community gatherings, rehearsals, and larger meetups.",
   "capacity": 80,
-  "isFree": false,
   "pricePerHour": 45.0,
   "currency": "USD",
   "houseRules": "No open flames. Please stack chairs and wipe down tables before leaving. Kitchen use requires 24h notice.",

@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
-organizers. Request→approve booking (not instant-book), free-first, one NoVA beachhead.
+organizers. Request→approve booking (not instant-book), required host-set hourly pricing
+(free listings removed 2026-07-07), one NoVA beachhead.
 .NET 10 API + HTMX web + HTMX admin + PostgreSQL + Flutter mobile (`/mobile`, Phase 4).
 Shipped (Phases 0–3): the full web loop — discovery → SSO → apply → approve →
 booking with DB-enforced integrity. Solo-operated; lean (~$100 AUD/mo ceiling).

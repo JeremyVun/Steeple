@@ -33,14 +33,7 @@
             </div>
         }
 
-        @if (Model.IsFree)
-        {
-            <span class="badge badge-free">Free</span>
-        }
-        else if (Model.PricePerHour.HasValue)
-        {
-            <span class="badge badge-price">$@Model.PricePerHour.Value.ToString("0.##")/hr</span>
-        }
+        <span class="badge badge-price">$@Model.PricePerHour.ToString("0.##")/hr</span>
     </div>
 
     <div class="card-body">
@@ -63,8 +56,8 @@
 
         @if (win is not null)
         {
-            <p class="card-free">
-                Free @ApplicationDisplay.FormatTimeRange(win.StartTime, win.EndTime)@(win.Date is { } wd ? $" on {wd:MMM d}" : "")
+            <p class="card-open">
+                Open @ApplicationDisplay.FormatTimeRange(win.StartTime, win.EndTime)@(win.Date is { } wd ? $" on {wd:MMM d}" : "")
             </p>
         }
 

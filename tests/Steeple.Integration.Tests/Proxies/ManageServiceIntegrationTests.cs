@@ -67,7 +67,7 @@ public class ManageServiceIntegrationTests
         Name: name,
         Description: "A flexible meeting space.",
         Capacity: 40,
-        PricePerHour: null,
+        PricePerHour: 30m,
         HouseRules: null,
         Status: status,
         Activities: null,

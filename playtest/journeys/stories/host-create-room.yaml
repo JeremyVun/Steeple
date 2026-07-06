@@ -1,0 +1,12 @@
+description: Host adds a new priced room; it saves as a draft showing the price.
+timeout: 6m
+story: |
+  Sign in with the dev sign-in as "pastor.dave@steeple.test" (name "Pastor Dave").
+  Your church wants to offer its "Choir Loft" — a cosy upstairs room for about 12
+  people, $20 an hour, good for music practice. Add it under Grace Community
+  Church of Vienna, filling in whatever the form genuinely needs, and stop once
+  it's saved — no need to publish it or add photos yet.
+success:
+  - console_errors: 0
+  - url_matches: "/manage/rooms/*"
+  - assert: A room called "Choir Loft" now exists showing $20/hr, and its status reads as a draft (not published or publicly listed).

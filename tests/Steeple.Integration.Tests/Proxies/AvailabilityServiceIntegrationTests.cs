@@ -61,6 +61,7 @@ public class AvailabilityServiceIntegrationTests
             Slug = $"hall-{Guid.NewGuid():N}",
             Description = "A hall.",
             Capacity = 40,
+            PricePerHour = 30m,
             Status = RoomStatus.Draft,
             CreatedAtUtc = FixedNow,
             UpdatedAtUtc = FixedNow,

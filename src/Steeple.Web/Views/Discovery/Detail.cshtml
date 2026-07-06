@@ -25,8 +25,7 @@
                 venue = venue.Name,
                 url = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}"),
                 photo = primary?.Url,
-                price = Model.IsFree ? "Free" : (Model.PricePerHour.HasValue ? $"${Model.PricePerHour.Value:0.##}/hr" : "Enquire"),
-                free = Model.IsFree
+                price = $"${Model.PricePerHour:0.##}/hr"
             }
         }
     };
@@ -54,7 +53,7 @@
     var nextReviewsUrl = Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}?reviewsPage={reviews.Page + 1}#reviews");
 
     // schema.org JSON-LD: the room as a Place, contained in the venue (a PlaceOfWorship for
-    // churches), with address, geo, capacity, amenities and free/paid signal — for local rich
+    // churches), with address, geo, capacity, amenities and hourly-price Offer — for local rich
     // results. A separate BreadcrumbList block gives the Home -> Venue -> Room trail.
     var canonicalUrl = ViewData["Canonical"] as string ?? Url.Content($"~/space/{venue.Slug}/{Model.RoomSlug}");
     var isChurch = string.Equals(venue.VenueType, "church", StringComparison.OrdinalIgnoreCase);
@@ -66,7 +65,6 @@
         ["name"] = Model.RoomName,
         ["url"] = canonicalUrl,
         ["maximumAttendeeCapacity"] = Model.Capacity,
-        ["isAccessibleForFree"] = Model.IsFree,
         ["photo"] = orderedPhotos.Select(p => p.Url).ToArray(),
         ["address"] = new Dictionary<string, object?>
         {
@@ -99,23 +97,20 @@
     {
         jsonLd["description"] = Model.Description;
     }
-    if (!Model.IsFree && Model.PricePerHour is decimal pricePerHour)
+    // An Offer with a per-hour UnitPriceSpecification (price + currency).
+    jsonLd["offers"] = new Dictionary<string, object?>
     {
-        // Paid rooms: an Offer with a per-hour UnitPriceSpecification (price + currency).
-        jsonLd["offers"] = new Dictionary<string, object?>
+        ["@type"] = "Offer",
+        ["price"] = Model.PricePerHour,
+        ["priceCurrency"] = Model.Currency,
+        ["priceSpecification"] = new Dictionary<string, object?>
         {
-            ["@type"] = "Offer",
-            ["price"] = pricePerHour,
+            ["@type"] = "UnitPriceSpecification",
+            ["price"] = Model.PricePerHour,
             ["priceCurrency"] = Model.Currency,
-            ["priceSpecification"] = new Dictionary<string, object?>
-            {
-                ["@type"] = "UnitPriceSpecification",
-                ["price"] = pricePerHour,
-                ["priceCurrency"] = Model.Currency,
-                ["unitText"] = "HOUR"
-            }
-        };
-    }
+            ["unitText"] = "HOUR"
+        }
+    };
 
     var jsonLdOptions = new JsonSerializerOptions
     {
@@ -189,14 +184,7 @@
                     <p class="detail-address">@address</p>
                 }
                 <div class="detail-keyfacts">
-                    @if (Model.IsFree)
-                    {
-                        <span class="badge badge-free">Free to use</span>
-                    }
-                    else if (Model.PricePerHour.HasValue)
-                    {
-                        <span class="badge badge-price">$@Model.PricePerHour.Value.ToString("0.##")/hr</span>
-                    }
+                    <span class="badge badge-price">$@Model.PricePerHour.ToString("0.##")/hr</span>
                     <span class="keyfact">Up to @Model.Capacity people</span>
                     @if (Model.Rating is { } rating)
                     {
@@ -353,18 +341,7 @@
 
         <aside class="detail-aside">
             <div class="apply-card">
-                @if (Model.IsFree)
-                {
-                    <p class="apply-price"><strong>Free</strong> to use</p>
-                }
-                else if (Model.PricePerHour.HasValue)
-                {
-                    <p class="apply-price"><strong>$@Model.PricePerHour.Value.ToString("0.##")</strong> / hour</p>
-                }
-                else
-                {
-                    <p class="apply-price"><strong>Enquire</strong> for pricing</p>
-                }
+                <p class="apply-price"><strong>$@Model.PricePerHour.ToString("0.##")</strong> / hour</p>
 
                 @if ((ViewData["ApplyEnabled"] as bool?) == true)
                 {

@@ -62,6 +62,7 @@ public class VenueCalendarIntegrationTests
             Slug = $"hall-{Guid.NewGuid():N}",
             Description = "A hall.",
             Capacity = 40,
+            PricePerHour = 30m,
             // Draft so this seed never pollutes the shared-Postgres search/count tests — the calendar
             // lists rooms of every status regardless (hosts see their whole venue).
             Status = RoomStatus.Draft,

@@ -52,8 +52,14 @@ public sealed class IdentityService : IIdentityService
                 IdentityErrorCodes.TurnstileFailed, "Turnstile verification failed.");
         }
 
-        var verifier = _verifiers.FirstOrDefault(v => v.Provider == provider)
-            ?? throw new InvalidOperationException($"No ID-token verifier registered for {provider}.");
+        // No registered verifier = the provider isn't available in this environment (e.g. the
+        // dev provider outside Development) — fail closed as an invalid token, not a 500.
+        var verifier = _verifiers.FirstOrDefault(v => v.Provider == provider);
+        if (verifier is null)
+        {
+            return IdentityResult<SessionResponse>.Fail(
+                IdentityErrorCodes.InvalidIdToken, $"Sign-in with '{request.Provider}' isn't available.");
+        }
 
         var identity = await verifier.VerifyAsync(request.IdToken, request.Nonce, ct).ConfigureAwait(false);
         if (identity is null)

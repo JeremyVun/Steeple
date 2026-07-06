@@ -11,9 +11,9 @@ class StatusColors {
   final Color bg;
 
   StatusColors lerpTo(StatusColors other, double t) => StatusColors(
-        fg: Color.lerp(fg, other.fg, t)!,
-        bg: Color.lerp(bg, other.bg, t)!,
-      );
+    fg: Color.lerp(fg, other.fg, t)!,
+    bg: Color.lerp(bg, other.bg, t)!,
+  );
 }
 
 /// The semantic color roles of DESIGN_SYSTEM §2.2/§2.3 — what components
@@ -59,7 +59,8 @@ class SteepleColors extends ThemeExtension<SteepleColors> {
   final Color actionPrimaryPressed;
   final Color accent; // paid-price accents, tab badge dot — never buttons
   final Color link; // links, text buttons, secondary-button labels
-  final Color selectedFill; // sage — FREE badge, free pins, selected borders
+  final Color
+  selectedFill; // sage — selected borders, selected pins, trust states
   final Color selectedBg; // sage-tint — selected chip background
   final Color selectedFg; // sage-deep — selected chip text
   final Color focus; // 3px focus ring
@@ -76,20 +77,42 @@ class SteepleColors extends ThemeExtension<SteepleColors> {
   List<BoxShadow> get elevation1 => shadow.a == 0
       ? const []
       : [
-          BoxShadow(color: shadow.withValues(alpha: 0.06), offset: const Offset(0, 1), blurRadius: 2),
-          BoxShadow(color: shadow.withValues(alpha: 0.05), offset: const Offset(0, 1), blurRadius: 3),
+          BoxShadow(
+            color: shadow.withValues(alpha: 0.06),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+          BoxShadow(
+            color: shadow.withValues(alpha: 0.05),
+            offset: const Offset(0, 1),
+            blurRadius: 3,
+          ),
         ];
 
   List<BoxShadow> get elevation2 => shadow.a == 0
       ? const []
       : [
-          BoxShadow(color: shadow.withValues(alpha: 0.08), offset: const Offset(0, 6), blurRadius: 18),
-          BoxShadow(color: shadow.withValues(alpha: 0.05), offset: const Offset(0, 2), blurRadius: 6),
+          BoxShadow(
+            color: shadow.withValues(alpha: 0.08),
+            offset: const Offset(0, 6),
+            blurRadius: 18,
+          ),
+          BoxShadow(
+            color: shadow.withValues(alpha: 0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 6,
+          ),
         ];
 
   List<BoxShadow> get elevation3 => shadow.a == 0
       ? const []
-      : [BoxShadow(color: shadow.withValues(alpha: 0.13), offset: const Offset(0, 18), blurRadius: 44)];
+      : [
+          BoxShadow(
+            color: shadow.withValues(alpha: 0.13),
+            offset: const Offset(0, 18),
+            blurRadius: 44,
+          ),
+        ];
 
   static const light = SteepleColors(
     background: SteepleTokens.paperLight,
@@ -110,11 +133,26 @@ class SteepleColors extends ThemeExtension<SteepleColors> {
     focus: Color(0x595B7553), // sage @ 35%
     overlay: Color(0x662A2620), // ink @ 40%
     shadow: SteepleTokens.inkLight,
-    success: StatusColors(fg: SteepleTokens.successFgLight, bg: SteepleTokens.successBgLight),
-    warning: StatusColors(fg: SteepleTokens.warningFgLight, bg: SteepleTokens.warningBgLight),
-    info: StatusColors(fg: SteepleTokens.infoFgLight, bg: SteepleTokens.infoBgLight),
-    danger: StatusColors(fg: SteepleTokens.dangerFgLight, bg: SteepleTokens.dangerBgLight),
-    neutral: StatusColors(fg: SteepleTokens.neutralFgLight, bg: SteepleTokens.neutralBgLight),
+    success: StatusColors(
+      fg: SteepleTokens.successFgLight,
+      bg: SteepleTokens.successBgLight,
+    ),
+    warning: StatusColors(
+      fg: SteepleTokens.warningFgLight,
+      bg: SteepleTokens.warningBgLight,
+    ),
+    info: StatusColors(
+      fg: SteepleTokens.infoFgLight,
+      bg: SteepleTokens.infoBgLight,
+    ),
+    danger: StatusColors(
+      fg: SteepleTokens.dangerFgLight,
+      bg: SteepleTokens.dangerBgLight,
+    ),
+    neutral: StatusColors(
+      fg: SteepleTokens.neutralFgLight,
+      bg: SteepleTokens.neutralBgLight,
+    ),
   );
 
   static const dark = SteepleColors(
@@ -136,11 +174,26 @@ class SteepleColors extends ThemeExtension<SteepleColors> {
     focus: Color(0x595B7553),
     overlay: Color(0x8C000000), // black @ 55%
     shadow: Color(0x00000000), // shadows barely read in dark — none (§5)
-    success: StatusColors(fg: SteepleTokens.successFgDark, bg: SteepleTokens.successBgDark),
-    warning: StatusColors(fg: SteepleTokens.warningFgDark, bg: SteepleTokens.warningBgDark),
-    info: StatusColors(fg: SteepleTokens.infoFgDark, bg: SteepleTokens.infoBgDark),
-    danger: StatusColors(fg: SteepleTokens.dangerFgDark, bg: SteepleTokens.dangerBgDark),
-    neutral: StatusColors(fg: SteepleTokens.neutralFgDark, bg: SteepleTokens.neutralBgDark),
+    success: StatusColors(
+      fg: SteepleTokens.successFgDark,
+      bg: SteepleTokens.successBgDark,
+    ),
+    warning: StatusColors(
+      fg: SteepleTokens.warningFgDark,
+      bg: SteepleTokens.warningBgDark,
+    ),
+    info: StatusColors(
+      fg: SteepleTokens.infoFgDark,
+      bg: SteepleTokens.infoBgDark,
+    ),
+    danger: StatusColors(
+      fg: SteepleTokens.dangerFgDark,
+      bg: SteepleTokens.dangerBgDark,
+    ),
+    neutral: StatusColors(
+      fg: SteepleTokens.neutralFgDark,
+      bg: SteepleTokens.neutralBgDark,
+    ),
   );
 
   @override

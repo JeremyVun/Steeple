@@ -69,7 +69,7 @@ their shapes in §5.
 
 ### `GET /api/v1/listings/search` ✅
 Query: `centerLat, centerLng, radiusMeters` **or** `minLat/maxLat/minLng/maxLng`;
-`suburb, minCapacity, freeOnly, page, pageSize`; repeatable `activities` &
+`suburb, minCapacity, page, pageSize`; repeatable `activities` &
 `accessibility` params. **Matching semantics:** repeated values combine into one bitmask
 and a room matches only if it accepts/provides **all** requested values (AND — deliberate:
 "accepts children AND music", "has step-free access AND accessible restroom"). Geofence
@@ -87,13 +87,14 @@ Response `ListingSearchResult`:
 ```
 
 `RoomSummary`: `roomId, venueId, roomSlug, venueSlug, roomName, venueName, suburb,
-primaryPhotoUrl?, capacity, isFree, pricePerHour?, currency, latitude, longitude,
+primaryPhotoUrl?, capacity, pricePerHour, currency, latitude, longitude,
 activities[], accessibility[], distanceMeters?, rating?{averageStars, count},
-matchedWindow?{date?, startTime, endTime}`. `rating` is the venue-level aggregate across
-all rooms and appears only when at least one rating is revealed. `matchedWindow` is
-additive *(availability plan commit 6)* and present only on searches with a When filter:
-the free window that satisfied the filter ("Free 6–9 PM"); `date` is set for one-off
-searches, absent for recurring ones.
+matchedWindow?{date?, startTime, endTime}`. `pricePerHour` is always present and positive —
+free listings were removed from the product (SYSTEM_DESIGN §17). `rating` is the venue-level
+aggregate across all rooms and appears only when at least one rating is revealed.
+`matchedWindow` is additive *(availability plan commit 6)* and present only on searches with
+a When filter: the open window that satisfied the filter (rendered "Open 6–9 PM"); `date` is
+set for one-off searches, absent for recurring ones.
 
 **When filter (time-first search) ✅ *(built 2026-07-05 — availability plan commit 6)*:**
 
@@ -146,6 +147,12 @@ day/time/recurrence filters when the Bookings slice lands.
 the person's name once, in the authorization response, never in the ID token. `turnstileToken`
 is required wherever Turnstile is enabled (deployed env); environments without a configured
 secret skip the check. Rate limited per IP (shared `auth` policy with `refresh`).
+
+**Development only:** provider `"dev"` accepts `idToken` = `email` or `email|Display Name`
+(no signature) for the local dev loop and automated playtests. Its verifier is registered
+solely when `Auth:DevLoginEnabled` is true (`appsettings.Development.json`); everywhere else
+provider `dev` → `401 invalid_id_token`. The Web BFF pairs it with a dev sign-in form on
+`/login` + `POST /auth/dev/callback` behind the same-named Web config flag.
 
 Errors: `401 invalid_id_token`, `403 turnstile_failed`, `409 use_original_provider` (the
 verified email already belongs to an account on the other provider — no auto-linking),
@@ -345,8 +352,9 @@ Edits a provider makes to an already-published room apply immediately (never blo
   photos: [RoomPhotoDto], updatedAtUtc}`.
 - `POST /api/v1/manage/venues/{id}/rooms` ✅ — `SaveRoomRequest`; creates the room in `draft`
   under the managed venue. `201`.
-- `PATCH /api/v1/manage/rooms/{id}` ✅ — `SaveRoomRequest` (`null` = unchanged; non-positive
-  `pricePerHour` = free); `status` drives the moderation model above. Leaving `published` is
+- `PATCH /api/v1/manage/rooms/{id}` ✅ — `SaveRoomRequest` (`null` = unchanged; `pricePerHour`
+  is required on create and must be positive whenever supplied — `400 invalid_room` otherwise);
+  `status` drives the moderation model above. Leaving `published` is
   blocked by future confirmed occurrences → `409 has_active_bookings`. Any transition **to**
   `published` (publish request or relist) requires ≥1 photo → `400 no_photos`.
 

@@ -13,8 +13,7 @@
         venue = i.VenueName,
         url = Url.Content($"~/space/{i.VenueSlug}/{i.RoomSlug}"),
         photo = i.PrimaryPhotoUrl,
-        price = i.IsFree ? "Free" : (i.PricePerHour.HasValue ? $"${i.PricePerHour.Value:0.##}/hr" : "Enquire"),
-        free = i.IsFree
+        price = $"${i.PricePerHour:0.##}/hr"
     });
 
     // Frame the map on the whole served area by default; when a suburb is selected, tighten the
@@ -76,7 +75,7 @@
         <p class="empty-emoji" aria-hidden="true">🌱</p>
         <h2 class="empty-title">No spaces match yet</h2>
         <p class="empty-body">
-            Try widening your filters — turn off "Free only", lower the capacity, or clear an activity chip.
+            Try widening your filters — lower the capacity or clear an activity chip.
             New halls are added by hand every week, so it is worth checking back.
         </p>
     </div>

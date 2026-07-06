@@ -5,22 +5,19 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../../app/theme/theme.dart';
 
-/// The four pre-rasterized map-pin bitmaps (DESIGN_SYSTEM §8.6): teardrop
-/// 30×38, paper stroke 2.5, white center dot; free = sage, paid = terracotta;
-/// selected = 1.15 scale + ink stroke. One bitmap per state, never
+/// The two pre-rasterized map-pin bitmaps (DESIGN_SYSTEM §8.6): teardrop
+/// 30×38, paper stroke 2.5, white center dot; default = terracotta,
+/// selected = sage at 1.15 scale + ink stroke. One bitmap per state, never
 /// per-marker widget renders (MOBILE_DESIGN §4 rule 3). Pin colors are frozen
 /// by the design system so this set stays small.
 class PinBitmaps {
-  PinBitmaps._(this.free, this.paid, this.freeSelected, this.paidSelected);
+  PinBitmaps._(this.normal, this.selected);
 
-  final BitmapDescriptor free;
-  final BitmapDescriptor paid;
-  final BitmapDescriptor freeSelected;
-  final BitmapDescriptor paidSelected;
+  final BitmapDescriptor normal;
+  final BitmapDescriptor selected;
 
-  BitmapDescriptor of({required bool isFree, required bool selected}) => isFree
-      ? (selected ? freeSelected : free)
-      : (selected ? paidSelected : paid);
+  BitmapDescriptor of({required bool selected}) =>
+      selected ? this.selected : normal;
 
   static Future<PinBitmaps> rasterize(BuildContext context) async {
     final colors = context.steepleColors;
@@ -71,10 +68,8 @@ class PinBitmaps {
       );
     }
 
-    final free = await draw(colors.selectedFill, selected: false);
-    final paid = await draw(colors.accent, selected: false);
-    final freeSelected = await draw(colors.selectedFill, selected: true);
-    final paidSelected = await draw(colors.accent, selected: true);
-    return PinBitmaps._(free, paid, freeSelected, paidSelected);
+    final normal = await draw(colors.accent, selected: false);
+    final selected = await draw(colors.selectedFill, selected: true);
+    return PinBitmaps._(normal, selected);
   }
 }

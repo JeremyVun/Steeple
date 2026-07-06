@@ -32,8 +32,9 @@ class ListingDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final detail =
-        ref.watch(listingDetailProvider((venueSlug: venueSlug, roomSlug: roomSlug)));
+    final detail = ref.watch(
+      listingDetailProvider((venueSlug: venueSlug, roomSlug: roomSlug)),
+    );
 
     return Scaffold(
       appBar: AppBar(),
@@ -69,25 +70,28 @@ class _Detail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.steepleColors;
-    final applyEnabled =
-        ref.watch(flagsProvider).isEnabled(FlagKeys.applyEnabled, orElse: true);
+    final applyEnabled = ref
+        .watch(flagsProvider)
+        .isEnabled(FlagKeys.applyEnabled, orElse: true);
     final venue = room.venue;
     final rating = room.rating;
 
     Widget section(String title, Widget child) => Padding(
-          padding: const EdgeInsets.only(top: SteepleTokens.space6),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
-              ),
-              const SizedBox(height: SteepleTokens.space3),
-              child,
-            ],
+      padding: const EdgeInsets.only(top: SteepleTokens.space6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: SteepleTypography.headlineSerif.copyWith(
+              color: colors.textPrimary,
+            ),
           ),
-        );
+          const SizedBox(height: SteepleTokens.space3),
+          child,
+        ],
+      ),
+    );
 
     return Column(
       children: [
@@ -107,18 +111,17 @@ class _Detail extends ConsumerWidget {
                         Expanded(
                           child: Text(
                             room.roomName,
-                            style: SteepleTypography.displaySerif
-                                .copyWith(color: colors.textPrimary),
+                            style: SteepleTypography.displaySerif.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                         ),
                         const SizedBox(width: SteepleTokens.space3),
-                        // Price is a serif "moment" (§3): FREE or $n/hr.
+                        // Price is a serif "moment" (§3): $n/hr.
                         Text(
-                          room.isFree
-                              ? 'FREE'
-                              : '\$${(room.pricePerHour ?? 0).toStringAsFixed(0)}/hr',
+                          '\$${room.pricePerHour.toStringAsFixed(0)}/hr',
                           style: SteepleTypography.priceSerif.copyWith(
-                            color: room.isFree ? colors.selectedFg : colors.accent,
+                            color: colors.accent,
                           ),
                         ),
                       ],
@@ -126,7 +129,9 @@ class _Detail extends ConsumerWidget {
                     const SizedBox(height: SteepleTokens.space2),
                     Text(
                       '${venue.name} · ${venue.suburb}',
-                      style: SteepleTypography.body.copyWith(color: colors.textSecondary),
+                      style: SteepleTypography.body.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                     if (rating != null) ...[
                       const SizedBox(height: SteepleTokens.space1),
@@ -140,7 +145,9 @@ class _Detail extends ConsumerWidget {
                     ],
                     Text(
                       'Up to ${room.capacity} people',
-                      style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                      style: SteepleTypography.bodySm.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                     if (venue.isIdentityVerified) ...[
                       const SizedBox(height: SteepleTokens.space3),
@@ -151,7 +158,9 @@ class _Detail extends ConsumerWidget {
                         'About this space',
                         Text(
                           room.description,
-                          style: SteepleTypography.body.copyWith(color: colors.textPrimary),
+                          style: SteepleTypography.body.copyWith(
+                            color: colors.textPrimary,
+                          ),
                         ),
                       ),
                     if (room.activities.isNotEmpty)
@@ -166,7 +175,8 @@ class _Detail extends ConsumerWidget {
                           ],
                         ),
                       ),
-                    if (room.amenities.isNotEmpty || room.accessibility.isNotEmpty)
+                    if (room.amenities.isNotEmpty ||
+                        room.accessibility.isNotEmpty)
                       section(
                         'What it has',
                         Wrap(
@@ -187,13 +197,12 @@ class _Detail extends ConsumerWidget {
                         'House rules',
                         Text(
                           room.houseRules,
-                          style: SteepleTypography.body.copyWith(color: colors.textPrimary),
+                          style: SteepleTypography.body.copyWith(
+                            color: colors.textPrimary,
+                          ),
                         ),
                       ),
-                    section(
-                      "When it's open",
-                      _AvailabilitySection(room: room),
-                    ),
+                    section("When it's open", _AvailabilitySection(room: room)),
                     section(
                       'Getting there',
                       Column(
@@ -201,16 +210,23 @@ class _Detail extends ConsumerWidget {
                         children: [
                           Text(
                             '${venue.addressLine}, ${venue.suburb} ${venue.postcode}',
-                            style:
-                                SteepleTypography.body.copyWith(color: colors.textPrimary),
+                            style: SteepleTypography.body.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                           if (venue.parkingInfo.isNotEmpty) ...[
                             const SizedBox(height: SteepleTokens.space2),
-                            _InfoLine(icon: Icons.local_parking_rounded, text: venue.parkingInfo),
+                            _InfoLine(
+                              icon: Icons.local_parking_rounded,
+                              text: venue.parkingInfo,
+                            ),
                           ],
                           if (venue.transitInfo.isNotEmpty) ...[
                             const SizedBox(height: SteepleTokens.space2),
-                            _InfoLine(icon: Icons.directions_bus_rounded, text: venue.transitInfo),
+                            _InfoLine(
+                              icon: Icons.directions_bus_rounded,
+                              text: venue.transitInfo,
+                            ),
                           ],
                         ],
                       ),
@@ -236,19 +252,22 @@ class _Detail extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    room.isFree
-                        ? 'Free to use'
-                        : '\$${(room.pricePerHour ?? 0).toStringAsFixed(0)} per hour',
-                    style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                    '\$${room.pricePerHour.toStringAsFixed(0)} per hour',
+                    style: SteepleTypography.title.copyWith(
+                      color: colors.textPrimary,
+                    ),
                   ),
                 ),
                 FilledButton(
                   onPressed: applyEnabled
                       ? () => context.goNamed(
-                            RouteNames.apply,
-                            pathParameters: {'venueSlug': venueSlug, 'roomSlug': roomSlug},
-                            extra: whenSelection,
-                          )
+                          RouteNames.apply,
+                          pathParameters: {
+                            'venueSlug': venueSlug,
+                            'roomSlug': roomSlug,
+                          },
+                          extra: whenSelection,
+                        )
                       : null,
                   child: const Text('Ask to book'),
                 ),
@@ -371,7 +390,9 @@ class _AvailabilitySection extends ConsumerWidget {
           loading: () => const SkeletonBlock(height: 72),
           error: (_, _) => Text(
             "We couldn't load open times right now.",
-            style: SteepleTypography.bodySm.copyWith(color: colors.textTertiary),
+            style: SteepleTypography.bodySm.copyWith(
+              color: colors.textTertiary,
+            ),
           ),
           data: (data) => _StripAndNextFree(room: room, availability: data),
         ),
@@ -415,7 +436,8 @@ class _StripAndNextFree extends StatelessWidget {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: days.length,
-            separatorBuilder: (_, _) => const SizedBox(width: SteepleTokens.space2),
+            separatorBuilder: (_, _) =>
+                const SizedBox(width: SteepleTokens.space2),
             itemBuilder: (context, i) => _StripCell(
               day: days[i],
               openWindows: openWindowsForDate(room.openHours, days[i].date),
@@ -428,7 +450,7 @@ class _StripAndNextFree extends StatelessWidget {
           nextFree == null
               ? 'No open times in the next two weeks.'
               : 'Next free: ${weekdayMonthDay(nextFree.date)} · '
-                  '${timeRange12(nextFree.freeWindows.first.startTime, nextFree.freeWindows.first.endTime)}',
+                    '${timeRange12(nextFree.freeWindows.first.startTime, nextFree.freeWindows.first.endTime)}',
           style: SteepleTypography.bodySm.copyWith(
             color: nextFree == null ? colors.textTertiary : colors.selectedFg,
             fontWeight: FontWeight.w600,
@@ -442,7 +464,11 @@ class _StripAndNextFree extends StatelessWidget {
 }
 
 class _StripCell extends StatelessWidget {
-  const _StripCell({required this.day, required this.openWindows, required this.today});
+  const _StripCell({
+    required this.day,
+    required this.openWindows,
+    required this.today,
+  });
 
   final AvailabilityDay day;
   final List<OpenWindow> openWindows;
@@ -464,7 +490,8 @@ class _StripCell extends StatelessWidget {
     final dayNumber = int.parse(day.date.split('-')[2]).toString();
 
     return Semantics(
-      label: '$weekday ${monthDay(day.date)}, ${dayStateSemantics(state, day.freeWindows.length)}',
+      label:
+          '$weekday ${monthDay(day.date)}, ${dayStateSemantics(state, day.freeWindows.length)}',
       child: Container(
         width: 44,
         decoration: BoxDecoration(
@@ -477,7 +504,9 @@ class _StripCell extends StatelessWidget {
           children: [
             Text(
               weekday,
-              style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+              style: SteepleTypography.label.copyWith(
+                color: colors.textTertiary,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -493,8 +522,10 @@ class _StripCell extends StatelessWidget {
                   ? Container(
                       width: 5,
                       height: 5,
-                      decoration:
-                          BoxDecoration(color: colors.warning.fg, shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                        color: colors.warning.fg,
+                        shape: BoxShape.circle,
+                      ),
                     )
                   : null,
             ),
@@ -512,7 +543,13 @@ class _OpenHoursSummary extends StatelessWidget {
 
   static const _abbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   static const _order = [
-    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday', //
   ];
 
   @override
@@ -553,8 +590,11 @@ class _OpenHoursSummary extends StatelessWidget {
               ),
               Expanded(
                 child: Text(
-                  [for (final w in windows) timeRange12(w.startTime, w.endTime)].join(', '),
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                  [for (final w in windows) timeRange12(w.startTime, w.endTime)]
+                      .join(', '),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -570,7 +610,9 @@ class _OpenHoursSummary extends StatelessWidget {
         if (closed.isNotEmpty)
           Text(
             'Closed ${closed.join(', ')}',
-            style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+            style: SteepleTypography.caption.copyWith(
+              color: colors.textTertiary,
+            ),
           ),
       ],
     );
@@ -594,7 +636,9 @@ class _InfoLine extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+            style: SteepleTypography.bodySm.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
         ),
       ],

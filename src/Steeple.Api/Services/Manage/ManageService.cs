@@ -290,7 +290,7 @@ public sealed class ManageService : IManageService
         var description = request.Description?.Trim() ?? "";
         var capacity = request.Capacity ?? 0;
 
-        if (ValidateRoomFields(name, description, capacity, request) is { } invalid)
+        if (ValidateRoomFields(name, description, capacity, request.PricePerHour, request) is { } invalid)
         {
             return ManageResult<ManagedRoomDto>.Fail(ManageErrorCodes.InvalidRoom, invalid);
         }
@@ -317,7 +317,7 @@ public sealed class ManageService : IManageService
             Slug = await Slugs.UniquifyAsync(baseSlug, s => _repository.RoomSlugExistsAsync(venue.Id, s, ct)).ConfigureAwait(false),
             Description = description,
             Capacity = capacity,
-            PricePerHour = NormalizePrice(request.PricePerHour),
+            PricePerHour = decimal.Round(request.PricePerHour!.Value, 2),
             Currency = "USD",
             HouseRules = request.HouseRules?.Trim() ?? "",
             Status = RoomStatus.Draft, // publishing is the moderated step
@@ -347,7 +347,7 @@ public sealed class ManageService : IManageService
         var description = request.Description?.Trim() ?? room!.Description;
         var capacity = request.Capacity ?? room!.Capacity;
 
-        if (ValidateRoomFields(name, description, capacity, request) is { } invalid)
+        if (ValidateRoomFields(name, description, capacity, request.PricePerHour ?? room!.PricePerHour, request) is { } invalid)
         {
             return ManageResult<ManagedRoomDto>.Fail(ManageErrorCodes.InvalidRoom, invalid);
         }
@@ -439,7 +439,7 @@ public sealed class ManageService : IManageService
         room.Capacity = capacity;
         if (request.PricePerHour is not null)
         {
-            room.PricePerHour = NormalizePrice(request.PricePerHour);
+            room.PricePerHour = decimal.Round(request.PricePerHour.Value, 2);
         }
         room.HouseRules = request.HouseRules?.Trim() ?? room.HouseRules;
         if (request.Activities is not null)
@@ -581,12 +581,13 @@ public sealed class ManageService : IManageService
         return null;
     }
 
-    private static string? ValidateRoomFields(string name, string description, int capacity, SaveRoomRequest request)
+    private static string? ValidateRoomFields(string name, string description, int capacity, decimal? effectivePrice, SaveRoomRequest request)
     {
         if (name.Length is 0 or > 200) return "Give the room a name (up to 200 characters).";
         if (description.Length is 0 or > 4000) return "Describe the room (up to 4000 characters).";
         if (capacity is < 1 or > 10_000) return "Capacity must be between 1 and 10,000.";
-        if (request.PricePerHour is > 99_999_999m) return "That hourly price is out of range.";
+        if (effectivePrice is null or <= 0m) return "Set an hourly price greater than zero.";
+        if (effectivePrice is > 99_999_999m) return "That hourly price is out of range.";
         if (request.HouseRules is { Length: > 4000 }) return "House rules are limited to 4000 characters.";
         return null;
     }
@@ -601,10 +602,6 @@ public sealed class ManageService : IManageService
         var unknown = badActivities.Concat(badAmenities).Concat(badAccessibility).FirstOrDefault();
         return ((activities, amenities, accessibility), unknown);
     }
-
-    /// <summary>Non-positive means free, stored as null (the public IsFree rule).</summary>
-    private static decimal? NormalizePrice(decimal? price) =>
-        price is null or <= 0m ? null : decimal.Round(price.Value, 2);
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

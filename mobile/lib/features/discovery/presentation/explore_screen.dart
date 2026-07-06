@@ -33,7 +33,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       appBar: AppBar(
         title: Text(
           'Find a space',
-          style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+          style: SteepleTypography.headlineSerif.copyWith(
+            color: colors.textPrimary,
+          ),
         ),
         actions: [
           Padding(
@@ -43,7 +45,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               label: _showMap ? 'Show list' : 'Show map',
               child: TextButton.icon(
                 onPressed: () => setState(() => _showMap = !_showMap),
-                icon: Icon(_showMap ? Icons.view_list_rounded : Icons.map_rounded, size: 18),
+                icon: Icon(
+                  _showMap ? Icons.view_list_rounded : Icons.map_rounded,
+                  size: 18,
+                ),
                 label: Text(_showMap ? 'List' : 'Map'),
               ),
             ),
@@ -59,7 +64,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 : AsyncValueView<ListingSearchResult>(
                     value: results,
                     skeleton: () => const SkeletonList(),
-                    onRetry: () => ref.read(searchResultsProvider.notifier).refresh(),
+                    onRetry: () =>
+                        ref.read(searchResultsProvider.notifier).refresh(),
                     data: (result) => _ResultsList(result: result),
                   ),
           ),
@@ -85,17 +91,11 @@ class _FilterRow extends ConsumerWidget {
         children: [
           Center(
             child: FilterChipPill(
-              label: filters.activeCount > 0 ? 'Filters · ${filters.activeCount}' : 'Filters',
+              label: filters.activeCount > 0
+                  ? 'Filters · ${filters.activeCount}'
+                  : 'Filters',
               selected: filters.activeCount > 0,
               onTap: () => showFilterSheet(context),
-            ),
-          ),
-          const SizedBox(width: SteepleTokens.space2),
-          Center(
-            child: FilterChipPill(
-              label: 'Free only',
-              selected: filters.freeOnly,
-              onTap: () => notifier.setFreeOnly(!filters.freeOnly),
             ),
           ),
           const SizedBox(width: SteepleTokens.space2),
@@ -145,7 +145,8 @@ class _ResultsList extends ConsumerWidget {
       child: ListView.separated(
         padding: const EdgeInsets.all(SteepleTokens.gutter),
         itemCount: result.items.length + 1,
-        separatorBuilder: (context, _) => const SizedBox(height: SteepleTokens.space3),
+        separatorBuilder: (context, _) =>
+            const SizedBox(height: SteepleTokens.space3),
         itemBuilder: (context, index) {
           if (index == 0) {
             final n = result.totalCount;
@@ -153,7 +154,9 @@ class _ResultsList extends ConsumerWidget {
               padding: const EdgeInsets.only(bottom: SteepleTokens.space1),
               child: Text(
                 n == 1 ? '1 space nearby' : '$n spaces nearby',
-                style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                style: SteepleTypography.caption.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
             );
           }
@@ -164,7 +167,10 @@ class _ResultsList extends ConsumerWidget {
               final when = ref.read(searchFiltersProvider).when;
               context.goNamed(
                 RouteNames.listing,
-                pathParameters: {'venueSlug': room.venueSlug, 'roomSlug': room.roomSlug},
+                pathParameters: {
+                  'venueSlug': room.venueSlug,
+                  'roomSlug': room.roomSlug,
+                },
                 // Carry the search's When filter through so Apply can
                 // prefill its schedule (MOBILE_CONTRACTS §7).
                 extra: when.isAny ? null : when,

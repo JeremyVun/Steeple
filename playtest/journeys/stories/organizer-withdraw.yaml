@@ -1,0 +1,9 @@
+description: An organizer withdraws a pending request from the inbox thread.
+story: |
+  Your plans fell through. Sign in with the dev sign-in as "jordan@steeple.test"
+  (name "Jordan Rivera"), find the request you made for the Fellowship Hall in
+  your inbox, and withdraw it. Make sure it clearly reads as withdrawn afterwards.
+success:
+  - console_errors: 0
+  - api_called: "POST /inbox/applications/*/withdraw"
+  - assert: The application's status now reads as withdrawn.

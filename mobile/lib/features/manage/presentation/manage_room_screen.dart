@@ -32,6 +32,7 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
   final _priceController = TextEditingController();
   bool _fieldsLoaded = false;
   bool _saving = false;
+  String? _priceError;
 
   @override
   void dispose() {
@@ -46,7 +47,7 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
     _nameController.text = room.name;
     _descriptionController.text = room.description;
     _capacityController.text = room.capacity.toString();
-    _priceController.text = room.isFree ? '' : room.pricePerHour!.toStringAsFixed(2);
+    _priceController.text = room.pricePerHour.toStringAsFixed(2);
     _fieldsLoaded = true;
   }
 
@@ -86,7 +87,9 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
             Expanded(
               child: Text(
                 room.venueName,
-                style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                style: SteepleTypography.bodySm.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
             ),
             if (room.publishRequestedAtUtc != null)
@@ -96,11 +99,17 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
           ],
         ),
         const SizedBox(height: SteepleTokens.space5),
-        Text('Name', style: SteepleTypography.label.copyWith(color: colors.textTertiary)),
+        Text(
+          'Name',
+          style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+        ),
         const SizedBox(height: SteepleTokens.space2),
         TextField(controller: _nameController),
         const SizedBox(height: SteepleTokens.space4),
-        Text('Description', style: SteepleTypography.label.copyWith(color: colors.textTertiary)),
+        Text(
+          'Description',
+          style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+        ),
         const SizedBox(height: SteepleTokens.space2),
         TextField(controller: _descriptionController, minLines: 3, maxLines: 6),
         const SizedBox(height: SteepleTokens.space4),
@@ -111,8 +120,12 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Capacity',
-                      style: SteepleTypography.label.copyWith(color: colors.textTertiary)),
+                  Text(
+                    'Capacity',
+                    style: SteepleTypography.label.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
                   const SizedBox(height: SteepleTokens.space2),
                   TextField(
                     controller: _capacityController,
@@ -127,13 +140,29 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Price per hour (blank = free)',
-                      style: SteepleTypography.label.copyWith(color: colors.textTertiary)),
+                  Text(
+                    'Price per hour (USD)',
+                    style: SteepleTypography.label.copyWith(
+                      color: colors.textTertiary,
+                    ),
+                  ),
                   const SizedBox(height: SteepleTokens.space2),
                   TextField(
                     controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}'))],
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d{0,2}'),
+                      ),
+                    ],
+                    decoration: InputDecoration(errorText: _priceError),
+                    onChanged: (_) {
+                      if (_priceError != null) {
+                        setState(() => _priceError = null);
+                      }
+                    },
                   ),
                 ],
               ),
@@ -157,7 +186,10 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
         const SizedBox(height: SteepleTokens.space8),
         _HoursTile(roomId: room.id),
         const SizedBox(height: SteepleTokens.space8),
-        Text('Listing status', style: SteepleTypography.title.copyWith(color: colors.textPrimary)),
+        Text(
+          'Listing status',
+          style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+        ),
         const SizedBox(height: SteepleTokens.space3),
         _StatusActions(room: room, saving: _saving, onAction: _applyStatus),
       ],
@@ -169,11 +201,18 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
     final description = _descriptionController.text.trim();
     final capacity = int.tryParse(_capacityController.text.trim());
     final priceText = _priceController.text.trim();
-    final price = priceText.isEmpty ? 0.0 : double.tryParse(priceText);
+    final price = double.tryParse(priceText);
 
-    if (name.isEmpty || capacity == null || capacity <= 0 || price == null) {
+    if (priceText.isEmpty || price == null || price <= 0) {
+      setState(() => _priceError = 'Enter an hourly price.');
+      return;
+    }
+
+    if (name.isEmpty || capacity == null || capacity <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Check the name, capacity, and price fields.')),
+        const SnackBar(
+          content: Text('Check the name, capacity, and price fields.'),
+        ),
       );
       return;
     }
@@ -217,22 +256,30 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
       if (confirmed != true || !mounted) return;
     }
 
-    await _save(ManagedRoomPatch(status: status), successMessage: _statusMessage(status));
+    await _save(
+      ManagedRoomPatch(status: status),
+      successMessage: _statusMessage(status),
+    );
   }
 
   String _statusMessage(String status) => switch (status) {
-        'published' => 'Sent for review.',
-        'draft' => 'Publish request withdrawn.',
-        'unlisted' => 'Unlisted.',
-        _ => 'Updated.',
-      };
+    'published' => 'Sent for review.',
+    'draft' => 'Publish request withdrawn.',
+    'unlisted' => 'Unlisted.',
+    _ => 'Updated.',
+  };
 
-  Future<void> _save(ManagedRoomPatch patch, {required String successMessage}) async {
+  Future<void> _save(
+    ManagedRoomPatch patch, {
+    required String successMessage,
+  }) async {
     setState(() => _saving = true);
     try {
       await ref.read(manageRoomProvider(widget.roomId).notifier).save(patch);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(successMessage)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(successMessage)));
       }
     } catch (e) {
       if (!mounted) return;
@@ -252,7 +299,11 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
 }
 
 class _StatusActions extends StatelessWidget {
-  const _StatusActions({required this.room, required this.saving, required this.onAction});
+  const _StatusActions({
+    required this.room,
+    required this.saving,
+    required this.onAction,
+  });
 
   final ManagedRoom room;
   final bool saving;
@@ -269,7 +320,9 @@ class _StatusActions extends StatelessWidget {
         children: [
           Text(
             "This room is waiting on review before it goes live.",
-            style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+            style: SteepleTypography.bodySm.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
           const SizedBox(height: SteepleTokens.space3),
           OutlinedButton(
@@ -282,18 +335,18 @@ class _StatusActions extends StatelessWidget {
 
     return switch (room.statusValue) {
       ManagedRoomStatus.draft => FilledButton(
-          onPressed: saving ? null : () => onAction('published'),
-          child: const Text('Request publish'),
-        ),
+        onPressed: saving ? null : () => onAction('published'),
+        child: const Text('Request publish'),
+      ),
       ManagedRoomStatus.published => OutlinedButton(
-          onPressed: saving ? null : () => onAction('unlisted'),
-          style: OutlinedButton.styleFrom(foregroundColor: colors.danger.fg),
-          child: const Text('Unlist'),
-        ),
+        onPressed: saving ? null : () => onAction('unlisted'),
+        style: OutlinedButton.styleFrom(foregroundColor: colors.danger.fg),
+        child: const Text('Unlist'),
+      ),
       ManagedRoomStatus.unlisted || ManagedRoomStatus.unknown => FilledButton(
-          onPressed: saving ? null : () => onAction('published'),
-          child: const Text('Relist'),
-        ),
+        onPressed: saving ? null : () => onAction('published'),
+        child: const Text('Relist'),
+      ),
     };
   }
 }
@@ -338,17 +391,24 @@ class _HoursTile extends StatelessWidget {
                         children: [
                           Text(
                             'Hours & blackouts',
-                            style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                            style: SteepleTypography.title.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                           const SizedBox(height: SteepleTokens.space1),
                           Text(
                             'Set open hours and closed dates.',
-                            style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                            style: SteepleTypography.bodySm.copyWith(
+                              color: colors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded, color: colors.textTertiary),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: colors.textTertiary,
+                    ),
                   ],
                 ),
               ),

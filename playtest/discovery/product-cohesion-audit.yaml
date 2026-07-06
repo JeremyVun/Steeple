@@ -1,0 +1,15 @@
+description: A skeptical evaluator judges polish, cohesion, and honesty across the product.
+story: |
+  Your board wants a recommendation on this platform by Friday. Spend your
+  session judging whether it's a finished, trustworthy product: browse as a
+  visitor, read the about/host/legal pages, then sign in and look at the
+  account side too. You're not booking anything — you're deciding whether this
+  feels like one coherent product you'd put your association's name behind.
+persona: [rachel-skeptical-evaluator]
+report:
+  - List every inconsistency in affordance language they noticed — controls that look the same but behave differently, or the same action dressed differently on different pages (buttons vs links, pills vs chips, differing labels for one concept).
+  - List visual-polish defects with their location — misalignment, cramped or uneven spacing, placeholder-looking content, broken or awkward states, anything that reads "unfinished".
+  - Did any copy over-promise or contradict the product — especially any surviving suggestion that spaces can be free of charge, which is no longer true?
+  - Rate the coherence of the visitor side vs the signed-in side vs the host side — do they read as one product? Where exactly does the seam show?
+  - What are the three fixes that would most raise this product's perceived quality, in their view?
+  - What was their verdict for the board, and what single observation weighed heaviest in it?

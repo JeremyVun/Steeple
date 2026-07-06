@@ -69,12 +69,12 @@
                 if (cell.IsInteractive)
                 {
                     var tab = roving is not null && roving.Date == cell.Date ? "0" : "-1";
+                    @* Selection + day-windows loading is slot-picker.js territory (multi-select
+                       toggling can't be expressed as a plain hx-get). *@
                     <button type="button" class="@classes" role="gridcell"
                             data-avail-day data-date="@cell.Date.ToString("yyyy-MM-dd")"
                             tabindex="@tab"
-                            aria-label="@cell.AccessibleName" aria-pressed="@(isSelected ? "true" : "false")"
-                            hx-get="@Url.Content($"~/space/{Model.VenueSlug}/{Model.RoomSlug}/apply/day?date={cell.Date:yyyy-MM-dd}")"
-                            hx-target="#apply-day-windows" hx-swap="innerHTML">
+                            aria-label="@cell.AccessibleName" aria-pressed="@(isSelected ? "true" : "false")">
                         <span class="avail-num">@num</span>
                         @if (cell.State == AvailabilityDayState.PartlyBooked)
                         {

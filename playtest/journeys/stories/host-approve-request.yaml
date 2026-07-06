@@ -1,0 +1,12 @@
+description: Host reviews the waiting request and approves it into a confirmed booking.
+timeout: 6m
+story: |
+  You look after the buildings at Grace Community Church of Vienna. Sign in with
+  the dev sign-in as "pastor.dave@steeple.test" (name "Pastor Dave"). A group has
+  asked to use the Fellowship Hall — find their request, read who's asking and
+  when, and approve it. Before you finish, satisfy yourself that the time is now
+  actually locked in on your side.
+success:
+  - console_errors: 0
+  - api_called: "POST /manage/applications/*/decision"
+  - assert: The request is approved, and a confirmed booking for Fellowship Hall is visible on the host side (in the thread's approved state or the host bookings/calendar view).

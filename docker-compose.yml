@@ -75,6 +75,9 @@ services:
       Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
       Geocoding__GoogleApiKey: "${GEOCODING_GOOGLE_API_KEY:-}"
       Flags__mobile.manage_enabled: "${MOBILE_MANAGE_ENABLED:-false}"
+      # Must be on whenever web.availability_picker is on (below) — the picker's calendar,
+      # free windows, and live check all read this API surface (off → 404 → all-closed grid).
+      Flags__listing.availability: "${LISTING_AVAILABILITY:-true}"
     # Loopback-only, for the local-disk media loop above; compose-internal otherwise.
     ports:
       - "127.0.0.1:${API_PORT:-8081}:8080"

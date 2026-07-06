@@ -360,7 +360,7 @@ public sealed record AvailabilityDayCell(DateOnly Date, AvailabilityDayState Sta
         _ => "in the past",
     };
 
-    /// <summary>"Tuesday, September 8 — open, 2 free windows" (§8.10 screen-reader name).</summary>
+    /// <summary>"Tuesday, September 8 — open, 2 open windows" (§8.10 screen-reader name).</summary>
     public string AccessibleName
     {
         get
@@ -368,7 +368,7 @@ public sealed record AvailabilityDayCell(DateOnly Date, AvailabilityDayState Sta
             var day = Date.ToString("dddd, MMMM d", CultureInfo.InvariantCulture);
             if (FreeWindowCount > 0)
             {
-                return $"{day} — {StateLabel}, {FreeWindowCount} free window{(FreeWindowCount == 1 ? "" : "s")}";
+                return $"{day} — {StateLabel}, {FreeWindowCount} open window{(FreeWindowCount == 1 ? "" : "s")}";
             }
 
             return $"{day} — {StateLabel}";
@@ -638,12 +638,12 @@ public sealed class ConflictSummaryViewModel
             var total = Result.TotalOccurrences;
             if (Result.Available)
             {
-                return total == 1 ? "That time looks free." : $"All {total} dates look free.";
+                return total == 1 ? "That time looks open." : $"All {total} dates look open.";
             }
 
             if (FullyBlocked && ClashCount >= total)
             {
-                return total == 1 ? "That time isn't available." : $"None of those {total} dates are free.";
+                return total == 1 ? "That time isn't available." : $"None of those {total} dates are open.";
             }
 
             return $"{ClashCount} of {total} dates clash.";
@@ -652,7 +652,7 @@ public sealed class ConflictSummaryViewModel
 
     /// <summary>Next-action line, shown for the danger variant (§8.13).</summary>
     public string? NextAction =>
-        Role == "danger" ? "Pick another time — the calendar shows what's free." : null;
+        Role == "danger" ? "Pick another time — the calendar shows what's open." : null;
 }
 
 // ------------------------------------------------------------------------------------------------

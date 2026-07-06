@@ -15,7 +15,7 @@
 ## 1. Brand personality — what the UI must feel like
 
 Steeple is a **neighbourly noticeboard, not a SaaS booking engine** (PRD: community-first,
-free-first, warm, non-corporate). Every visual decision serves that:
+warm, non-corporate). Every visual decision serves that:
 
 1. **Paper, not white.** Backgrounds are warm paper (`#FBF7F0`), never pure white page
    backgrounds; white is reserved for cards sitting *on* paper. Dark mode is warm
@@ -23,10 +23,10 @@ free-first, warm, non-corporate). Every visual decision serves that:
 2. **Serif for moments, sans for work.** The brand serif appears in headings, the
    wordmark, prices, and "moment" copy (approval banners). All functional UI (body,
    labels, buttons, forms) is the platform sans. Never set body text in the serif.
-3. **Sage means trust and free; terracotta means action and paid.** Sage (`#5B7553`) is
-   the color of the FREE badge, selected filters, verified checks, success. Terracotta
-   (`#C0623F`) is the primary CTA, paid-price accents, and warmth. The two never compete
-   inside one component — one accent per component.
+3. **Sage means trust; terracotta means action.** Sage (`#5B7553`) is the color of
+   selected filters, verified checks, availability ("Open …" lines), success. Terracotta
+   (`#C0623F`) is the primary CTA, price accents, map pins, and warmth. The two never
+   compete inside one component — one accent per component.
 4. **Soft geometry.** Pills for interactive chips/buttons, 14px radius cards, generous
    whitespace. No sharp corners, no hairline-dense data-table aesthetics.
 5. **Honest and calm.** No urgency mechanics (countdown timers, "3 people are viewing"),
@@ -107,7 +107,7 @@ color) — destructive buttons and error text use `danger`, never terracotta.
 | ink-soft on paper | ≈7:1 | AAA-small |
 | ink-faint on paper | ≈5.6:1 | AA — fine for captions/placeholders |
 | sage-deep on paper / on sage-tint | ≈6.5:1 / ≈5.4:1 | AA |
-| white on sage `#5B7553` | ≈5.1:1 | AA (FREE badge, pins) |
+| white on sage `#5B7553` | ≈5.1:1 | AA (selected-state fills) |
 | white on terracotta-strong `#B0552F` | ≈4.8:1 | AA (primary buttons) |
 | white on terracotta `#C0623F` | ≈4.2:1 | **Large/bold text only** |
 | dark: textPrimary on background | ≈14.5:1 | AAA |
@@ -136,7 +136,7 @@ Type scale (sizes in logical px/sp at 1.0 text scale; must survive user text sca
 | `label` | sans 700, +0.08em tracking, UPPERCASE | 12 / 16 | `labelSmall` | Eyebrows, filter-group legends |
 | `button` | sans 600 | 16 / 20 | `labelLarge` | All button labels |
 | `caption` | sans 400 | 12 / 16 | `bodySmall` | Timestamps, photo captions, footnotes |
-| `priceSerif` | serif 600 | 22 / 26 | (custom style) | Price displays ("FREE", "$25/hr") |
+| `priceSerif` | serif 600 | 22 / 26 | (custom style) | Price displays ("$25/hr") |
 
 Letter-spacing on serif headings: `-0.01em` (matches web). Never uppercase the serif.
 
@@ -177,6 +177,9 @@ Dark mode: shadows barely read — use `surfaceRaised` + `border` steps for dept
 - **Web:** the existing hand-drawn inline SVGs (stroke `currentColor`, 1.5–2px stroke) —
   matches rounded style.
 - Icons are never the sole carrier of meaning (pair with text or a semantic label).
+- Nav controls keep one identity across breakpoints: icon + label on wide layouts,
+  the same icon alone (with visually-hidden label + aria-label) when space is tight —
+  never an icon that only ever appears without its label.
 
 ## 7. Motion & haptics
 
@@ -223,9 +226,8 @@ stays same width (no layout jump).
 
 ### 8.3 Badges
 
-- **FREE:** solid sage, white 700 text, pill — the single most brand-loaded element;
-  never restyle it.
-- **Price:** `surfaceRaised` bg, ink text, `borderStrong` border, pill.
+- **Price:** `surfaceRaised` bg, ink text, `borderStrong` border, pill. Every listing
+  carries one (free listings are not a product concept).
 - **Verified (SSO):** sage-outlined pill with check glyph + "Identity verified (SSO)";
   never reword to imply vetting.
 
@@ -253,17 +255,17 @@ Tint-background chips (`bg` + `fg` from §2.3), `bodySm` 600 label. Wire token �
 ### 8.5 Listing card
 
 `surfaceRaised`, `radiusMd`, `border`, `elevation1`. Anatomy: 4:3 photo (CDN thumb-400
-variant; placeholder = sage-tint→paper-deep gradient with serif initial), FREE/price
+variant; placeholder = sage-tint→paper-deep gradient with serif initial), price
 badge top-left, then `title` room name, `bodySm` venue name + suburb (textSecondary),
 `bodySm` capacity ("Up to 60") with 600-weight number, static tag chips (max 3 + "+n").
-Whole card is one tap target with a semantic label ("<room>, <venue>, free, seats 60").
+Whole card is one tap target with a semantic label ("<room>, <venue>, $30 per hour, seats 60").
 
 ### 8.6 Map pins
 
 Teardrop, 30×38, paper stroke 2.5, white center dot (web `map.js` as-built):
-free = sage fill, paid = terracotta fill. **Selected:** scale 1.15 + ink stroke replacing
-paper. **Cluster:** ink circle, paper `title` count. One pre-rasterized bitmap per state
-(MOBILE_DESIGN §4 rule 3) — pin colors are frozen here so the rasterized set stays small.
+terracotta fill. **Selected:** scale 1.15 + ink stroke replacing paper. **Cluster:** ink
+circle, paper `title` count. One pre-rasterized bitmap per state (MOBILE_DESIGN §4 rule 3)
+— pin colors are frozen here so the rasterized set stays small.
 
 ### 8.7 Feedback surfaces
 
@@ -318,18 +320,29 @@ applied). States, all styled from §2.3 tokens — never raw hex:
 | `past` | `textTertiary`, no bg | no |
 | `today` | 1px `sage` outline (combines with any state) | per state |
 | `selected` | `sage` bg, white 700 text (combines: selected wins the bg) | yes |
+| `derived` | `sageTint` bg, `sageDeep` 700 text — a date the derived weekly series covers but wasn't tapped directly | yes |
+
+**Multi-select (apply calendar, 2026-07-06):** day cells toggle. One tapped date = a
+one-off; several tapped dates derive the wire's `recurringWeekly` schedule (weekdays of the
+tapped dates × their first–last range), and the calendar paints every covered date
+(`derived` state) plus a plain-language summary line ("Tuesdays & Thursdays · 3–17 Mar ·
+6 sessions") so a multi-week pattern never adds dates invisibly. A "Repeats weekly" toggle
+sits **below** the calendar (with Until presets 8 weeks / 3 months / Custom) and shows only
+while exactly one date is selected — a multi-date pick already *is* the pattern, so the
+toggle hides and unchecks. The old "Just once / Weekly" mode radios and apply weekday chips
+are the no-JS fallback only.
 
 The **legend is mandatory** wherever the calendar renders (compact single line, chips of
 the four meaningful states: Open, Partly booked, Booked out, Closed). Month nav = prev/next
 buttons + "Month yyyy" heading (`aria-live="polite"`). Keyboard: cells are focusable in DOM
 order, arrow keys move by day/week where JS is present (roving tabindex), Enter/Space
 selects; disabled states are real `disabled`/no-href, not CSS-only. Screen readers get the
-full state in the accessible name ("Tuesday, September 8 — open, 2 free windows").
+full state in the accessible name ("Tuesday, September 8 — open, 2 open windows").
 Booked-out vs closed must never rely on color alone (the dot / × glyph carry the meaning).
 
 ### 8.11 Time-range control
 
-Selection order: day → free window → range inside it. Free windows render as filter chips
+Selection order: day → open window → range inside it. Open windows render as filter chips
 (§8.2) labelled with their span ("6:00 PM – 9:00 PM"); tapping one seeds the range to the
 window and reveals the range controls: duration preset pills (1h / 2h / 3h / Custom —
 default 2h) plus start-time stepper constrained to the window. The canonical inputs are two
@@ -340,12 +353,14 @@ slider is progressive enhancement only. A live plain-language readout confirms t
 
 ### 8.12 Weekday chips
 
-The Mo–Su multi-select used in apply (weekly mode), search ("Weekly on…"), and hours
-editors: seven filter chips (§8.2 selected/unselected states), **Sunday-first order, always
-all seven**, min touch target 44px, each a real checkbox inside a `<label>` (web) /
-`FilterChip` (mobile). Selecting a calendar day pre-checks that day's weekday chip if
-nothing is selected yet; it never unchecks user choices. At least one chip required in
-weekly mode — enforce at submit with `danger` helper text, not by disabling chips.
+The Mo–Su multi-select used in search ("Weekly on…"), hours editors, and the apply flow's
+no-JS fallback (with the picker active, apply derives weekdays from the tapped calendar
+dates instead — §8.10 multi-select): seven filter chips (§8.2 selected/unselected states),
+**Sunday-first order, always all seven**, min touch target 44px, each a real checkbox
+inside a `<label>` (web) / `FilterChip` (mobile). Selecting a calendar day pre-checks that
+day's weekday chip if nothing is selected yet; it never unchecks user choices. At least one
+chip required in weekly mode — enforce at submit with `danger` helper text, not by
+disabling chips.
 
 ### 8.12a Search "When" popover (web discovery)
 
@@ -362,19 +377,50 @@ fallback rendered inline). Phones (≤640px): the panel becomes a fixed bottom s
 (max-height 85dvh, internal scroll) — the stacked filter bar would push an anchored panel
 below the fold — with full-bleed width so all seven columns keep ≥44px targets.
 
+### 8.12b Discovery search pill (web)
+
+The home filter bar is **one segmented pill** — `Where · When · How many · Filters` — not a
+panel of controls; the primary story ("a space for N people, at these times, near me") gets
+the only always-visible affordances. The pill is the bar: no card wrapper around it, and its
+width caps at **56rem** so segments keep balanced proportions on wide screens (Where never
+stretches to the app shell). One `surfaceRaised` container, `borderStrong` outline, pill
+radius, `shadow-sm`, hairline (`border`) dividers between segments; each segment is a
+`label`-token micro-caption over its value. The sticky wrapper is a full-width `background`
+band that is invisible at rest (paper on paper); when pinned, results scroll cleanly
+*underneath* it and a hairline `border` fades in along its bottom edge — the pill never
+floats free over content, and never gets a card wrapper. Segment hover/focus fills `surface`; focus rings draw inset
+(`--focus-inset`) because the pill clips overflow; `:focus-within` tints the pill border
+sage. The number input hides native spinners.
+
+- **Where** — suburb text input (datalist), placeholder "Anywhere nearby".
+- **When** — the §8.12a summarizing trigger, restyled as a segment ("Any time" reads as
+  placeholder `textTertiary`; an active summary reads `600`-weight ink).
+- **How many** — min-capacity number input, placeholder "Any size".
+- **Filters** — single-line trigger (funnel icon + word + sage count badge when any facet
+  is active) opening a dialog panel anchored under the bar's right edge with Activity
+  and Accessibility chips (§8.2) and a Clear / Done footer. Same
+  behavior contract as §8.12a: real form inputs ride the HTMX swap, Esc / Done /
+  outside-click close, phones get a bottom sheet.
+- "Clear all" link sits outside the pill, only when any filter is active.
+
+Secondary facets **never** render inline when JS is available — collapsing them behind
+Filters is the point. No-JS: When and Filters triggers stay hidden and every field renders
+inline below the pill with a submit button (unchanged fallback). Phones: Where takes the
+full first row; When · How many · Filters share the second.
+
 ### 8.13 Availability & conflict feedback
 
 One shared verdict card, used by the apply live check, the submit hard-block re-render, and
 host review badges:
 
-- **All clear:** `success` pair banner, check icon, "All 14 dates are free."
+- **All clear:** `success` pair banner, check icon, "All 14 dates look open."
 - **Partial conflict:** `warning` pair banner, "3 of 14 dates clash", followed by an
   expandable per-date list (date + humanized reason: `outsideOpenHours` → "outside open
   hours", `blackout` → "closed that day", `booked` → "already booked").
 - **Fully unavailable / hard-block 409:** `danger` pair banner, same list, plus the next
-  action in words ("Pick another time — the calendar shows what's free.").
+  action in words ("Pick another time — the calendar shows what's open.").
 
-The card is advisory language ("looks free right now"), never a promise — approval and the
+The card is advisory language ("looks open right now"), never a promise — approval and the
 DB constraint decide. Debounce live checks (500ms web / mobile alike); never re-derive
 availability client-side; the card always renders exactly what the server returned.
 

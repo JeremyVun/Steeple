@@ -183,6 +183,7 @@ public class WhenSearchIntegrationTests
         Slug = $"{slug}-{Guid.NewGuid():N}"[..Math.Min(slug.Length + 9, 60)],
         Description = "A room.",
         Capacity = 40,
+        PricePerHour = 30m,
         Status = RoomStatus.Published,
         CreatedAtUtc = FixedNow,
         UpdatedAtUtc = FixedNow,

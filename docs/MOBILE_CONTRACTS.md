@@ -116,8 +116,8 @@ Mapping (exhaustive — anything unlisted → `server`, retryable):
   is a single-value wire enum with the usual `unknown` fallback.
 - **`RoomSummary.matchedWindow`** *(additive — availability plan commit 6)*:
   `MatchedWindow? {date?, startTime, endTime}`, present only when the search carried a
-  When filter — the free window that satisfied it. `ListingCard` renders it as an accent
-  line ("Free 6:00–9:00 PM", plus "· Sep 8" when `date` is set).
+  When filter — the open window that satisfied it. `ListingCard` renders it as an accent
+  line ("Open 6:00–9:00 PM", plus "· Sep 8" when `date` is set).
 
 ## 6. Session & auth (`core/auth/`)
 
@@ -319,7 +319,7 @@ AsyncValueView<T>(value: AsyncValue<T>, data: (T) => Widget,
 ErrorView(error: AppError, {VoidCallback? onRetry})
 EmptyState({required IconData icon, required String title, String? body, Widget? action})
 StatusChip(statusRaw: String, domain: StatusDomain)            // DESIGN_SYSTEM §8.4 mapping (application counterOffered → info "Time suggested")
-FreeBadge() / PriceBadge(price, currency)
+PriceBadge(price, currency)
 ListingCard(summary: RoomSummary, {VoidCallback? onTap})       // the one card, list + map popup
 SkeletonListingCard() / SkeletonList(itemCount)
 OfflineBanner()                                                // listens connectivityProvider

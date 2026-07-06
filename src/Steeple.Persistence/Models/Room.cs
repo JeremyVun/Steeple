@@ -26,8 +26,8 @@ public class Room
     /// <summary>Maximum occupancy.</summary>
     public int Capacity { get; set; }
 
-    /// <summary>Hourly price; <c>null</c> or non-positive means free to use.</summary>
-    public decimal? PricePerHour { get; set; }
+    /// <summary>Hourly price; always positive (DB CHECK) — free listings are not a product concept.</summary>
+    public decimal PricePerHour { get; set; }
 
     /// <summary>ISO currency code for <see cref="PricePerHour"/>.</summary>
     public string Currency { get; set; } = "USD";
@@ -79,9 +79,4 @@ public class Room
 
     /// <summary>Whole dates the room is closed regardless of open hours.</summary>
     public ICollection<RoomBlackoutDate> BlackoutDates { get; set; } = new List<RoomBlackoutDate>();
-
-    /// <summary>
-    /// Whether the room is free to use. Not persisted — the EF configuration ignores this property.
-    /// </summary>
-    public bool IsFree => PricePerHour is null or <= 0m;
 }

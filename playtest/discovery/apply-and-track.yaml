@@ -1,0 +1,13 @@
+description: Ask to book a specific hall and understand what happens next.
+story: |
+  You've settled on the Fellowship Hall at Grace Community Church of Vienna for
+  a one-off event in about three weeks. Ask to book it for a two-hour slot the
+  calendar shows as open, then work out where you stand: has it gone through,
+  who decides, and where will you hear back?
+persona: [maria-first-timer]
+report:
+  - Where in the apply form did they slow down, re-read, or second-guess — and was the availability calendar a help or an obstacle in picking the slot?
+  - How did the sign-in interruption land — did the page make clear their work would survive it, and after signing in, was their draft visibly intact and did they notice?
+  - After submitting, could they say in their own words what state the request is in and what happens next? Quote the copy that told them — or note that nothing did.
+  - Did the thread/inbox they landed in feel like the same product as the browsing side (same affordance language, same tone), or like crossing into a different app?
+  - If they gave up at any point, what exactly was on screen when they decided to?

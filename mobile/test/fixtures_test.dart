@@ -22,8 +22,8 @@ void main() {
 
       expect(result.totalCount, 3);
       expect(result.items, hasLength(3));
-      expect(result.items[0].isFree, isFalse);
-      expect(result.items[1].isFree, isTrue);
+      expect(result.items[0].pricePerHour, 45.0);
+      expect(result.items[1].pricePerHour, 15.0);
       expect(result.items[0].rating?.averageStars, 4.75);
       expect(result.center?.latitude, closeTo(38.9012, 0.0001));
       expect(result.appliedBounds.minLat, closeTo(38.85, 0.0001));
@@ -50,7 +50,9 @@ void main() {
       expect(detail.openHours, hasLength(7));
       expect(detail.openHours!.first.dayOfWeek, 'sunday');
       expect(detail.openHours!.first.windows, isEmpty);
-      final wed = detail.openHours!.firstWhere((d) => d.dayOfWeek == 'wednesday');
+      final wed = detail.openHours!.firstWhere(
+        (d) => d.dayOfWeek == 'wednesday',
+      );
       expect(wed.windows, hasLength(2));
     });
 
@@ -66,8 +68,9 @@ void main() {
 
   group('availability.json', () {
     test('round-trips RoomAvailability', () {
-      final availability =
-          RoomAvailability.fromJson(_loadJson('availability.json'));
+      final availability = RoomAvailability.fromJson(
+        _loadJson('availability.json'),
+      );
 
       expect(availability.timezone, 'America/New_York');
       expect(availability.days, hasLength(14));
@@ -87,8 +90,9 @@ void main() {
 
   group('conflict_check.json', () {
     test('round-trips ScheduleCheckResult with all three reasons', () {
-      final result =
-          ScheduleCheckResult.fromJson(_loadJson('conflict_check.json'));
+      final result = ScheduleCheckResult.fromJson(
+        _loadJson('conflict_check.json'),
+      );
 
       expect(result.available, isFalse);
       expect(result.totalOccurrences, 8);
@@ -149,8 +153,9 @@ void main() {
 
   group('application_counter_offer.json', () {
     test('round-trips an Application carrying an open counterOffer', () {
-      final application =
-          Application.fromJson(_loadJson('application_counter_offer.json'));
+      final application = Application.fromJson(
+        _loadJson('application_counter_offer.json'),
+      );
 
       // New status token (CONTRACTS §5, availability plan commit 8).
       expect(application.statusValue, ApplicationStatus.counterOffered);
@@ -169,7 +174,8 @@ void main() {
 
     test('tolerates an unknown counter status token', () {
       final json = _loadJson('application_counter_offer.json');
-      (json['counterOffer'] as Map<String, dynamic>)['status'] = 'someFutureState';
+      (json['counterOffer'] as Map<String, dynamic>)['status'] =
+          'someFutureState';
 
       final application = Application.fromJson(json);
 
@@ -287,7 +293,7 @@ void main() {
       expect(room.name, 'Fellowship Hall');
       expect(room.venueName, 'Grace Community Church');
       expect(room.statusValue, ManagedRoomStatus.published);
-      expect(room.isFree, isFalse);
+      expect(room.pricePerHour, 45.0);
       expect(room.photos, hasLength(2));
       expect(room.photos[0].id, isNotNull);
       expect(room.photos[0].thumbUrl, isNotNull);
@@ -346,7 +352,8 @@ void main() {
 
     test('tolerates a legacy payload with no conflicts', () {
       final json = _loadJson('manage_applications_page.json');
-      final items = (json['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final items = (json['items'] as List<dynamic>)
+          .cast<Map<String, dynamic>>();
       items[1].remove('conflicts');
 
       final application = Application.fromJson(items[1]);
@@ -376,14 +383,18 @@ void main() {
       expect(calendar.pending, hasLength(2));
       expect(calendar.pending[0].organizerName, 'Marcus Lee');
       expect(calendar.pending[0].dates, hasLength(2));
-      expect(calendar.pending[1].applicationId,
-          'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee');
+      expect(
+        calendar.pending[1].applicationId,
+        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      );
     });
   });
 
   group('room_open_hours.json', () {
     test('round-trips RoomAvailabilityRules', () {
-      final rules = RoomAvailabilityRules.fromJson(_loadJson('room_open_hours.json'));
+      final rules = RoomAvailabilityRules.fromJson(
+        _loadJson('room_open_hours.json'),
+      );
 
       expect(rules.timezone, 'America/New_York');
       // GET always emits all seven days Sunday-first.
@@ -393,7 +404,9 @@ void main() {
       // Closed days have empty windows.
       expect(rules.days[0].windows, isEmpty);
       // Wednesday has two windows.
-      final wednesday = rules.days.firstWhere((d) => d.dayOfWeek == 'wednesday');
+      final wednesday = rules.days.firstWhere(
+        (d) => d.dayOfWeek == 'wednesday',
+      );
       expect(wednesday.windows, hasLength(2));
       expect(wednesday.windows[0].startTime, '09:00');
       expect(wednesday.windows[1].endTime, '21:00');
@@ -404,7 +417,9 @@ void main() {
     });
 
     test('toSavePayload emits days + blackouts only', () {
-      final rules = RoomAvailabilityRules.fromJson(_loadJson('room_open_hours.json'));
+      final rules = RoomAvailabilityRules.fromJson(
+        _loadJson('room_open_hours.json'),
+      );
       final payload = rules.toSavePayload();
 
       expect(payload.keys, unorderedEquals(<String>['days', 'blackouts']));

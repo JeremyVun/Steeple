@@ -30,7 +30,12 @@ class ManageHomeScreen extends StatelessWidget {
               onPressed: () => context.pushNamed(RouteNames.manageCalendar),
             ),
           ],
-          bottom: const TabBar(tabs: [Tab(text: 'Requests'), Tab(text: 'Rooms')]),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'Requests'),
+              Tab(text: 'Rooms'),
+            ],
+          ),
         ),
         body: const TabBarView(children: [_RequestsTab(), _RoomsTab()]),
       ),
@@ -48,8 +53,9 @@ class _RequestsTab extends ConsumerWidget {
       value: state,
       skeleton: () => const SkeletonList(),
       onRetry: () => ref.read(manageApplicationsProvider.notifier).refresh(),
-      data: (requests) =>
-          requests.isEmpty ? const _EmptyRequests() : _RequestsList(requests: requests),
+      data: (requests) => requests.isEmpty
+          ? const _EmptyRequests()
+          : _RequestsList(requests: requests),
     );
   }
 }
@@ -81,8 +87,10 @@ class _RequestsList extends ConsumerWidget {
       child: ListView.separated(
         padding: const EdgeInsets.all(SteepleTokens.gutter),
         itemCount: requests.length,
-        separatorBuilder: (context, _) => const SizedBox(height: SteepleTokens.space3),
-        itemBuilder: (context, index) => _RequestCard(application: requests[index]),
+        separatorBuilder: (context, _) =>
+            const SizedBox(height: SteepleTokens.space3),
+        itemBuilder: (context, index) =>
+            _RequestCard(application: requests[index]),
       ),
     );
   }
@@ -128,7 +136,9 @@ class _RequestCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             application.roomName,
-                            style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                            style: SteepleTypography.title.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                         ),
                         const SizedBox(width: SteepleTokens.space2),
@@ -141,7 +151,9 @@ class _RequestCard extends StatelessWidget {
                     const SizedBox(height: SteepleTokens.space1),
                     Text(
                       '${application.organizer.displayName} · Group of ${application.groupSize}',
-                      style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                      style: SteepleTypography.bodySm.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -164,7 +176,8 @@ class _RoomsTab extends ConsumerWidget {
       value: state,
       skeleton: () => const SkeletonList(),
       onRetry: () => ref.read(manageVenuesProvider.notifier).refresh(),
-      data: (venues) => venues.isEmpty ? const _EmptyRooms() : _VenuesList(venues: venues),
+      data: (venues) =>
+          venues.isEmpty ? const _EmptyRooms() : _VenuesList(venues: venues),
     );
   }
 }
@@ -215,17 +228,24 @@ class _VenueSection extends ConsumerWidget {
         children: [
           Text(
             venue.name,
-            style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+            style: SteepleTypography.headlineSerif.copyWith(
+              color: colors.textPrimary,
+            ),
           ),
           const SizedBox(height: SteepleTokens.space3),
           AsyncValueView(
             value: state,
-            skeleton: () => const SkeletonBlock(width: double.infinity, height: 72),
-            onRetry: () => ref.read(manageVenueDetailProvider(venue.id).notifier).refresh(),
+            skeleton: () =>
+                const SkeletonBlock(width: double.infinity, height: 72),
+            onRetry: () => ref
+                .read(manageVenueDetailProvider(venue.id).notifier)
+                .refresh(),
             data: (detail) => detail.rooms.isEmpty
                 ? Text(
                     'No rooms yet',
-                    style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                    style: SteepleTypography.bodySm.copyWith(
+                      color: colors.textSecondary,
+                    ),
                   )
                 : Column(
                     children: [
@@ -251,7 +271,8 @@ class _RoomRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.steepleColors;
     final inReview = room.publishRequestedAtUtc != null;
-    final semanticLabel = '${room.name}, ${inReview ? 'in review' : room.status}';
+    final semanticLabel =
+        '${room.name}, ${inReview ? 'in review' : room.status}';
 
     return Semantics(
       label: semanticLabel,
@@ -266,8 +287,10 @@ class _RoomRow extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             borderRadius: BorderRadius.circular(SteepleTokens.radiusMd),
-            onTap: () =>
-                context.pushNamed(RouteNames.manageRoom, pathParameters: {'id': room.id}),
+            onTap: () => context.pushNamed(
+              RouteNames.manageRoom,
+              pathParameters: {'id': room.id},
+            ),
             child: ExcludeSemantics(
               child: Padding(
                 padding: const EdgeInsets.all(SteepleTokens.space3),
@@ -279,16 +302,17 @@ class _RoomRow extends StatelessWidget {
                         children: [
                           Text(
                             room.name,
-                            style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                            style: SteepleTypography.title.copyWith(
+                              color: colors.textPrimary,
+                            ),
                           ),
                           const SizedBox(height: SteepleTokens.space1),
                           Text(
-                            room.isFree || room.pricePerHour == null
-                                ? 'Free · Capacity ${room.capacity}'
-                                : '${room.currency} ${room.pricePerHour!.toStringAsFixed(0)}/hr'
-                                    ' · Capacity ${room.capacity}',
-                            style:
-                                SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                            '${_formatPrice(room.pricePerHour, room.currency)}/hr'
+                            ' · Capacity ${room.capacity}',
+                            style: SteepleTypography.bodySm.copyWith(
+                              color: colors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
@@ -297,7 +321,10 @@ class _RoomRow extends StatelessWidget {
                     if (inReview)
                       const InReviewBadge()
                     else
-                      StatusChip(statusRaw: room.status, domain: StatusDomain.room),
+                      StatusChip(
+                        statusRaw: room.status,
+                        domain: StatusDomain.room,
+                      ),
                   ],
                 ),
               ),
@@ -307,4 +334,10 @@ class _RoomRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatPrice(double price, String currency) {
+  final symbol = currency == 'USD' ? r'$' : '$currency ';
+  final whole = price == price.roundToDouble();
+  return '$symbol${whole ? price.toStringAsFixed(0) : price.toStringAsFixed(2)}';
 }
