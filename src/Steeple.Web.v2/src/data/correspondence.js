@@ -241,6 +241,103 @@ export async function counterOffer(applicationId, schedule, message) {
   return { ok: true, value: await hold(answer.value, { thread: true }) };
 }
 
+// ── bookings: what a yes actually made ───────────────────────────────────────
+//
+// A list read says **which** bookings exist and nothing about the inside of one:
+// the occurrence set is deliberately absent from it (`BookingDto.Occurrences` is
+// empty on lists), so every dated, priced, charge-state fact comes from the
+// booking's own detail read. Mirroring a list over a detail is exactly the
+// mistake the counter-offer eraser was (v2_migration Phase 2, defect 3) —
+// `mirrorBooking` will not replace an occurrence set from a page, and nothing
+// here should try to make it.
+
+/** One booking in full — every occurrence, with its charge state. */
+export async function openBooking(bookingId) {
+  const answer = await attempt((token) => api.getBooking(bookingId, token));
+  if (!answer.ok) return answer;
+  return { ok: true, value: mirrorBooking(answer.value) };
+}
+
+/**
+ * The bookings standing at the venues this person manages, each read in full.
+ *
+ * The page names them; the detail read is what the desk prints. `limit` bounds
+ * the second read — a desk shows the coming weeks, not a lifetime of them.
+ */
+export async function refreshManagedBookings({ limit = 25 } = {}) {
+  const listed = await attempt((token) => api.getManagedBookings(token, { pageSize: 100 }));
+  if (!listed.ok) return listed;
+  const items = listed.value.items ?? [];
+  for (const dto of items) mirrorBooking(dto);
+  for (const dto of items.slice(0, limit)) await openBooking(dto.id);
+  return { ok: true, value: items.length };
+}
+
+/** The signed-in guest's own bookings, each read in full. */
+export async function refreshMyBookings({ limit = 25 } = {}) {
+  const listed = await attempt((token) => api.getMyBookings(token, { pageSize: 100 }));
+  if (!listed.ok) return listed;
+  const items = listed.value.items ?? [];
+  for (const dto of items) mirrorBooking(dto);
+  for (const dto of items.slice(0, limit)) await openBooking(dto.id);
+  return { ok: true, value: items.length };
+}
+
+/**
+ * End a booking. For a host this is the rescind lever, and it is not symmetric:
+ * a host's cancel frees **every** remaining date and refunds every charge
+ * already taken, because the notice window binds only guests
+ * (docs/contracts/payments.md — the refund table). Steeple decides all of that;
+ * this only carries the ask and mirrors the answer.
+ */
+export async function cancelBooking(bookingId, reason = null) {
+  const answer = await attempt((token) =>
+    api.cancelBooking(bookingId, { reason: reason?.trim() || null }, { accessToken: token })
+  );
+  if (!answer.ok) return answer;
+  return { ok: true, value: mirrorBooking(answer.value) };
+}
+
+// ── how a venue takes bookings, and how it gets paid ─────────────────────────
+
+/** `instant` or `manual`, as steeple holds it. Changing it binds new requests only. */
+export async function setBookingMode(venueId, bookingMode) {
+  return attempt((token) => api.updateManagedVenue(venueId, { bookingMode }, { accessToken: token }));
+}
+
+/** Where this venue stands with payouts. Never a gate in the mock era — a prompt. */
+export async function venuePayments(venueId) {
+  return attempt((token) => api.getVenuePayments(venueId, token));
+}
+
+/**
+ * Begin payout onboarding. The `url` that comes back is **not navigable** under
+ * the mock gateway; the client shows its own screen and finishes below. At
+ * Stripe-time that url is the hosted account link and is followed as it stands.
+ */
+export async function startPayouts(venueId) {
+  return attempt((token) => api.startVenuePayoutOnboarding(venueId, { accessToken: token }));
+}
+
+/** Finish the mock's stand-in for hosted KYC. Retires with the mock gateway. */
+export async function finishMockPayouts(venueId) {
+  return attempt((token) => api.completeMockVenuePayoutOnboarding(venueId, { accessToken: token }));
+}
+
+// ── what steeple wrote to you while you were away ────────────────────────────
+
+/** The notification inbox, newest first. Read quietly; never polled. */
+export async function notifications({ pageSize = 24 } = {}) {
+  if (!session.isSignedIn()) return { ok: false, reach: 'signedOut', problem: 'Sign in to see this.' };
+  return attempt((token) => api.getMyNotifications(token, { pageSize }));
+}
+
+/** Mark rows read. Best effort — a slip that showed was still delivered. */
+export async function markNotificationsRead(ids) {
+  if (!ids?.length) return { ok: true, value: null };
+  return attempt((token) => api.markNotificationsRead(ids, { accessToken: token }));
+}
+
 // ── the method on file a request cannot be sent without ──────────────────────
 
 /** Whether steeple holds a card for this person (docs/contracts/payments.md). */

@@ -250,6 +250,32 @@ export function occurrencesFor(bookingId) {
     .sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
+export function getBooking(bookingId) {
+  return load().bookings.find((b) => b.id === bookingId) ?? null;
+}
+
+/**
+ * The bookings held at one venue, soonest first.
+ *
+ * The desk's Bookings tab is this list; each row's occurrences and payment
+ * detail come from that booking's own detail read, never from the page that
+ * named it (docs/contracts/payments.md — a list read is authoritative for which
+ * bookings exist and for nothing inside one).
+ */
+export function venueBookings(venueId) {
+  return load()
+    .bookings.filter((b) => b.venueId === venueId)
+    .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+}
+
+/** The bookings this browser holds for the signed-in guest, soonest first. */
+export function guestBookings() {
+  const me = currentOrganizerId();
+  return load()
+    .bookings.filter((b) => b.organizerId === me)
+    .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+}
+
 /** Live occurrences a room is committed to — the ribbons on its week. */
 export function roomOccurrences(venueId, roomId) {
   const key = roomKey(venueId, roomId);
@@ -1186,6 +1212,9 @@ export const store = {
   countersFor,
   openCounterFor,
   bookingFor,
+  getBooking,
+  venueBookings,
+  guestBookings,
   occurrencesFor,
   roomOccurrences,
   openHoursFor,

@@ -521,6 +521,18 @@ export function getManagedBookings(accessToken, { status = null, page = null, pa
   return get('/manage/bookings', { status, page, pageSize }, { accessToken });
 }
 
+/**
+ * `POST /bookings/{id}/cancel` — either party ends the booking. A host's cancel
+ * frees **every** remaining occurrence and refunds every charge already taken;
+ * a guest's frees only what is still outside the notice window
+ * (docs/contracts/payments.md — the refund table). The answer is the booking as
+ * it now stands.
+ * @returns {Promise<object>} BookingDto
+ */
+export function cancelBooking(bookingId, { reason = null } = {}, { accessToken } = {}) {
+  return send('POST', `/bookings/${encodeURIComponent(bookingId)}/cancel`, { reason }, { accessToken });
+}
+
 // ─── payments: the method on file a request cannot be sent without ───────────
 //
 // No card number ever travels here. `setup` opens the intent, the mock confirm
@@ -547,6 +559,58 @@ export function confirmMockPaymentSetup({ clientSecret, brand, last4 }, { access
 /** `GET /me/payments` — whether there is a method on file, and how it reads. */
 export function getMyPayments(accessToken) {
   return get('/me/payments', null, { accessToken });
+}
+
+// ─── payouts: the venue's side of the money ──────────────────────────────────
+//
+// Under the mock gateway the onboarding `url` is not navigable
+// (`mock-onboarding:acct_mock_…`) — the client renders its own screen and
+// finishes through `mock-complete`. At Stripe-time `url` becomes the hosted
+// account-link and is followed unchanged, and `mock-complete` retires.
+
+/** `GET /manage/venues/{id}/payments` — the venue's payout onboarding state. */
+export function getVenuePayments(venueId, accessToken) {
+  return get(`/manage/venues/${encodeURIComponent(venueId)}/payments`, null, { accessToken });
+}
+
+/** `POST /manage/venues/{id}/payments/onboarding` → `{url, mock}`. */
+export function startVenuePayoutOnboarding(venueId, { accessToken } = {}) {
+  return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/payments/onboarding`, null, {
+    accessToken,
+  });
+}
+
+/**
+ * `POST /manage/venues/{id}/payments/onboarding/mock-complete` — one call for
+ * what hosted KYC, the `account.updated` webhooks and the opt-in switch will do.
+ * `400 invalid_payment` before onboarding has been started.
+ * @returns {Promise<object>} VenuePaymentStateDto
+ */
+export function completeMockVenuePayoutOnboarding(venueId, { accessToken } = {}) {
+  return send(
+    'POST',
+    `/manage/venues/${encodeURIComponent(venueId)}/payments/onboarding/mock-complete`,
+    null,
+    { accessToken }
+  );
+}
+
+// ─── the inbox steeple writes: notifications ─────────────────────────────────
+
+/**
+ * `GET /me/notifications` — a cursor page of inbox rows, newest first.
+ * `after` continues a previous page; `nextCursor: null` means there are no more.
+ * Each row's `payload` is the event's own document — ids, display fields and a
+ * `deepLink` this app already knows how to follow (`ui/deepLink.js`).
+ * @returns {Promise<{items:Array<{id:string,type:string,createdAtUtc:string,readAt:string|null,payload:object}>,nextCursor:string|null}>}
+ */
+export function getMyNotifications(accessToken, { after = null, pageSize = null } = {}) {
+  return get('/me/notifications', { after, pageSize }, { accessToken });
+}
+
+/** `POST /me/notifications/read` — marks rows read; ids not yours are ignored. */
+export function markNotificationsRead(ids, { accessToken } = {}) {
+  return send('POST', '/me/notifications/read', { ids }, { accessToken });
 }
 
 // ─── manage: the provider's own venues, rooms, hours and photos ──────────────
