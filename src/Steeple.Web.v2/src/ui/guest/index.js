@@ -34,7 +34,7 @@ import { isYourMove, plural } from './copy.js';
 // purpose — and anything modal, which has its own way out.
 const NOT_AWAY = '.guest__surface, .sent, .nav, .porch, [role="dialog"], .modal__layer';
 
-export function createGuestFlows({ announce, porch } = {}) {
+export function createGuestFlows({ announce, porch, onFixPayment } = {}) {
   document.documentElement.dataset.letter = state.letter;
 
   const wash = el('div', { class: 'guest__wash', 'aria-hidden': 'true' });
@@ -60,6 +60,9 @@ export function createGuestFlows({ announce, porch } = {}) {
     announce,
     onBack: () => setView('journal'),
     onBrowse: () => setView('village'),
+    // A failed charge on a booked date is the one thing on this page that is
+    // fixed somewhere else. The panel is the shelf's, so it is handed in.
+    onFixPayment,
   });
 
   const surfaces = [

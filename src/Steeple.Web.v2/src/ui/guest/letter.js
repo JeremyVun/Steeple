@@ -19,6 +19,14 @@ import { getVenue } from '../../data/venues.js';
 import { priceParts } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import {
+  FAILURE_LADDER,
+  chargeWord,
+  isTrouble,
+  nextChargeLine,
+  paymentLine,
+  wasCharged,
+} from '../money.js';
+import {
   formatDate,
   formatTimeRange,
   plural,
@@ -29,7 +37,7 @@ import {
   timeAgo,
 } from './copy.js';
 
-export function createLetterView({ announce, onBack, onBrowse }) {
+export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
   let applicationId = null;
   let confirming = null; // 'withdraw' | 'declineCounter' | null
   // What steeple said when it last refused something here. It is not the
@@ -242,12 +250,26 @@ export function createLetterView({ announce, onBack, onBrowse }) {
     ]);
   }
 
+  /**
+   * The dates a yes actually holds, and what has happened to the money for each.
+   *
+   * Everything printed here comes from the booking's own **detail** read — the
+   * one `wire.openApplication` pulls alongside the request. A list read names
+   * bookings and carries no occurrence set at all, so a page can never be the
+   * source of a date or a charge state (docs/contracts/payments.md; the
+   * counter-offer eraser is the cautionary tale for reading anything off one).
+   */
   function occurrenceBlock(app) {
     const booking = bookingFor(app.id);
     if (!booking) return null;
     const dates = occurrencesFor(booking.id);
     const today = todayIso();
     const ahead = dates.filter((o) => o.date >= today);
+    const each = paymentLine(booking, 'guest');
+    const next = nextChargeLine(booking);
+    const failed = dates.some((o) => isTrouble(o.paymentStatus));
+    const paid = dates.filter((o) => wasCharged(o.paymentStatus)).length;
+
     return el('section', { class: 'held' }, [
       el('div', { class: 'held__head' }, [
         el('h2', { class: 'eyebrow', text: 'Dates held for you' }),
@@ -258,17 +280,68 @@ export function createLetterView({ announce, onBack, onBrowse }) {
             : `${plural(dates.length, 'date', 'dates')}, all now past`,
         }),
       ]),
+      // The money, said before the dates it applies to — a person reading this
+      // wants "what does it cost and when" before "which Tuesdays".
+      each
+        ? el('div', { class: 'held__money' }, [
+            el('p', { class: 'held__rate', text: each }),
+            next ? el('p', { class: 'held__next', text: next }) : null,
+            paid ? el('p', { class: 'held__paid', text: `${plural(paid, 'date', 'dates')} paid so far.` }) : null,
+          ].filter(Boolean))
+        : null,
+      failed ? failureBlock() : null,
       el(
         'ul',
         { class: 'held__list' },
-        dates.map((o) =>
-          el('li', { class: `held__item${o.date < today ? ' is-past' : ''}` }, [
-            el('span', { class: 'held__date', text: formatDate(o.date, { weekday: true, short: true }) }),
-            el('span', { class: 'held__time', text: formatTimeRange(o.start, o.end) }),
-          ])
-        )
+        dates.map((o) => {
+          const word = chargeWord(o.paymentStatus, 'guest');
+          return el(
+            'li',
+            {
+              class: `held__item${o.date < today ? ' is-past' : ''}`,
+              dataset: { charge: o.paymentStatus ?? 'none' },
+            },
+            [
+              el('span', { class: 'held__date', text: formatDate(o.date, { weekday: true, short: true }) }),
+              el('span', { class: 'held__time', text: formatTimeRange(o.start, o.end) }),
+              word
+                ? el('span', {
+                    class: `held__charge held__charge--${isTrouble(o.paymentStatus) ? 'trouble' : o.paymentStatus}`,
+                    text: word,
+                  })
+                : null,
+            ].filter(Boolean)
+          );
+        })
       ),
-    ]);
+    ].filter(Boolean));
+  }
+
+  /**
+   * A charge that did not go through, and exactly what happens next.
+   *
+   * Steeple's own ladder, in steeple's own order (payments.md §5): the card is
+   * retried, and a date still unpaid 24 hours before it starts is released. Said
+   * once, calmly, with the one thing that fixes it a press away — never as an
+   * accusation, and never as a threat with no remedy attached.
+   */
+  function failureBlock() {
+    return el('div', { class: 'held__failed', role: 'status' }, [
+      el('p', { class: 'held__failedtitle', text: 'A payment did not go through' }),
+      el('p', { class: 'prose prose--sm', text: FAILURE_LADDER }),
+      onFixPayment
+        ? el(
+            'button',
+            {
+              type: 'button',
+              class: 'pill pill--primary',
+              dataset: { action: 'fix-payment' },
+              onclick: () => onFixPayment(),
+            },
+            'Update your payment method'
+          )
+        : null,
+    ].filter(Boolean));
   }
 
   function threadBlock(app, venue) {
@@ -433,7 +506,9 @@ export function createLetterView({ announce, onBack, onBrowse }) {
       threadBlock(app, venue),
       closingBlock(app, venue),
     ]);
-    if (working) for (const control of body.querySelectorAll('button')) control.disabled = true;
+    // Set from the flag, never only to true: the page is rebuilt here, but the
+    // habit is what keeps a control from staying dead after a redraw that is not.
+    for (const control of body.querySelectorAll('button')) control.disabled = working;
   }
 
   function spoken() {
@@ -444,11 +519,16 @@ export function createLetterView({ announce, onBack, onBrowse }) {
     const counter = openCounterFor(app.id);
     const booking = bookingFor(app.id);
     const messages = threadFor(app.id);
+    const dates = booking ? occurrencesFor(booking.id) : [];
+    const trouble = dates.some((o) => isTrouble(o.paymentStatus));
     return [
       `Your request for ${room?.name} at ${venue?.name}.`,
       `${statusLabel(app.status)}. ${statusNote(app, {
         occurrences: booking ? occurrencesFor(booking.id).length : 0,
       })}`,
+      booking ? (paymentLine(booking, 'guest') ?? '') : '',
+      booking ? (nextChargeLine(booking) ?? '') : '',
+      trouble ? `A payment did not go through. ${FAILURE_LADDER}` : '',
       `You asked for ${scheduleSentence(app)}, for ${plural(app.groupSize, 'person', 'people')}, ${app.activityType}.`,
       counter
         ? `The host suggests ${scheduleSentence(counter)}. You can accept it or keep your original time.`

@@ -16,8 +16,10 @@
 // (CONTRACT6 §1.1) — no module here calls another's code.
 
 import { CORRESPONDENCE_VIEWS, setView, state } from '../core/bus.js';
+import { paymentState } from '../data/correspondence.js';
 import * as session from '../data/session.js';
 import { el, replaceChildren } from './dom.js';
+import { cardLine } from './guest/payment.js';
 
 /** Two letters at most: a monogram, not an abbreviation. */
 function initials(person) {
@@ -30,7 +32,11 @@ function initials(person) {
 const firstName = (person) =>
   String(person?.displayName ?? '').trim().split(/\s+/)[0] || (person?.email ?? 'Account');
 
-export function createAccount({ announce = () => {}, onSignIn = null } = {}) {
+export function createAccount({ announce = () => {}, onSignIn = null, onCard = null } = {}) {
+  // The card steeple holds for this person, as `GET /me/payments` last answered.
+  // Null means the question has not been asked — which is a different sentence
+  // from "no card on file", and the card prints neither until it knows.
+  let payments = null;
   const mark = el('span', { class: 'account__mark', 'aria-hidden': 'true' });
   const who = el('span', { class: 'account__who' });
 
@@ -88,7 +94,51 @@ export function createAccount({ announce = () => {}, onSignIn = null } = {}) {
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
     card.hidden = !open;
     element.classList.toggle('is-open', open);
-    if (open) place();
+    if (open) {
+      place();
+      // Asked when the card is opened, not on every page load: nobody needs a
+      // payments read to look at a map. A stale answer is corrected in place.
+      readPayments();
+    }
+  }
+
+  /** What steeple holds on file. Best effort — a failure simply says nothing. */
+  function readPayments() {
+    if (!session.isSignedIn()) return;
+    paymentState().then((answer) => {
+      if (!answer.ok) return;
+      payments = answer.value;
+      if (open) render();
+    });
+  }
+
+  /**
+   * The money half of an account, and only what Steeple actually knows: a brand
+   * and four digits. No card number has ever been here to print.
+   */
+  function paymentBlock() {
+    if (!onCard) return null;
+    const line = payments?.hasPaymentMethod ? cardLine(payments.method) : null;
+    return el('div', { class: 'account__payment' }, [
+      el('p', { class: 'account__paylabel', text: 'Payment method' }),
+      el('p', {
+        class: `account__method${line ? '' : ' is-none'}`,
+        text: line ?? (payments ? 'No card on file' : 'Checking…'),
+      }),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'linkish account__cardedit',
+          dataset: { action: 'card' },
+          onclick: () => {
+            setOpen(false);
+            onCard();
+          },
+        },
+        line ? 'Use a different card' : 'Add a card'
+      ),
+    ]);
   }
 
   window.addEventListener('resize', () => {
@@ -140,6 +190,7 @@ export function createAccount({ announce = () => {}, onSignIn = null } = {}) {
     replaceChildren(card, [
       el('p', { class: 'account__name', text: person.displayName }),
       person.email && el('p', { class: 'account__email', text: person.email }),
+      paymentBlock(),
       el(
         'button',
         { type: 'button', class: 'linkish account__out', onclick: () => signOut() },
@@ -192,7 +243,13 @@ export function createAccount({ announce = () => {}, onSignIn = null } = {}) {
     card.addEventListener(type, (event) => event.stopPropagation());
   }
 
-  session.onSessionChange(render);
+  session.onSessionChange((held) => {
+    // A card is the person's, not the browser's: what was read for whoever was
+    // here before must not be printed on the next person's account.
+    payments = null;
+    if (!held) setOpen(false);
+    render();
+  });
   render();
 
   // A session remembered from a previous visit may have gone stale while the

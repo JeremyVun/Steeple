@@ -419,6 +419,41 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* The money half of an account: a brand and four digits, which is the whole of
+   what Steeple knows about a card (docs/contracts/payments.md). */
+.account__payment {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.account__paylabel {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.account__method {
+  margin: 3px 0 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.account__method.is-none {
+  color: var(--ink-faint);
+}
+
+.account__cardedit {
+  margin-top: 5px;
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+}
+
 .account__out {
   margin-top: 11px;
   padding-top: 10px;
@@ -1119,6 +1154,72 @@ body {
   transform: none;
   width: 100%;
   max-height: min(78vh, 660px);
+}
+
+/* ── The card on file, reachable ─────────────────────────────────────────────
+   The request sheet's card step, lifted out of the sheet the same way the
+   identity panel is (ui/cardPanel.js). Same paper, same rules; brand and last
+   four digits and nothing else, here as everywhere. */
+
+.cardpanel {
+  width: min(430px, 100%);
+  transform: translateY(10px);
+  transition: transform 220ms var(--ease);
+
+  --sheet: color-mix(in srgb, var(--card) 84%, var(--paper));
+  --rule: var(--line);
+  --rule-firm: var(--line-strong);
+  --ink-wash: color-mix(in srgb, var(--ink) 8%, transparent);
+  --lift: 0 34px 64px -34px color-mix(in srgb, var(--ink) 55%, transparent),
+    0 4px 14px -8px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.modal__layer.is-open .cardpanel {
+  transform: none;
+}
+
+.cardpanel .identity {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-height: min(78vh, 660px);
+}
+
+/* The card Steeple already holds, above the fields that would replace it. */
+.cardheld {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid var(--rule, var(--line));
+  border-radius: 8px;
+  background: var(--sheet, var(--card));
+}
+
+.cardheld__mark {
+  width: 30px;
+  height: 20px;
+  flex: none;
+  border-radius: 3px;
+  background: linear-gradient(140deg, var(--sage) 0%, var(--sage-deep) 100%);
+  opacity: 0.85;
+}
+
+.cardheld__body {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cardheld__brand {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.cardheld__note {
+  font-size: 11.5px;
+  color: var(--ink-faint);
 }
 
 /* ── A word about something that happened to you ─────────────────────────────

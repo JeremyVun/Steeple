@@ -17,6 +17,7 @@ import { getVenue } from '../data/venues.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
 import { createAccount } from './account.js';
+import { createCardPanel } from './cardPanel.js';
 import { createDeepLink } from './deepLink.js';
 import { createNotice } from './notice.js';
 import { createSignInPanel } from './signIn.js';
@@ -54,7 +55,14 @@ export function createUI(_engine, _world) {
 
   const porch = el('div', { class: 'porch' });
   const discovery = createDiscovery({ announce: announcer.say });
-  const guest = createGuestFlows({ announce: announcer.say, porch });
+  // One panel for the card on file, opened from the two places it matters: the
+  // account on the shelf, and a booked date whose charge failed.
+  const cardPanel = createCardPanel({ announce: announcer.say });
+  const guest = createGuestFlows({
+    announce: announcer.say,
+    porch,
+    onFixPayment: () => cardPanel.open(),
+  });
   // Hosting is somebody's, so the switch has to be able to ask who. The panel
   // itself is made below — this is called on a click, long after.
   const host = createHostFlows({
@@ -70,6 +78,7 @@ export function createUI(_engine, _world) {
   const account = createAccount({
     announce: announcer.say,
     onSignIn: () => signIn.open(),
+    onCard: () => cardPanel.open(),
   });
   porch.append(account.element);
 
@@ -126,7 +135,8 @@ export function createUI(_engine, _world) {
     // the same reason — either can be opened over any surface there is.
     account.card,
     notice.element,
-    signIn.element
+    signIn.element,
+    cardPanel.element
   );
 
   // Leaflet can only measure itself once the panel is on the page.

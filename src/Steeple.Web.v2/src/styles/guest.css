@@ -1618,6 +1618,73 @@
   color: inherit;
 }
 
+/* ── what has happened to the money ─────────────────────────────────────────
+   The price snapshot a booking was confirmed at, when the next charge falls,
+   and what has already been taken — printed above the dates it applies to,
+   because "what does it cost and when" is read before "which Tuesdays". */
+
+.held__money {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--sage) 26%, transparent);
+  display: grid;
+  gap: 2px;
+}
+
+.held__rate {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.held__next,
+.held__paid {
+  margin: 0;
+  font-size: 12px;
+  color: var(--sage-deep);
+}
+
+.held__charge {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sage-deep);
+}
+
+.held__charge--trouble {
+  color: var(--terracotta-deep);
+}
+
+.held__charge--refunded,
+.held__charge--pending {
+  color: var(--ink-faint);
+}
+
+/* A failed charge is the one thing on this page that has to be acted on, so it
+   leaves the sage block's calm and says what happens next, with the fix on it. */
+.held__failed {
+  margin-top: 12px;
+  padding: 13px 15px;
+  border-radius: 4px;
+  background: var(--card);
+  border: 1px solid var(--terracotta);
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.held__failedtitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--terracotta-deep);
+}
+
+.held__failed .prose {
+  margin: 0;
+}
+
 /* ── The thread ─────────────────────────────────────────────────────────── */
 
 .thread {
