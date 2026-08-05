@@ -217,7 +217,7 @@ card step a press away; the card on file is reachable from the account chip thro
 panel (`ui/cardPanel.js`, brand + last4 only); the payout prompt → mock KYC → connected state
 lives on the desk; booking mode is a setting on Spaces; and `GET /me/notifications` renders as
 **ambience** — one slip on arrival, quiet lines in the inbox, no bell and no new nav tab.
-Driven by `tools/payments-ui-test.mjs` (63/63). Demo — dev provider only, no Turnstile;
+Driven by `tools/payments-ui-test.mjs` (65/65). Demo — dev provider only, no Turnstile;
 `organizationName` is sent as `null` until Phase 4's input; the card step and the payout screen
 are the mock gateway's own stand-ins. Accounts-consolidation order agreed 2026-08-05: signed-out
 header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.

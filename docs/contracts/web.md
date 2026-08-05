@@ -249,7 +249,7 @@ it is contained by construction: its letters are written under the seed's own id
     `.slip` — with the same deep-link follower an email CTA uses (`followDeepLink`) — and marked
     read. The inbox keeps the last few as quiet lines (`.jnotes`). Losing a slip loses a
     reminder, never a fact: every fact it names lives on the letter or the desk.
-  - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (63/63).
+  - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (65/65).
 - **Demo:** dev provider only, `turnstileToken` hardcoded `null` (D7); `organizationName` is
   sent as `null` — the group beside a name is whatever came back on a request, and the input
   that would set it belongs to Phase 4; the card step is deliberately plain and the mock

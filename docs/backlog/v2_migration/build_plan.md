@@ -261,7 +261,7 @@ panel; the payout prompt → mock KYC → connected state, honest that payments 
 booking-mode toggle on Spaces; and `GET /me/notifications` rendered as **ambience** — one slip
 on arrival plus quiet lines in the inbox, no bell, no unread count, no new nav tab.
 
-**Verification:** `tools/payments-ui-test.mjs` **63/63** (§1 IA per mode · §2 the booking view
+**Verification:** `tools/payments-ui-test.mjs` **65/65** (§1 IA per mode · §2 the booking view
 incl. a `0002`-card failure · §3 rescind + refund both sides and in the DB · §4 payouts · §5
 the mode toggle changing the public apply UX · §6 a seeded reminder as a slip).
 `correspondence-test.mjs` **62/62** (61 + one new check; its §2 was re-baselined to press the
