@@ -191,13 +191,26 @@ await store('resetDemo()');
 await page.evaluate('__steeple.roll.set(1)');
 await wait(300);
 await page.evaluate('localStorage.removeItem("steeple-village-session")');
+
+// Re-baselined for v2_migration Phase 2 (D4). The flow used to be reached by
+// pressing "List a space" on a desk that opened for anybody. There is no desk
+// for somebody who keeps no venue now — and a person in that position is taken
+// *to this flow* instead of to an empty board, which is the way in this suite
+// should be attacking. So: be somebody, ask for hosting, and the flow opens
+// itself.
+await page.evaluate(
+  `__steeple.session.signIn({email:'host-input-${Date.now().toString(36)}@demo.steeple.test',displayName:'Ada Newcomer'})`
+);
+await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
 await page.evaluate('__steeple.setMode("host")');
+await page
+  .waitForFunction('!!document.querySelector(".listing.is-open, .listing__layer")', { timeout: 30000 })
+  .catch(() => {});
 await wait(1400);
 
 // ── 1. Place: nothing, whitespace, and markup ─────────────────────────────
 console.log('\n1. Place — nothing, whitespace, and a script tag');
-await clickText('.desk button', /^List a space$/, 'List a space');
-check('the flow opens at Place', (await onStep()) === '1Place');
+check('a person who keeps no venue is taken to the flow that would give them one', (await onStep()) === '1Place');
 check('an empty draft cannot continue', (await disabled('[data-action="advance"]')) === true);
 
 await type('#place-name', '   ');
@@ -220,13 +233,22 @@ await click('[data-action="advance"]', 'Continue');
 check('Verify is next', (await onStep()) === '2Verify', await onStep());
 
 // ── 2. Verify ─────────────────────────────────────────────────────────────
-console.log('\n2. Verify — a session to write under');
-await type('#identity-email', hostEmail);
-await type('#identity-name', 'Ruth Ellery');
-await page.keyboard.press('Enter');
-await page.waitForFunction('Boolean(localStorage.getItem("steeple-village-session"))', { timeout: 15000 });
-await wait(1200);
-await clickText('.listing .identity__actions .pill--primary', /^Continue as/, 'Continue as Ruth');
+//
+// Re-baselined for v2_migration Phase 2. This step used to be where a host
+// signed in, because the flow could be reached by a stranger. It cannot be
+// reached by a stranger any more (D4: no desk, and no way to hosting, without a
+// session), so by the time anybody stands here they are already somebody — the
+// step shows them who, and asks them to carry on rather than to sign in again.
+//
+// ⚠ Note for whoever owns the flow next: the signed-*out* half of this step is
+// now unreachable in the product's own order. Either the flow should be openable
+// before signing in (and this step is the gate), or the step should be dropped
+// and the flow entered already-identified. That is a product call, not a
+// harness one — it is written up in `docs/backlog/v2_migration/build_plan.md`.
+console.log('\n2. Verify — the session it will be written under');
+check('the step does not ask a signed-in host to sign in again', (await page.$('#identity-email')) === null);
+check('it shows who the listing will belong to', (await page.$('.listing .identity .verified')) !== null);
+await clickText('.listing .identity__actions .pill--primary', /^Continue as/, 'carry on as this person');
 await wait(2600);
 check('Describe is next', (await onStep()) === '3Describe', await onStep());
 const token = await bearer();

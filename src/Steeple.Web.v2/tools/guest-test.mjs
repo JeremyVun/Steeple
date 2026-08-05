@@ -266,11 +266,21 @@ check('and files nothing', await page.evaluate('__steeple.store.guestApplication
 // (Workstream D's return-path memory: Esc leaves a request view for the last
 // place the visitor actually stood in the world.)
 console.log('\n11. Esc');
+// This used to open `#/letter/app-sparrows-craft` and press Esc. Two Phase 1/2
+// changes make that unaskable here rather than broken: a cold link to a letter
+// **while signed out** lands in the village and corrects the address bar with
+// it, and the store is keyed per person, so a seeded demo request is not in any
+// real account's inbox to open. The return path from an opened letter is driven
+// where opened letters now come from — correspondence-test.mjs. What this suite
+// can still say about that link is the thing Phase 1 promised about it.
 await ready(`${url}#/room/dunn-loring-umc/art-studio`);
 await ready(`${url}#/letter/app-sparrows-craft`);
-await page.keyboard.press('Escape');
-await wait(1400);
-check('Esc from a request returns to the room it was read from', await state('view'), 'room');
+check('a letter nobody is signed in to read lands in the village', await state('view'), 'village');
+check(
+  '...and the address bar is corrected with it, not left lying',
+  await page.evaluate('location.hash'),
+  '#/village'
+);
 
 await ready(`${url}#/village`);
 await ready(`${url}#/journal`);

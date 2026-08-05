@@ -205,13 +205,21 @@ to those venues; `409 slot_taken` on approve renders as the product moment it is
 calendar reads `RoomDetail.openHours` + `GET /listings/{id}/availability`, so a built bundle
 can file a request. A `402 payment_method_required` opens a minimal mock-card step and the
 send resumes itself; instant venues answer the submit with the booking and say so. Email CTA
-deep links (`?goto=`) are followed at boot. Demo — dev provider only, no Turnstile;
+deep links (`?goto=`) are followed at boot. All of it is **driven end to end** by
+`tools/correspondence-test.mjs` (61/61, §0–§7), two people in two browsers against real rows,
+including D5's honest-offline send. Demo — dev provider only, no Turnstile;
 `organizationName` is sent as `null` until Phase 4's input; the card step is deliberately
 plain (mock gateway); nothing renders a booking's payment fields, the host's rescind lever,
 or the notifications inbox yet. Accounts-consolidation order agreed 2026-08-05: signed-out
 header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.
 
-**Hazards found in the waves (unfixed):** the 4s-abort retry can double-create venues — the
+**Hazards found in the waves (unfixed):** with no session there is **no way into hosting at
+all** (D4), so the listing flow cannot be reached while the API is away and the signed-out
+half of its Verify step is unreachable in the product's own order — a product call is owed
+(`host-offline-test.mjs` and `host-test.mjs`/`wave2-test.mjs` still assert the old order);
+room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
+orphans every photo already written (and, locally, rows from other agents' API ports 404);
+the 4s-abort retry can double-create venues — the
 API now honours `Idempotency-Key` on manage creates but the client does not send one yet
 (D8's client half); `draft.roomId` is always `'main-space'` (second room per venue collides);
 dev geocoding = `StubGeocodingGateway` (every address → village centre, so

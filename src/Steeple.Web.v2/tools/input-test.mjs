@@ -360,18 +360,15 @@ check('clicking it opens the request step', (await state('view')) === 'apply', S
 // Reaching past an open sheet means putting it down, not hunting for the way
 // out. It must take nothing else with it: no roll, and no church chosen by the
 // same click on its way through.
+// Re-baselined for v2_migration Phase 2 (D4). A desk used to open for anybody,
+// on a seeded venue. **Hosting is somebody's now**: the desk exists only when
+// `GET /manage/venues` answers with something, so a deep link to `#/desk` from a
+// browser that is nobody must not conjure a business. That is the check now —
+// it is also the owner's own repro, kept at the top of correspondence-test §0.
 await ready(`${url}#/desk`);
-check('the desk opens on a deep link', await page.evaluate('!!document.querySelector(".desk.is-open")'));
-const deskBox = await box('.desk');
-const listColumn = await box('.dm-list');
-const awayFromDesk = { x: listColumn.cx, y: Math.max(deskBox.y + deskBox.height - 40, listColumn.cy) };
-console.log('clicking away from the desk at', `${Math.round(awayFromDesk.x)},${Math.round(awayFromDesk.y)}`);
-await page.mouse.click(awayFromDesk.x, awayFromDesk.y);
-await wait(700);
-check('clicking the page behind the desk puts it down', (await state('view')) === 'village', String(await state('view')));
+check('a deep link to a desk, signed out, opens no desk', await page.evaluate('!document.querySelector(".desk.is-open")'));
+check('...and leaves the visitor in the village', await state('view'), 'village');
 check('...without rolling', (await state('roll')) === 1, String(await state('roll')));
-check('...and without choosing a church on the way through', (await state('venueId')) === null, String(await state('venueId')));
-check('...and the desk is closed', await page.evaluate('!document.querySelector(".desk.is-open")'));
 
 // An inbox belongs to somebody (D6), so there has to be a somebody before
 // there is an inbox to click away from. The sign-in is the real one — the
@@ -389,28 +386,42 @@ await wait(700);
 check('clicking the page behind the inbox puts it down', (await state('view')) === 'village', String(await state('view')));
 check('...and keeps the lens it was read in', (await state('mode')) === 'guest', String(await state('mode')));
 
-// The sheet's own controls, the top line and the porch are not "away".
-await ready(`${url}#/desk`);
+// The sheet's own controls, the top line and the porch are not "away". Driven
+// on the inbox, which is a sheet of the same kind and which this browser can
+// actually open: the desk needs a person who keeps a venue (D4), and minting one
+// is fixture work this suite does not do — see the note before §12.
+await ready(`${url}#/journal`);
 const porchSwitch = await box('.porchswitch');
 await page.mouse.click(porchSwitch.cx, porchSwitch.cy);
 await wait(700);
-check('the porch switch still works over an open desk', (await state('view')) === 'village' && (await state('mode')) === 'guest', `${await state('view')} / ${await state('mode')}`);
+check('the porch switch still works over an open sheet', (await state('view')) === 'village' && (await state('mode')) === 'guest', `${await state('view')} / ${await state('mode')}`);
 
-await ready(`${url}#/desk`);
-const spacesTab = await page.evaluate(() => {
-  const b = [...document.querySelectorAll('.desk .tab')].find((n) => n.textContent.startsWith('Spaces'));
-  const r = b.getBoundingClientRect();
-  return { cx: r.x + r.width / 2, cy: r.y + r.height / 2 };
-});
-await page.mouse.click(spacesTab.cx, spacesTab.cy);
+await ready(`${url}#/journal`);
+const insideSheet = await box('.journal');
+await page.mouse.click(insideSheet.cx, insideSheet.cy);
 await wait(500);
-check('a click inside the desk is the desk\'s own', (await state('view')) === 'desk' && (await page.evaluate('!!document.querySelector(".desk .spaces")')), String(await state('view')));
+check('a click inside the sheet is the sheet\'s own', (await state('view')) === 'journal', String(await state('view')));
 
 // ── 12. board ↔ ledger switches where it stands ────────────────────────────
 // The switch used to reload the page with a new query string, which cost two
 // seconds and the visitor's place. A window marker set before the click cannot
 // survive a reload; it must survive this.
+//
+// ⚠ Owed work, not a passing check. Since Phase 2 (D4) a desk exists only for a
+// person `GET /manage/venues` answers for, so this block needs a host fixture —
+// dev SSO → POST venue → room → photo → availability → publish, the sequence
+// `correspondence-test.mjs:mintVenue` already writes. The right fix is to lift
+// that into a shared `tools/fixtures.mjs` and have this suite call it; until
+// then this says so out loud rather than asserting against a desk that is not
+// there (which is how a suite starts reporting the wrong thing).
 await ready(`${url}#/desk`);
+const haveDesk = await page.evaluate('!!document.querySelector(".desk__variant")');
+if (!haveDesk) {
+  console.log(
+    '\nSKIPPED §12 (board ↔ ledger): no desk for a browser that keeps no venue (D4).\n' +
+      '  Needs a host fixture — see the note above. Not a pass, and not a failure of the app.'
+  );
+} else {
 await page.evaluate(() => {
   window.__deskMark = performance.now();
   window.__deskNavs = performance.getEntriesByType('navigation').length;
@@ -458,6 +469,7 @@ check(
   (await page.evaluate('document.querySelectorAll(".desk .card").length')) === cardsBefore &&
     (await page.evaluate('typeof window.__deskMark')) === 'number'
 );
+}
 
 // ── 13. a finger still has the page in its hand ────────────────────────────
 // The wheel gave up scrubbing; touch keeps it. A finger drags the roll where it

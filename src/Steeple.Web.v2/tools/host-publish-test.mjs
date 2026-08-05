@@ -159,13 +159,23 @@ await page.evaluate('__steeple.roll.set(1)');
 await wait(300);
 // A journey from nothing: no session remembered, no venue placed.
 await page.evaluate('localStorage.removeItem("steeple-village-session")');
+
+// Re-baselined for v2_migration Phase 2 (D4). The flow used to be reached from a
+// desk that opened for anybody, and the host signed in at the Verify step. There
+// is no desk without a managed venue now, and no way into hosting without a
+// session — so the order the product actually has is: be somebody, ask for
+// hosting, and the flow opens itself because you keep no venue yet.
+await page.evaluate(`__steeple.session.signIn({email:'${hostEmail}',displayName:'Ruth Ellery'})`);
+await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
 await page.evaluate('__steeple.setMode("host")');
+await page
+  .waitForFunction('!!document.querySelector(".listing.is-open, .listing__layer")', { timeout: 30000 })
+  .catch(() => {});
 await wait(1400);
 
 // ── 1. Place: address fields, no pin ──────────────────────────────────────
 console.log('\n1. Place — the address, and no pin to drop');
-await clickText('.desk button', /^List a space$/, 'List a space');
-check('the flow opened at Place', (await text('.steps__step.is-on')) === '1Place');
+check('a host who keeps no venue is taken straight to the flow', (await text('.steps__step.is-on')) === '1Place');
 check('the pin picker is gone', !(await page.$('.plan[role="application"]')), 'no draggable plan');
 check('there is nowhere to drop a pin', (await page.$$('.place__pin')).length === 0);
 check('the step asks for an address', await visible('#place-address'));
@@ -184,15 +194,14 @@ await click('[data-action="advance"]', 'Continue');
 check('Verify is next', (await text('.steps__step.is-on')) === '2Verify', await text('.steps__step.is-on'));
 
 // ── 2. Verify: the same session the guest surface uses ─────────────────────
+//
+// ⚠ The signed-*out* half of this step is unreachable in the product's own order
+// now (see §1's note), so what it can still be held to is that it names the
+// session the listing will be written under, in steeple's own words.
 console.log('\n2. Verify — steeple’s own sign-in, not a checkbox');
 check('the identity panel is the step, not a floating card', await visible('.listing .identity'));
 check('it is in the sheet’s own flow', await page.$eval('.listing .identity', (n) => getComputedStyle(n).position === 'static'));
-check('nothing can advance without a session', await disabled('[data-action="advance"]'));
-await type('#identity-email', hostEmail);
-await type('#identity-name', 'Ruth Ellery');
-await page.keyboard.press('Enter');
-await page.waitForFunction('Boolean(localStorage.getItem("steeple-village-session"))', { timeout: 15000 });
-await wait(1200);
+check('a signed-in host is not asked to sign in again', (await page.$('#identity-email')) === null);
 const session = JSON.parse(await page.evaluate('localStorage.getItem("steeple-village-session")'));
 check('a real session exists', Boolean(session?.accessToken), session?.user?.displayName);
 check('the API agrees who that is', (await api('/me', session.accessToken)).email === hostEmail);
