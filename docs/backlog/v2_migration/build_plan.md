@@ -334,3 +334,9 @@ full flow); SEO.md tells the truth.
    framing and stale hazards that this migration fixed), prune this plan to a
    phase-history stub in `docs/backlog/README.md`.
 4. Confirm nothing here modified build/deploy files owned by the parallel workstream.
+5. **Harness hygiene (owner-reported 2026-08-05):** every `tools/*.mjs` suite closes its
+   browsers happy-path only, and headless Chrome outlives a dead node parent — aborted
+   runs orphan "Chrome for Testing" process trees. Sweep all suites: `pipe: true` in
+   `puppeteer.launch` (browser dies with the node process, even on SIGKILL) + close in
+   `finally`. P2's continuation applies it to the suites it touches; this item is the
+   rest. Verify: abort a run mid-suite → `ps` shows no PPID-1 Chrome processes.
