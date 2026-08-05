@@ -598,6 +598,41 @@ check('the charged date says Paid', paidView.charges.includes('Paid'), JSON.stri
 eq('a booking whose card is good says nothing about failure', paidView.failed, false);
 await shot(payerPage, '2-guest-paid');
 
+// The card is the account's, not the send's: it has to be answerable from the
+// shelf at any moment, not only in the middle of a request.
+await press(payerPage, '.porch .account');
+await until(
+  payerPage,
+  () => Boolean(document.querySelector('.account__method')),
+  null,
+  20000,
+  'the account card opened'
+);
+await until(
+  payerPage,
+  () => document.querySelector('.account__method')?.textContent !== 'Checking…',
+  null,
+  20000,
+  'the account card read the method on file'
+);
+eq(
+  'the account carries the card on file, as brand and four digits',
+  await textOf(payerPage, '.account__method'),
+  'Visa ···· 4242'
+);
+await shot(payerPage, '2-account-card');
+await press(payerPage, '[data-action="card"]');
+await until(
+  payerPage,
+  () => Boolean(document.querySelector('.cardpanel__layer.is-open')),
+  null,
+  20000,
+  'the account opens the same card panel'
+);
+check('and one way to replace it, which is the same panel the letter opens', true);
+await payerPage.keyboard.press('Escape');
+await settle(payerPage);
+
 const declinerPage = await openPage('decliner');
 await boot(declinerPage);
 await arrive(declinerPage);
