@@ -104,9 +104,28 @@ Payments module and read through its service.
 Slugs (`Utils/Slugs.cs`) are derived from the name at creation and **immutable** thereafter —
 renames never break a shared listing URL or SEO equity.
 
-`Idempotency-Key` is **not** honored on the two create endpoints today (`POST /manage/venues`,
-`POST /manage/venues/{id}/rooms`); a retried create makes a second row.
-⚠ superseded-by-adopted-decision: see `docs/backlog/v2_migration/design.md` D8 — not yet built.
+### Idempotent creates ✅ *(built 2026-08-05 — `docs/backlog/v2_migration/design.md` D8)*
+
+`POST /manage/venues` and `POST /manage/venues/{id}/rooms` honor the `Idempotency-Key` header
+(`conventions.md` §2), same replay-returns-original semantics as the applications submit:
+
+- **First request** → `201` with the created resource. **Replay of the same key by the same
+  user** → `200` with the *original* resource, byte-identical (same id, same slug); the request
+  body of the replay is ignored entirely.
+- **Scope is the authenticated user**, not the venue: user A can never resolve user B's key, and
+  two users sending the same key each get their own resource. The key is also partitioned per
+  endpoint, so one key spent on a venue create is still spendable on a room create.
+- A **room** key resolves the room it originally created regardless of which venue the retry is
+  posted to — the key identifies the request, not the path.
+- **No header → unchanged behavior** (every POST creates). A header that isn't a GUID is treated
+  as absent — the create proceeds *unguarded*, it is not a `400`.
+- **Keys never expire.** There is no TTL; a key is spendable exactly once, forever.
+- Two *overlapping* requests with one key (the real hazard: a client write timeout fires while
+  the first create is still running server-side) still yield one resource — the loser's whole
+  transaction rolls back and it answers with the winner's `200`.
+
+Backing store: `idempotency_records` keyed `(UserId, Scope, Key) → ResourceId`
+(`persistence.md`). Applications keep their own column-based mechanism (004) — unchanged.
 
 ### Room availability rules (open hours + blackouts) ✅ *(built 2026-07-05 — availability plan commit 4)*
 

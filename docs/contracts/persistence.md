@@ -3,7 +3,7 @@
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–014` and `src/Steeple.Persistence/` (2026-08-05).
+> Verified against `db/changelog/001–016` and `src/Steeple.Persistence/` (2026-08-05).
 
 ## Ownership rule (non-negotiable)
 
@@ -37,6 +37,9 @@ users 1─* user_logins (unique (Provider, Subject))    users 1─* refresh_toke
 users 1─* user_agreements (per-version ToS/Privacy)   users 1─* notifications (inbox = truth)
 users 1─* devices                                     venues 1─* venue_managers *─1 users
 venues 1─* venue_verification_requests 1─* venue_verification_documents
+
+users 1─* idempotency_records (016: PK (UserId, Scope, Key) → ResourceId, CreatedAtUtc;
+  the spent-key ledger for manage creates)
 
 rooms 1─* room_open_hours (per-weekday [start,end) windows)
 rooms 1─* room_blackout_dates (unique (RoomId, Date))
@@ -82,6 +85,13 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
   StartUtc`. `[)` semantics let back-to-back slots coexist.
 - **One booking per application, ever:** unique `bookings.ApplicationId`.
 - **Idempotent submit:** filtered unique `(OrganizerId, IdempotencyKey)` on `applications`.
+- **Idempotent manage creates:** `idempotency_records` PK `(UserId, Scope, Key)` → `ResourceId`
+  (016). Written in the same transaction as the venue/room it bought, so the PK *is* the race
+  guard: two overlapping creates with one key can only land one, and the loser rolls its
+  resource back with it. `Scope` ∈ `manage.venue.create` | `manage.room.create` — persisted
+  strings, never renamed without a data migration. Rows are permanent (no TTL). Venues have no
+  owner column (ownership is `venue_managers`), which is why this is a table rather than the
+  applications module's per-row column (`contracts/manage.md`).
 - **One open counter-offer per application:** partial unique index on
   `application_counter_offers (ApplicationId) WHERE Status = 0`.
 - **Priced listings only:** `rooms."PricePerHour"` NOT NULL + `CHECK (> 0)` (010 — free

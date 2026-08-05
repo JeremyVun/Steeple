@@ -224,10 +224,15 @@ widget token through; first sign-in records agreements; dev provider still works
 
 Tasks:
 
-1. **`Idempotency-Key` on manage creates (API):** `POST /manage/venues` and
+1. `[x]` **`Idempotency-Key` on manage creates (API):** `POST /manage/venues` and
    `POST /manage/venues/{id}/rooms` — replay returns the original (mirror the
    applications module's mechanism). Contracts idempotency table updated. Integration
    test: same key twice ⇒ one venue.
+   *Built 2026-08-05.* Applications' per-row column + filtered unique index couldn't
+   transplant (venues carry no owner column — ownership is `venue_managers`), so the store
+   is a small per-user ledger: **new changeset `016-idempotency.sql`**, deviating from this
+   plan's "no new changesets" (`design.md` §4). Semantics, error shapes and the malformed-key
+   rule the web half must build against: `docs/contracts/manage.md` → "Idempotent creates".
 2. **Client sends keys + sane timeouts:** `createManagedVenue`/`createManagedRoom`
    send keys; write timeout 15s separated from read 4s (`api.js:25`); timeout ≠
    unreachable in `send.js`/`manage.js` classification. Fix `draft.roomId`

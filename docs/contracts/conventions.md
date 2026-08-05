@@ -51,7 +51,7 @@ and `/mobile/lib/**/models/` are hand-kept mirrors.
 | Pagination | Request `page` (1-based) + `pageSize` (≤100, default 24); response `{ items, totalCount, page, pageSize }` |
 | Errors | RFC 9457 ProblemDetails + `code` extension: `{ type, title, status, detail?, code }`. Stable `code` values documented per endpoint (e.g. `slot_taken`, `geofence_rejected`, `turnstile_failed`, `rate_limited`) |
 | Auth | `Authorization: Bearer <accessToken>` (mobile & Web-BFF server-side). Anonymous allowed on all Discovery reads |
-| Idempotency | `Idempotency-Key` header (client GUID) honored on `POST` create endpoints (applications, sessions); replays return the original result |
+| Idempotency | `Idempotency-Key` header (client GUID) honored on `POST /listings/{id}/applications` ✅, `POST /manage/venues` ✅, `POST /manage/venues/{id}/rooms` ✅ (2026-08-05, D8). Replays return the original result as `200` (first create is `201`); keys are scoped to the authenticated user and never expire; a non-GUID value is treated as absent (unguarded create, never a `400`). Not yet honored on `POST /auth/sessions` — see `identity.md` |
 | Rate limits | `429` + `Retry-After`. Public writable endpoints additionally require a Turnstile token field where noted |
 | Unknown fields | Clients must ignore them (see §1.1) |
 

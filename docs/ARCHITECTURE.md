@@ -204,6 +204,13 @@ room apply immediately but stamp `ProviderEditedAtUtc`, which is Admin's after-t
 signal, not a block. Both timestamp columns (006-manage.sql) carry partial indexes so the
 Admin queue/feed scans stay cheap. Writes run behind the `manage` rate-limit policy
 (30/min/account).
+**Idempotent creates** (`v2_migration` D2's sibling D8, 2026-08-05): both create endpoints
+honor `Idempotency-Key`; a replay by the same user returns the original as `200` (first create
+is `201`). The store is `idempotency_records` (016), keyed `(UserId, Scope, Key) → ResourceId`,
+written in the same `SaveChanges` as the resource — so the primary key is the race guard and a
+timed-out-then-retried create can't leave a host with two venues. Applications' older per-row
+`IdempotencyKey` column (004) stays as it is; venues have no owner column to hang one off.
+Semantics for clients: `docs/contracts/manage.md`.
 
 **Availability** (availability plan, commit 4) — a room's bookable rules: open hours
 (`room_open_hours`, per-weekday `[start, end)` windows) and blackout dates
@@ -318,6 +325,7 @@ users 1─* user_logins (unique (Provider, Subject))    users 1─* refresh_toke
 users 1─* user_agreements (per-version ToS/Privacy)   users 1─* notifications (inbox = truth)
 users 1─* devices                                     venues 1─* venue_managers *─1 users
 venues 1─* venue_verification_requests 1─* venue_verification_documents
+users 1─* idempotency_records (016: PK (UserId, Scope, Key) → ResourceId; manage creates)
 
 rooms 1─* applications *─1 users (organizer)
   ActivityType, GroupSize, venue-local schedule (dates/times + optional DayOfWeek),
