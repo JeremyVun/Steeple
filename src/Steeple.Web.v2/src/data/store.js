@@ -638,6 +638,11 @@ export function mirrorBooking(dto) {
     venueId: dto.venueSlug,
     roomId: dto.roomSlug,
     remoteRoomId: dto.roomId,
+    // Every name a booking is printed under travels with the booking. A desk
+    // must be able to say which room and whose it is before it has read the
+    // venue back — and a room a host listed is in no bundled scenery at all.
+    roomName: dto.roomName ?? null,
+    venueName: dto.venueName ?? null,
     organizerId: dto.organizerId,
     organizerName: dto.organizerName ?? null,
     ...schedule,
