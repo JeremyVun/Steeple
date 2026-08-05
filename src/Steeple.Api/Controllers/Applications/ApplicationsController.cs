@@ -16,9 +16,6 @@ namespace Steeple.Api.Controllers.Applications;
 [Route("api/v1")]
 public sealed class ApplicationsController : ControllerBase
 {
-    /// <summary>The Idempotency-Key request header (CONTRACTS §2).</summary>
-    private const string IdempotencyKeyHeader = "Idempotency-Key";
-
     private readonly IApplicationService _applications;
 
     public ApplicationsController(IApplicationService applications) => _applications = applications;
@@ -29,11 +26,9 @@ public sealed class ApplicationsController : ControllerBase
     public async Task<ActionResult<ApplicationDto>> Submit(
         Guid roomId, [FromBody] SubmitApplicationRequest request, CancellationToken ct)
     {
-        Guid? idempotencyKey = Request.Headers.TryGetValue(IdempotencyKeyHeader, out var raw)
-            && Guid.TryParse(raw.ToString(), out var parsed) ? parsed : null;
-
         var result = await _applications.SubmitAsync(
-            roomId, User.GetUserId(), request, idempotencyKey, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
+            roomId, User.GetUserId(), request, Request.ReadIdempotencyKey(),
+            HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
 
         if (result.Error is not null)
         {

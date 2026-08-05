@@ -60,8 +60,16 @@ public sealed class ManageService : IManageService
     }
 
     /// <inheritdoc />
-    public async Task<ManageResult<ManagedVenueDetailDto>> CreateVenueAsync(Guid callerId, SaveVenueRequest request, CancellationToken ct = default)
+    public async Task<ManageResult<CreateOutcome<ManagedVenueDetailDto>>> CreateVenueAsync(
+        Guid callerId, SaveVenueRequest request, Guid? idempotencyKey = null, CancellationToken ct = default)
     {
+        // Replays return the original venue — the point of the key: a create the client abandoned
+        // on its write timeout, then retried, must not leave the host with two venues.
+        if (await ReplayVenueAsync(callerId, idempotencyKey, ct).ConfigureAwait(false) is { } replay)
+        {
+            return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Ok(new CreateOutcome<ManagedVenueDetailDto>(replay, Created: false));
+        }
+
         var name = request.Name?.Trim() ?? "";
         var description = request.Description?.Trim() ?? "";
         var addressLine = request.AddressLine?.Trim() ?? "";
@@ -70,13 +78,13 @@ public sealed class ManageService : IManageService
 
         if (ValidateVenueFields(name, description, addressLine, suburb, postcode, request) is { } invalid)
         {
-            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, invalid);
+            return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Fail(ManageErrorCodes.InvalidVenue, invalid);
         }
 
         var (timezone, timezoneError) = ValidateTimezone(request);
         if (timezoneError is not null)
         {
-            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, timezoneError);
+            return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Fail(ManageErrorCodes.InvalidVenue, timezoneError);
         }
 
         var venueType = FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) ?? VenueType.Church;
@@ -84,13 +92,13 @@ public sealed class ManageService : IManageService
         var location = await GeocodeInsideBeachheadAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
         if (location.Error is not null)
         {
-            return new ManageResult<ManagedVenueDetailDto>(null, location.Error);
+            return new ManageResult<CreateOutcome<ManagedVenueDetailDto>>(null, location.Error);
         }
 
         var baseSlug = Slugs.From(name);
         if (baseSlug.Length == 0)
         {
-            return ManageResult<ManagedVenueDetailDto>.Fail(ManageErrorCodes.InvalidVenue, "Give the venue a name.");
+            return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Fail(ManageErrorCodes.InvalidVenue, "Give the venue a name.");
         }
 
         var now = _clock.GetUtcNow();
@@ -119,10 +127,19 @@ public sealed class ManageService : IManageService
             UpdatedAtUtc = now,
         };
 
-        await _repository.AddVenueWithManagerAsync(venue, callerId, ct).ConfigureAwait(false);
+        var record = NewIdempotencyRecord(callerId, IdempotencyScopes.ManageVenueCreate, idempotencyKey, venue.Id);
+        if (!await _repository.AddVenueWithManagerAsync(venue, callerId, record, ct).ConfigureAwait(false))
+        {
+            // A concurrent request with the same key committed first and this one wrote nothing.
+            var winner = await ReplayVenueAsync(callerId, idempotencyKey, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The idempotent venue vanished between conflict and read-back.");
+            return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Ok(new CreateOutcome<ManagedVenueDetailDto>(winner, Created: false));
+        }
+
         await TrackSafelyAsync("venue_created", new { venueId = venue.Id, suburb = venue.Suburb }).ConfigureAwait(false);
 
-        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto());
+        return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Ok(
+            new CreateOutcome<ManagedVenueDetailDto>(venue.ToManagedDetailDto(), Created: true));
     }
 
     /// <inheritdoc />
@@ -288,12 +305,21 @@ public sealed class ManageService : IManageService
     }
 
     /// <inheritdoc />
-    public async Task<ManageResult<ManagedRoomDto>> CreateRoomAsync(Guid callerId, Guid venueId, SaveRoomRequest request, CancellationToken ct = default)
+    public async Task<ManageResult<CreateOutcome<ManagedRoomDto>>> CreateRoomAsync(
+        Guid callerId, Guid venueId, SaveRoomRequest request, Guid? idempotencyKey = null, CancellationToken ct = default)
     {
+        // Replays return the original room, resolved before the venue scope is even loaded:
+        // the key identifies the request, so it answers with the same room whichever venue
+        // the retry is posted to.
+        if (await ReplayRoomAsync(callerId, idempotencyKey, ct).ConfigureAwait(false) is { } replay)
+        {
+            return ManageResult<CreateOutcome<ManagedRoomDto>>.Ok(new CreateOutcome<ManagedRoomDto>(replay, Created: false));
+        }
+
         var (venue, error) = await LoadScopedVenueAsync(callerId, venueId, ct).ConfigureAwait(false);
         if (error is not null)
         {
-            return new ManageResult<ManagedRoomDto>(null, error);
+            return new ManageResult<CreateOutcome<ManagedRoomDto>>(null, error);
         }
 
         var name = request.Name?.Trim() ?? "";
@@ -302,19 +328,19 @@ public sealed class ManageService : IManageService
 
         if (ValidateRoomFields(name, description, capacity, request.PricePerHour, request) is { } invalid)
         {
-            return ManageResult<ManagedRoomDto>.Fail(ManageErrorCodes.InvalidRoom, invalid);
+            return ManageResult<CreateOutcome<ManagedRoomDto>>.Fail(ManageErrorCodes.InvalidRoom, invalid);
         }
 
         var (flags, unknownToken) = ParseRoomFlags(request);
         if (unknownToken is not null)
         {
-            return ManageResult<ManagedRoomDto>.Fail(ManageErrorCodes.InvalidRoom, $"Unknown token '{unknownToken}'.");
+            return ManageResult<CreateOutcome<ManagedRoomDto>>.Fail(ManageErrorCodes.InvalidRoom, $"Unknown token '{unknownToken}'.");
         }
 
         var baseSlug = Slugs.From(name);
         if (baseSlug.Length == 0)
         {
-            return ManageResult<ManagedRoomDto>.Fail(ManageErrorCodes.InvalidRoom, "Give the room a name.");
+            return ManageResult<CreateOutcome<ManagedRoomDto>>.Fail(ManageErrorCodes.InvalidRoom, "Give the room a name.");
         }
 
         var now = _clock.GetUtcNow();
@@ -338,10 +364,18 @@ public sealed class ManageService : IManageService
             UpdatedAtUtc = now,
         };
 
-        await _repository.AddRoomAsync(room, ct).ConfigureAwait(false);
+        var record = NewIdempotencyRecord(callerId, IdempotencyScopes.ManageRoomCreate, idempotencyKey, room.Id);
+        if (!await _repository.AddRoomAsync(room, record, ct).ConfigureAwait(false))
+        {
+            // A concurrent request with the same key committed first and this one wrote nothing.
+            var winner = await ReplayRoomAsync(callerId, idempotencyKey, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The idempotent room vanished between conflict and read-back.");
+            return ManageResult<CreateOutcome<ManagedRoomDto>>.Ok(new CreateOutcome<ManagedRoomDto>(winner, Created: false));
+        }
+
         await TrackSafelyAsync("room_created", new { roomId = room.Id, venueId = venue.Id }).ConfigureAwait(false);
 
-        return ManageResult<ManagedRoomDto>.Ok(room.ToManagedDto());
+        return ManageResult<CreateOutcome<ManagedRoomDto>>.Ok(new CreateOutcome<ManagedRoomDto>(room.ToManagedDto(), Created: true));
     }
 
     /// <inheritdoc />
@@ -512,6 +546,53 @@ public sealed class ManageService : IManageService
 
         return ManageResult<ManagedRoomDto>.Ok(room.ToManagedDto());
     }
+
+    /// <summary>
+    /// The venue this caller already created with this key, or null when the key is absent or
+    /// unspent. Lookups are keyed on the caller, so one host can never replay another's key.
+    /// </summary>
+    private async Task<ManagedVenueDetailDto?> ReplayVenueAsync(Guid callerId, Guid? key, CancellationToken ct)
+    {
+        var venueId = await FindReplayedResourceIdAsync(callerId, IdempotencyScopes.ManageVenueCreate, key, ct).ConfigureAwait(false);
+        if (venueId is null)
+        {
+            return null;
+        }
+
+        var venue = await _repository.GetVenueWithRoomsAsync(venueId.Value, ct).ConfigureAwait(false);
+        return venue?.ToManagedDetailDto();
+    }
+
+    /// <summary>The room this caller already created with this key, or null. See <see cref="ReplayVenueAsync"/>.</summary>
+    private async Task<ManagedRoomDto?> ReplayRoomAsync(Guid callerId, Guid? key, CancellationToken ct)
+    {
+        var roomId = await FindReplayedResourceIdAsync(callerId, IdempotencyScopes.ManageRoomCreate, key, ct).ConfigureAwait(false);
+        if (roomId is null)
+        {
+            return null;
+        }
+
+        var room = await _repository.GetRoomWithVenueAsync(roomId.Value, ct).ConfigureAwait(false);
+        return room?.ToManagedDto();
+    }
+
+    private Task<Guid?> FindReplayedResourceIdAsync(Guid callerId, string scope, Guid? key, CancellationToken ct) =>
+        key is { } value
+            ? _repository.FindIdempotentResourceIdAsync(callerId, scope, value, ct)
+            : Task.FromResult<Guid?>(null);
+
+    /// <summary>The ledger row to commit alongside the new resource; null when no key was sent.</summary>
+    private IdempotencyRecord? NewIdempotencyRecord(Guid callerId, string scope, Guid? key, Guid resourceId) =>
+        key is { } value
+            ? new IdempotencyRecord
+            {
+                UserId = callerId,
+                Scope = scope,
+                Key = value,
+                ResourceId = resourceId,
+                CreatedAtUtc = _clock.GetUtcNow(),
+            }
+            : null;
 
     private async Task<(Venue? Venue, ManageError? Error)> LoadScopedVenueAsync(Guid callerId, Guid venueId, CancellationToken ct)
     {

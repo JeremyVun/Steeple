@@ -12,14 +12,29 @@ public interface IManageRepository
     /// <summary>A room with its venue and photos loaded; null when unknown.</summary>
     Task<Room?> GetRoomWithVenueAsync(Guid roomId, CancellationToken ct = default);
 
-    /// <summary>Adds a venue and links <paramref name="managerUserId"/> as its first manager, atomically.</summary>
-    Task AddVenueWithManagerAsync(Venue venue, Guid managerUserId, CancellationToken ct = default);
+    /// <summary>
+    /// Adds a venue and links <paramref name="managerUserId"/> as its first manager, atomically.
+    /// When <paramref name="idempotency"/> is supplied it is written in the same transaction;
+    /// returns <c>false</c> (writing nothing) when that key was already spent — a concurrent
+    /// replay won the race and the caller should resolve the original resource instead.
+    /// </summary>
+    Task<bool> AddVenueWithManagerAsync(
+        Venue venue, Guid managerUserId, IdempotencyRecord? idempotency = null, CancellationToken ct = default);
 
     /// <summary>Adds a venue verification request with its document metadata.</summary>
     Task AddVenueVerificationRequestAsync(VenueVerificationRequest request, CancellationToken ct = default);
 
-    /// <summary>Adds a room to an existing venue.</summary>
-    Task AddRoomAsync(Room room, CancellationToken ct = default);
+    /// <summary>
+    /// Adds a room to an existing venue, with the same optional idempotency record + race
+    /// semantics as <see cref="AddVenueWithManagerAsync"/>.
+    /// </summary>
+    Task<bool> AddRoomAsync(Room room, IdempotencyRecord? idempotency = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// The resource this user already created with this (scope, key), or null when the key is
+    /// unspent. Scoped to the caller by construction: one user can never resolve another's key.
+    /// </summary>
+    Task<Guid?> FindIdempotentResourceIdAsync(Guid userId, string scope, Guid key, CancellationToken ct = default);
 
     /// <summary>Persists pending mutations on tracked entities.</summary>
     Task SaveChangesAsync(CancellationToken ct = default);

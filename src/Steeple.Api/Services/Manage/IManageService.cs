@@ -12,8 +12,13 @@ public interface IManageService
     /// <summary>Full editor view of a managed venue, or NotFound when the caller isn't a manager.</summary>
     Task<ManageResult<ManagedVenueDetailDto>> GetVenueAsync(Guid callerId, Guid venueId, CancellationToken ct = default);
 
-    /// <summary>Creates a venue (geocoded + geofenced) and links the caller as its first manager.</summary>
-    Task<ManageResult<ManagedVenueDetailDto>> CreateVenueAsync(Guid callerId, SaveVenueRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Creates a venue (geocoded + geofenced) and links the caller as its first manager. A replay
+    /// of <paramref name="idempotencyKey"/> by the same caller returns the original venue with
+    /// <c>Created: false</c> instead of making a second one.
+    /// </summary>
+    Task<ManageResult<CreateOutcome<ManagedVenueDetailDto>>> CreateVenueAsync(
+        Guid callerId, SaveVenueRequest request, Guid? idempotencyKey = null, CancellationToken ct = default);
 
     /// <summary>Applies the non-null fields; address changes re-geocode (geofenced).</summary>
     Task<ManageResult<ManagedVenueDetailDto>> UpdateVenueAsync(Guid callerId, Guid venueId, SaveVenueRequest request, CancellationToken ct = default);
@@ -25,8 +30,12 @@ public interface IManageService
     /// <summary>Manager view of a room, or NotFound when the caller doesn't manage its venue.</summary>
     Task<ManageResult<ManagedRoomDto>> GetRoomAsync(Guid callerId, Guid roomId, CancellationToken ct = default);
 
-    /// <summary>Creates a room in Draft under a managed venue.</summary>
-    Task<ManageResult<ManagedRoomDto>> CreateRoomAsync(Guid callerId, Guid venueId, SaveRoomRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Creates a room in Draft under a managed venue, with the same caller-scoped
+    /// <paramref name="idempotencyKey"/> replay semantics as <see cref="CreateVenueAsync"/>.
+    /// </summary>
+    Task<ManageResult<CreateOutcome<ManagedRoomDto>>> CreateRoomAsync(
+        Guid callerId, Guid venueId, SaveRoomRequest request, Guid? idempotencyKey = null, CancellationToken ct = default);
 
     /// <summary>
     /// Applies the non-null fields, including status transitions: leaving Published is blocked
@@ -35,6 +44,13 @@ public interface IManageService
     /// </summary>
     Task<ManageResult<ManagedRoomDto>> UpdateRoomAsync(Guid callerId, Guid roomId, SaveRoomRequest request, CancellationToken ct = default);
 }
+
+/// <summary>
+/// What a create returned and whether it actually created it — <c>Created: false</c> means an
+/// <c>Idempotency-Key</c> replay resolved the original (mirrors Applications' <c>SubmitOutcome</c>,
+/// and drives the controller's 201-vs-200).
+/// </summary>
+public sealed record CreateOutcome<T>(T Resource, bool Created) where T : class;
 
 /// <summary>Result envelope for manage use-cases (same idiom as <c>ApplicationResult</c>).</summary>
 public sealed record ManageResult<T>(T? Value, ManageError? Error) where T : class

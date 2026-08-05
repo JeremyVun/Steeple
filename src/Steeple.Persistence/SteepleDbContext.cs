@@ -87,6 +87,9 @@ public class SteepleDbContext : DbContext
     /// <summary>Charge/refund attempts on booking occurrences (Payments module).</summary>
     public DbSet<Payment> Payments => Set<Payment>();
 
+    /// <summary>Spent <c>Idempotency-Key</c> values for create endpoints that honor them.</summary>
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
