@@ -11,8 +11,8 @@ The API, mobile app, and deprecated web v1 reference implement the full two-side
 geo-fenced discovery → SSO → apply → provider decision → booking with DB-enforced
 no-double-booking, notifications, cancellation, and no-show handling. Active web v2 uses
 the real API for catalog, application submit, and provider listing creation, but its inbox,
-request decisions, and production SSO are still integration work. Admin moderates the first
-publish per room.
+request decisions, and production SSO are still integration work. Admin moderates each host's
+first listing; everything that host lists afterwards publishes itself.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
 screen, FCM push, and the analytics/flags client proxies. The deprecated web v1 source still
@@ -146,14 +146,24 @@ ownership/lease-authority verification; wire shapes and endpoint list are `CONTR
 `SaveVenueRequest`/`SaveRoomRequest` treat `null` fields as "unchanged" on PATCH. Address
 create/edit geocodes via `IGeocodingGateway` and re-checks the geofence (`400
 geofence_rejected` outside it). Verification requests store evidence summaries and
-externally-hosted/signed document links only, not raw deed/lease/ID contents; Admin approval
-sets `venues.IsIdentityVerified`. Slugs (`Utils/Slugs.cs`) are derived once from the name and
+externally-hosted/signed document links only, not raw deed/lease/ID contents. A submission has
+no decision of its own any more: it is evidence shown inside the first-listing review, and the
+listing decision marks it decided. Slugs (`Utils/Slugs.cs`) are derived once from the name and
 **immutable** — renames never break a shared listing URL.
-**Moderation model:** a room that has never been approved (`FirstPublishedAtUtc IS NULL`)
-asking for `published` instead stamps `PublishRequestedAtUtc` and waits in the Admin queue;
-approval requires the venue to be verified, then sets `Published` + stamps
-`FirstPublishedAtUtc` (once, ever). After that, unlist/relist is entirely provider-controlled
-— no further gate. Edits to an already-published
+**Moderation model** (single gate, `v2_migration` D2, 2026-08-05): the human gate is a
+**host's first listing**, not every listing, and the whole rule lives in `ManageService` —
+Admin only performs the decision. A publish request that clears the automatic gates (≥1 photo,
+open hours behind `manage.open_hours_required`, geofence) either:
+publishes immediately when the caller is a **trusted host** — derived, not stored: they
+manage ≥1 room with `FirstPublishedAtUtc` set (`IManageRepository.IsTrustedHostAsync`) — or
+stamps `PublishRequestedAtUtc` and waits in the Admin review queue. Admin's approval sets
+`Published` + `FirstPublishedAtUtc` (once, ever), which is what makes the host trusted.
+**Invariant: published ⇒ venue verified** — every route to `Published` sets
+`Venue.IsIdentityVerified`, in `ManageService` and in Admin's decision alike. Auto-publishes
+emit `listing_moderated` with `actor: "auto:trusted_host"` so the moderation funnel stays
+complete. After first publish, unlist/relist is entirely provider-controlled — no further
+gate; the operator's only listing lever is Admin's Unlist takedown. Edits to an
+already-published
 room apply immediately but stamp `ProviderEditedAtUtc`, which is Admin's after-the-fact review
 signal, not a block. Both timestamp columns (006-manage.sql) carry partial indexes so the
 Admin queue/feed scans stay cheap. Writes run behind the `manage` rate-limit policy
@@ -218,21 +228,34 @@ config (see `mobile/README.md`).
 
 **Admin** — HTMX dashboard over Postgres via Persistence; no in-app auth **by design**
 (authelia at the edge; trusts the forwarded `Remote-User` header for audit attribution).
-Live listings/applications/bookings/analytics panels; venue-manager linking by sign-in
-email (the concierge step that makes a church account a provider); manual application
-force-status repair (operator override, no notifications); bulk listing status changes
-honor bookings (rooms with upcoming confirmed occurrences can't leave Published) and
-stamp `UpdatedAtUtc`. **Moderation panel** (`/admin/moderation`): lists rooms with a pending
-`PublishRequestedAtUtc` (approve/decline, optional note), pending venue verification requests
-(approve marks `IsIdentityVerified`, decline records the operator note), and the
-`ProviderEditedAtUtc` review feed (mark-reviewed clears the stamp, no other effect). Listing
-approval is blocked until the venue is verified. Every listing decision writes a
-`listingApproved`/`listingDeclined` inbox row to the venue's managers directly (Admin has no
-email/push fan-out of its own — the inbox row is the whole notification) and logs a
-`listing_moderated` stdout line in the same shape as `IAnalyticsSink`; verification decisions
-log `venue_verification_decided`. POST actions
-attribute to the forwarded `Remote-User` header, falling back to `"local-dev"` when absent
-(local runs have no edge proxy in front). Users/flags panels are still placeholders.
+Reduced 2026-08-05 to what an operator actually does (`v2_migration` D3) — three action
+surfaces plus one takedown lever, over four screens:
+
+- **Review queue** (`/admin/review`) — the steady-state screen. One card per room with a
+  pending `PublishRequestedAtUtc`: listing preview (photos, description, capacity, price),
+  venue address, the linked host accounts, and any ownership/lease evidence the host
+  submitted, folded in (there is no separate verification decision). **One decision:**
+  approve publishes the room, stamps `FirstPublishedAtUtc`, sets `Venue.IsIdentityVerified`
+  and clears `ProviderEditedAtUtc`; decline just clears the request. Either way the venue's
+  pending evidence submission is marked decided (so a declined host can resubmit), and every
+  venue manager gets a `listingApproved`/`listingDeclined` inbox row written directly (Admin
+  has no email/push fan-out — the inbox row is the whole notification). Also hosts the
+  review-comment hide/unhide lever.
+- **Listings** (`/admin/listings`) — read-only inventory plus a single-room **Unlist**
+  takedown for abuse/DMCA. Honors the listing lifecycle: a room with upcoming confirmed
+  occurrences can't leave Published (cancel first); the host can relist themselves.
+- **Venue managers** (`/admin/venue-managers`) — linking by sign-in email, the concierge
+  step that makes a church account a provider.
+- **Overview** (`/admin`) — four real counts and a pointer at the queue.
+
+Decisions log `listing_moderated` / `listing_unlisted_by_operator` stdout lines in the same
+shape as `IAnalyticsSink`, attributed to the forwarded `Remote-User` header (falling back to
+`"local-dev"` locally). Listing photos come from the media origin, so Admin's CSP `img-src`
+is config-pinned (`Admin:MediaImageOrigins`) — a queue whose photos are blocked is a decision
+made blind. Deleted with the reduction: users/analytics/feature-flag panels, login/MFA/
+trusted-device theater, application force-status repair, bulk listing-status writes (they
+bypassed the verified invariant), and the `ProviderEditedAtUtc` review feed — the column and
+its stamping stay as the dormant abuse-response seam.
 
 **Tests** — `Steeple.Api.Tests` (unit: geofence, geo math, listing visibility,
 `ScheduleMaterializer` DST cases) and `Steeple.Integration.Tests` (Testcontainers
@@ -280,6 +303,10 @@ applications 1─0..1 bookings (created only by approval; unique ApplicationId; 
   = a *new* booking re-checking availability.
 - **Timezone correctness:** schedules are venue-local wall-clock, materialized per-date
   in `venues.Timezone` — never by adding fixed UTC intervals.
+- **Published ⇒ venue verified:** every path that sets a room to `Published` also sets
+  `Venue.IsIdentityVerified` — the badge means "belongs to a vetted host", and after the
+  single-gate change (D2) every publish route *is* that vetting. Enforced in
+  `ManageService` and Admin's decision; nothing else may write `RoomStatus.Published`.
 - **State machines** validated in services; statuses stored as int, stable camelCase
   strings on the wire.
 - Flags-enum filtering is a bitwise mask in SQL; multi-value matching is **AND** ("room
@@ -305,8 +332,8 @@ out-of-area detail lookups. Launch-suburb swap = one config change.
 
 Web: `/` plus hash routes for map browsing, venue/room panels, apply, guest correspondence,
 account, and host management (see `src/Steeple.Web.v2/README.md`).
-Admin: `/admin/moderation` (publish-request decisions, venue verification, provider-edit review
-feed, review-comment hide/unhide).
+Admin: `/admin` (overview), `/admin/review` (first-listing decisions + review-comment
+hide/unhide), `/admin/listings` (Unlist takedown), `/admin/venue-managers` (linking).
 
 API: full specs in `CONTRACTS.md` — Discovery §3, Identity §4, Applications /
 Notifications / Bookings §5, Manage §6.

@@ -34,7 +34,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `notification_sent` ✅ / `notification_opened` ✅ | server / client | type, channel, recipientCount |
 | `venue_created` ✅ / `room_created` ✅ | server | venueId, suburb / roomId, venueId |
 | `venue_verification_requested` ✅ | server | venueId, documentCount |
-| `venue_verification_decided` ✅ | Admin (stdout only) | venueId, requestId, outcome (approved/declined), actor |
+| ~~`venue_verification_decided`~~ | retired 2026-08-05 (`v2_migration` D2 — the separate verification decision is gone; the first-listing `listing_moderated` covers it) | — |
 | `listing_publish_requested` ✅ | server | roomId, venueId |
 | `photo_uploaded` ✅ | server | roomId, photoId |
 | `open_hours_updated` ✅ | server | roomId, windowCount, blackoutCount |
@@ -42,7 +42,8 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `availability_checked` ✅ | server | roomId, available, conflictCount |
 | `counter_offer_sent` ✅ | server | applicationId, roomId, superseded (bool) |
 | `counter_offer_responded` ✅ | server | applicationId, decision, timeToResponseHours |
-| `listing_moderated` ✅ | Admin (stdout only — not `IAnalyticsSink`; same log-line shape) | roomId, outcome (approved/declined), actor |
+| `listing_moderated` ✅ | Admin (stdout, same log-line shape) **and** server (`IAnalyticsSink`, on a trusted host's auto-publish) | roomId, venueId, outcome (approved/declined), actor — `actor` is the operator's `Remote-User`, or `"auto:trusted_host"` when `ManageService` published without a human (`v2_migration` D2) |
+| `listing_unlisted_by_operator` ✅ | Admin (stdout only) | roomId, venueId, actor — the abuse/DMCA takedown lever |
 
 ¹ The deprecated v1 BFF emits these client-ish funnel events server-side (`IWebAnalytics`,
 same stdout log line shape). Active web v2 does not yet emit them; it must call the built

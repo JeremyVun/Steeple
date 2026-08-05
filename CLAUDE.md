@@ -51,8 +51,8 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   to the API; the frontend has no DB or shared server assembly. See its section below.
 - `/src/Steeple.Admin` — operator dashboard; reads Postgres via Persistence. No in-app
   auth **by design** — authelia gates it at the edge proxy in the deployed environment.
-  (Reduction to review-queue + venue-manager linking + rating hide/unhide adopted
-  2026-08-05 — `docs/backlog/v2_migration/` D3.)
+  Four screens only (2026-08-05, D3): overview, `/admin/review` (first-listing decisions +
+  rating hide/unhide), `/admin/listings` (Unlist takedown), `/admin/venue-managers`.
 - `/db/changelog` — Liquibase formatted SQL (`001…005-*.sql` + master manifest).
   **Owns the schema; no application ever migrates.**
 - `/tests` — `Steeple.Api.Tests` (xUnit unit: geofence, geo math, listing visibility,
@@ -183,7 +183,8 @@ E2E suites mint real accounts/venues/applications on the local API each run.
 **Real vs demo (the integration work):** Real — catalog reads, auth sessions,
 application submit (`Idempotency-Key`, mirrors into local store), and the whole hosting
 chain (dev SSO → POST venue → room → photo upload → PUT availability → PATCH published;
-publish requires a photo; moderation answers `draft` + `publishRequestedAtUtc`). Demo —
+publish requires a photo; a first-time host's publish answers `draft` +
+`publishRequestedAtUtc`, a trusted host's answers `published` outright). Demo —
 guest inbox/letters and host request decisions run on store.js **hardcoded as
 `GUEST_ID='maria-alvarez'` regardless of session** (the API's `GET /me/applications` is
 never read by the UI); send falls back to filing locally when the API is unreachable

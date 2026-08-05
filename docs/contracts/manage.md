@@ -19,22 +19,31 @@ no_photos | already_verified | verification_pending` (409 for `has_active_bookin
 **Manage-only `status` tokens** (never on public reads — `conventions.md` §2.1):
 `draft | published | unlisted`.
 
-### Moderation model
-A room that has **never** been approved (`FirstPublishedAtUtc IS NULL`) asking for
-`status: "published"` doesn't publish — it stamps `PublishRequestedAtUtc` and lands in the Admin
-moderation queue (`docs/ARCHITECTURE.md` owns the queue mechanics). Admin approval sets
-`Published` + stamps `FirstPublishedAtUtc` (once, ever) and writes a `listingApproved`
-notification to the venue's managers; decline clears the request and writes `listingDeclined`.
-Listing approval is blocked until the venue is verified (a separate venue-verification
-decision, below). **After first publish, unlist/relist is entirely provider-controlled** — no
-further moderation. Edits a provider makes to an already-published room apply immediately
-(never blocked) but stamp `ProviderEditedAtUtc`, which surfaces the room in Admin's review feed
-without gating the edit.
+### Moderation model — one human gate ✅ *(built 2026-08-05 — `v2_migration` D2)*
+The gate is a **host's first listing**, not every listing, and `ManageService` is its single
+enforcement point. Any transition to `status: "published"` first clears the automatic gates
+(≥1 photo → `no_photos`; open hours behind `manage.open_hours_required` → `no_open_hours`;
+geofence on the venue's address). Then:
 
-⚠ superseded-by-adopted-decision: see `docs/backlog/v2_migration/design.md` D2 — not yet built.
-(D2 replaces the two-step gate with a single human gate on a host's *first* listing, decided in
-`ManageService`; trusted hosts auto-publish. The under-review wire representation — room reads
-as `draft` + `publishRequestedAtUtc` — is unchanged by it.)
+- **Trusted host** — the caller manages ≥1 room with `FirstPublishedAtUtc` set (derived per
+  request, no schema, no flag) — the room **publishes immediately**: `Published` +
+  `FirstPublishedAtUtc` stamped, no queue, no `publishRequestedAtUtc`. Applies to new rooms on
+  an existing venue *and* to a venue the trusted host has just created.
+- **Untrusted host** — first listing ever — stamps `PublishRequestedAtUtc` and waits. Wire
+  representation is unchanged: the room reads as `status: "draft"` with `publishRequestedAtUtc`
+  set to its manager, and 404s publicly. An explicit `draft`/`unlisted` PATCH withdraws it.
+  An operator decides it once in Admin (`docs/ARCHITECTURE.md` owns the queue mechanics):
+  approve → `Published` + `FirstPublishedAtUtc` (once, ever) + `listingApproved` notification;
+  decline → request cleared, note recorded, `listingDeclined`. Approval is what makes the host
+  trusted for everything they list afterwards.
+- **Invariant: published ⇒ venue verified.** Every publish path sets
+  `Venue.IsIdentityVerified` (`isIdentityVerified: true` on the venue reads) — the badge means
+  "belongs to a vetted host". There is no separate venue-verification decision.
+- **After first publish, unlist/relist is entirely provider-controlled** — no further
+  moderation. Edits to an already-published room apply immediately (never blocked) but stamp
+  `ProviderEditedAtUtc` as a dormant abuse-response seam.
+- Operators keep one listing lever: a single-room **Unlist** takedown in Admin, which honors
+  upcoming confirmed occurrences exactly like the provider's own unpublish.
 
 ### Venues
 - `GET /api/v1/manage/venues` ✅ → `[{id, name, slug}]` — venues the caller manages (also
@@ -56,7 +65,9 @@ as `draft` + `publishRequestedAtUtc` — is unchanged by it.)
   `America/New_York` (single-timezone beachhead). Changing it while the venue has upcoming
   confirmed occurrences → `409 has_active_bookings` (existing bookings were promised at their
   current venue-local times); same value re-sent is always fine.
-- `POST /api/v1/manage/venues/{id}/verification` ✅ — `SubmitVenueVerificationRequest`:
+- `POST /api/v1/manage/venues/{id}/verification` ✅ — evidence for the first-listing review;
+  it has no decision of its own (the listing decision marks it decided, so a declined host can
+  resubmit). `SubmitVenueVerificationRequest`:
   `{contactName, contactEmail?, evidenceSummary, attestedAuthority, documents:[{label,url}]}`
   where `documents` has 1–5 HTTP(S) links to externally hosted/signed proof documents (lease,
   deed, authorization letter, etc.). The API stores labels/links and review metadata only; it
