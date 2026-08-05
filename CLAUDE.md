@@ -213,10 +213,12 @@ plain (mock gateway); nothing renders a booking's payment fields, the host's res
 or the notifications inbox yet. Accounts-consolidation order agreed 2026-08-05: signed-out
 header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.
 
-**Hazards found in the waves (unfixed):** with no session there is **no way into hosting at
-all** (D4), so the listing flow cannot be reached while the API is away and the signed-out
-half of its Verify step is unreachable in the product's own order — a product call is owed
-(`host-offline-test.mjs` and `host-test.mjs`/`wave2-test.mjs` still assert the old order);
+**Hazards found in the waves (unfixed):** the desk's Spaces tab reads open hours from the
+**local** store, so a room whose hours only exist at steeple reads "No open hours set" in red;
+`.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —
+host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason);
+`host-offline-test.mjs` is **not re-baselinable**: hosting requires a session, so writing a
+listing while steeple is away is no longer a promise the product makes (owner call 2026-08-05);
 room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
 orphans every photo already written (and, locally, rows from other agents' API ports 404);
 the 4s-abort retry can double-create venues — the

@@ -226,6 +226,65 @@ the closest existing harness — run them with documented flags; extend rather t
 
 ---
 
+## Phase 2.5 — The payments surface (web) `[x]` *(landed 2026-08-05)*
+
+**Implements:** the client half of `docs/contracts/payments.md` +
+`docs/backlog/booking-modes.md`, on top of Phase 2's wire integration.
+**Touches:** `data/api.js`, `data/correspondence.js`, `data/store.js`,
+`ui/money.js` (new), `ui/cardPanel.js` (new), `ui/notifications.js` (new),
+`ui/host/{desk,index,payouts,listing}.js`, `ui/guest/{letter,index,journal,payment,sso}.js`,
+`ui/{account,deepLink,index}.js`, `styles/{host,guest,main}.css`,
+`tools/payments-ui-test.mjs` (new).
+
+**Owner decisions this implements (2026-08-05, in session):**
+
+1. **Hosting entry requires a session, full stop** — which retires the signed-out half of the
+   listing flow's Verify step as dead code. It now confirms *whose* listing this will be and
+   never asks a signed-in host to sign in again; a session that dies mid-flow says so and
+   points at the one way back in (`createIdentityStep({requireSession})`). This also settles
+   Phase 2's outstanding item 3: **`host-offline-test.mjs` is not re-baselinable — writing a
+   listing while steeple is away is no longer a promise the product makes.** Delete it or
+   rewrite it as a signed-in-then-offline test; do not restore the old order.
+2. **The desk's IA is `Bookings · Requests · Spaces`.** "Requests" is the wrong primary noun
+   under instant-book-by-default: most hosts never answer one. Bookings leads and the desk
+   opens on it. Requests renders **only** for a manual venue — with one deliberate refinement
+   on the brief: it also survives while an instant venue still has live requests, because mode
+   changes bind new asks only and a tab that vanished with somebody's ask inside it would
+   strand them. A fresh instant venue has no Requests tab, which is what the decision is about.
+3. Copy grammar throughout: instant = booked/confirmed, manual = requests.
+
+**What landed:** the host's rescind lever (two presses, an honest asymmetric warning, refund
+proven in the `payments` table); per-occurrence charge state and the next-payment line on both
+sides; the guest's failure ladder in steeple's own terms with the card step a press away; the
+card on file reachable from the account chip (`Visa ···· 4242`, replace) through one shared
+panel; the payout prompt → mock KYC → connected state, honest that payments are simulated; the
+booking-mode toggle on Spaces; and `GET /me/notifications` rendered as **ambience** — one slip
+on arrival plus quiet lines in the inbox, no bell, no unread count, no new nav tab.
+
+**Verification:** `tools/payments-ui-test.mjs` **63/63** (§1 IA per mode · §2 the booking view
+incl. a `0002`-card failure · §3 rescind + refund both sides and in the DB · §4 payouts · §5
+the mode toggle changing the public apply UX · §6 a seeded reminder as a slip).
+`correspondence-test.mjs` **62/62** (61 + one new check; its §2 was re-baselined to press the
+Requests tab, since the desk opens on Bookings now). `host-input-test.mjs` 61/61 unchanged —
+the simplified Verify step keeps its §2 assertions. `dotnet test` unit 386/386.
+`host-publish-test.mjs` still fails only its documented tail assertion.
+
+**Five defects the driving found that reading the code did not:**
+1. The booking-mode radios reused `.choice*`, which is the **request sheet's** class in
+   `styles/guest.css` — and guest.css loads after host.css, so the desk's setting silently
+   inherited the composer's radio styling and rendered unreadable. They are `.mode*` now.
+2. The guest letterhead printed **"Free"** over a $40-a-session booking for any host-listed
+   room: `priceParts` answers Free to a price it was not given, and a room outside the bundled
+   scenery has none. A missing figure means *unknown* now and prints nothing.
+3. The payout screen offered **Confirm and finish before onboarding had started**, which
+   answers `400 invalid_payment` — the screen's own fault, not the host's. The way on does not
+   exist until steeple has answered.
+4. The held-dates grid crammed three columns into two once a charge word joined each row.
+5. The suite's first slip check passed on a slip at **opacity 0** — "not hidden" is not "on
+   screen" when the thing fades in and headless GL runs app-time ~6× slow.
+
+---
+
 ## Phase 3 — Single-gate moderation + Admin gutting (API + Admin) `[x]` *(landed 2026-08-05)*
 
 > **Landed as specified**, with three notes for whoever reads this next:
