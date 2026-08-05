@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Services.Notifications;
 /// <summary>
@@ -16,6 +17,7 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     private readonly IPushGateway _push;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly EmailOptions _emailOptions;
     private readonly ILogger<NotificationDispatcher> _logger;
 
     /// <summary>Creates the dispatcher from its ports.</summary>
@@ -26,6 +28,7 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         IPushGateway push,
         IAnalyticsSink analytics,
         TimeProvider clock,
+        IOptions<EmailOptions> emailOptions,
         ILogger<NotificationDispatcher> logger)
     {
         _repository = repository;
@@ -34,6 +37,7 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         _push = push;
         _analytics = analytics;
         _clock = clock;
+        _emailOptions = emailOptions.Value;
         _logger = logger;
     }
 
@@ -67,12 +71,17 @@ public sealed class NotificationDispatcher : INotificationDispatcher
 
         if (email is not null)
         {
+            // One composition for the whole fan-out: the CTA points at the payload's own deep
+            // link, so email, push and the inbox row can never disagree about where this event
+            // lives (docs/contracts/web.md — deep links from email/push into the SPA).
+            var composed = WithCallToAction(email, type, deepLink);
+
             foreach (var recipient in recipients.Where(r => !string.IsNullOrEmpty(r.Email)))
             {
                 // Deliberately not awaited: the inbox row is already the record of truth, and the
                 // gateway is a singleton over HttpClient, safe to outlive this scoped request.
                 // CancellationToken.None so an aborted request doesn't cancel a send already decided on.
-                _ = SendEmailSafelyAsync(recipient.Email!, email, type);
+                _ = SendEmailSafelyAsync(recipient.Email!, composed, type);
             }
         }
 
@@ -93,11 +102,33 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         await TrackSafelyAsync(type, recipients.Count, email is not null).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Appends the CTA to every part the mail carries. Without a configured
+    /// <see cref="EmailOptions.WebBaseUrl"/> the content is returned untouched — emails then
+    /// carry no links at all rather than a link to nowhere.
+    /// </summary>
+    private EmailContent WithCallToAction(EmailContent email, NotificationType type, string? deepLink)
+    {
+        var url = EmailCta.BuildUrl(_emailOptions.WebBaseUrl, deepLink);
+        if (url is null)
+        {
+            return email;
+        }
+
+        return email with
+        {
+            TextBody = $"{email.TextBody}\n\n{EmailCta.TextLine(type, url)}",
+            HtmlBody = string.IsNullOrEmpty(email.HtmlBody)
+                ? email.HtmlBody
+                : email.HtmlBody + EmailCta.HtmlLine(type, url),
+        };
+    }
+
     private async Task SendEmailSafelyAsync(string toEmail, EmailContent email, NotificationType type)
     {
         try
         {
-            await _email.SendAsync(toEmail, email.Subject, email.TextBody, CancellationToken.None).ConfigureAwait(false);
+            await _email.SendAsync(toEmail, email, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

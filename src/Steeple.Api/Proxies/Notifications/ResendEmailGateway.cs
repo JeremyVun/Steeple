@@ -8,7 +8,8 @@ namespace Steeple.Api.Proxies.Notifications;
 /// a managed transactional sender per SYSTEM_DESIGN §8 (never SMTP from the droplet; free tier
 /// fits the cost ceiling). Without a configured key it logs the send instead (dev-friendly, and
 /// the inbox row is the record of truth anyway). Failures log and return — callers may
-/// fire-and-forget.
+/// fire-and-forget. Transport only: the body arrives fully composed from the dispatcher, CTA
+/// link included.
 /// </summary>
 public sealed class ResendEmailGateway : IEmailGateway
 {
@@ -27,15 +28,13 @@ public sealed class ResendEmailGateway : IEmailGateway
     }
 
     /// <inheritdoc />
-    public async Task SendAsync(string toEmail, string subject, string textBody, CancellationToken ct = default)
+    public async Task SendAsync(string toEmail, EmailContent content, CancellationToken ct = default)
     {
-        var body = AppendWebLink(textBody);
-
         if (string.IsNullOrEmpty(_options.ApiKey))
         {
             _logger.LogInformation(
                 "Email (log-only mode, no Email:ApiKey): to={To} subject={Subject}\n{Body}",
-                toEmail, subject, body);
+                toEmail, content.Subject, content.TextBody);
             return;
         }
 
@@ -48,8 +47,11 @@ public sealed class ResendEmailGateway : IEmailGateway
                 {
                     from = _options.From,
                     to = new[] { toEmail },
-                    subject,
-                    text = body,
+                    subject = content.Subject,
+                    text = content.TextBody,
+                    // Resend treats a null `html` as "text only" — the alternative part is opt-in
+                    // per email, and plain text is always sent alongside it.
+                    html = string.IsNullOrEmpty(content.HtmlBody) ? null : content.HtmlBody,
                 }),
             };
 
@@ -66,10 +68,4 @@ public sealed class ResendEmailGateway : IEmailGateway
             _logger.LogWarning(ex, "Email send failed (provider unreachable).");
         }
     }
-
-    /// <summary>Emails say "from your Steeple inbox" — give that sentence a real link when configured.</summary>
-    private string AppendWebLink(string textBody) =>
-        string.IsNullOrEmpty(_options.WebBaseUrl)
-            ? textBody
-            : $"{textBody}\n\n{_options.WebBaseUrl.TrimEnd('/')}/inbox";
 }

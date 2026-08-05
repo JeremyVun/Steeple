@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Tests.Services;
 /// <summary>
@@ -94,13 +95,80 @@ public class NotificationDispatcherTests
         Assert.Equal("inbox+push", GetProp(tracked.Payload, "channel"));
     }
 
+    [Fact]
+    public async Task NotifyAsync_WithWebBaseUrl_AppendsAGotoCtaForThePayloadsDeepLink()
+    {
+        var (dispatcher, _, email, _, _, _) = CreateDispatcher("http://localhost:5173/");
+
+        await dispatcher.NotifyAsync(
+            [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
+            NotificationType.BookingReminder,
+            new { deepLink = "/bookings/9f1c1b2e-0000-4000-8000-000000000001" },
+            new EmailContent("Subject", "Body"));
+
+        var sent = Assert.Single(email.Sent);
+        Assert.Equal(
+            "Body\n\nOpen the booking: http://localhost:5173/?goto=%2Fbookings%2F9f1c1b2e-0000-4000-8000-000000000001",
+            sent.Content.TextBody);
+    }
+
+    [Fact]
+    public async Task NotifyAsync_PayloadWithoutDeepLink_CtaFallsBackToTheInbox()
+    {
+        var (dispatcher, _, email, _, _, _) = CreateDispatcher("https://steeple.example/steeple");
+
+        await dispatcher.NotifyAsync(
+            [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
+            NotificationType.ApplicationReceived,
+            new { applicationId = Guid.NewGuid() },
+            new EmailContent("Subject", "Body"));
+
+        Assert.EndsWith(
+            "Open the request: https://steeple.example/steeple/?goto=%2Finbox",
+            Assert.Single(email.Sent).Content.TextBody,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NotifyAsync_WithoutWebBaseUrl_LeavesTheBodyUntouched()
+    {
+        var (dispatcher, _, email, _, _, _) = CreateDispatcher();
+
+        await dispatcher.NotifyAsync(
+            [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
+            NotificationType.ApplicationReceived,
+            new { deepLink = "/inbox/applications/123" },
+            new EmailContent("Subject", "Body"));
+
+        Assert.Equal("Body", Assert.Single(email.Sent).Content.TextBody);
+    }
+
+    [Fact]
+    public async Task NotifyAsync_WithHtmlBody_AppendsTheCtaToBothParts()
+    {
+        var (dispatcher, _, email, _, _, _) = CreateDispatcher("http://localhost:5173");
+
+        await dispatcher.NotifyAsync(
+            [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
+            NotificationType.ApplicationApproved,
+            new { deepLink = "/inbox/applications/abc" },
+            new EmailContent("Subject", "Body", "<p>Body</p>"));
+
+        var sent = Assert.Single(email.Sent).Content;
+        Assert.Contains("/?goto=%2Finbox%2Fapplications%2Fabc", sent.TextBody, StringComparison.Ordinal);
+        Assert.Contains(
+            "<a href=\"http://localhost:5173/?goto=%2Finbox%2Fapplications%2Fabc\">Open the request</a>",
+            sent.HtmlBody!,
+            StringComparison.Ordinal);
+    }
+
     private static (
         NotificationDispatcher Dispatcher,
         FakeNotificationRepository Repository,
         FakeEmailGateway Email,
         FakeDeviceRegistry Devices,
         FakePushGateway Push,
-        FakeAnalyticsSink Analytics) CreateDispatcher()
+        FakeAnalyticsSink Analytics) CreateDispatcher(string webBaseUrl = "")
     {
         var repo = new FakeNotificationRepository();
         var email = new FakeEmailGateway();
@@ -108,7 +176,14 @@ public class NotificationDispatcherTests
         var push = new FakePushGateway();
         var analytics = new FakeAnalyticsSink();
         var dispatcher = new NotificationDispatcher(
-            repo, email, devices, push, analytics, new FixedTimeProvider(FixedNow), NullLogger<NotificationDispatcher>.Instance);
+            repo,
+            email,
+            devices,
+            push,
+            analytics,
+            new FixedTimeProvider(FixedNow),
+            Options.Create(new EmailOptions { WebBaseUrl = webBaseUrl }),
+            NullLogger<NotificationDispatcher>.Instance);
         return (dispatcher, repo, email, devices, push, analytics);
     }
 
@@ -144,11 +219,11 @@ public class NotificationDispatcherTests
 
     private sealed class FakeEmailGateway : IEmailGateway
     {
-        public List<(string ToEmail, string Subject, string TextBody)> Sent { get; } = [];
+        public List<(string ToEmail, EmailContent Content)> Sent { get; } = [];
 
-        public Task SendAsync(string toEmail, string subject, string textBody, CancellationToken ct = default)
+        public Task SendAsync(string toEmail, EmailContent content, CancellationToken ct = default)
         {
-            Sent.Add((toEmail, subject, textBody));
+            Sent.Add((toEmail, content));
             return Task.CompletedTask;
         }
     }

@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddSteepleMedia(configuration);
         services.AddSteepleFlags(configuration);
         services.AddSteepleAnalyticsIngest();
+        services.AddSteepleReminders(configuration);
         services.AddSteepleRateLimiting();
 
         return services;
@@ -130,6 +131,27 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>
+    /// Upcoming-booking reminders: the sweep (scoped, over the DbContext) plus the one background
+    /// timer in the API. Disabling the worker leaves the sweep resolvable, so tests and the dev
+    /// loop can still drive it directly.
+    /// </summary>
+    private static IServiceCollection AddSteepleReminders(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<ReminderOptions>(configuration.GetSection(ReminderOptions.SectionName));
+
+        services.AddScoped<IBookingReminderService, BookingReminderService>();
+        services.AddScoped<IBookingReminderRepository, EfBookingReminderRepository>();
+
+        var reminders = configuration.GetSection(ReminderOptions.SectionName).Get<ReminderOptions>() ?? new ReminderOptions();
+        if (reminders.Enabled)
+        {
+            services.AddHostedService<BookingReminderWorker>();
+        }
+
+        return services;
+    }
+
     /// <summary>Analytics ingest (CONTRACTS §7): validates/enriches the client batch, no persistence of its own.</summary>
     private static IServiceCollection AddSteepleAnalyticsIngest(this IServiceCollection services)
     {
@@ -163,8 +185,24 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 
         // Stateless over HttpClient + options; sends are fire-and-forget from scoped callers, so
-        // the gateway must not capture scoped state -> typed singleton client.
-        services.AddHttpClient<IEmailGateway, ResendEmailGateway>();
+        // the gateway must not capture scoped state -> typed client, resolved per use.
+        services.AddHttpClient<ResendEmailGateway>();
+
+        var email = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
+        if (email.DevMailboxEnabled)
+        {
+            // Development only (the flag lives in appsettings.Development.json): the real gateway
+            // still runs, with every send also captured for /dev/mailbox to render.
+            services.AddSingleton<IDevMailbox, FileDevMailbox>();
+            services.AddTransient<IEmailGateway>(sp => new DevMailboxEmailGateway(
+                sp.GetRequiredService<ResendEmailGateway>(),
+                sp.GetRequiredService<IDevMailbox>(),
+                sp.GetRequiredService<TimeProvider>()));
+        }
+        else
+        {
+            services.AddTransient<IEmailGateway>(sp => sp.GetRequiredService<ResendEmailGateway>());
+        }
 
         services.AddSteeplePush(configuration);
 
