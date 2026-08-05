@@ -31,6 +31,13 @@ public class EfApplicationRepository : IApplicationRepository
     }
 
     /// <inheritdoc />
+    public void AddPending(Application application) => _db.Applications.Add(application);
+
+    /// <inheritdoc />
+    public Task<User?> GetOrganizerAsync(Guid organizerId, CancellationToken ct = default) =>
+        _db.Users.FirstOrDefaultAsync(u => u.Id == organizerId, ct);
+
+    /// <inheritdoc />
     public Task<Application?> GetAsync(Guid applicationId, CancellationToken ct = default) =>
         Graph().FirstOrDefaultAsync(a => a.Id == applicationId, ct);
 

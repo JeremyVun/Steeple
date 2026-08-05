@@ -394,11 +394,31 @@ public class BookingServiceTests
         FakeBookingRepository repo,
         FakeVenueManagerRepository managers,
         out FakeNotificationDispatcher notifications,
-        out FakeAnalyticsSink analytics)
+        out FakeAnalyticsSink analytics,
+        StubPaymentService? payments = null,
+        FakeFeatureFlags? flags = null)
     {
         notifications = new FakeNotificationDispatcher();
         analytics = new FakeAnalyticsSink();
-        return new BookingService(repo, managers, new FakeRatingService(), notifications, analytics, new FixedTimeProvider(FixedNow));
+        return new BookingService(
+            repo, managers, new FakeRatingService(), payments ?? new StubPaymentService(),
+            flags ?? new FakeFeatureFlags(), notifications, analytics, new FixedTimeProvider(FixedNow),
+            Microsoft.Extensions.Options.Options.Create(new PaymentsOptions()),
+            Microsoft.Extensions.Options.Options.Create(new EmailOptions()));
+    }
+
+    /// <summary>Config-free feature-flag stub: flags off unless explicitly enabled.</summary>
+    private sealed class FakeFeatureFlags : IFeatureFlags
+    {
+        private readonly HashSet<string> _enabled = [];
+
+        public FakeFeatureFlags Enable(string key)
+        {
+            _enabled.Add(key);
+            return this;
+        }
+
+        public bool IsEnabled(string key) => _enabled.Contains(key);
     }
 
     /// <summary>A clock frozen at a fixed instant, so tests can pin exact cancellation/sweep math.</summary>

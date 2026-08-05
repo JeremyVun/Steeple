@@ -156,6 +156,7 @@ public class WhenSearchIntegrationTests
             })),
             new NullRatings(),
             new AvailabilityService(new EfAvailabilityRepository(db), new EfVenueManagerRepository(db), new NullAnalytics(), new FixedClock(FixedNow)),
+            new TestFeatureFlags(),
             new NullAnalytics(),
             new FixedClock(FixedNow));
 

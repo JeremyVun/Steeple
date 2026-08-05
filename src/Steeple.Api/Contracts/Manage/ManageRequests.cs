@@ -14,7 +14,10 @@ public record SaveVenueRequest(
     string? ContactEmail,
     string? ParkingInfo,
     string? TransitInfo,
-    string? Timezone = null);
+    string? Timezone = null,
+    // Additive 2026-08-05 (booking-modes): "instant" | "manual"; null = unchanged (create default:
+    // instant). The host's choice — mode is read at submit time, existing bookings are unaffected.
+    string? BookingMode = null);
 
 /// <summary>One document link supplied with a venue verification request.</summary>
 public record VenueVerificationDocumentRequest(string? Label, string? Url);

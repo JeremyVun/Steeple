@@ -25,8 +25,15 @@ public interface IBookingService
     /// counter's schedule. Null (the default) books the application as submitted (the approval path).
     /// </para>
     /// </summary>
+    /// <para>
+    /// <paramref name="instant"/> marks an instant-book confirmation (the submit *is* the booking
+    /// transaction — docs/backlog/booking-modes.md); it only affects analytics dimensions, the
+    /// machinery is identical to approval. When payments are enabled the confirmation also
+    /// snapshots the per-occurrence price onto the booking (column writes only — no gateway call
+    /// ever runs inside this transaction; charging kicks post-commit via the Payments service).
+    /// </para>
     Task<BookingConfirmation> ConfirmFromApplicationAsync(
-        Application application, ScheduleSpec? schedule = null, CancellationToken ct = default);
+        Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default);
 
     /// <summary>The organizer's bookings, newest first, optionally filtered by status token.</summary>
     Task<BookingResult<BookingListResult>> GetForOrganizerAsync(
@@ -56,6 +63,16 @@ public interface IBookingService
     /// feeds ratings in Phase 6). Returns the updated booking.
     /// </summary>
     Task<BookingResult<BookingDto>> MarkNoShowAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The payment failure ladder's cancel (docs/contracts/payments.md; sanctioned caller: the
+    /// Payments sweeper — Payments never mutates occurrences itself). Cancels the named
+    /// occurrences, freeing their slots; with <paramref name="cancelRemainingTerm"/> (the second
+    /// consecutive payment-failure cancel) the whole booking cancels and every remaining
+    /// scheduled occurrence frees. Both parties are notified.
+    /// </summary>
+    Task CancelOccurrencesForPaymentFailureAsync(
+        Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default);
 }
 
 /// <summary>

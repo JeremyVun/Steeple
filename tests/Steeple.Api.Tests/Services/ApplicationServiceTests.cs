@@ -1091,16 +1091,19 @@ public class ApplicationServiceTests
         out FakeAnalyticsSink analytics,
         FakeBookingService? bookings = null,
         FakeAvailabilityService? availability = null,
-        FakeFeatureFlags? flags = null)
+        FakeFeatureFlags? flags = null,
+        StubPaymentService? payments = null)
     {
         notifications = new FakeNotificationDispatcher();
         turnstile = new FakeTurnstileVerifier();
         analytics = new FakeAnalyticsSink();
         return new ApplicationService(
             repo, managers, bookings ?? new FakeBookingService(), new FakeRatingService(),
-            availability ?? new FakeAvailabilityService(), flags ?? new FakeFeatureFlags(),
+            availability ?? new FakeAvailabilityService(), payments ?? new StubPaymentService(),
+            flags ?? new FakeFeatureFlags(),
             notifications, turnstile, analytics,
-            new FixedTimeProvider(FixedNow));
+            new FixedTimeProvider(FixedNow),
+            Microsoft.Extensions.Options.Options.Create(new EmailOptions()));
     }
 
     /// <summary>
@@ -1117,8 +1120,11 @@ public class ApplicationServiceTests
         /// <summary>The schedule the last confirmation booked (the counter's, or null for the ask).</summary>
         public ScheduleSpec? LastSpec { get; private set; }
 
+        /// <summary>Whether the last confirmation was flagged as instant book.</summary>
+        public bool LastInstant { get; private set; }
+
         public Task<BookingConfirmation> ConfirmFromApplicationAsync(
-            Application application, ScheduleSpec? schedule = null, CancellationToken ct = default)
+            Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
         {
             if (SlotTaken)
             {
@@ -1126,8 +1132,34 @@ public class ApplicationServiceTests
             }
 
             LastSpec = schedule;
+            LastInstant = instant;
             Confirmed.Add(application);
-            return Task.FromResult(new BookingConfirmation(null, SlotTaken: false));
+
+            // A minimal confirmed-booking DTO — callers only read Id off it (the charge kick).
+            var dto = new Steeple.Api.Contracts.Bookings.BookingDto(
+                Id: Guid.NewGuid(),
+                ApplicationId: application.Id,
+                RoomId: application.RoomId,
+                RoomName: "",
+                VenueName: "",
+                VenueSlug: "",
+                RoomSlug: "",
+                VenueTimezone: "America/New_York",
+                OrganizerId: application.OrganizerId,
+                OrganizerName: "",
+                Type: "oneOff",
+                StartDate: application.StartDate,
+                EndDate: application.EndDate ?? application.StartDate,
+                Schedule: application.ToScheduleDto(),
+                Status: "confirmed",
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                CancelledBy: null,
+                CancelledAtUtc: null,
+                CancelReason: null,
+                NextOccurrence: null,
+                Occurrences: [],
+                Ratings: null);
+            return Task.FromResult(new BookingConfirmation(dto, SlotTaken: false));
         }
 
         public Task<BookingResult<Steeple.Api.Contracts.Bookings.BookingListResult>> GetForOrganizerAsync(
@@ -1148,6 +1180,10 @@ public class ApplicationServiceTests
 
         public Task<BookingResult<Steeple.Api.Contracts.Bookings.BookingDto>> MarkNoShowAsync(
             Guid occurrenceId, Guid callerId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task CancelOccurrencesForPaymentFailureAsync(
+            Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
@@ -1343,6 +1379,11 @@ public class ApplicationServiceTests
             Applications.Add(application);
             return Task.CompletedTask;
         }
+
+        public void AddPending(Application application) => Applications.Add(application);
+
+        public Task<User?> GetOrganizerAsync(Guid organizerId, CancellationToken ct = default) =>
+            Task.FromResult(Users.FirstOrDefault(u => u.Id == organizerId));
 
         public Task<Application?> GetAsync(Guid applicationId, CancellationToken ct = default)
         {

@@ -27,7 +27,10 @@ public record ApplicationDto(
     ApplicationConflictsDto? Conflicts = null,
     CounterOfferDto? CounterOffer = null,
     // Additive 2026-07-08: the organizer's group/organization ("Who's asking"), if given.
-    string? OrganizationName = null);
+    string? OrganizationName = null,
+    // Additive 2026-08-05 (payments rails): the organizer has a payment method on file — the
+    // host-visible trust signal (always true for applications submitted after the 402 gate).
+    bool HasPaymentMethod = false);
 
 /// <summary>The applying organizer as shown to the provider, including reputation once available.</summary>
 public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);

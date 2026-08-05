@@ -1,9 +1,11 @@
 using System.Globalization;
+using Microsoft.Extensions.Options;
 using Steeple.Api.Contracts.Applications;
 using Steeple.Api.Services.Availability;
 using Steeple.Api.Services.Flags;
 using Steeple.Api.Services.Manage;
 using Steeple.Api.Services.Notifications;
+using Steeple.Api.Services.Payments;
 
 namespace Steeple.Api.Services.Applications;
 /// <summary>
@@ -34,11 +36,13 @@ public sealed class ApplicationService : IApplicationService
     private readonly IBookingService _bookings;
     private readonly IRatingService _ratings;
     private readonly IAvailabilityService _availability;
+    private readonly IPaymentService _payments;
     private readonly IFeatureFlags _flags;
     private readonly INotificationDispatcher _notifications;
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly string? _webBaseUrl;
 
     /// <summary>Creates the service from its ports.</summary>
     public ApplicationService(
@@ -47,22 +51,26 @@ public sealed class ApplicationService : IApplicationService
         IBookingService bookings,
         IRatingService ratings,
         IAvailabilityService availability,
+        IPaymentService payments,
         IFeatureFlags flags,
         INotificationDispatcher notifications,
         ITurnstileVerifier turnstile,
         IAnalyticsSink analytics,
-        TimeProvider clock)
+        TimeProvider clock,
+        IOptions<EmailOptions> emailOptions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
         _bookings = bookings;
         _ratings = ratings;
         _availability = availability;
+        _payments = payments;
         _flags = flags;
         _notifications = notifications;
         _turnstile = turnstile;
         _analytics = analytics;
         _clock = clock;
+        _webBaseUrl = emailOptions.Value.WebBaseUrl;
     }
 
     /// <inheritdoc />
@@ -108,8 +116,20 @@ public sealed class ApplicationService : IApplicationService
             return ApplicationResult<SubmitOutcome>.Fail(block.Code, block.Detail, block.Extensions!);
         }
 
+        // Card at request (booking-modes.md): while payments are enabled, EVERY submit — instant
+        // or manual — requires a method on file. 402 payment_method_required routes the client
+        // into the /me/payments/setup loop first.
+        var paymentsOn = _flags.IsEnabled(PaymentService.PaymentsFlag);
+        if (paymentsOn && !await _payments.HasPaymentMethodAsync(organizerId, ct).ConfigureAwait(false))
+        {
+            return ApplicationResult<SubmitOutcome>.Fail(
+                ApplicationErrorCodes.PaymentMethodRequired,
+                "Save a payment method first — this venue takes bookings with a card on file.");
+        }
+
         var now = _clock.GetUtcNow();
         var schedule = ParseSchedule(request.Schedule);
+        var instant = paymentsOn && room.Venue.BookingMode == BookingMode.Instant;
         var application = new Application
         {
             Id = Guid.NewGuid(),
@@ -125,11 +145,17 @@ public sealed class ApplicationService : IApplicationService
             EndTime = schedule.EndTime,
             IntentText = request.IntentText.Trim(),
             OrganizationName = string.IsNullOrWhiteSpace(request.OrganizationName) ? null : request.OrganizationName.Trim(),
-            Status = ApplicationStatus.Pending,
+            Status = instant ? ApplicationStatus.Approved : ApplicationStatus.Pending,
+            DecidedAtUtc = instant ? now : null,
             IdempotencyKey = idempotencyKey,
             CreatedAtUtc = now,
             ExpiresAtUtc = now + ExpiryWindow,
         };
+
+        if (instant)
+        {
+            return await ConfirmInstantAsync(application, room, now, ct).ConfigureAwait(false);
+        }
 
         await _repository.AddAsync(application, ct).ConfigureAwait(false);
 
@@ -162,6 +188,110 @@ public sealed class ApplicationService : IApplicationService
             },
             ct).ConfigureAwait(false);
 
+        return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(created.ToDto(includeThread: true), Created: true));
+    }
+
+    /// <summary>
+    /// The instant-book confirmation (booking-modes.md): the submit itself is the booking
+    /// transaction. The application is tracked-unsaved (Approved) and commits atomically with the
+    /// booking + occurrences inside <see cref="IBookingService.ConfirmFromApplicationAsync"/> —
+    /// an exclusion-constraint loss aborts everything and answers <c>409 slot_taken</c> (first
+    /// valid request wins; nothing persists). The first occurrence's charge kicks <b>after</b>
+    /// the commit — never a gateway call inside the transaction.
+    /// </summary>
+    private async Task<ApplicationResult<SubmitOutcome>> ConfirmInstantAsync(
+        Application application, Room room, DateTimeOffset now, CancellationToken ct)
+    {
+        var organizer = await _repository.GetOrganizerAsync(application.OrganizerId, ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Authenticated caller has no user row.");
+        application.Room = room;
+        application.Organizer = organizer;
+        _repository.AddPending(application);
+
+        var confirmation = await _bookings.ConfirmFromApplicationAsync(application, instant: true, ct: ct).ConfigureAwait(false);
+        if (confirmation.SlotTaken)
+        {
+            // Unlike approval's auto-decline, nothing existed before this call and nothing was
+            // written by it — the submit simply fails and the guest can pick another time.
+            return ApplicationResult<SubmitOutcome>.Fail(
+                ApplicationErrorCodes.SlotTaken,
+                "Another booking already holds an overlapping time — pick a different slot.");
+        }
+
+        var booking = confirmation.Booking!;
+
+        // Post-commit charge kick (booking-modes.md charge timing): one-off → its only occurrence
+        // in full, now; recurring → the first occurrence now, the rest at T−48h via the sweeper.
+        await _payments.ChargeAtConfirmationAsync(booking.Id, ct).ConfigureAwait(false);
+
+        var venue = room.Venue!;
+        var deepLink = $"/bookings/{booking.Id}";
+        var payload = new
+        {
+            applicationId = application.Id,
+            bookingId = booking.Id,
+            roomId = room.Id,
+            roomName = room.Name,
+            venueName = venue.Name,
+            venueSlug = venue.Slug,
+            roomSlug = room.Slug,
+            organizerName = organizer.DisplayName,
+            status = FlagEnumExtensions.ToCamelCaseToken(application.Status.ToString()),
+            deepLink,
+        };
+
+        // The booking-confirmed notice, instant flavor: same ApplicationApproved type the approval
+        // path uses (clients already render it), CTA deep-links straight to the booking.
+        await _notifications.NotifyAsync(
+            [new NotificationRecipient(organizer.Id, organizer.Email)],
+            NotificationType.ApplicationApproved,
+            payload,
+            new EmailContent(
+                Subject: $"You're booked — {room.Name} at {venue.Name}",
+                TextBody:
+                    $"Your booking of {room.Name} at {venue.Name} is confirmed.\n\n" +
+                    $"When: {DescribeSchedule(application)}\n\n" +
+                    "This venue books instantly — no approval needed. Your card covers each " +
+                    "session as it comes up; the first payment is being taken now." +
+                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+            ct).ConfigureAwait(false);
+
+        // Host-side notice: a booking landed without a decision from them (the rescind lever is
+        // their control — cancelling any time refunds the guest in full).
+        var managers = await _venueManagers.GetManagersAsync(venue.Id, ct).ConfigureAwait(false);
+        if (managers.Count > 0)
+        {
+            await _notifications.NotifyAsync(
+                managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
+                NotificationType.BookingReceived,
+                payload,
+                new EmailContent(
+                    Subject: $"New booking: {room.Name}",
+                    TextBody:
+                        $"{organizer.DisplayName} booked {room.Name} at {venue.Name}.\n\n" +
+                        $"What: {Humanize(application.ActivityType.ToString())}, about {application.GroupSize} people\n" +
+                        $"When: {DescribeSchedule(application)}\n\n" +
+                        $"\"{application.IntentText}\"\n\n" +
+                        "Your venue books instantly, so this is confirmed. If it doesn't fit, you can " +
+                        "cancel it any time from your Steeple inbox — the organizer is refunded in full." +
+                        EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+                ct).ConfigureAwait(false);
+        }
+
+        await TrackSafelyAsync(
+            "application_submitted",
+            new
+            {
+                roomId = room.Id,
+                venueId = room.VenueId,
+                activityType = FlagEnumExtensions.ToCamelCaseToken(application.ActivityType.ToString()),
+                frequency = FlagEnumExtensions.ToCamelCaseToken(application.Frequency.ToString()),
+                groupSize = application.GroupSize,
+                instant = true,
+            },
+            ct).ConfigureAwait(false);
+
+        var created = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
         return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(created.ToDto(includeThread: true), Created: true));
     }
 
@@ -440,6 +570,7 @@ public sealed class ApplicationService : IApplicationService
         // every materialized occurrence. When the exclusion constraint aborts that save, the slot
         // is already held — the application auto-declines with notice, and the provider gets
         // slot_taken instead of a half-approved state.
+        Guid? bookingId = null;
         if (approve)
         {
             var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct: ct).ConfigureAwait(false);
@@ -447,6 +578,13 @@ public sealed class ApplicationService : IApplicationService
             {
                 return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: false, ct).ConfigureAwait(false);
             }
+
+            bookingId = confirmation.Booking!.Id;
+
+            // Post-commit charge kick (booking-modes.md): the first occurrence charges at
+            // confirmation — approval and instant book share the same machinery. No-op for
+            // bookings without a price snapshot (payments disabled at confirmation).
+            await _payments.ChargeAtConfirmationAsync(bookingId.Value, ct).ConfigureAwait(false);
         }
 
         if (request.Message is { Length: > 0 } note)
@@ -475,7 +613,8 @@ public sealed class ApplicationService : IApplicationService
                     $"Good news — {venueName} approved your request to use {application.Room.Name}.\n\n" +
                     $"When: {DescribeSchedule(application)}\n\n" +
                     (request.Message is { Length: > 0 } m ? $"They added: \"{m}\"\n\n" : "") +
-                    "Your booking is confirmed — the details are in your Steeple inbox.")
+                    "Your booking is confirmed — the details are in your Steeple inbox." +
+                    (bookingId is { } cta ? EmailLinks.CtaLine(_webBaseUrl, $"/bookings/{cta}") : ""))
             : new EmailContent(
                 Subject: $"About your request for {application.Room.Name}",
                 TextBody:
@@ -699,7 +838,7 @@ public sealed class ApplicationService : IApplicationService
             open.RespondedAtUtc = now;
 
             var spec = new ScheduleSpec(open.Frequency, open.StartDate, open.EndDate, open.DaysOfWeek, open.StartTime, open.EndTime);
-            var confirmation = await _bookings.ConfirmFromApplicationAsync(application, spec, ct).ConfigureAwait(false);
+            var confirmation = await _bookings.ConfirmFromApplicationAsync(application, spec, ct: ct).ConfigureAwait(false);
             if (confirmation.SlotTaken)
             {
                 // Same race handling as approval: the Accepted flip never committed (the booking save
@@ -708,6 +847,9 @@ public sealed class ApplicationService : IApplicationService
                 open.Status = CounterOfferStatus.Lapsed;
                 return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: true, ct).ConfigureAwait(false);
             }
+
+            // Same post-commit charge kick as approval (no-op without a price snapshot).
+            await _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, ct).ConfigureAwait(false);
 
             await NotifyManagersAsync(
                 application,

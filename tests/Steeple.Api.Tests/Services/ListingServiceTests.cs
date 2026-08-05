@@ -63,7 +63,7 @@ public class ListingServiceTests
 
     private static ListingService CreateService(Room room) =>
         new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new FakeAvailabilityService(),
-            new NullAnalyticsSink(), new FixedTimeProvider());
+            new SetFeatureFlags(), new NullAnalyticsSink(), new FixedTimeProvider());
 
     private static Room CreateRoom(RoomStatus status, double latitude = InAreaLatitude, double longitude = InAreaLongitude)
     {

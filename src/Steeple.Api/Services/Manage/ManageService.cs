@@ -107,6 +107,8 @@ public sealed class ManageService : IManageService
             ParkingInfo = request.ParkingInfo?.Trim() ?? "",
             TransitInfo = request.TransitInfo?.Trim() ?? "",
             IsIdentityVerified = false, // concierge/Admin verification, never self-claimed
+            // Instant book is the product default (booking-modes.md); manual is the host's opt-in.
+            BookingMode = FlagEnumExtensions.ParseToken<BookingMode>(request.BookingMode) ?? BookingMode.Instant,
             // Beachhead default hosts can now override with any IANA identifier (per-area zones
             // still land with an areas table — SYSTEM_DESIGN §10).
             Timezone = timezone ?? "America/New_York",
@@ -181,6 +183,11 @@ public sealed class ManageService : IManageService
         if (FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) is { } venueType)
         {
             venue.Type = venueType;
+        }
+        if (FlagEnumExtensions.ParseToken<BookingMode>(request.BookingMode) is { } bookingMode)
+        {
+            // Read at submit time only: pending applications and confirmed bookings are unaffected.
+            venue.BookingMode = bookingMode;
         }
         if (request.ContactEmail is not null)
         {
@@ -531,6 +538,8 @@ public sealed class ManageService : IManageService
         if (request.TransitInfo is { Length: > 1000 }) return "Transit notes are limited to 1000 characters.";
         if (request.VenueType is not null && FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) is null)
             return $"Unknown venue type '{request.VenueType}'.";
+        if (request.BookingMode is not null && FlagEnumExtensions.ParseToken<BookingMode>(request.BookingMode) is null)
+            return $"Unknown booking mode '{request.BookingMode}' — use \"instant\" or \"manual\".";
         return null;
     }
 

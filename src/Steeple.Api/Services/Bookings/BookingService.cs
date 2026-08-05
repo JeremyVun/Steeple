@@ -1,5 +1,8 @@
 using System.Globalization;
+using Microsoft.Extensions.Options;
 using Steeple.Api.Contracts.Bookings;
+using Steeple.Api.Services.Flags;
+using Steeple.Api.Services.Payments;
 
 namespace Steeple.Api.Services.Bookings;
 /// <summary>
@@ -26,30 +29,42 @@ public sealed class BookingService : IBookingService
     private readonly IBookingRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IRatingService _ratings;
+    private readonly IPaymentService _payments;
+    private readonly IFeatureFlags _flags;
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly TimeSpan _chargeWindow;
+    private readonly string? _webBaseUrl;
 
     /// <summary>Creates the service from its ports.</summary>
     public BookingService(
         IBookingRepository repository,
         IVenueManagerRepository venueManagers,
         IRatingService ratings,
+        IPaymentService payments,
+        IFeatureFlags flags,
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
-        TimeProvider clock)
+        TimeProvider clock,
+        IOptions<PaymentsOptions> paymentsOptions,
+        IOptions<EmailOptions> emailOptions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
         _ratings = ratings;
+        _payments = payments;
+        _flags = flags;
         _notifications = notifications;
         _analytics = analytics;
         _clock = clock;
+        _chargeWindow = TimeSpan.FromHours(paymentsOptions.Value.ChargeWindowHours);
+        _webBaseUrl = emailOptions.Value.WebBaseUrl;
     }
 
     /// <inheritdoc />
     public async Task<BookingConfirmation> ConfirmFromApplicationAsync(
-        Application application, ScheduleSpec? schedule = null, CancellationToken ct = default)
+        Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
     {
         var room = application.Room ?? throw new InvalidOperationException("Application passed without its room.");
         var venue = room.Venue ?? throw new InvalidOperationException("Application passed without its venue.");
@@ -71,6 +86,15 @@ public sealed class BookingService : IBookingService
             spec.Frequency, spec.StartDate, endDate,
             spec.DaysOfWeek, spec.StartTime, spec.EndTime, venueZone);
 
+        // Price snapshot (docs/contracts/payments.md): column writes only — the actual charge is
+        // a post-commit kick by the caller, never a gateway call inside this transaction. Only
+        // written while payments are enabled, so bookings confirmed before the rails switched on
+        // stay offline forever (mode is frozen for the booking's life, payments.md §4).
+        var paid = _flags.IsEnabled(PaymentService.PaymentsFlag);
+        var pricePerOccurrence = paid
+            ? decimal.Round(room.PricePerHour * (decimal)(spec.EndTime - spec.StartTime).TotalHours, 2)
+            : (decimal?)null;
+
         var booking = new Booking
         {
             Id = Guid.NewGuid(),
@@ -84,19 +108,21 @@ public sealed class BookingService : IBookingService
             StartTime = spec.StartTime,
             EndTime = spec.EndTime,
             Status = BookingStatus.Confirmed,
+            PricePerOccurrence = pricePerOccurrence,
+            Currency = paid ? room.Currency : null,
             CreatedAtUtc = now,
         };
 
-        foreach (var instant in instants)
+        foreach (var slot in instants)
         {
             booking.Occurrences.Add(new BookingOccurrence
             {
                 Id = Guid.NewGuid(),
                 BookingId = booking.Id,
                 RoomId = room.Id,
-                StartUtc = instant.StartUtc,
-                EndUtc = instant.EndUtc,
-                LocalDate = instant.LocalDate,
+                StartUtc = slot.StartUtc,
+                EndUtc = slot.EndUtc,
+                LocalDate = slot.LocalDate,
                 Status = OccurrenceStatus.Scheduled,
             });
         }
@@ -125,10 +151,17 @@ public sealed class BookingService : IBookingService
                     ? System.Numerics.BitOperations.PopCount((uint)(int)(spec.DaysOfWeek ?? Weekdays.None))
                     : 0,
                 viaCounterOffer,
+                // Additive dimensions (payments rails): instant vs approved, and whether money moves.
+                instant,
+                isPaid = pricePerOccurrence is not null,
             },
             ct).ConfigureAwait(false);
 
-        return new BookingConfirmation(booking.ToDto(includeOccurrences: true, now), SlotTaken: false);
+        return new BookingConfirmation(
+            booking.ToDto(
+                includeOccurrences: true, now,
+                paymentStatuses: new Dictionary<Guid, PaymentStatus>(), chargeWindow: _chargeWindow),
+            SlotTaken: false);
     }
 
     /// <inheritdoc />
@@ -192,7 +225,9 @@ public sealed class BookingService : IBookingService
         var scopedBooking = booking!;
         var now = await SweepAsync([scopedBooking], ct).ConfigureAwait(false);
         var ratings = await _ratings.GetBookingOverviewsAsync([scopedBooking], callerId, now, ct).ConfigureAwait(false);
-        return BookingResult<BookingDto>.Ok(scopedBooking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(scopedBooking.Id)));
+        var payments = await GetPaymentStatusesAsync([scopedBooking], ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(scopedBooking.ToDto(
+            includeOccurrences: true, now, ratings.GetValueOrDefault(scopedBooking.Id), payments, _chargeWindow));
     }
 
     /// <inheritdoc />
@@ -227,9 +262,13 @@ public sealed class BookingService : IBookingService
         booking.CancelledAtUtc = now;
         booking.CancelReason = string.IsNullOrEmpty(reason) ? null : reason;
 
-        // Free every slot the other party still has time to re-let; occurrences already inside
-        // the notice window keep standing (they were owed notice and can be no-show marked).
-        var freeFrom = now + CancellationNoticeWindow;
+        // Asymmetric freeing (booking-modes.md refund table, superseding the symmetric window —
+        // SYSTEM_DESIGN §17): the guest's cancellation owes the host 48h notice, so occurrences
+        // inside the window keep standing (and their charges stand); a HOST cancel/rescind frees
+        // every upcoming occurrence immediately — the notice window binds only guests, and every
+        // freed occurrence's charge refunds in full (the Payments refund rule keys off Cancelled).
+        var cancelledByOrganizer = booking.OrganizerId == callerId;
+        var freeFrom = cancelledByOrganizer ? now + CancellationNoticeWindow : now;
         foreach (var occurrence in booking.Occurrences.Where(o => o.Status == OccurrenceStatus.Scheduled && o.StartUtc >= freeFrom))
         {
             occurrence.Status = OccurrenceStatus.Cancelled;
@@ -237,7 +276,11 @@ public sealed class BookingService : IBookingService
 
         await _repository.SaveAsync(ct).ConfigureAwait(false);
 
-        var cancelledByOrganizer = booking.OrganizerId == callerId;
+        // Post-commit: return any charges now sitting on cancelled occurrences (full refund —
+        // guest ≥48h cancels and host rescinds both reduce to this rule). The sweeper re-runs the
+        // same rule every pass, so a failure here only delays the refund, never loses it.
+        await _payments.RefundCancelledForBookingAsync(booking.Id, ct).ConfigureAwait(false);
+
         var email = BuildCancellationEmail(booking, cancelledByOrganizer);
         if (cancelledByOrganizer)
         {
@@ -258,8 +301,10 @@ public sealed class BookingService : IBookingService
             },
             ct).ConfigureAwait(false);
 
-        var ratings = await _ratings.GetBookingOverviewsAsync([booking], callerId, now, ct).ConfigureAwait(false);
-        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(booking.Id)));
+        var cancelRatings = await _ratings.GetBookingOverviewsAsync([booking], callerId, now, ct).ConfigureAwait(false);
+        var cancelPayments = await GetPaymentStatusesAsync([booking], ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(booking.ToDto(
+            includeOccurrences: true, now, cancelRatings.GetValueOrDefault(booking.Id), cancelPayments, _chargeWindow));
     }
 
     /// <inheritdoc />
@@ -312,7 +357,98 @@ public sealed class BookingService : IBookingService
             ct).ConfigureAwait(false);
 
         var ratings = await _ratings.GetBookingOverviewsAsync([booking], callerId, now, ct).ConfigureAwait(false);
-        return BookingResult<BookingDto>.Ok(booking.ToDto(includeOccurrences: true, now, ratings.GetValueOrDefault(booking.Id)));
+        var payments = await GetPaymentStatusesAsync([booking], ct).ConfigureAwait(false);
+        return BookingResult<BookingDto>.Ok(booking.ToDto(
+            includeOccurrences: true, now, ratings.GetValueOrDefault(booking.Id), payments, _chargeWindow));
+    }
+
+    /// <inheritdoc />
+    public async Task CancelOccurrencesForPaymentFailureAsync(
+        Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default)
+    {
+        var booking = await _repository.GetAsync(bookingId, ct).ConfigureAwait(false);
+        if (booking is null || booking.Status != BookingStatus.Confirmed)
+        {
+            return; // already cancelled/completed — nothing left for the ladder to free
+        }
+
+        var now = _clock.GetUtcNow();
+        var targets = booking.Occurrences
+            .Where(o => o.Status == OccurrenceStatus.Scheduled && occurrenceIds.Contains(o.Id))
+            .ToList();
+        if (targets.Count == 0 && !cancelRemainingTerm)
+        {
+            return;
+        }
+
+        foreach (var occurrence in targets)
+        {
+            occurrence.Status = OccurrenceStatus.Cancelled;
+        }
+
+        if (cancelRemainingTerm)
+        {
+            // Second consecutive payment-failure cancel (payments.md §5): the term itself ends.
+            // Every remaining scheduled occurrence frees — they're unpaid or refunding anyway.
+            booking.Status = BookingStatus.Cancelled;
+            booking.CancelledBy = null; // system, not a party
+            booking.CancelledAtUtc = now;
+            booking.CancelReason = "Payments for this booking repeatedly failed.";
+            foreach (var occurrence in booking.Occurrences.Where(o => o.Status == OccurrenceStatus.Scheduled))
+            {
+                occurrence.Status = OccurrenceStatus.Cancelled;
+            }
+        }
+
+        await _repository.SaveAsync(ct).ConfigureAwait(false);
+
+        var dates = targets.Count > 0
+            ? string.Join(", ", targets.OrderBy(o => o.StartUtc).Select(o => FormatDate(o.LocalDate)))
+            : FormatDate(booking.EndDate);
+        var room = booking.Room!;
+        var venue = room.Venue!;
+        var deepLink = $"/bookings/{booking.Id}";
+        var termLine = cancelRemainingTerm
+            ? "Because payments failed twice in a row, the rest of the booking has been cancelled as well.\n\n"
+            : "The rest of the booking stands.\n\n";
+
+        await NotifyOrganizerAsync(
+            booking,
+            NotificationType.BookingCancelled,
+            new EmailContent(
+                Subject: $"Session cancelled — payment didn't go through for {room.Name}",
+                TextBody:
+                    $"We couldn't collect payment for {room.Name} at {venue.Name} ({dates}), " +
+                    "so that session has been cancelled and the time released.\n\n" +
+                    termLine.TrimEnd() + "\n\n" +
+                    "You can check your payment method and book again at any time." +
+                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+            ct).ConfigureAwait(false);
+
+        await NotifyManagersAsync(
+            booking,
+            NotificationType.BookingCancelled,
+            new EmailContent(
+                Subject: $"A booking of {room.Name} was cancelled (payment failure)",
+                TextBody:
+                    $"{booking.Organizer!.DisplayName}'s booking of {room.Name} ({dates}) was cancelled " +
+                    "because their payment didn't go through. The time is open to new requests.\n\n" +
+                    (cancelRemainingTerm ? "The remaining term was cancelled as well." : "The rest of the booking stands.") +
+                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+            ct).ConfigureAwait(false);
+
+        await TrackSafelyAsync(
+            "booking_cancelled",
+            new
+            {
+                bookingId = booking.Id,
+                type = FlagEnumExtensions.ToCamelCaseToken(booking.Type.ToString()),
+                cancelledBy = "system",
+                reason = "payment_failure",
+                occurrenceCount = targets.Count,
+                cancelRemainingTerm,
+            },
+            ct).ConfigureAwait(false);
     }
 
     // ----- Party scoping & lazy sweeps -----------------------------------------------------------
@@ -325,10 +461,16 @@ public sealed class BookingService : IBookingService
         CancellationToken ct)
     {
         var ratings = await _ratings.GetBookingOverviewsAsync(bookings, callerId, now, ct).ConfigureAwait(false);
+        var payments = await GetPaymentStatusesAsync(bookings, ct).ConfigureAwait(false);
         return bookings
-            .Select(b => b.ToDto(includeOccurrences, now, ratings.GetValueOrDefault(b.Id)))
+            .Select(b => b.ToDto(includeOccurrences, now, ratings.GetValueOrDefault(b.Id), payments, _chargeWindow))
             .ToList();
     }
+
+    /// <summary>Occurrence payment states for the page's bookings (Payments-owned read).</summary>
+    private Task<IReadOnlyDictionary<Guid, PaymentStatus>> GetPaymentStatusesAsync(
+        IReadOnlyList<Booking> bookings, CancellationToken ct) =>
+        _payments.GetOccurrenceStatusesAsync(bookings.Select(b => b.Id).ToList(), ct);
 
     /// <summary>
     /// Loads the booking and verifies the caller is a party (organizer or a manager of the room's
@@ -484,12 +626,14 @@ public sealed class BookingService : IBookingService
         deepLink = $"/bookings/{booking.Id}",
     };
 
-    private static EmailContent BuildCancellationEmail(Booking booking, bool cancelledByOrganizer)
+    private EmailContent BuildCancellationEmail(Booking booking, bool cancelledByOrganizer)
     {
         var room = booking.Room!;
         var venue = room.Venue!;
         var reasonLine = booking.CancelReason is { Length: > 0 } r ? $"They said: \"{r}\"\n\n" : "";
 
+        // Asymmetric copy matches the asymmetric rule: a guest cancel leaves in-window sessions
+        // standing (charges stand too); a host cancel frees everything and refunds everything.
         return cancelledByOrganizer
             ? new EmailContent(
                 Subject: $"{booking.Organizer!.DisplayName} cancelled their booking of {room.Name}",
@@ -504,8 +648,10 @@ public sealed class BookingService : IBookingService
                 TextBody:
                     $"{venue.Name} has cancelled your booking of {room.Name} ({DescribeSchedule(booking)}).\n\n" +
                     reasonLine +
-                    "Anything already within the 48-hour notice window still stands. " +
-                    "There are more spaces nearby on Steeple — the details are in your inbox.");
+                    "All upcoming sessions are cancelled, and anything you've already paid for them " +
+                    "will be refunded in full automatically. " +
+                    "There are more spaces nearby on Steeple — the details are in your inbox." +
+                    EmailLinks.CtaLine(_webBaseUrl, $"/bookings/{booking.Id}"));
     }
 
     // ----- Copy helpers (email text only — clients humanize wire tokens themselves) --------------

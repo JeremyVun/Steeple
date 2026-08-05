@@ -30,7 +30,8 @@ public static class ManageMappings
             Rooms: venue.Rooms
                 .OrderBy(r => r.Name)
                 .Select(r => r.ToManagedSummaryDto())
-                .ToList());
+                .ToList(),
+            BookingMode: FlagEnumExtensions.ToCamelCaseToken(venue.BookingMode.ToString()));
 
     /// <summary>Maps a room to its row in the venue editor's room list.</summary>
     public static ManagedRoomSummaryDto ToManagedSummaryDto(this Room room) =>

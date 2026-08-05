@@ -48,7 +48,9 @@ public static class ApplicationMappings
             // The latest non-superseded counter rides the detail read for both parties (lists omit it,
             // matching the thread/conflicts). Superseded rows stay only as history.
             CounterOffer: includeThread ? application.LatestCounterOfferDto() : null,
-            OrganizationName: application.OrganizationName);
+            OrganizationName: application.OrganizationName,
+            // Display cache on the loaded organizer — the host-visible trust signal.
+            HasPaymentMethod: organizer.PaymentMethodSetAtUtc is not null);
     }
 
     /// <summary>

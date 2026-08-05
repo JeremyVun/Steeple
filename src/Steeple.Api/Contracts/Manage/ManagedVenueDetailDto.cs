@@ -21,4 +21,6 @@ public record ManagedVenueDetailDto(
     bool IsIdentityVerified,
     string VerificationStatus,
     DateTimeOffset? VerificationRequestedAtUtc,
-    IReadOnlyList<ManagedRoomSummaryDto> Rooms);
+    IReadOnlyList<ManagedRoomSummaryDto> Rooms,
+    // Additive 2026-08-05 (booking-modes): the host's stored choice, "instant" | "manual".
+    string BookingMode = "instant");
