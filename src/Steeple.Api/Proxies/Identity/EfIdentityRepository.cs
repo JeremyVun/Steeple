@@ -133,6 +133,13 @@ public sealed class EfIdentityRepository : IIdentityRepository
         user.DeletedAtUtc = now;
         _db.UserLogins.RemoveRange(user.Logins);
 
+        // Payment identity is PII too: the provider customer id and the card display data
+        // (brand/last4) must not survive the account they identify.
+        user.PaymentCustomerId = null;
+        user.PaymentMethodBrand = null;
+        user.PaymentMethodLast4 = null;
+        user.PaymentMethodSetAtUtc = null;
+
         await _db.RefreshTokens
             .Where(t => t.UserId == userId && t.RevokedAtUtc == null)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAtUtc, now), ct)

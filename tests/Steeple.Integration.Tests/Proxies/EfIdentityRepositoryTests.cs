@@ -244,6 +244,10 @@ public class EfIdentityRepositoryTests
     {
         await using var seedDb = CreateContext();
         var user = NewUser("Alex Person", "alex@example.com");
+        user.PaymentCustomerId = "cus_mock_123";
+        user.PaymentMethodBrand = "visa";
+        user.PaymentMethodLast4 = "4242";
+        user.PaymentMethodSetAtUtc = FixedNow;
         var login = NewLogin(user.Id);
         var token = NewRefreshToken(user.Id, Guid.NewGuid());
         var agreement = new UserAgreement
@@ -271,6 +275,10 @@ public class EfIdentityRepositoryTests
         Assert.NotEqual("Alex Person", reloadedUser.DisplayName);
         Assert.Null(reloadedUser.Email);
         Assert.Equal(FixedNow, reloadedUser.DeletedAtUtc);
+        Assert.Null(reloadedUser.PaymentCustomerId);
+        Assert.Null(reloadedUser.PaymentMethodBrand);
+        Assert.Null(reloadedUser.PaymentMethodLast4);
+        Assert.Null(reloadedUser.PaymentMethodSetAtUtc);
 
         Assert.Empty(await readDb.UserLogins.Where(l => l.UserId == user.Id).ToListAsync());
 
