@@ -386,21 +386,12 @@ await wait(700);
 check('clicking the page behind the inbox puts it down', (await state('view')) === 'village', String(await state('view')));
 check('...and keeps the lens it was read in', (await state('mode')) === 'guest', String(await state('mode')));
 
-// The sheet's own controls, the top line and the porch are not "away". Driven
-// on the inbox, which is a sheet of the same kind and which this browser can
-// actually open: the desk needs a person who keeps a venue (D4), and minting one
-// is fixture work this suite does not do — see the note before §12.
-await ready(`${url}#/journal`);
-const porchSwitch = await box('.porchswitch');
-await page.mouse.click(porchSwitch.cx, porchSwitch.cy);
-await wait(700);
-check('the porch switch still works over an open sheet', (await state('view')) === 'village' && (await state('mode')) === 'guest', `${await state('view')} / ${await state('mode')}`);
-
-await ready(`${url}#/journal`);
-const insideSheet = await box('.journal');
-await page.mouse.click(insideSheet.cx, insideSheet.cy);
-await wait(500);
-check('a click inside the sheet is the sheet\'s own', (await state('view')) === 'journal', String(await state('view')));
+// ⚠ Owed, with §12: "the porch switch still works over an open desk" and "a
+// click inside the desk is the desk's own" were desk-specific, and there is no
+// desk for a browser that keeps no venue (D4). Driving them on the inbox instead
+// does not stand in for them — the two sheets sit in different modes, and the
+// substitution asserted the wrong thing. They come back with the shared host
+// fixture described before §12, not before.
 
 // ── 12. board ↔ ledger switches where it stands ────────────────────────────
 // The switch used to reload the page with a new query string, which cost two

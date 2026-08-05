@@ -122,9 +122,18 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 >    before sign-in (and Verify is the gate), or writing a listing offline is not a promise
 >    the product makes any more. Same question makes the signed-out half of the listing
 >    flow's **Verify step unreachable** in the product's own order (`host-input-test.mjs` §2).
-> 4. `input-test.mjs` §12 (board ↔ ledger) is **skipped, not passing**: it needs a host
->    fixture. The right fix is to lift `correspondence-test.mjs:mintVenue` into a shared
->    `tools/fixtures.mjs` and let any suite ask for a host who keeps a venue.
+> 4. `input-test.mjs` §12 (board ↔ ledger) is **skipped, not passing**, and two desk-specific
+>    plumbing checks beside it ("the porch switch still works over an open desk", "a click
+>    inside the desk is the desk's own") are **removed, owed**: driving them on the inbox
+>    instead was tried and asserts the wrong thing — the two sheets sit in different modes.
+>    All three need a host fixture. The right fix is to lift
+>    `correspondence-test.mjs:mintVenue` into a shared `tools/fixtures.mjs` and let any suite
+>    ask for a host who keeps a venue; that one change unblocks this, `host-test.mjs` and
+>    `wave2-test.mjs` together, and is the highest-leverage next move on suite debt.
+> 5. `input-test.mjs` also fails 7 checks in its **opening** section (the roll/arrival beats
+>    and three "the canvas is topmost" hit tests). These are map-first drift that predates
+>    this phase — the same family as `guest-test.mjs`'s documented known-stale 3 — and were
+>    not touched here.
 >
 > **Re-baselined and green:** `account-test.mjs` 47/47 · `host-input-test.mjs` 61/61 ·
 > `guest-test.mjs` (§§7–10b removed — their subject moved to `correspondence-test.mjs`; the
