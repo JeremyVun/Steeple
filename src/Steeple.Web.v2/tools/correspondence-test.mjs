@@ -573,6 +573,18 @@ const hostPage = await openPage('host');
 await boot(hostPage);
 await signInPage(hostPage, `host-manual-${stamp}@example.org`, 'Ruth Callaghan');
 await hostPage.evaluate(() => window.__steeple.setMode('host'));
+// The desk is Bookings · Requests · Spaces now, and it opens on Bookings —
+// under instant-book-by-default most hosts never answer a request at all
+// (build_plan Phase 2.5). This venue is manual, so it has a Requests tab; the
+// pile of asks is behind it rather than in front.
+await until(hostPage, () => document.querySelectorAll('.desk .tab').length === 3, null, 30000, 'the desk drew its tabs');
+const deskTabs = await hostPage.$$eval('.desk .tab', (nodes) => nodes.map((n) => n.dataset.tab));
+check(
+  'a manual venue’s desk carries Bookings, Requests and Spaces',
+  deskTabs.join(',') === 'bookings,letters,spaces',
+  JSON.stringify(deskTabs)
+);
+await press(hostPage, '.desk .tab[data-tab="letters"]');
 await until(hostPage, () => document.querySelectorAll('.desk .card, .desk .row').length === 1);
 const deskVenue = await hostPage.evaluate(() => window.__steeple.state.venueId);
 eq('the desk opened on the venue this person manages', deskVenue, manual.venueSlug);

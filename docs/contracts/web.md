@@ -34,16 +34,15 @@ and behind a stripped proxy prefix.
 | `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
 | `createSession`, `refreshSession`, `getMe`, `deleteSession`, `deleteAllSessions` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
-| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getManagedVenues`, `getManagedVenue`, `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments` | `correspondence.js` only (the seam every letter/desk/decision goes through) |
+| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
 | `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 
 **Defined but never called** (the integration to-do list): `getManagedRoom`,
-`getRoomAvailabilityRules`, `getMyBookings`, `getManagedBookings`.
+`getRoomAvailabilityRules`.
 
-**Not present in `api.js` at all** (no client function exists yet): notifications
-(`GET /me/notifications`, `/read`), booking writes (cancel, no-show), ratings, analytics ingest
-(`POST /events`), `POST /me/agreements`, `POST /me/devices`, venue payout onboarding
-(`…/payments/onboarding[/mock-complete]`, `GET …/payments`).
+**Not present in `api.js` at all** (no client function exists yet): occurrence no-show
+(`POST /occurrences/{id}/no-show`), ratings, analytics ingest (`POST /events`),
+`POST /me/agreements`, `POST /me/devices`.
 
 A request whose body is `undefined` carries no body and declares no content type — the
 revocations below are the only such calls; `null` still means the empty JSON document that
@@ -86,7 +85,17 @@ answer to `store.js`'s mirror, and returns a verdict — never a guess.
 - Guest writes: `sendMessage`, `withdraw`, `respondToCounter(id, accept)`.
 - Host writes: `decide(id, 'approve'|'decline', message?)`, `ask` (= `sendMessage`),
   `counterOffer(id, schedule, message)`.
-- Payments: `paymentState()`, `startCardSetup()`, `saveMockCard({clientSecret, brand, last4})`.
+- Payments (guest): `paymentState()`, `startCardSetup()`, `saveMockCard({clientSecret, brand, last4})`.
+- Bookings (Phase 2.5, 2026-08-05): `openBooking(id)` — the **detail** read —
+  `refreshManagedBookings({limit})`, `refreshMyBookings({limit})`, `cancelBooking(id, reason?)`.
+  **A booking list read names bookings and says nothing about the inside of one:** the API sends
+  an empty occurrence set on lists by design, so every dated / priced / charge-state fact comes
+  from that booking's own detail read. Both refreshers therefore mirror the page and then re-read
+  each booking in full, bounded by `limit`. Same rule, same reason as the counter-offer eraser
+  below.
+- Payouts (host): `venuePayments(venueId)`, `startPayouts(venueId)`, `finishMockPayouts(venueId)`.
+- Notifications: `notifications({pageSize})`, `markNotificationsRead(ids)`.
+- Venue settings: `setBookingMode(venueId, 'instant'|'manual')` (`PATCH /manage/venues/{id}`).
 - `toWireSchedule(schedule)` and `problemText(error)` are shared with `ui/guest/send.js`.
 
 **The failure vocabulary is the contract.** Every verdict is `{ok:true, value}` or
@@ -131,9 +140,11 @@ server's. Clearing localStorage mid-flow costs a reload, never a fact.
 - `mirrorApplications(dtos, {scope})` — a page as the whole of a scope: anything matching
   `scope` that the page did not carry is dropped, which is how a withdrawal made on another
   device leaves this browser.
-- `mirrorBooking(dto)` — the booking and its occurrences. `payment {mode,
-  perOccurrenceAmount, currency, nextChargeAtUtc}` and each occurrence's `paymentStatus`
-  **pass through untouched** even though nothing renders them yet.
+- `mirrorBooking(dto)` — the booking and its occurrences, plus the names it is printed under
+  (`roomName`, `venueName`; a host-listed room is in no bundled scenery). `payment {mode,
+  perOccurrenceAmount, currency, nextChargeAtUtc}` and each occurrence's `paymentStatus` pass
+  through untouched, and **only a detail read may replace an occurrence set**. Read back with
+  `getBooking(id)`, `venueBookings(venueSlug)`, `guestBookings()`.
 - `mirrorManagedVenues(venues)` — `GET /manage/venues` + details, held under steeple's slug
   with its id as `remoteId`; a venue the listing flow placed under a guessed slug before
   steeple answered is replaced rather than duplicated.
@@ -208,11 +219,42 @@ it is contained by construction: its letters are written under the seed's own id
     page never sees a network error, so the plainest outage got the vaguest sentence.
     **504 is excluded on purpose:** a gateway timeout may well have landed, so it must not
     be promised away; the idempotency key is what makes retrying it safe.
+- **Real (Phase 2.5, 2026-08-05):** the money, on both sides.
+  - **The desk is `Bookings · Requests · Spaces`** and opens on **Bookings** — confirmed
+    bookings with dates still to come, each with the group, the schedule, the frozen
+    per-session price, the next charge, every date's own `paymentStatus`, and the host's
+    cancel behind a two-press warning that says what it costs (every remaining date freed,
+    everything charged refunded in full). **Requests renders only where requests exist:** a
+    venue in `manual` mode, or one that has just left manual with answers still owed — an
+    instant venue's desk has no Requests tab at all. `?desk=board|ledger` is offered on the
+    Requests tab only, because that is the only pile it sets.
+  - **The guest's opened letter carries the booking's payment truth** from the detail read: the
+    price snapshot, `nextChargeAtUtc`, what has been paid, and per-date charge words. A
+    `failed` date prints steeple's own ladder (retried; released 24h before the session if it
+    cannot complete) with a way to the card step.
+  - **The card on file is reachable outside a send** — `ui/cardPanel.js` wraps the same step
+    (`ui/guest/payment.js`, now with a replace mode and a `Visa ···· 4242` line) and is opened
+    from the account card on the shelf and from that failure ladder. Still brand + last4 only,
+    and **no field a card number could travel in**.
+  - **Payouts:** once a venue holds a priced booking and `GET …/payments` says payouts are off,
+    the desk prompts once ("Set up payouts to receive $X"). It is a prompt, never a gate — in
+    the mock era payout state gates nothing. `ui/host/payouts.js` renders the mock's own KYC
+    stand-in (the returned `url` is deliberately not navigable) and finishes through
+    `…/onboarding/mock-complete`; the connected state says plainly that payments are simulated.
+  - **Booking mode** is a two-option setting on the desk's Spaces tab (`PATCH /manage/venues/{id}`),
+    one honest sentence each, scoped in copy to new asks only.
+  - **Notifications are ambient, not a tab** (`ui/notifications.js`). `GET /me/notifications` is
+    read on sign-in and on arriving at the product surface; the newest unread of
+    `bookingReminder | paymentFailed | occurrenceRefunded | bookingReceived` is shown once as a
+    `.slip` — with the same deep-link follower an email CTA uses (`followDeepLink`) — and marked
+    read. The inbox keeps the last few as quiet lines (`.jnotes`). Losing a slip loses a
+    reminder, never a fact: every fact it names lives on the letter or the desk.
+  - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (63/63).
 - **Demo:** dev provider only, `turnstileToken` hardcoded `null` (D7); `organizationName` is
   sent as `null` — the group beside a name is whatever came back on a request, and the input
   that would set it belongs to Phase 4; the card step is deliberately plain and the mock
-  gateway's own (`saveMockCard` retires at Stripe-time); nothing renders a booking's payment
-  fields, the host's rescind lever, or the notifications inbox yet.
+  gateway's own (`saveMockCard` retires at Stripe-time), and the payout screen is the mock's
+  stand-in for hosted KYC.
 
 ⚠ Still unbuilt: D7 (Turnstile, agreements, real providers), D8's client half (client-sent
 idempotency keys on manage creates, longer write timeouts), D9 (CSP, `window.__steeple`
@@ -239,7 +281,18 @@ gated to dev).
 - Sign-out's revocation uses the access token it was holding. A token already expired means
   the `DELETE` answers 401 and the refresh-token family outlives the sign-out (until its own
   expiry); the local half is unconditional either way.
-- `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`.
+- `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`, and
+  the ambient notification surface borrows it.
+- **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
+  guest.css loads after host.css. The desk's booking-mode radios are `.mode*` for that reason —
+  the first version reused `.choice` and was silently restyled into an unreadable block.
+- The desk's Spaces tab reads open hours from the **local** store (`hoursSummary` ←
+  `openHoursFor`), so a room whose hours only exist at steeple reads "No open hours set" in red.
+  Pre-existing, and now visible beside real bookings; the fix is a managed-availability read.
+- `ui/guest/letter.js` prints an hourly price only when this browser has a listing for the room.
+  A missing figure means *unknown*, never free (free listings were removed 2026-07-07) — and
+  `priceParts` answers "Free" to a price it was not given, which is how a host-listed room's
+  letterhead used to say Free above a $40-a-session booking.
 
 ## Harness truths (`tools/*.mjs`)
 
@@ -267,6 +320,16 @@ gated to dev).
   every state read back from the database. It mints its own venues per run and uses `psql`
   for exactly one thing — the operator's approve on a new host's first listing, which has no
   API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets.
+- `tools/payments-ui-test.mjs` is Phase 2.5's: the desk's IA per booking mode, the guest's
+  booking view (including a `0002`-card failure — the mock gateway's decline card), the payout
+  prompt through mock onboarding to connected, the mode toggle changing the public apply UX,
+  the rescind lever with its refund proven in the `payments` table, and a seeded
+  `bookingReminder` rendering as the slip. Same env vars; `STEEPLE_SHOTS=<dir>` additionally
+  photographs each surface on the way past (a photograph proves nothing about interactivity —
+  it is for looking at what was built).
+- **A slip is not "on screen" because it is not `hidden`.** It fades in, and headless GL runs
+  app-time ~6× slow, so a check that only asks whether it exists passes on something nobody
+  could have read. Wait on computed opacity.
 - Builds: `npm run dev` (vite :5173) · `npm run build` · `npm run build:flat`
   (`VITE_WORLD=off`, ~310kB vs ~988kB — three.js compiled out, no query can ask for a world
   that was never shipped).
