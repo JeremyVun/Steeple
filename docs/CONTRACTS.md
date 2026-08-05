@@ -19,6 +19,7 @@
 | §7 Analytics events | `contracts/analytics.md` | Ingest endpoint + the full event taxonomy |
 | §8 Feature flags service | `contracts/infra.md` | Flags service + the client flags proxy |
 | §9 Non-API integration contracts | `contracts/infra.md` | Edge auth, sub-path hosting, deep links, push payload |
+| §10 Payments (new 2026-08-05) | `contracts/payments.md` | Method-on-file, 402 apply gate, charge timing + failure ladder, refunds, payout onboarding |
 
 Contracts that were never in this file but belong to the same index:
 `contracts/api-ports.md` (API module map + port→adapter table), `contracts/persistence.md`

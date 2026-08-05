@@ -26,12 +26,26 @@ clients)*: array of weekday tokens (`"sunday"`…`"saturday"` — `conventions.m
 
 → `201 Application` (an `Idempotency-Key` replay returns the original as `200`). Errors:
 `400 invalid_application` (bad token / malformed or unbounded schedule / past start date),
+`402 payment_method_required` *(additive 2026-08-05, while `payments.enabled` — save a method
+via `payments.md` first; applies to every room, instant or manual)*,
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer
 identically — no existence leak), `404 geofence_rejected` (reserved, defense in depth),
 `409 schedule_unavailable` (any occurrence outside open hours / on a blackout / already booked —
 body carries the per-date conflict list, `manage.md` "Guest availability reads"; skipped for
-rooms with no availability rules), `429 rate_limited` (per-account `apply` policy, shared with
-messages).
+rooms with no availability rules), `409 slot_taken` *(instant venues only, below)*,
+`429 rate_limited` (per-account `apply` policy, shared with messages).
+
+**Instant book ✅ *(2026-08-05 — `docs/backlog/booking-modes.md`; behind `payments.enabled`)*:**
+when the room's venue is in `instant` mode (`RoomDetail.bookingMode`, `discovery.md`), the
+submit **is the booking transaction** — the same one-SaveChanges machinery approval uses, under
+the same exclusion constraint; first valid request wins. The `201` response is the application
+with `status: "approved"` and `bookingId` set; losing a race answers `409 slot_taken` and
+**nothing persists** (no application row — unlike approval's auto-decline, there was nothing to
+decline). Post-commit, the first occurrence charges (`payments.md`); the organizer gets the
+booking-confirmed notification/email (`applicationApproved`, `deepLink: /bookings/{id}`) and
+the venue's managers get a `bookingReceived` notice. The host's lever is **rescind** = the
+normal booking cancel, which refunds in full any time. `manual` venues keep the entire
+request→approve flow below unchanged; counter-offers exist only in manual mode.
 
 `Application` ✅: `{ id, roomId, roomName, venueName, venueSlug, roomSlug,
 organizer{id, displayName, ratingSummary?{averageStars, ratingCount, noShowCount,
@@ -39,7 +53,9 @@ completedBookings}}, activityType, groupSize,
 schedule{…}, intentText, organizationName? /* additive 2026-07-08: "Who's asking" */,
 status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
 bookingId? /* set once approved — the booking it created */, messageCount,
-messages: [{id, senderId, body, sentAtUtc}] }`
+messages: [{id, senderId, body, sentAtUtc}],
+hasPaymentMethod /* additive 2026-08-05: the organizer has a card on file — host-visible
+trust signal; always true for applications submitted behind the 402 gate */ }`
 `status`: `pending | needsInfo | counterOffered | approved | declined | withdrawn | expired`.
 List endpoints return `messages: []` (thread stays behind the detail fetch); `messageCount` is
 always set. Undecided applications auto-expire 14 days after submission (lazy sweep on read —
@@ -91,9 +107,15 @@ digest (host-only) — specified with the availability engine in `manage.md`.
 `Booking` ✅: `{ id, applicationId, roomId, roomName, venueName, venueSlug, roomSlug,
 venueTimezone, organizerId, organizerName, type: "oneOff"|"recurring", startDate, endDate,
 schedule{…}, status: "confirmed"|"completed"|"cancelled", createdAtUtc,
-cancelledBy?, cancelledAtUtc?, cancelReason?,
+cancelledBy? /* null on a cancelled booking = system (payment-failure term cancel) */,
+cancelledAtUtc?, cancelReason?,
 nextOccurrence? /* the next live occurrence — set on lists too */,
-occurrences: [{id, startUtc, endUtc, localDate, status: "scheduled"|"occurred"|"noShow"|"cancelled", noShowMarkedBy?}],
+occurrences: [{id, startUtc, endUtc, localDate, status: "scheduled"|"occurred"|"noShow"|"cancelled", noShowMarkedBy?,
+  paymentStatus? /* additive 2026-08-05: "pending"|"requiresAction"|"succeeded"|"failed"|"refunded"|"disputed";
+  absent while never charged and on offline bookings */}],
+payment /* additive 2026-08-05 (payments.md): {mode: "inApp"|"offline", perOccurrenceAmount?,
+  currency?, nextChargeAtUtc? /* when the next unpaid occurrence charges; null when nothing
+  remains or offline */} */,
 ratings?{byOrganizer?{stars, comment?, createdAtUtc}, byVenue?{stars, comment?, createdAtUtc}, canRate, rateByUtc?} }`
 List endpoints return `occurrences: []` (the set stays behind the detail fetch);
 `nextOccurrence` is always populated where one exists. `localDate` and `schedule` are
@@ -105,9 +127,13 @@ no background worker.
   non-managers) · `GET /api/v1/bookings/{id}` ✅ (party-scoped; others 404) — pagination per
   `conventions.md`, filter by `status`.
 - `POST /api/v1/bookings/{id}/cancel` ✅ — `{reason?}` (≤500 chars), either party.
-  **Notice window (48h):** occurrences starting beyond it are cancelled and freed;
-  nearer ones still stand (and remain no-show markable). Other party notified.
-  Errors: `409 invalid_state` (not confirmed), `400 invalid_booking`, `429 rate_limited`.
+  **Asymmetric since 2026-08-05 (booking-modes.md refund table — SYSTEM_DESIGN §17):**
+  a **guest** cancel frees occurrences beyond the 48h notice window (nearer ones stand,
+  their charges stand, and they remain no-show markable); a **host** cancel/rescind frees
+  **every** scheduled occurrence immediately — the window binds only guests — and every
+  charge on a freed occurrence refunds in full automatically (`payments.md`). Other party
+  notified. Errors: `409 invalid_state` (not confirmed), `400 invalid_booking`,
+  `429 rate_limited`.
 - `POST /api/v1/occurrences/{id}/no-show` ✅ — no body; either party marks the other on a
   past, non-cancelled occurrence (feeds ratings, Phase 6). `409 invalid_state` when future,
   cancelled, or already marked.
@@ -124,7 +150,11 @@ no background worker.
 `after` is the opaque `nextCursor` from the previous page (unreadable cursors read from the top).
 `type` ∈ `applicationReceived | applicationMessage | applicationApproved |
 applicationDeclined | bookingCancelled | renewalDue | ratingReceived | listingApproved |
-listingDeclined` (additive).
+listingDeclined | paymentFailed | occurrenceRefunded | bookingReceived` (additive; the last
+three are the 2026-08-05 payments set — `paymentFailed`/`occurrenceRefunded` go to the
+organizer, `bookingReceived` is the host-side instant-booking notice; payloads carry the
+booking display fields + `bookingId`, `occurrenceId?`, `amount?`, `currency?`,
+`deepLink: "/bookings/{id}"`).
 `payload` for the application types: `{applicationId, roomId, roomName, venueName, venueSlug,
 roomSlug, organizerName, status, deepLink}` (deepLink = the canonical path registry in
 `infra.md`); for `bookingCancelled`/`renewalDue`: the same display fields with `bookingId` and

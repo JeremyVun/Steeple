@@ -1,7 +1,17 @@
 # Steeple — Payments design (inbound & outbound)
 
-> **Status:** Design adopted 2026-07-04; **build gated on the Phase 7 trigger** — real
-> money observably moving offline through the platform (`phase-7-growth-seams.md`).
+> **Status:** Design adopted 2026-07-04; **rails built 2026-08-05 with a MOCK gateway**
+> (`docs/contracts/payments.md` is the as-built wire truth): schema (013/014), the Payments
+> module (`IPaymentGateway` port + `MockPaymentGateway`), method-on-file, the apply gate,
+> per-occurrence charging + the failure ladder, refunds, the `PaymentSweeper`, and the
+> payout-onboarding stub — all behind the `payments.enabled` flag. The **Stripe adapter,
+> webhooks, and the §11 legal/policy work stay gated on the Phase 7 trigger**; swapping the
+> mock for `StripePaymentGateway` behind the same port is the remaining build.
+> **⚠ Charge-timing supersession (2026-08-05):** §5's charge-at-T−48h-only rule is
+> **superseded in part** by `booking-modes.md`: the FIRST occurrence (and therefore the whole
+> of a one-off) charges **at confirmation**; later occurrences keep the T−48h rule. §6's
+> symmetric-window row for provider cancels was also superseded there (host cancel frees +
+> refunds everything, any time). Both recorded in SYSTEM_DESIGN §17.
 > Expands SYSTEM_DESIGN §15 (which stays the one-paragraph seam summary) into the full
 > design: provider onboarding & payouts (outbound), organizer charging (inbound),
 > **recurring payments for recurring bookings**, and the **refund & cancellation
@@ -90,6 +100,12 @@ because it's precisely the "managed vendors only where they remove liability" ca
    payment mode they were approved with (mode is snapshotted on the booking, §7).
 
 ## 5. Inbound — when money moves (the core design)
+
+> **⚠ Superseded in part (2026-08-05, `booking-modes.md`):** the unified at-T−48h rule below
+> now applies only to the *second and later* occurrences of a recurring booking. The first
+> occurrence — and the whole of a one-off — charges **at confirmation** (immediate,
+> ticket-like commitment). The refund table shifts with it: a charged occurrence a guest
+> cancels ≥48h out refunds in full; a host cancel refunds everything charged, any time.
 
 ### Card on file at apply; charge per occurrence at commitment
 
