@@ -21,7 +21,7 @@
 //     waiting for an answer.
 
 import * as api from '../../data/api.js';
-import { problemText, toWireSchedule } from '../../data/correspondence.js';
+import { neverArrived, problemText, toWireSchedule } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { mirrorApplication, mirrorBooking } from '../../data/store.js';
 
@@ -73,7 +73,7 @@ export async function sendRequest(draft) {
       if (roomId) draft.remoteRoomId = roomId;
     }
   } catch (error) {
-    return { ok: false, problem: problemText(error), offline: error?.status === 0 };
+    return { ok: false, problem: problemText(error), offline: neverArrived(error?.status) };
   }
   if (!roomId) {
     return {
@@ -121,7 +121,7 @@ export async function sendRequest(draft) {
       ok: false,
       problem: problemText(error),
       signedOut: error?.status === 401,
-      offline: error?.status === 0,
+      offline: neverArrived(error?.status),
     };
   }
 }

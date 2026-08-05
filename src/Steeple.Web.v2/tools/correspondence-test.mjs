@@ -19,6 +19,11 @@
 //   · the guest's inbox is `GET /me/applications` and nobody else's;
 //   · a decision email lands in the dev mailbox with a CTA that opens the letter.
 //
+// And §7, the honest-offline path (D5): the wire is cut under a finished
+// request, and nothing may be filed, nothing lost, and the retry must carry the
+// same idempotency key — a second key is a second booking request for a send
+// the guest made once.
+//
 // Needs: the API (STEEPLE_API, default http://localhost:5200/api/v1) with
 // Auth:DevLoginEnabled and payments.enabled, this app on the given origin with
 // its proxy pointed at that same API, and `psql` reachable at the dev database.
@@ -749,6 +754,152 @@ eq('one guest never sees another’s request', strangerSees, false);
 
 const forbidden = await call('GET', `/applications/${application.id}`, { token: instantToken });
 eq('and steeple refuses it too', forbidden.status, 404);
+
+// ── 7. the send that could not get through (D5) ──────────────────────────────
+//
+// The honest-offline path. The wire is cut under a finished request, the send
+// is pressed, and the only acceptable outcome is: nothing filed, nothing lost,
+// a sentence that says so, and a retry that files exactly one.
+//
+// The cut is made in the browser, not by stopping the API: an aborted request
+// is precisely what an unreachable steeple looks like from inside the page
+// (`status === 0`), and it is repeatable on any machine. What it also buys is
+// the proof that matters most here — puppeteer sees the headers of the attempt
+// that never landed, so the `Idempotency-Key` of the failed send can be
+// compared with the one the retry carries. Losing it between the two is the one
+// bug this section exists to catch: a second key means a second request filed
+// against a venue for a send the guest only ever made once.
+
+console.log('\n7 · the send that could not get through');
+const offGuest = { email: `guest-off-${stamp}@example.org`, name: 'Priya Nandal' };
+const offToken = (await signIn(offGuest.email, offGuest.name)).accessToken;
+const offSetup = await call('POST', '/me/payments/setup', { token: offToken });
+await call('POST', '/me/payments/setup/mock-confirm', {
+  token: offToken,
+  body: { clientSecret: offSetup.body.clientSecret, brand: 'Visa', last4: '3009' },
+});
+
+const offPage = await openPage('offline');
+
+// Every key the page offers steeple for this request, in order.
+const keysOffered = [];
+// How the wire is cut. Both cuts are driven, because they are not the same
+// thing from inside the page and only one of them is the common case: a dead
+// fetch is `status === 0`, but this app always sits behind a proxy, and a proxy
+// with nothing to talk to answers **502**. Reading only `status === 0` as
+// "never arrived" meant an API being restarted — the one outage a person
+// actually meets — got the vaguest sentence in the vocabulary and no promise
+// that nothing had been sent.
+let cut = false;
+await offPage.setRequestInterception(true);
+offPage.on('request', (request) => {
+  const isSubmit = /\/api\/v1\/listings\/[^/]+\/applications$/.test(request.url()) && request.method() === 'POST';
+  if (isSubmit) keysOffered.push(request.headers()['idempotency-key'] ?? null);
+  if (cut && request.url().includes('/api/v1')) {
+    if (cut === 'proxy') {
+      request.respond({ status: 502, contentType: 'text/html', body: '<html>502 Bad Gateway</html>' }).catch(() => {});
+    } else {
+      request.abort('failed').catch(() => {});
+    }
+    return;
+  }
+  request.continue().catch(() => {});
+});
+
+await boot(offPage);
+await signInPage(offPage, offGuest.email, offGuest.name);
+await offPage.evaluate(
+  (v, r) => window.__steeple.setView('apply', { venueId: v, roomId: r }),
+  manual.venueSlug,
+  manual.roomSlug
+);
+await until(offPage, () => document.querySelectorAll('.week__cell').length > 0, null, 30000, 'the week card drew');
+
+const intentWritten = 'A monthly repair café — bring a broken thing and we will look at it together.';
+await write(offPage, '#letter-intent', intentWritten);
+await press(offPage, '.choices .choice input');
+await press(offPage, '#letter-size');
+await write(offPage, '#letter-size', '18');
+const offSpot = await offPage.evaluate(() => {
+  const cell = [...document.querySelectorAll('.week__cell:not(.is-inert)')][8];
+  const box = cell.getBoundingClientRect();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+});
+await offPage.mouse.click(offSpot.x, offSpot.y);
+await settle(offPage);
+
+// Cut the wire — nothing answers at all — then send.
+cut = 'dead';
+await press(offPage, '.letter__foot .pill--primary');
+await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step opened');
+await press(offPage, '.identity .pill--primary');
+
+await until(
+  offPage,
+  () => /could not be reached/i.test(document.querySelector('.letter__foot')?.textContent ?? ''),
+  null,
+  30000,
+  'the send says steeple could not be reached'
+);
+const saidOffline = await offPage.$eval('.letter__foot', (n) => n.textContent.trim());
+check('an unreachable steeple is said plainly, where the send is', /nothing was sent/i.test(saidOffline), saidOffline);
+
+const nothingFiled = await call('GET', '/me/applications', { token: offToken });
+eq('and nothing was filed', nothingFiled.body?.totalCount, 0);
+
+const draftKept = await offPage.evaluate(() => ({
+  intent: document.querySelector('#letter-intent')?.value ?? null,
+  sheet: Boolean(document.querySelector('.letter__sheet')),
+  sendable: !document.querySelector('.letter__foot .pill--primary')?.disabled,
+}));
+eq('the written request is still on the page, word for word', draftKept.intent, intentWritten);
+eq('the sheet did not go anywhere', draftKept.sheet, true);
+eq('and the send is pressable again — a retry, not a dead end', draftKept.sendable, true);
+
+// Now the outage a person actually meets: the API is restarting, so the proxy
+// in front of it answers 502 and the page never sees a network error at all.
+cut = 'proxy';
+await offPage.evaluate(() => {
+  const foot = document.querySelector('.letter__foot');
+  if (foot) foot.dataset.wasSaid = foot.textContent;
+});
+await press(offPage, '.letter__foot .pill--primary');
+await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step reopened');
+await press(offPage, '.identity .pill--primary');
+await until(
+  offPage,
+  () => /nothing was sent/i.test(document.querySelector('.letter__foot')?.textContent ?? ''),
+  null,
+  30000,
+  'a 502 from the proxy is said as plainly as a dead wire'
+);
+check('an API behind a proxy that cannot answer says the same plain thing', true);
+
+const stillNothing = await call('GET', '/me/applications', { token: offToken });
+eq('and a 502 filed nothing either', stillNothing.body?.totalCount, 0);
+
+// Mend the wire and press send again.
+cut = false;
+await press(offPage, '.letter__foot .pill--primary');
+await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step reopened');
+await press(offPage, '.identity .pill--primary');
+await until(
+  offPage,
+  () => window.__steeple.store.guestApplications().length === 1,
+  null,
+  30000,
+  'the retry filed the request'
+);
+
+const afterRetry = await call('GET', '/me/applications', { token: offToken });
+eq('the retry filed the request', afterRetry.body?.totalCount, 1);
+check('exactly one request exists for a send made once', afterRetry.body?.items?.length === 1);
+check('the failed send did carry a key', Boolean(keysOffered[0]), `offered ${JSON.stringify(keysOffered)}`);
+check(
+  'and every attempt carried the same one — the key survived both failures',
+  keysOffered.length === 3 && new Set(keysOffered).size === 1,
+  `offered ${JSON.stringify(keysOffered)}`
+);
 
 // ── done ─────────────────────────────────────────────────────────────────────
 

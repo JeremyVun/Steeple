@@ -52,8 +52,24 @@ export function toWireSchedule(schedule) {
  * codes with no useful prose, and the failures that never reached the service
  * at all, get words of our own.
  */
+/**
+ * Whether a failure means the request never reached steeple at all.
+ *
+ * Not just a dead fetch: this app is always served from behind a proxy (vite in
+ * development, nginx in a container), and a proxy with nothing to talk to
+ * answers **502** — the page never sees a network error. Treating only
+ * `status === 0` as unreachable meant that the one case a person actually meets,
+ * an API being restarted, got the vaguest sentence of the set and no promise
+ * that nothing had been sent.
+ *
+ * 504 is deliberately not here. A gateway *timeout* is the case where the
+ * request may well have landed, so it must not be promised away; the
+ * idempotency key is what makes retrying it safe.
+ */
+export const neverArrived = (status) => status === 0 || status === 502 || status === 503;
+
 export function problemText(error) {
-  if (error?.status === 0) {
+  if (neverArrived(error?.status)) {
     return 'Steeple could not be reached just now — nothing was sent. Try again in a moment.';
   }
   if (error?.code === 'slot_taken') {
@@ -81,7 +97,7 @@ async function attempt(work) {
   } catch (error) {
     const status = error?.status ?? 0;
     const reach =
-      status === 0 ? 'offline' : status === 401 ? 'signedOut' : status === 404 ? 'unavailable' : 'refused';
+      neverArrived(status) ? 'offline' : status === 401 ? 'signedOut' : status === 404 ? 'unavailable' : 'refused';
     return { ok: false, reach, status, code: error?.code ?? null, problem: problemText(error) };
   }
 }
