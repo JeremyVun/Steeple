@@ -46,6 +46,28 @@ const PHOTO = readFileSync(writeRoomPhoto(`/tmp/steeple-webp2-room-${stamp}.png`
 let checks = 0;
 let failures = 0;
 const problems = [];
+const wireLog = [];
+
+// A suite that dies mid-loop still knows everything worth knowing; print it
+// rather than leaving a stack trace to speak for the whole run.
+async function lastWords(error) {
+  // Shut the browsers first: whatever else is true, this run is over, and a
+  // half-dead suite must not leave a headless Chrome behind for each person.
+  for (const browser of browsers) await browser.close().catch(() => {});
+  console.log(`\nthe run stopped: ${error?.message ?? error}`);
+  if (wireLog.length) {
+    console.log('\nthe last things steeple was asked, in order:');
+    for (const line of wireLog.slice(-25)) console.log(`  ${line}`);
+  }
+  if (problems.length) {
+    console.log('\npage problems:');
+    for (const line of [...new Set(problems)]) console.log(`  ${line}`);
+  }
+  console.log(`\n${checks - failures}/${checks} checks passed before it stopped`);
+  process.exit(1);
+}
+process.on('uncaughtException', lastWords);
+process.on('unhandledRejection', lastWords);
 
 function check(label, ok, detail = '') {
   checks += 1;
@@ -82,7 +104,28 @@ async function call(method, path, { token = null, body = undefined, key = null }
   return { status: response.status, body: document };
 }
 
+// Signing in is per-IP limited (10/min) and deliberately so — it is the one
+// endpoint a stranger can hammer. A suite that mints a fresh person for every
+// scenario will exhaust that honestly, so it waits its turn rather than asking
+// the API to be more permissive than it should be in production. This is the
+// one wall-clock wait in the file: it is the server's clock, not the app's.
+const authAt = [];
+const AUTH_PER_MINUTE = 10;
+
+async function paceAuth() {
+  for (;;) {
+    const now = Date.now();
+    while (authAt.length && now - authAt[0] > 60_000) authAt.shift();
+    if (authAt.length < AUTH_PER_MINUTE) break;
+    const waitMs = 60_000 - (now - authAt[0]) + 250;
+    console.log(`  ·     waiting ${Math.ceil(waitMs / 1000)}s for the sign-in window to roll`);
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+  authAt.push(Date.now());
+}
+
 async function signIn(email, name) {
+  await paceAuth();
   const answer = await call('POST', '/auth/sessions', {
     body: { provider: 'dev', idToken: `${email}|${name}`, device: { platform: 'web' } },
   });
@@ -208,6 +251,11 @@ const browsers = [];
 async function openPage(label) {
   const browser = await puppeteer.launch({
     headless: true,
+    // Pipe transport, not a websocket: the browser is a child on a pipe, so it dies
+    // when this process dies — including SIGKILL and an abort mid-suite. Over the
+    // default transport a headless Chrome outlives its dead node parent and is
+    // reparented to init, and a few aborted runs leave a machine full of them.
+    pipe: true,
     args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
   });
   browsers.push(browser);
@@ -221,6 +269,14 @@ async function openPage(label) {
     // come from the open internet, which a sealed machine has none of.
     if (/Failed to load resource|402|409|ERR_/.test(text)) return;
     problems.push(`[${label}] ${text}`);
+  });
+  // Every call this page made to steeple, in order. When a surface stalls, the
+  // question is always "what did the wire say", and guessing at it is how a
+  // whole afternoon goes: 429 and 404 look identical from the outside.
+  page.on('response', (response) => {
+    const at = response.url();
+    if (!at.includes('/api/v1')) return;
+    wireLog.push(`[${label}] ${response.status()} ${response.request().method()} ${at.replace(/^https?:\/\/[^/]+/, '')}`);
   });
   return page;
 }
@@ -238,29 +294,55 @@ const settle = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 20
  */
 async function steady(page, selector, timeout = 15000) {
   await page.waitForSelector(selector, { timeout });
-  await page.waitForFunction(
-    (sel) => {
-      const node = document.querySelector(sel);
-      if (!node) return false;
-      // A custom radio is a hidden input inside a visible label — it is the
-      // label that has the box a pointer can land on, so it is the label whose
-      // position has to have settled. The element's own opacity is deliberately
-      // not read: styling one to zero is how these controls are built.
-      const box = (node.closest('label') ?? node).getBoundingClientRect();
-      if (box.width < 1 || box.height < 1) return false;
-      // Its containers, though, are the things that fade and slide in.
-      for (let at = node.parentElement; at && at !== document.documentElement; at = at.parentElement) {
-        const style = getComputedStyle(at);
-        if (style.visibility === 'hidden' || Number(style.opacity) < 0.9) return false;
-      }
-      const now = `${sel}:${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)}`;
-      const was = window.__steadyBox;
-      window.__steadyBox = now;
-      return was === now;
-    },
-    { timeout, polling: 120 },
-    selector
-  );
+  try {
+    await page.waitForFunction(
+      (sel) => {
+        const node = document.querySelector(sel);
+        if (!node) return false;
+        // A custom radio is a hidden input inside a visible label — it is the
+        // label that has the box a pointer can land on, so it is the label whose
+        // position has to have settled. The element's own opacity is deliberately
+        // not read: styling one to zero is how these controls are built.
+        const box = (node.closest('label') ?? node).getBoundingClientRect();
+        if (box.width < 1 || box.height < 1) return false;
+        // Its containers, though, are the things that fade and slide in.
+        for (let at = node.parentElement; at && at !== document.documentElement; at = at.parentElement) {
+          const style = getComputedStyle(at);
+          if (style.visibility === 'hidden' || Number(style.opacity) < 0.9) return false;
+        }
+        // Per-selector, because `steady` is called on one thing at a time but the
+        // last thing it looked at must not be what this one is compared against.
+        const now = `${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)}`;
+        window.__steadyBox ??= {};
+        const was = window.__steadyBox[sel];
+        window.__steadyBox[sel] = now;
+        return was === now;
+      },
+      { timeout, polling: 120 },
+      selector
+    );
+  } catch (error) {
+    // A timeout here used to say only "15000ms exceeded", which names neither
+    // the selector nor the reason. Say which link of the chain never settled.
+    const why = await page
+      .evaluate((sel) => {
+        const node = document.querySelector(sel);
+        if (!node) return 'the selector matches nothing any more';
+        const box = (node.closest('label') ?? node).getBoundingClientRect();
+        if (box.width < 1 || box.height < 1) return `it has no box (${box.width}x${box.height})`;
+        const faded = [];
+        for (let at = node.parentElement; at && at !== document.documentElement; at = at.parentElement) {
+          const style = getComputedStyle(at);
+          if (style.visibility === 'hidden' || Number(style.opacity) < 0.9) {
+            faded.push(`${at.tagName.toLowerCase()}.${String(at.className).trim().split(/\s+/)[0]} opacity=${style.opacity} visibility=${style.visibility}`);
+          }
+        }
+        if (faded.length) return `a container never came in: ${faded.join(' / ')}`;
+        return `it is still moving (box now ${Math.round(box.x)},${Math.round(box.y)},${Math.round(box.width)})`;
+      }, selector)
+      .catch(() => 'the page would not answer');
+    throw new Error(`${selector} never settled — ${why}`);
+  }
 }
 
 /**
@@ -295,6 +377,8 @@ async function boot(page, at = url) {
 }
 
 async function signInPage(page, email, name) {
+  // A browser's sign-in spends the same per-IP budget as a node one.
+  await paceAuth();
   await page.evaluate(
     (e, n) => window.__steeple.session.signIn({ email: e, displayName: n }),
     email,
@@ -303,9 +387,34 @@ async function signInPage(page, email, name) {
   await settle(page);
 }
 
-/** Wait for a condition on the page — state, never wall-clock (headless GL is slow). */
-const until = (page, fn, arg = null, timeout = 30000) =>
-  page.waitForFunction(fn, { timeout, polling: 120 }, arg);
+/** What the app thinks it is showing — the first question to ask of any stall. */
+const shape = (page) =>
+  page
+    .evaluate(() => ({
+      view: window.__steeple?.state?.view ?? null,
+      mode: window.__steeple?.state?.mode ?? null,
+      applicationId: window.__steeple?.state?.applicationId ?? null,
+      signedIn: window.__steeple?.session?.isSignedIn?.() ?? null,
+      person: window.__steeple?.store?.currentOrganizerId?.() ?? null,
+      inbox: (window.__steeple?.store?.guestApplications?.() ?? []).map((a) => `${a.id}:${a.status}`),
+      surfaces: [...document.querySelectorAll('[class*="is-open"]')].map((n) => String(n.className)),
+    }))
+    .catch(() => null);
+
+/**
+ * Wait for a condition on the page — state, never wall-clock (headless GL is slow).
+ *
+ * A bare `waitForFunction` timeout says "30000ms exceeded" and nothing else, which
+ * is the least useful sentence a suite can end on. Every wait here says what the
+ * app was showing when it gave up.
+ */
+async function until(page, fn, arg = null, timeout = 30000, what = 'the condition') {
+  try {
+    await page.waitForFunction(fn, { timeout, polling: 120 }, arg);
+  } catch (error) {
+    throw new Error(`${what} never came true within ${timeout}ms — page was ${JSON.stringify(await shape(page))}`);
+  }
+}
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
@@ -388,12 +497,14 @@ const guestPage = await openPage('guest');
 await boot(guestPage);
 await signInPage(guestPage, guest.email, guest.name);
 
-const mine = await call('GET', '/me/applications', {
-  token: (await signIn(guest.email, guest.name)).accessToken,
-});
+// One token for the whole scenario: every sign-in is a permit spent on a budget
+// the browsers need too, and asking three times for the same person's token is
+// how a suite talks itself into a 429 it then blames on the app.
+const guestToken = (await signIn(guest.email, guest.name)).accessToken;
+
+const mine = await call('GET', '/me/applications', { token: guestToken });
 eq('a brand new account has an empty inbox', mine.body?.totalCount, 0);
 
-const guestToken = (await signIn(guest.email, guest.name)).accessToken;
 const before = await call('GET', '/me/payments', { token: guestToken });
 eq('and no card on file', before.body?.hasPaymentMethod, false);
 
@@ -484,7 +595,7 @@ eq('and the thread carries it', asked.body?.messages?.length, 1);
 
 // The guest answers, in their own browser, after a reload that clears nothing.
 await guestPage.evaluate((id) => window.__steeple.setView('letter', { applicationId: id }), application.id);
-await until(guestPage, () => Boolean(document.querySelector('#letter-reply')));
+await until(guestPage, () => Boolean(document.querySelector('#letter-reply')), null, 30000, 'the guest’s letter offers a reply box');
 await write(guestPage, '#letter-reply', 'Six tables would be plenty, thank you.');
 await press(guestPage, '.reply .pill');
 await until(
@@ -649,3 +760,4 @@ if (problems.length) {
 }
 console.log(`\n${checks - failures}/${checks} checks passed`);
 process.exit(failures ? 1 : 0);
+

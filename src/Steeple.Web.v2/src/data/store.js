@@ -511,8 +511,14 @@ const upsertBy = (list, row) => {
  * whole thread and replaces it. `counterOffer` is the latest live counter — the
  * service returns no history, so neither does this.
  *
+ * The counter rides the *same* switch as the thread, because the API omits it
+ * from lists for the same reason (`ApplicationMappings.ToDto`: "lists omit it,
+ * matching the thread/conflicts"). Reading it off a list read means reading
+ * `null` and forgetting a live counter-offer — which is what a background inbox
+ * refresh did to a letter the guest was standing in front of.
+ *
  * @param {object} dto steeple's ApplicationDto
- * @param {{thread?: boolean}} options `thread` when the dto carries the full one
+ * @param {{thread?: boolean}} options `thread` when the dto is a detail read
  * @returns {object} the mirrored application
  */
 export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) && dto.messages.length > 0 } = {}) {
@@ -541,8 +547,10 @@ export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) &
     }
   }
 
-  data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
-  if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
+  if (thread) {
+    data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
+    if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
+  }
 
   emit('mirror', {
     applicationId: application.id,
@@ -574,11 +582,12 @@ export function mirrorApplications(dtos, { scope = null } = {}) {
     }
     data.applications = data.applications.filter((a) => !scope(a) || arriving.has(a.id));
   }
+  // A page never carries counter-offers (or threads), so it is authoritative for
+  // which applications exist and for nothing inside one. Counters belong to the
+  // detail read; the only ones dropped here are those of applications that went.
   const mirrored = dtos.map((dto) => {
     const application = fromWireApplication(dto);
     upsertBy(data.applications, application);
-    data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
-    if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
     return application;
   });
   emit('mirror-list', { count: mirrored.length });
