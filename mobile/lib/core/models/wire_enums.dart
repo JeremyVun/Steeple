@@ -138,6 +138,7 @@ enum NotificationType {
   bookingCancelled,
   renewalDue,
   ratingReceived,
+  bookingReminder,
   unknown;
 
   static const tokens = <String, NotificationType>{
@@ -148,5 +149,6 @@ enum NotificationType {
     'bookingCancelled': NotificationType.bookingCancelled,
     'renewalDue': NotificationType.renewalDue,
     'ratingReceived': NotificationType.ratingReceived,
+    'bookingReminder': NotificationType.bookingReminder,
   };
 }
