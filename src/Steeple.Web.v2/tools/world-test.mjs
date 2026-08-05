@@ -125,7 +125,10 @@ for (const style of styles) {
   await page.evaluate(`__steeple.setView('apply',{venueId:'vienna-presbyterian',roomId:'music-room'})`);
   await wait(2600);
   await page.evaluate(`
-    const today = __steeple.store.guestApplications()[0].startDate;
+    // Any seeded date will do. Read it from the parish's own post rather than
+    // from "your requests": nobody is signed in here, and an inbox belongs to
+    // somebody (D6) — signed out there is none to read.
+    const today = __steeple.store.venueApplications('grace-community-vienna')[0].startDate;
     __steeple.store.submitApplication({
       venueId: 'vienna-presbyterian', roomId: 'music-room', activityType: 'Music',
       groupSize: 12, frequency: 'oneOff', startDate: today,

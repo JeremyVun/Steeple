@@ -12,10 +12,13 @@
 // `porch` is the shared top-right shelf their entry affordances mount into.
 
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
+import * as session from '../data/session.js';
 import { getVenue } from '../data/venues.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
 import { createAccount } from './account.js';
+import { createNotice } from './notice.js';
+import { createSignInPanel } from './signIn.js';
 import { createAnnouncer } from './announcer.js';
 import { createArrival } from './arrival.js';
 import { createBrowse } from './browse.js';
@@ -54,9 +57,25 @@ export function createUI(_engine, _world) {
   const host = createHostFlows({ announce: announcer.say, porch });
 
   // Last onto the shelf, so it sits at the end of the line where an account
-  // belongs. It is only on the page when there is somebody to be.
-  const account = createAccount({ announce: announcer.say });
+  // belongs — a monogram when there is somebody to be, one quiet word when
+  // there is not (D6). Both open something: the card, or the way in.
+  const signIn = createSignInPanel({ announce: announcer.say });
+  const account = createAccount({
+    announce: announcer.say,
+    onSignIn: () => signIn.open(),
+  });
   porch.append(account.element);
+
+  // A session can end without anybody asking — a refresh token spent while the
+  // tab sat open. The chip going quiet is not an explanation.
+  const notice = createNotice();
+  session.onSessionChange((held, reason) => {
+    if (held || reason !== session.REASON.expired) return;
+    notice.show("You've been signed out.", {
+      label: 'Sign in again',
+      onPick: () => signIn.open(),
+    });
+  });
 
   const rail = el('div', { class: 'rail' }, [venuePanel.element, roomPanel.element]);
   const browse = createBrowse();
@@ -96,8 +115,11 @@ export function createUI(_engine, _world) {
     host.element,
     // The account's card is a layer, not a child of the shelf: the shelf rides
     // inside the browse surface and a letter or a desk lies over the whole of
-    // it. See ui/account.js.
-    account.card
+    // it. See ui/account.js. The sign-in panel and the notice are layers for
+    // the same reason — either can be opened over any surface there is.
+    account.card,
+    notice.element,
+    signIn.element
   );
 
   // Leaflet can only measure itself once the panel is on the page.
@@ -162,9 +184,11 @@ export function createUI(_engine, _world) {
   bus.on('filters:change', () => announcer.filters());
 
   // Publishing a space, or editing one, changes what discovery may honestly
-  // say about it — the sheets are re-read from the store.
+  // say about it — the sheets are re-read from the store. So does a change of
+  // person: host edits are kept per account, and a sheet must never show one
+  // person's draft to the next (data/store.js).
   bus.on('store:change', ({ type }) => {
-    if (type !== 'room-edit' && type !== 'reset') return;
+    if (type !== 'room-edit' && type !== 'reset' && type !== 'identity') return;
     render({ rebuild: true });
   });
 

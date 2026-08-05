@@ -125,36 +125,77 @@ if (ctaBox) {
 // the map — lives in journey/input.js, which a page with no world never loads.
 // Repeated in main.js for the flat page, and asserted here: without this, Esc
 // inside a request is a key that does nothing at all (CONTRACT6 §1.2).
-await page.goto(`${url.split('#')[0]}#/letter/app-chess-club`, { waitUntil: 'domcontentloaded' });
-await wait(1800);
-check('a request the parish received opens as the host', await page.evaluate(
-  "__steeple.state.view === 'letter' && __steeple.state.mode === 'host'"
-), await page.evaluate("`${__steeple.state.view}/${__steeple.state.mode}`"));
-await page.keyboard.press('Escape');
-await wait(900);
-check(
-  'Esc closes a request onto the board it belongs to',
-  (await page.evaluate('__steeple.state.view')) === 'desk',
-  await page.evaluate('__steeple.state.view')
-);
-await page.keyboard.press('Escape');
-await wait(900);
-check(
-  'and Esc again leaves the board for the map',
-  (await page.evaluate("__steeple.state.view === 'village' && __steeple.state.mode === 'guest'")),
-  await page.evaluate("`${__steeple.state.view}/${__steeple.state.mode}`")
-);
+//
+// Correspondence belongs to somebody now (D6), so the ladder is only walkable
+// once there is a somebody: the suite signs one in against the local API. A
+// page with no API to reach, or a production bundle with no demo village in it,
+// has no letters to walk at all — and that is itself the thing to assert.
+{
+  // Signed out first: a link to a letter is not a way past the sign-in.
+  await page.goto(`${url.split('#')[0]}#/letter/app-chess-club`, { waitUntil: 'domcontentloaded' });
+  await wait(1800);
+  check(
+    'signed out, a link to a letter lands in the village',
+    (await page.evaluate('__steeple.state.view')) === 'village',
+    await page.evaluate('__steeple.state.view')
+  );
+  check('and there is no inbox on the shelf', await page.evaluate(
+    "!document.querySelector('.letters') || document.querySelector('.letters').hidden"
+  ));
 
-const own = await page.evaluate('__steeple.store.guestApplications()[0].id');
-await page.goto(`${url.split('#')[0]}#/letter/${own}`, { waitUntil: 'domcontentloaded' });
-await wait(1600);
-await page.keyboard.press('Escape');
-await wait(900);
-check(
-  'a guest’s own letter closes onto their inbox',
-  (await page.evaluate('__steeple.state.view')) === 'journal',
-  await page.evaluate('__steeple.state.view')
-);
+  const signedIn = await page
+    .evaluate(
+      "__steeple.session.signIn({email:'maria@demo.steeple.test',displayName:'Maria Alvarez'}).then(() => true, () => false)"
+    )
+    .catch(() => false);
+  const seeded = signedIn
+    ? await page.evaluate("__steeple.store.guestApplications().length > 0")
+    : false;
+
+  if (!signedIn) {
+    console.log('     (no API to sign in against — the correspondence ladder is not walkable here)');
+  } else if (!seeded) {
+    // A production bundle: real correspondence comes from the wire, and there
+    // is none for a brand-new village.
+    check(
+      'a build with no demo village opens an empty inbox',
+      (await page.evaluate(
+        "(async () => { __steeple.setView('journal'); return __steeple.state.view; })()"
+      )) === 'journal'
+    );
+  } else {
+    await page.goto(`${url.split('#')[0]}#/letter/app-chess-club`, { waitUntil: 'domcontentloaded' });
+    await wait(1800);
+    check('a request the parish received opens as the host', await page.evaluate(
+      "__steeple.state.view === 'letter' && __steeple.state.mode === 'host'"
+    ), await page.evaluate("`${__steeple.state.view}/${__steeple.state.mode}`"));
+    await page.keyboard.press('Escape');
+    await wait(900);
+    check(
+      'Esc closes a request onto the board it belongs to',
+      (await page.evaluate('__steeple.state.view')) === 'desk',
+      await page.evaluate('__steeple.state.view')
+    );
+    await page.keyboard.press('Escape');
+    await wait(900);
+    check(
+      'and Esc again leaves the board for the map',
+      (await page.evaluate("__steeple.state.view === 'village' && __steeple.state.mode === 'guest'")),
+      await page.evaluate("`${__steeple.state.view}/${__steeple.state.mode}`")
+    );
+
+    const own = await page.evaluate('__steeple.store.guestApplications()[0].id');
+    await page.goto(`${url.split('#')[0]}#/letter/${own}`, { waitUntil: 'domcontentloaded' });
+    await wait(1600);
+    await page.keyboard.press('Escape');
+    await wait(900);
+    check(
+      'a guest’s own letter closes onto their inbox',
+      (await page.evaluate('__steeple.state.view')) === 'journal',
+      await page.evaluate('__steeple.state.view')
+    );
+  }
+}
 
 // ── 7. the way back up still means something ────────────────────────────────
 await page.keyboard.press('Escape');

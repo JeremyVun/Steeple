@@ -31,6 +31,7 @@ import {
   applyHash,
 } from './core/bus.js';
 import { store } from './data/store.js';
+import * as session from './data/session.js';
 
 /** Compile-time, not run-time: this is what lets the flat build drop three.js. */
 const BUILT_FLAT = import.meta.env.VITE_WORLD === 'off';
@@ -47,6 +48,9 @@ function publish(extra) {
     setMode,
     setMap,
     store,
+    // Who the page is: harnesses that need a signed-in guest sign one in for
+    // real against the local API, exactly as the identity panel does.
+    session,
     ...extra,
   };
 }

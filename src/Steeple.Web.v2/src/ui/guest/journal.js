@@ -2,9 +2,8 @@
 // have said back. Sorted by whose move it is, because that is the only question
 // a waiting organizer actually has.
 
+import * as session from '../../data/session.js';
 import {
-  GUEST_ID,
-  ORGANIZERS,
   bookingFor,
   effectiveRoom,
   guestApplications,
@@ -12,7 +11,7 @@ import {
 } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { el, replaceChildren } from '../dom.js';
-import { verifiedChip } from './sso.js';
+import { organizationFor, verifiedChip } from './sso.js';
 import {
   isYourMove,
   plural,
@@ -80,17 +79,24 @@ export function createJournal({ announce, onOpen, onBrowse }) {
 
   function render() {
     const apps = guestApplications();
-    const person = ORGANIZERS[GUEST_ID];
+    // Whose inbox this is is a fact about the session, not about a seeded
+    // persona: the line names whoever is signed in, and the trust chip is only
+    // earned by a session that exists.
+    const person = session.currentUser();
+    const org = organizationFor(person?.email);
     const needing = apps.filter((a) => isYourMove(a.status)).length;
 
     replaceChildren(head, [
       el('div', {}, [
         el('p', { class: 'eyebrow', text: 'Your requests' }),
         el('h1', { class: 'journal__title', text: 'Inbox' }),
-        el('p', { class: 'journal__who', text: `${person.org} · ${person.name}` }),
+        el('p', {
+          class: 'journal__who',
+          text: person ? (org ? `${org} · ${person.displayName}` : person.displayName) : '',
+        }),
       ]),
       el('div', { class: 'journal__aside' }, [
-        verifiedChip(),
+        session.isSignedIn() ? verifiedChip() : null,
         el('p', {
           class: 'journal__tally',
           text: needing

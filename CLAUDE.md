@@ -177,20 +177,23 @@ E2E suites mint real accounts/venues/applications on the local API each run.
   401-retry-once, localStorage). Sign-in = dev SSO (`POST /auth/sessions
   {provider:"dev", idToken:"email|Name"}`, DevLoginEnabled — Development only);
   Google/Apple later swap only `signIn()`.
-- `src/data/store.js` — localStorage demo correspondence mirroring db/changelog
-  004/005/009 exactly. Still the source for the guest inbox and host request handling.
+- `src/data/store.js` — localStorage correspondence mirroring db/changelog 004/005/009
+  exactly, keyed **per person** (`steeple-village-store:{organizerId}`, `:anon` signed out —
+  v2_migration D6). Still the source for the guest inbox and host request handling; the
+  demo seed loads only outside production builds.
 
-**Real vs demo (the integration work):** Real — catalog reads, auth sessions,
-application submit (`Idempotency-Key`, mirrors into local store), and the whole hosting
-chain (dev SSO → POST venue → room → photo upload → PUT availability → PATCH published;
-publish requires a photo; moderation answers `draft` + `publishRequestedAtUtc`). Demo —
-guest inbox/letters and host request decisions run on store.js **hardcoded as
-`GUEST_ID='maria-alvarez'` regardless of session** (the API's `GET /me/applications` is
-never read by the UI); send falls back to filing locally when the API is unreachable
-(honest in a demo, a lie in production); no signed-out header affordance (account chip
-hidden when signed out — sign-in only appears mid-flow); dev provider only, no Turnstile
-client-side. Accounts-consolidation order agreed 2026-08-05: signed-out header state →
-inbox onto `/me/applications` → real providers.
+**Real vs demo (the integration work):** Real — catalog reads, auth sessions (sign-in **and
+sign-out**, `DELETE /auth/sessions` best-effort), application submit (`Idempotency-Key`,
+mirrors into local store), the whole hosting chain (dev SSO → POST venue → room → photo
+upload → PUT availability → PATCH published; publish requires a photo; moderation answers
+`draft` + `publishRequestedAtUtc`), and the account surface — a "Sign in" chip on the porch
+when signed out, chip + card when signed in, inbox/badge/journal/letters and every "Identity
+verified (SSO)" chip gated on fact (v2_migration Phase 1). Demo — guest inbox/letters and
+host request decisions still run on store.js, per signed-in person but local (the API's
+`GET /me/applications` is not read by the UI yet); send falls back to filing locally when the
+API is unreachable (honest in a demo, a lie in production); dev provider only, no Turnstile
+client-side. Accounts-consolidation order agreed 2026-08-05: signed-out header state (**done**)
+→ inbox onto `/me/applications` → real providers.
 
 **Hazards found in the waves (unfixed):** the 4s-abort retry can double-create venues —
 manage routes need idempotency keys API-side; `draft.roomId` is always `'main-space'`

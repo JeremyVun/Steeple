@@ -193,8 +193,21 @@ async function press(page, sel, { touch = false } = {}) {
     check('...reachable by keyboard', (await page.evaluate('document.activeElement.className')).includes('copyaddr'));
   }
 
-  console.log('\n5. an account has a face and a door out (§2.6)');
-  check('signed out, the shelf stays quiet', !(await shownIn(page, '.account')));
+  console.log('\n5. an account has a face, a door out and a way in (§2.6, D6)');
+  // Re-baselined for the v2 migration: the shelf used to be empty until
+  // somebody signed in, and the way in belonged to the flows. It is always
+  // there now — a monogram when there is somebody, one quiet word when there
+  // is not — because who you are must be answerable at any moment.
+  check('signed out, the shelf offers a way in', await shownIn(page, '.account'));
+  check('...in one quiet word', (await textOf(page, '.account')) === 'Sign in', await textOf(page, '.account'));
+  await press(page, '.account');
+  await wait(600);
+  check(
+    '...which opens the same identity panel the flows use',
+    await shownIn(page, '.signin__layer .identity')
+  );
+  await page.keyboard.press('Escape');
+  await wait(400);
   await page.evaluate(async () => (await import('/src/data/session.js')).signIn({ email: 'ruth.abara@example.org', displayName: 'Ruth Abara' }));
   await wait(900);
   check('signed in, the person is on the shelf', await shownIn(page, '.account'));
@@ -217,7 +230,7 @@ async function press(page, sel, { touch = false } = {}) {
   await press(page, '.account__out');
   await wait(800);
   check('signing out clears the session', (await page.evaluate(async () => (await import('/src/data/session.js')).isSignedIn())) === false);
-  check('...takes the affordance off the shelf', !(await shownIn(page, '.account')));
+  check('...puts the shelf back to the way in', (await textOf(page, '.account')) === 'Sign in', await textOf(page, '.account'));
   check('...and leaves the inbox, which belonged to somebody', (await page.evaluate('__steeple.state.view')) === 'village', await page.evaluate('__steeple.state.view'));
 
   await page.close();

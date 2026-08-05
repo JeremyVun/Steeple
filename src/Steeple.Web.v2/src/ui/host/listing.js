@@ -1286,7 +1286,9 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         // room inside one can only ever be listed in this browser's own record.
         localOnly: !venue.placed,
         offline: null,
-        verified: true,
+        // The mark follows the session, here as everywhere: editing a listing
+        // does not confer one, and this browser cannot award itself a fact.
+        verified: manage.signedIn(),
         remote: { venueId: venue.remoteId ?? null, roomId: room.remoteId ?? null, position: null },
         venue: {
           name: venue.name,

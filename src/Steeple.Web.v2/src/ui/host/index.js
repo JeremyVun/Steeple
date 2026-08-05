@@ -12,7 +12,7 @@
 // truth, same interactions, different instrument.
 
 import { bus, setDesk, setMode, setView, state } from '../../core/bus.js';
-import { GUEST_ID, getApplication, hostVenueId } from '../../data/store.js';
+import { currentOrganizerId, getApplication, hostVenueId } from '../../data/store.js';
 import { el } from '../dom.js';
 import { createDesk } from './desk.js';
 import { createLetterPage } from './letter.js';
@@ -173,7 +173,7 @@ export function createHostFlows({ announce, porch } = {}) {
     // the guest's inbox holds their own requests, not the parish's.
     if (state.view === 'letter' && state.mode === 'guest') {
       const application = getApplication(state.applicationId);
-      if (application && application.organizerId !== GUEST_ID) {
+      if (application && application.organizerId !== currentOrganizerId()) {
         setMode('host');
         return;
       }

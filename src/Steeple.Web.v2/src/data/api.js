@@ -99,6 +99,10 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null } 
 async function send(method, path, body, { accessToken = null, headers = {}, timeoutMs = TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // `undefined` is a request with nothing to say — a revocation, a delete. It
+  // carries no body and so declares no content type; `null` still means the
+  // empty document, which is what every write here has always sent.
+  const carries = body !== undefined;
   let response;
   try {
     response = await fetch(`${BASE}${path}`, {
@@ -106,11 +110,11 @@ async function send(method, path, body, { accessToken = null, headers = {}, time
       signal: controller.signal,
       headers: {
         accept: 'application/json',
-        'content-type': 'application/json',
+        ...(carries ? { 'content-type': 'application/json' } : {}),
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
-      body: JSON.stringify(body ?? {}),
+      ...(carries ? { body: JSON.stringify(body ?? {}) } : {}),
     });
   } catch (cause) {
     throw new ApiError(
@@ -352,6 +356,23 @@ export function createSession({ provider, idToken, nonce = null, turnstileToken 
  */
 export function refreshSession(refreshToken) {
   return send('POST', '/auth/refresh', { refreshToken });
+}
+
+/**
+ * `DELETE /auth/sessions` — sign out here: revokes this session's refresh-token
+ * family, so the pair this browser was holding can never be rotated again.
+ * Answers 204.
+ */
+export function deleteSession(accessToken) {
+  return send('DELETE', '/auth/sessions', undefined, { accessToken });
+}
+
+/**
+ * `DELETE /me/sessions` — sign out everywhere: revokes every session this
+ * person holds, on every device. Answers 204.
+ */
+export function deleteAllSessions(accessToken) {
+  return send('DELETE', '/me/sessions', undefined, { accessToken });
 }
 
 /**

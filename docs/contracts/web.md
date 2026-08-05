@@ -32,7 +32,7 @@ and behind a stripped proxy prefix.
 | Wired (called today) | Caller |
 |---|---|
 | `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` to resolve the roomId before submit; `getGeofence` in `ui/host/manage.js`) |
-| `createSession`, `refreshSession`, `getMe` | `session.js` only |
+| `createSession`, `refreshSession`, `getMe`, `deleteSession`, `deleteAllSessions` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
 | `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 
@@ -44,7 +44,11 @@ and behind a stripped proxy prefix.
 decision endpoints (`GET /applications/{id}`, `/messages`, `/decision`, `/withdraw`,
 `/counter-offer[/respond]`, `GET /manage/applications`), notifications
 (`GET /me/notifications`, `/read`), bookings, ratings, analytics ingest (`POST /events`),
-`DELETE /auth/sessions`, `DELETE /me/sessions`, `POST /me/agreements`, `POST /me/devices`.
+`POST /me/agreements`, `POST /me/devices`.
+
+A request whose body is `undefined` carries no body and declares no content type — the
+revocations below are the only such calls; `null` still means the empty JSON document that
+every other write sends.
 
 ## `src/data/session.js` — the token pair
 
@@ -61,8 +65,15 @@ Owns the API token pair and **nothing else reads a token**. localStorage key
   fresh token, and rethrows if the retry has none.
 - `fetchCurrentUser()` at boot revalidates a remembered session: 401 signs the browser out; an
   unreachable API does **not** cost the guest their sign-in.
-- `signOut()` is **local only** — it clears storage; `DELETE /auth/sessions` is not called.
-- `currentUser()`, `isSignedIn()`, `onSessionChange(fn)` are the read surface.
+- `signOut({everywhere})` clears storage **first**, then calls `DELETE /auth/sessions`
+  (or `DELETE /me/sessions`) **best-effort**: a revocation that cannot be delivered must never
+  leave somebody signed in on a browser they asked to be signed out of. It returns a promise
+  that resolves once the attempt is over; callers do not have to await it.
+- `currentUser()`, `isSignedIn()`, `onSessionChange(fn)` are the read surface. Watchers are
+  called `(session, reason)` with `session.REASON` ∈ `signedIn · signedOut · expired ·
+  refreshed`; **`expired` is the only one the person did not ask for**, and `ui/notice.js`
+  turns it into a visible "You've been signed out." slip. This is the one channel a surface
+  learns about identity through — subscribe, never poll.
 
 ## `src/data/catalog.js` — product vocabulary over the wire
 
@@ -79,18 +90,27 @@ backend started after page load is picked up without a reload. Falling back logs
 never an error: it is a working state. The 3D village is deliberately **not** a consumer — it is
 staged from the bundled seed; the map and list are the truth.
 
-## `src/data/store.js` — the demo correspondence store
+## `src/data/store.js` — the correspondence store, one per person
 
-localStorage (`steeple-village-store`) model mirroring `db/changelog/004/005/009` exactly:
-application + counter-offer status machines, booking occurrences as the double-booking
-authority, open hours/blackouts, validation, 14-day expiry. Every mutation emits
-`bus 'store:change'`. It is still the source for the guest inbox/letters and host request
-decisions.
+localStorage model mirroring `db/changelog/004/005/009` exactly: application + counter-offer
+status machines, booking occurrences as the double-booking authority, open hours/blackouts,
+validation, 14-day expiry. Every mutation emits `bus 'store:change'`. It is still the source
+for the guest inbox/letters and host request decisions (P2 moves them onto the wire).
 
-**Hazard — `GUEST_ID = 'maria-alvarez'` is hardcoded** (`store.js`, read by
-`ui/guest/journal.js` and `ui/host/index.js`): the inbox, its badge, every letter and every host
-decision run as that seeded persona **regardless of who is signed in**, and
-`GET /me/applications` is never called. Signed-out visitors see seeded demo letters.
+**The key is `steeple-village-store:{organizerId}`** (Phase 1, D6). `currentOrganizerId()`
+reads `session.currentUser()` on every load — no boot order to get wrong — and answers:
+
+- `'anon'` when nobody is signed in. `guestApplications()` is then **empty by definition**:
+  an inbox belongs to somebody. Anonymous browsing and drafts live here.
+- the seeded persona id (`store.PERSONA_IDS`, e.g. `maria@demo.steeple.test →
+  'maria-alvarez'`) **in dev builds only**, so the demo village's correspondence still reads
+  as its people's. This table dies with the seed.
+- otherwise the API's own user id.
+
+A change of person drops the in-memory copy, leaves every other key untouched, and emits
+`store:change {type:'identity'}`; surfaces re-read from whoever is here now. The demo seed
+loads only when `import.meta.env.PROD !== true` — a production build starts every namespace
+empty, and plain node (where `store-test.mjs` runs) keeps the fixture.
 
 ## Real vs demo, as of 2026-08-05
 
@@ -98,17 +118,26 @@ decision run as that seeded persona **regardless of who is signed in**, and
   result mirrored into the local store); the whole hosting chain — dev SSO → `POST` venue →
   room → photo upload → `PUT` availability → `PATCH {status:'published'}` (publish requires a
   photo; moderation answers `draft` + `publishRequestedAtUtc`).
-- **Demo:** guest inbox/letters and host request decisions run on `store.js` under the
-  hardcoded `GUEST_ID`; `ui/guest/send.js` falls back to filing an application **locally** when
-  the API is unreachable while the UI still says the request is on its way (honest in a demo, a
-  lie in production); no signed-out header affordance (the account chip is hidden when signed
-  out — sign-in only appears mid-flow); dev provider only; `turnstileToken` is hardcoded `null`.
+- **Real (Phase 1, 2026-08-05):** the account surface. The porch carries the account in both
+  states — a monogram + card (Sign out · Sign out everywhere) signed in, one quiet "Sign in"
+  chip signed out, which opens the identity panel the flows use (`ui/signIn.js` wraps
+  `ui/guest/sso.js` in the shared `.modal__layer`). The inbox tab, its badge, the journal and
+  an opened letter render only for a signed-in guest; a cold link to `#/journal` or
+  `#/letter/…` while signed out lands in the village **and the address bar is corrected with
+  it**. "Identity verified (SSO)" is gated on fact everywhere it is printed: the session
+  (`journal.js`), the organizer's own `verified` (`host/desk.js` cards), the venue's
+  (`host/desk.js` head), the session again (`host/listing.js`).
+- **Demo:** guest inbox/letters and host request decisions still run on `store.js` (now the
+  signed-in person's own namespace); `ui/guest/send.js` falls back to filing an application
+  **locally** when the API is unreachable while the UI still says the request is on its way
+  (honest in a demo, a lie in production); dev provider only; `turnstileToken` is hardcoded
+  `null`.
 
 ⚠ superseded-by-adopted-decision: see `docs/backlog/v2_migration/design.md` **D4** (server is
-truth for correspondence; `store.js` becomes a cache, `GUEST_ID` dies) and **D5** (no silent
-local filing — submissions require the API) — **not yet built**. Related and also unbuilt: D6
-(always-present account surface + real sign-out), D7 (Turnstile, agreements, real providers),
-D8 (idempotency + longer write timeouts), D9 (CSP, `window.__steeple` gated to dev).
+truth for correspondence; `store.js` becomes a cache, the seeded-persona identity dies) and
+**D5** (no silent local filing — submissions require the API) — **not yet built**. Also
+unbuilt: D7 (Turnstile, agreements, real providers), D8 (idempotency + longer write timeouts),
+D9 (CSP, `window.__steeple` gated to dev).
 
 ## Known hazards (unfixed)
 
@@ -119,6 +148,13 @@ D8 (idempotency + longer write timeouts), D9 (CSP, `window.__steeple` gated to d
   geofence-rejection paths are locally unreachable.
 - API gaps compiled for steeple live in this project's `docs/CONTRACT4.md` §5 (CORS,
   venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint, …).
+- `hostVenueId` still defaults to a bundled venue in an empty store, so a production build's
+  host mode opens on a seeded venue's desk with nothing on it. P2 scopes the desk to
+  `GET /manage/venues`, which is the real fix.
+- Sign-out's revocation uses the access token it was holding. A token already expired means
+  the `DELETE` answers 401 and the refresh-token family outlives the sign-out (until its own
+  expiry); the local half is unconditional either way.
+- `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`.
 
 ## Harness truths (`tools/*.mjs`)
 
@@ -130,9 +166,14 @@ D8 (idempotency + longer write timeouts), D9 (CSP, `window.__steeple` gated to d
   a regression.
 - Headless GL runs app-time ~6× slow: tests **wait on state, never wall-clock**.
 - `window.__steeple` (`main.js`) is the debug/verification API the harnesses read
-  (`bus, state, setView, setFilters, setHover, setStyle, setMode, setMap, store`, plus
-  `resetDemo`); `window.__steepleReady` is the boot gate they await. Suites drive affordances
-  with input and use `__steeple` only for reset and reads.
+  (`bus, state, setView, setFilters, setHover, setStyle, setMode, setMap, store, session`);
+  `window.__steepleReady` is the boot gate they await. Suites drive affordances with input and
+  use `__steeple` only for reset, reads, and — since correspondence needs an owner — signing a
+  real person in against the local API (`__steeple.session.signIn`).
+- A fade is not proof: headless app-time runs ~6× slow, so a panel's opening transition takes
+  a second or more. `checkVisibility()` calls an element at opacity 0 visible — wait on the
+  computed opacity (and on a transform settling) before clicking, or a click lands on whatever
+  the moving box has slid off.
 - E2E suites mint real accounts/venues/applications against the local API each run.
 - Known-stale failure sets predating wave 7: guest-test 3, wave2-test 6, world-test 12.
 - Builds: `npm run dev` (vite :5173) · `npm run build` · `npm run build:flat`

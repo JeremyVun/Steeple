@@ -13,10 +13,23 @@
 // authority on double-booking. Open hours and blackouts are advisory at
 // decision time but validated at submit, as in the real service.
 //
-// Every mutation emits bus 'store:change' ({ type, ...context }).
+// One store per person: the localStorage key is `steeple-village-store:{id}`,
+// where the id is whoever data/session.js says is signed in, or `anon` when
+// nobody is. A shared browser therefore never shows one account another's
+// correspondence, and signing out drops what was in memory (D6).
+//
+// Every mutation emits bus 'store:change' ({ type, ...context }); so does a
+// change of person ({ type: 'identity' }).
 
 import { bus } from '../core/bus.js';
+import * as session from './session.js';
 import { ACTIVITY_TYPES, getRoom, getVenue, VENUES } from './venues.js';
+
+// Dev builds carry the demo village; a production bundle starts empty (D4).
+// Written as "not a production build" on purpose: `import.meta.env` is absent
+// under plain node, where the store's own suite runs, and the fixture is
+// exactly what that suite is for.
+const DEMO = import.meta.env?.PROD !== true;
 
 export const APP_STATUS = {
   pending: 'pending',
@@ -48,6 +61,19 @@ export const daysToMask = (days) => days.reduce((m, d) => m | (1 << d), 0);
 export const maskToDays = (mask) => DAY_LABELS.map((_, d) => d).filter((d) => mask & (1 << d));
 
 export const GUEST_ID = 'maria-alvarez';
+
+/**
+ * The demo village's people, by the address the dev provider mints them at.
+ * Signing in as one of them in a dev build stands in their shoes, so the seeded
+ * correspondence reads as theirs. It is a fixture, not identity: production
+ * builds have no seed and no personas, and this table goes with them.
+ */
+export const PERSONA_IDS = {
+  'maria@demo.steeple.test': 'maria-alvarez',
+  'daniel@demo.steeple.test': 'daniel-okafor',
+  'priya@demo.steeple.test': 'priya-raman',
+};
+
 export const ORGANIZERS = {
   'maria-alvarez': { name: 'Maria Alvarez', org: 'Little Sparrows Playgroup', verified: true, joined: '2025-09' },
   'daniel-okafor': { name: 'Daniel Okafor', org: 'Vienna Woods Chess Club', verified: true, joined: '2024-11' },
@@ -58,6 +84,9 @@ export const ORGANIZERS = {
 const EXPIRY_DAYS = 14;
 const STORE_KEY = 'steeple-village-store';
 const SEED_VERSION = 1;
+
+/** Nobody signed in: drafts and browsing, kept apart from every account. */
+const ANON = 'anon';
 
 // ---- venue-local time helpers (dates 'YYYY-MM-DD', times 'HH:mm') ----------
 
@@ -107,10 +136,36 @@ const storage = (() => {
 
 let data = null;
 
+// ---- whose store this is ----------------------------------------------------
+//
+// A browser is shared. One key per person means signing out cannot leave a
+// letter on the screen for the next person to read, and signing in as somebody
+// else opens their correspondence rather than inheriting the last one's
+// (D6). Signed out, the `:anon` namespace holds drafts and nothing private.
+//
+// The identity is read from the session on every load rather than pushed in, so
+// there is no boot order to get wrong: whoever asks the store a question first
+// gets the right person's answer. The subscription below exists only to tell
+// the surfaces that the answer has changed.
+
+let heldFor = null;
+
+/** Who this browser's correspondence belongs to, in the store's own names. */
+export function currentOrganizerId() {
+  const user = session.currentUser();
+  if (!user) return ANON;
+  return (DEMO && PERSONA_IDS[String(user.email ?? '').toLowerCase()]) || user.id;
+}
+
+const keyFor = (organizerId) => `${STORE_KEY}:${organizerId}`;
+
 function load() {
-  if (data) return data;
+  const organizerId = currentOrganizerId();
+  if (data && heldFor === organizerId) return data;
+  data = null;
+  heldFor = organizerId;
   try {
-    const raw = storage.getItem(STORE_KEY);
+    const raw = storage.getItem(keyFor(organizerId));
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed.seedVersion === SEED_VERSION) data = parsed;
@@ -127,8 +182,18 @@ function load() {
 }
 
 function save() {
-  storage.setItem(STORE_KEY, JSON.stringify(data));
+  storage.setItem(keyFor(heldFor ?? currentOrganizerId()), JSON.stringify(data));
 }
+
+// The person changed: drop what is in memory — nothing of theirs may survive
+// the sign-out — and tell the surfaces, which re-read from whoever is here now.
+// Other people's keys are left exactly where they are.
+session.onSessionChange(() => {
+  if (heldFor === currentOrganizerId()) return;
+  data = null;
+  heldFor = null;
+  bus.emit('store:change', { type: 'identity' });
+});
 
 function emit(type, context = {}) {
   save();
@@ -142,8 +207,14 @@ const nowIso = () => new Date().toISOString();
 
 const byNewest = (a, b) => (a.createdAt < b.createdAt ? 1 : -1);
 
+/**
+ * The signed-in person's own requests. Signed out there are none to have: an
+ * inbox belongs to somebody, and this browser is nobody at the moment.
+ */
 export function guestApplications() {
-  return load().applications.filter((a) => a.organizerId === GUEST_ID).sort(byNewest);
+  const me = currentOrganizerId();
+  if (me === ANON) return [];
+  return load().applications.filter((a) => a.organizerId === me).sort(byNewest);
 }
 
 export function venueApplications(venueId) {
@@ -360,9 +431,9 @@ const freshId = (prefix) => `${prefix}-${Date.now().toString(36)}-${(idCounter++
  * normalized schedule. Nothing is re-validated, because refusing locally what
  * the service accepted would be a phantom failure after a real success.
  *
- * `organizerId` stays this browser's guest either way — it is what "your
- * requests" means here — while the person the service actually recorded rides
- * alongside as `organizerName` / `organizationName`.
+ * `organizerId` is whoever is signed in on this browser either way — it is what
+ * "your requests" means here — while the person the service actually recorded
+ * rides alongside as `organizerName` / `organizationName`.
  */
 export function submitApplication(draft, remote = null) {
   load();
@@ -375,7 +446,7 @@ export function submitApplication(draft, remote = null) {
     id: mirrored?.id ?? freshId('app'),
     venueId: draft.venueId,
     roomId: draft.roomId,
-    organizerId: draft.organizerId ?? GUEST_ID,
+    organizerId: draft.organizerId ?? currentOrganizerId(),
     activityType: draft.activityType,
     groupSize: mirrored?.groupSize ?? Number(draft.groupSize),
     frequency: mirrored?.frequency ?? draft.frequency,
@@ -754,6 +825,7 @@ function sweepExpiry() {
 }
 
 export function resetDemo() {
+  heldFor = currentOrganizerId();
   data = seed();
   emit('reset', {});
   return { ok: true };
@@ -761,7 +833,30 @@ export function resetDemo() {
 
 // ---- seed: in-flight correspondence, believable and calm --------------------
 
+/** An empty village: what a production build starts from, and starts with. */
+function empty() {
+  return {
+    seedVersion: SEED_VERSION,
+    applications: [],
+    counterOffers: [],
+    messages: [],
+    bookings: [],
+    occurrences: [],
+    openHours: {},
+    blackouts: {},
+    roomEdits: {},
+    placedVenues: [],
+    homePin: null,
+    hostVenueId: 'grace-community-vienna',
+  };
+}
+
 function seed() {
+  // The demo correspondence is a fixture of the dev village — the letters the
+  // desk finds waiting, the hours its rooms keep. It is not somebody's data and
+  // it does not ship: a production build starts every namespace empty.
+  if (!DEMO) return empty();
+
   const today = todayIso();
   const at = (daysAgo) => new Date(Date.now() - daysAgo * MS_DAY).toISOString();
   const expiry = (createdAt) => new Date(Date.parse(createdAt) + EXPIRY_DAYS * MS_DAY).toISOString();
@@ -1050,6 +1145,7 @@ function seed() {
 // Convenient single handle for the debug API and for consumers that prefer a
 // namespace over named imports.
 export const store = {
+  currentOrganizerId,
   guestApplications,
   venueApplications,
   getApplication,

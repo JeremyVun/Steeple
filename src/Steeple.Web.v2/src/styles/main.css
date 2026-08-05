@@ -329,13 +329,23 @@ body {
 /* ── the account on the porch ───────────────────────────────────────────── */
 
 /* The same chip the other two doors on the shelf are cut from (.letters,
-   .porchswitch), with a monogram where they have a word. It is not on the page
-   at all until somebody is signed in. */
+   .porchswitch), with a monogram where they have a word. Signed out it keeps
+   its place and carries the word instead: the way in is always on the shelf. */
 .account__wrap {
   position: relative;
 }
 
 .account__wrap[hidden] {
+  display: none;
+}
+
+/* Signed out there is no monogram to set, so the chip is a word like its
+   neighbours — and padded like them, not around a mark that is not there. */
+.account__wrap.is-out .account {
+  padding: 6px 14px;
+}
+
+.account__mark[hidden] {
   display: none;
 }
 
@@ -415,6 +425,16 @@ body {
   border-top: 1px solid var(--line);
   width: 100%;
   text-align: left;
+}
+
+/* The heavier of the two, so it reads as the deliberate one: quieter type, and
+   no rule of its own — it belongs to the same block as Sign out. */
+.account__all {
+  margin-top: 6px;
+  width: 100%;
+  text-align: left;
+  font-size: 12px;
+  color: var(--ink-faint);
 }
 
 .rail,
@@ -1069,6 +1089,77 @@ body {
   margin-top: 22px;
   padding-top: 18px;
   border-top: 1px solid var(--line);
+}
+
+/* ── Signing in from the shelf ───────────────────────────────────────────────
+   The identity panel, lifted out of the flow that usually carries it
+   (ui/signIn.js). It is the same sheet with the same rules; what it needs here
+   is the paper vocabulary the guest surface would have given it, and a place to
+   stand of its own rather than centred inside a letter. */
+
+.signin {
+  width: min(430px, 100%);
+  transform: translateY(10px);
+  transition: transform 220ms var(--ease);
+
+  --sheet: color-mix(in srgb, var(--card) 84%, var(--paper));
+  --rule: var(--line);
+  --rule-firm: var(--line-strong);
+  --ink-wash: color-mix(in srgb, var(--ink) 8%, transparent);
+  --lift: 0 34px 64px -34px color-mix(in srgb, var(--ink) 55%, transparent),
+    0 4px 14px -8px color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.modal__layer.is-open .signin {
+  transform: none;
+}
+
+.signin .identity {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-height: min(78vh, 660px);
+}
+
+/* ── A word about something that happened to you ─────────────────────────────
+   Set in the same hand as the request sheet's confirmation slip (.sent), which
+   is the one other thing on the page that speaks without being asked. */
+
+/* Down in the corner, over the map: the shelf it concerns is at the top right
+   and so is the search pill, and a word about your account must not stand on
+   the controls somebody is using. */
+.slip {
+  position: fixed;
+  z-index: 8;
+  bottom: 26px;
+  left: var(--rail-inset);
+  width: min(288px, calc(100vw - 2 * var(--rail-inset)));
+  padding: 13px 16px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--terracotta);
+  border-radius: 4px;
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-sheet);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+
+.slip[hidden] {
+  display: none;
+}
+
+.slip.is-open {
+  opacity: 1;
+  transform: none;
+}
+
+.slip__line {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
 }
 
 /* ── Narrow viewports ───────────────────────────────────────────────────── */

@@ -13,6 +13,7 @@
 // sheet itself opts back in. A closed surface must not swallow the village.
 
 import { bus, setView, state } from '../../core/bus.js';
+import * as session from '../../data/session.js';
 import { getApplication, guestApplications } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { el, replaceChildren } from '../dom.js';
@@ -125,8 +126,10 @@ export function createGuestFlows({ announce, porch } = {}) {
   );
   porch?.append(tab);
 
+  // An inbox is somebody's. Signed out there is nobody for it to belong to, so
+  // there is no tab and no count — not an empty one (D6).
   function renderTab() {
-    const guest = state.mode === 'guest';
+    const guest = state.mode === 'guest' && session.isSignedIn();
     tab.hidden = !guest;
     if (!guest) return;
     const waiting = guestApplications().filter((a) => isYourMove(a.status)).length;
@@ -162,6 +165,26 @@ export function createGuestFlows({ announce, porch } = {}) {
   function render() {
     const guest = state.mode === 'guest';
     let active = null;
+
+    // The inbox and an opened letter are correspondence: they exist for one
+    // person and cannot be shown to nobody. A cold link to either while signed
+    // out lands in the village rather than on an empty sheet. Asking for a
+    // space is not correspondence yet — it is a draft, and naming yourself is a
+    // step inside it (ui/guest/composer.js). The host's lens on the same views
+    // is the desk's business, not this module's.
+    //
+    // Left until the next microtask so the address bar is corrected with the
+    // view: a hash being applied is being read, and core/bus.js will not write
+    // one back while it is reading — a cold link that lands in the village
+    // would otherwise leave a letter's address in the bar.
+    if (guest && !session.isSignedIn() && (state.view === 'journal' || state.view === 'letter')) {
+      queueMicrotask(() => {
+        if (!session.isSignedIn() && (state.view === 'journal' || state.view === 'letter')) {
+          setView('village');
+        }
+      });
+      return;
+    }
 
     for (const { view, surface } of surfaces) {
       const open = guest && state.view === view;
@@ -230,6 +253,16 @@ export function createGuestFlows({ announce, porch } = {}) {
 
   bus.on('view:change', render);
   bus.on('mode:change', render);
+  // Who is signed in decides whether the inbox exists at all. Told, never
+  // polled (data/session.js).
+  //
+  // Deliberately not the whole render: the request sheet asks for a name in the
+  // middle of itself, and a full render re-opens the composer — which puts the
+  // identity step away at the exact moment somebody has just used it.
+  session.onSessionChange(() => {
+    renderTab();
+    if (state.view === 'journal' || state.view === 'letter') render();
+  });
   // The stationery/ledger flag is set entirely in CSS off this one attribute,
   // so switching it live is the attribute and nothing else. Nothing on the page
   // offers the switch yet — `?letter=` still opens on one of them.

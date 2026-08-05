@@ -55,12 +55,24 @@ function load() {
   return held;
 }
 
-function keep(next) {
+/**
+ * Why the session changed, told to every watcher alongside the session itself.
+ * Only 'expired' is news to the person — they did not ask for it — and the
+ * interface says so out loud rather than letting a chip vanish (D6).
+ */
+export const REASON = {
+  signedIn: 'signedIn',
+  signedOut: 'signedOut',
+  expired: 'expired',
+  refreshed: 'refreshed',
+};
+
+function keep(next, reason) {
   held = next;
   loaded = true;
   if (next) storage.setItem(KEY, JSON.stringify(next));
   else storage.removeItem(KEY);
-  for (const watch of watchers) watch(next);
+  for (const watch of watchers) watch(next, reason);
 }
 
 /** The person signed in on this browser, or null. */
@@ -71,7 +83,13 @@ export function currentUser() {
 /** Whether a real session exists — the only thing that earns the trust chip. */
 export const isSignedIn = () => Boolean(load());
 
-/** Told whenever the session appears, changes person, or goes. */
+/**
+ * Told whenever the session appears, changes person, or goes — with the
+ * {@link REASON} it changed for. This is the only channel: surfaces subscribe,
+ * nothing polls.
+ *
+ * @param {(session: object|null, reason: string) => void} watch
+ */
 export function onSessionChange(watch) {
   watchers.add(watch);
   return () => watchers.delete(watch);
@@ -97,17 +115,40 @@ export async function signIn({ email, displayName = null }) {
     displayName: name || null,
     device: { platform: 'web', label: 'Steeple Village' },
   });
-  keep({
-    accessToken: session.accessToken,
-    refreshToken: session.refreshToken,
-    user: session.user,
-  });
+  keep(
+    {
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      user: session.user,
+    },
+    REASON.signedIn
+  );
   return session.user;
 }
 
-/** Forget the session on this browser. The server keeps its own record. */
-export function signOut() {
-  keep(null);
+/**
+ * Sign out: here, and at steeple.
+ *
+ * The local half is unconditional and happens first. A revocation that fails —
+ * the API is down, the access token is already stale — must not leave someone
+ * signed in on a browser they asked to be signed out of; the server call is
+ * best-effort by design, and its failure is not the guest's problem.
+ *
+ * `everywhere` revokes every session this person holds rather than this one
+ * (`DELETE /me/sessions` — the shared-computer answer, CONTRACTS §4).
+ *
+ * @returns {Promise<void>} resolves once the revocation has been attempted.
+ */
+export async function signOut({ everywhere = false } = {}) {
+  const token = load()?.accessToken ?? null;
+  keep(null, REASON.signedOut);
+  if (!token) return;
+  try {
+    await (everywhere ? api.deleteAllSessions(token) : api.deleteSession(token));
+  } catch {
+    // Nothing to say and nothing to undo: the pair is gone from this browser
+    // either way, and an unrevoked refresh token expires on its own.
+  }
 }
 
 let refreshing = null;
@@ -119,13 +160,17 @@ function refresh() {
   refreshing ??= api
     .refreshSession(session.refreshToken)
     .then((pair) => {
-      keep({ ...load(), accessToken: pair.accessToken, refreshToken: pair.refreshToken });
+      keep(
+        { ...load(), accessToken: pair.accessToken, refreshToken: pair.refreshToken },
+        REASON.refreshed
+      );
       return pair.accessToken;
     })
     .catch(() => {
       // The refresh token is spent or revoked: this browser is signed out. Say
-      // so plainly rather than leaving a session that cannot do anything.
-      keep(null);
+      // so plainly rather than leaving a session that cannot do anything — and
+      // say it to the person too, since nobody asked for this (ui/notice.js).
+      keep(null, REASON.expired);
       return null;
     })
     .finally(() => {
@@ -173,12 +218,13 @@ export async function fetchCurrentUser() {
       email: me.email,
       createdAtUtc: me.createdAtUtc,
     };
-    keep({ ...load(), user });
+    keep({ ...load(), user }, REASON.refreshed);
     return user;
   } catch (error) {
     // A dead session goes; an API that simply is not running does not cost the
     // guest their sign-in — it will be there again when the API is.
-    if (error?.status === 401) keep(null);
+    // The refresh inside withAccess may already have said so; say it once.
+    if (error?.status === 401 && load()) keep(null, REASON.expired);
     return currentUser();
   }
 }
