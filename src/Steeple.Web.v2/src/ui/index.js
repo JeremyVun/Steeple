@@ -17,8 +17,10 @@ import { getVenue } from '../data/venues.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
 import { createAccount } from './account.js';
+import { createCardPanel } from './cardPanel.js';
 import { createDeepLink } from './deepLink.js';
 import { createNotice } from './notice.js';
+import { createNotifications } from './notifications.js';
 import { createSignInPanel } from './signIn.js';
 import { createAnnouncer } from './announcer.js';
 import { createArrival } from './arrival.js';
@@ -54,7 +56,17 @@ export function createUI(_engine, _world) {
 
   const porch = el('div', { class: 'porch' });
   const discovery = createDiscovery({ announce: announcer.say });
-  const guest = createGuestFlows({ announce: announcer.say, porch });
+  // One panel for the card on file, opened from the two places it matters: the
+  // account on the shelf, and a booked date whose charge failed.
+  const cardPanel = createCardPanel({ announce: announcer.say });
+  const guest = createGuestFlows({
+    announce: announcer.say,
+    porch,
+    onFixPayment: () => cardPanel.open(),
+    // Read lazily: the ambient surface is made further down, once the slip it
+    // speaks through exists. The inbox only ever asks at render time.
+    ambientRows: () => ambient.ambient(),
+  });
   // Hosting is somebody's, so the switch has to be able to ask who. The panel
   // itself is made below — this is called on a click, long after.
   const host = createHostFlows({
@@ -70,6 +82,7 @@ export function createUI(_engine, _world) {
   const account = createAccount({
     announce: announcer.say,
     onSignIn: () => signIn.open(),
+    onCard: () => cardPanel.open(),
   });
   porch.append(account.element);
 
@@ -83,6 +96,11 @@ export function createUI(_engine, _world) {
       onPick: () => signIn.open(),
     });
   });
+
+  // What steeple wrote while this person was away — ambient, not a tab. It
+  // borrows the same slip the session notice uses, because it is the same kind
+  // of thing: a word about something that happened to you (ui/notifications.js).
+  const ambient = createNotifications({ notice, announce: announcer.say });
 
   const rail = el('div', { class: 'rail' }, [venuePanel.element, roomPanel.element]);
   const browse = createBrowse();
@@ -126,7 +144,8 @@ export function createUI(_engine, _world) {
     // the same reason — either can be opened over any surface there is.
     account.card,
     notice.element,
-    signIn.element
+    signIn.element,
+    cardPanel.element
   );
 
   // Leaflet can only measure itself once the panel is on the page.
@@ -186,7 +205,11 @@ export function createUI(_engine, _world) {
 
   bus.on('mode:change', () => render());
 
-  bus.on('roll:change', () => render());
+  bus.on('roll:change', () => {
+    render();
+    // Arriving at the product surface is when there is room for a quiet word.
+    ambient.onRoll();
+  });
 
   bus.on('filters:change', () => announcer.filters());
 

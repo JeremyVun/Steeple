@@ -82,8 +82,16 @@ const GUEST_WORDS = {
  * @param onVerify  called when the person carries on as who they are signed in as
  * @param onCancel  the way out; the way back is left to the caller when absent
  * @param words     overrides for {@link GUEST_WORDS}
+ * @param requireSession
+ *   For a flow that **cannot be entered without a session at all**. Listing a
+ *   space is one: "I have space to share" signs somebody in before the flow
+ *   opens (v2_migration D4, owner decision 2026-08-05), so the signed-out half
+ *   of its Verify step could only ever be reached by a session dying mid-flow.
+ *   Rendering a second sign-in form there asked a signed-in host to sign in
+ *   again and gave the dead branch somewhere to hide; with this set, no session
+ *   says so plainly and points at the one way in there is.
  */
-export function createIdentityStep({ announce, onVerify, onCancel, words = {} }) {
+export function createIdentityStep({ announce, onVerify, onCancel, words = {}, requireSession = false }) {
   const say = { ...GUEST_WORDS, ...words };
   let busy = false;
   let problem = '';
@@ -312,7 +320,23 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
     ];
   }
 
-  const signedOut = () => (asking === 'email' ? byEmail() : people());
+  /**
+   * A flow whose door is a session has no sign-in form inside it. Being here
+   * without one means the session ended under somebody, so that is what it says.
+   */
+  function sessionGone() {
+    return [
+      el('p', {
+        class: 'prose prose--sm',
+        text: 'You have been signed out. Sign in from the top of the page and what you have written here is still waiting.',
+      }),
+      note(),
+      quietActions(),
+    ];
+  }
+
+  const signedOut = () =>
+    requireSession ? sessionGone() : asking === 'email' ? byEmail() : people();
 
   function render() {
     const user = session.currentUser();

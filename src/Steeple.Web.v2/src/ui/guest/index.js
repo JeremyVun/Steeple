@@ -34,7 +34,7 @@ import { isYourMove, plural } from './copy.js';
 // purpose — and anything modal, which has its own way out.
 const NOT_AWAY = '.guest__surface, .sent, .nav, .porch, [role="dialog"], .modal__layer';
 
-export function createGuestFlows({ announce, porch } = {}) {
+export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } = {}) {
   document.documentElement.dataset.letter = state.letter;
 
   const wash = el('div', { class: 'guest__wash', 'aria-hidden': 'true' });
@@ -54,12 +54,18 @@ export function createGuestFlows({ announce, porch } = {}) {
     onOpen: (app) =>
       setView('letter', { applicationId: app.id, venueId: app.venueId, roomId: app.roomId }),
     onBrowse: () => setView('village'),
+    // What steeple wrote while this person was away, printed as lines at the
+    // head of the inbox rather than as a second inbox of its own.
+    ambientRows,
   });
 
   const letter = createLetterView({
     announce,
     onBack: () => setView('journal'),
     onBrowse: () => setView('village'),
+    // A failed charge on a booked date is the one thing on this page that is
+    // fixed somewhere else. The panel is the shelf's, so it is handed in.
+    onFixPayment,
   });
 
   const surfaces = [

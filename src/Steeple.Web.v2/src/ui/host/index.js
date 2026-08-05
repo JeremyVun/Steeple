@@ -12,7 +12,12 @@
 // truth, same interactions, different instrument.
 
 import { bus, setDesk, setMode, setView, state } from '../../core/bus.js';
-import { managedVenues, refreshManaged } from '../../data/correspondence.js';
+import {
+  managedVenues,
+  refreshManaged,
+  refreshManagedBookings,
+  venuePayments,
+} from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import {
   currentOrganizerId,
@@ -25,7 +30,8 @@ import { el } from '../dom.js';
 import { createDesk } from './desk.js';
 import { createLetterPage } from './letter.js';
 import { createListingFlow } from './listing.js';
-import { deskVenues } from './model.js';
+import { createPayoutScreen } from './payouts.js';
+import { deskVenues, venueOf } from './model.js';
 
 const HOST_VIEWS = new Set(['desk', 'letter']);
 
@@ -44,6 +50,7 @@ function setOpen(node, open) {
 
 export function createHostFlows({ announce, porch, askToSignIn } = {}) {
   const desk = createDesk({
+    announce,
     variant: state.desk,
     onOpenLetter: (application) =>
       setView('letter', {
@@ -53,7 +60,29 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       }),
     onListing: (options) => openListing(options),
     onVariant: setDesk,
-    onVenue: (venueId) => setView('desk', { venueId }),
+    onVenue: (venueId, { reread = false } = {}) => {
+      // A venue that has just changed how it takes bookings is a venue steeple
+      // now says something different about: ask it again rather than redraw
+      // this browser's memory of the old answer.
+      if (reread) {
+        readDesk({ again: true }).then(() => desk.render());
+        return;
+      }
+      setView('desk', { venueId });
+    },
+    onSetUpPayouts: (id) => {
+      const venue = venueOf(id, placedVenues());
+      if (!venue?.remoteId) return;
+      payoutScreen.open({ id: venue.remoteId, name: venue.name });
+    },
+  });
+
+  const payoutScreen = createPayoutScreen({
+    announce,
+    onDone: (payments) => {
+      desk.setPayouts(payments);
+      desk.render();
+    },
   });
 
   const letterPage = createLetterPage({
@@ -85,6 +114,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     desk.element,
     letterPage.element,
     listing.element,
+    payoutScreen.element,
   ]);
 
   // ── whose doors these are ─────────────────────────────────────────────────
@@ -104,6 +134,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
   async function readVenues() {
     if (!session.isSignedIn()) {
       desk.setReading(false);
+      desk.setPayouts(null);
       return [];
     }
     desk.setReading(true);
@@ -111,8 +142,30 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     desk.setReading(false);
     if (answer.ok) mirrorManagedVenues(answer.value);
     const slugs = mine();
-    if (slugs.length) await refreshManaged(slugs);
+    if (slugs.length) {
+      await refreshManaged(slugs);
+      // What a yes actually made. Each booking is then read in full, because a
+      // page names bookings and says nothing about the inside of one — the
+      // dates and their charge states live on the detail read alone.
+      await refreshManagedBookings();
+      await readPayouts();
+    }
     return slugs;
+  }
+
+  /**
+   * Where the desk's venue stands with payouts. Read after the venues, so the
+   * prompt is about the venue on screen; a failure leaves it unread rather than
+   * printing "not set up" about a question that was never answered.
+   */
+  async function readPayouts() {
+    const venue = venueOf(state.venueId ?? deskVenue(), placedVenues());
+    if (!venue?.remoteId) {
+      desk.setPayouts(null);
+      return;
+    }
+    const answer = await venuePayments(venue.remoteId);
+    desk.setPayouts(answer.ok ? answer.value : null);
   }
 
   /** Ask steeple, once, unless `again` insists (a listing just landed, or the desk was opened). */
@@ -171,7 +224,9 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
    * of them with its demo correspondence on the board (v2_migration D4).
    */
   function enterHosting() {
-    desk.setTab('letters');
+    // Bookings, not requests: under instant book most hosts never answer a
+    // request at all, and the first thing a desk owes them is what is confirmed.
+    desk.setTab('bookings');
     if (!session.isSignedIn()) {
       wanted = true;
       announce?.('Sign in to list a space.');

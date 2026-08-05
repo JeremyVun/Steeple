@@ -2,7 +2,9 @@
 //
 // A venue is booked with money now (docs/contracts/payments.md), so every
 // request needs a method on file before it can be sent: without one the submit
-// answers 402 and this step is what the sheet opens instead of failing.
+// answers 402 and this step is what the sheet opens instead of failing. The same
+// step, in different words, is how a card is replaced later — after a failed
+// charge, or when the old one expires.
 //
 // It is deliberately minimal, and it is deliberately not a card form. Under the
 // mock gateway steeple records display data only — the brand and the last four
@@ -11,35 +13,81 @@
 // `clientSecret` and `publishableKey` this step already receives feed Elements,
 // Elements owns the number, and `saveMockCard` retires with the mock.
 //
-//   createCardStep({ announce, onSaved, onCancel }) -> { element, open, reset, focus }
+//   createCardStep({ announce, onSaved, onCancel, words }) -> { element, open, reset, focus, setMethod }
 //
 // `open()` asks steeple for the setup intent; `onSaved` runs once the method is
 // recorded, which is the caller's cue to try its send again.
 
-import { saveMockCard, startCardSetup } from '../../data/correspondence.js';
+import { paymentState, saveMockCard, startCardSetup } from '../../data/correspondence.js';
 import { el, replaceChildren } from '../dom.js';
 
 const BRANDS = ['Visa', 'Mastercard', 'American Express', 'Discover'];
 
-export function createCardStep({ announce, onSaved, onCancel }) {
+// The words belong to the moment, not to the step. Before a request goes out it
+// is a gate; from the account or after a failed charge it is a replacement, and
+// telling somebody a payment method "is needed first" when they already have one
+// on file is telling them something untrue.
+const GATE_WORDS = {
+  eyebrow: 'Before you send',
+  title: 'A payment method is needed first',
+  blurb:
+    'Venues here are paid by the hour, so Steeple keeps a card on file before a request goes out. Nothing is charged until a booking is confirmed.',
+  save: 'Save and send',
+  cancel: 'Back to your request',
+};
+
+const REPLACE_WORDS = {
+  eyebrow: 'Your payment method',
+  title: 'Use a different card',
+  blurb:
+    'Steeple keeps one card on file. Saving another replaces it, and every booking you already hold charges to the new one from now on.',
+  save: 'Save this card',
+  cancel: 'Keep the card I have',
+};
+
+export { GATE_WORDS, REPLACE_WORDS };
+
+// Steeple stores a brand the way the gateway names it — `visa`, `mastercard`,
+// `amex` — and those are wire tokens, not words to print at somebody. Anything
+// unknown is title-cased rather than dropped: the set of card brands grows
+// without asking this file.
+const BRAND_LABEL = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'American Express',
+  'american express': 'American Express',
+  discover: 'Discover',
+  diners: 'Diners Club',
+  jcb: 'JCB',
+  unionpay: 'UnionPay',
+};
+
+export const brandLabel = (brand) =>
+  BRAND_LABEL[String(brand ?? '').toLowerCase()] ??
+  String(brand ?? '').replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+
+/** "Visa ···· 4242" — the whole of what Steeple knows about a card. */
+export function cardLine(method) {
+  if (!method?.brand || !method?.last4) return null;
+  return `${brandLabel(method.brand)} ···· ${method.last4}`;
+}
+
+export function createCardStep({ announce, onSaved, onCancel, words = GATE_WORDS } = {}) {
+  const say = { ...GATE_WORDS, ...words };
   let clientSecret = null;
   let busy = false;
   let problem = '';
   let opening = false;
+  // The card steeple already holds, when this step has been told about one.
+  let method = null;
 
   const body = el('div', { class: 'identity__body' });
+  const heading = el('h2', { class: 'identity__title', text: say.title });
+  const blurb = el('p', { class: 'prose prose--sm', text: say.blurb });
   const element = el(
     'section',
     { class: 'identity identity--card', tabindex: '-1', 'aria-label': 'A way to pay' },
-    [
-      el('p', { class: 'eyebrow', text: 'Before you send' }),
-      el('h2', { class: 'identity__title', text: 'A payment method is needed first' }),
-      el('p', {
-        class: 'prose prose--sm',
-        text: 'Venues here are paid by the hour, so steeple keeps a card on file before a request goes out. Nothing is charged until a booking is confirmed.',
-      }),
-      body,
-    ]
+    [el('p', { class: 'eyebrow', text: say.eyebrow }), heading, blurb, body]
   );
 
   const brand = el('input', {
@@ -65,7 +113,9 @@ export function createCardStep({ announce, onSaved, onCancel }) {
     placeholder: '4242',
   });
 
-  const form = el('form', { class: 'identity__form', novalidate: true }, [
+  const submit = el('button', { type: 'submit', class: 'pill pill--primary' }, say.save);
+
+  const form = el('form', { class: 'identity__form cardform', novalidate: true }, [
     el('div', { class: 'field' }, [
       el('label', { class: 'field__label', for: 'card-brand', text: 'Card' }),
       brand,
@@ -75,7 +125,7 @@ export function createCardStep({ announce, onSaved, onCancel }) {
       el('label', { class: 'field__label', for: 'card-last4', text: 'Last four digits' }),
       last4,
     ]),
-    el('button', { type: 'submit', class: 'pill pill--primary' }, 'Save and send'),
+    submit,
   ]);
 
   form.addEventListener('submit', (event) => {
@@ -108,7 +158,10 @@ export function createCardStep({ announce, onSaved, onCancel }) {
       announce?.(problem);
       return;
     }
-    announce?.(`${name} ending ${digits} saved. Sending your request.`);
+    method = answer.value?.method ?? { brand: name, last4: digits };
+    // Spent: a setup intent is confirmed once, and a second save opens another.
+    clientSecret = null;
+    announce?.(`${name} ending ${digits} saved.${onSaved ? ' Sending your request.' : ''}`);
     render();
     onSaved?.(answer.value);
   }
@@ -117,9 +170,26 @@ export function createCardStep({ announce, onSaved, onCancel }) {
     return problem ? el('p', { class: 'identity__problem', role: 'alert', text: problem }) : null;
   }
 
+  /** The card on file, printed as the only two things Steeple knows about it. */
+  function held() {
+    const line = cardLine(method);
+    if (!line) return null;
+    return el('div', { class: 'cardheld' }, [
+      el('span', { class: 'cardheld__mark', 'aria-hidden': 'true' }),
+      el('div', { class: 'cardheld__body' }, [
+        el('span', { class: 'cardheld__brand', text: line }),
+        el('span', { class: 'cardheld__note', text: 'On file with Steeple' }),
+      ]),
+    ]);
+  }
+
   function render() {
     element.classList.toggle('is-signing', busy || opening);
+    heading.textContent = say.title;
+    blurb.textContent = say.blurb;
+    submit.textContent = say.save;
     replaceChildren(body, [
+      held(),
       form,
       el('p', {
         class: 'identity__fineprint',
@@ -128,14 +198,14 @@ export function createCardStep({ announce, onSaved, onCancel }) {
       note(),
       el('div', { class: 'identity__actions identity__actions--quiet' }, [
         onCancel
-          ? el('button', { type: 'button', class: 'linkish', onclick: () => onCancel() }, 'Back to your request')
+          ? el('button', { type: 'button', class: 'linkish', onclick: () => onCancel() }, say.cancel)
           : null,
       ].filter(Boolean)),
-    ]);
+    ].filter(Boolean));
     // Set from the flag, never only to true: the form node survives a redraw,
     // so a control disabled while waiting stays disabled unless it is told.
-    const held = busy || opening;
-    for (const control of body.querySelectorAll('button, input')) control.disabled = held;
+    const busyNow = busy || opening;
+    for (const control of body.querySelectorAll('button, input')) control.disabled = busyNow;
   }
 
   /** Ask steeple to open the setup intent. False when it could not. */
@@ -156,11 +226,25 @@ export function createCardStep({ announce, onSaved, onCancel }) {
     return true;
   }
 
+  /** Ask steeple what card it holds, so this step can print it. Best effort. */
+  async function readMethod() {
+    const answer = await paymentState();
+    if (!answer.ok) return null;
+    method = answer.value?.method ?? null;
+    render();
+    return method;
+  }
+
   render();
 
   return {
     element,
     open,
+    readMethod,
+    setMethod(next) {
+      method = next ?? null;
+      render();
+    },
     reset() {
       problem = '';
       busy = false;

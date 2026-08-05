@@ -200,6 +200,12 @@
   gap: 9px;
 }
 
+/* The foot is a pair, but the layout switch belongs to one tab only — with it
+   gone the remaining button keeps its side rather than sliding to the middle. */
+.desk__foot > .pill:only-child {
+  margin-left: auto;
+}
+
 .segments--flat {
   padding: 2px;
   border-color: var(--line);
@@ -554,6 +560,342 @@
 .pill--quiet:hover {
   border-color: var(--terracotta);
   color: var(--terracotta-deep);
+}
+
+/* ── bookings ───────────────────────────────────────────────────────────────
+   A confirmed booking is settled business, so it lies down rather than standing
+   up: no hover lift, no invitation to press. The one lever on it — the host's
+   cancel — is a quiet line, because it frees every remaining date and refunds
+   everything charged, and a button that looks eager to be pressed would be
+   lying about what pressing it costs. */
+
+.bookings {
+  display: grid;
+  gap: 14px;
+}
+
+.booking {
+  padding: 16px 18px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+}
+
+.booking__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.booking__heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.booking__room {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 19px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.booking__who {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.booking__stamp {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+  flex: none;
+}
+
+.booking__rate {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.booking__when {
+  margin: 11px 0 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.booking__tally,
+.booking__next {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.booking__next {
+  color: var(--sage-deep);
+}
+
+.booking__trouble {
+  margin: 9px 0 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--terracotta-tint);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--terracotta-deep);
+}
+
+/* Each date, and what has happened to the money for it. */
+.dates {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1px;
+}
+
+.dates__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.dates .dates__item:first-child {
+  border-top: 0;
+}
+
+.dates__item.is-past {
+  color: var(--ink-faint);
+  opacity: 0.72;
+}
+
+.dates__day {
+  color: var(--ink);
+}
+
+.dates__hours {
+  color: var(--ink-soft);
+}
+
+.dates__charge {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.dates__charge--succeeded {
+  color: var(--sage-deep);
+}
+
+.dates__charge--trouble {
+  color: var(--terracotta-deep);
+}
+
+.dates__charge--refunded {
+  color: var(--ink-soft);
+}
+
+.booking__rescind {
+  margin-top: 12px;
+}
+
+.booking__confirm {
+  margin-top: 12px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.booking__warning {
+  margin: 0;
+  color: var(--terracotta-deep);
+}
+
+.booking__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.desk__refusal {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--terracotta-tint);
+  font-size: 13px;
+  color: var(--terracotta-deep);
+}
+
+/* ── payouts ────────────────────────────────────────────────────────────────
+   A prompt, never a wall: payout state gates nothing in the mock era, so this
+   asks once, says what it is for, and gets out of the way. */
+
+.payout {
+  display: grid;
+  gap: 9px;
+  justify-items: start;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  background: var(--paper-deep);
+}
+
+.payout > .prose {
+  margin: 0;
+}
+
+.payout--done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-color: transparent;
+  background: var(--sage-tint);
+  font-size: 12.5px;
+  color: var(--sage-deep);
+}
+
+/* ── the venue's own settings ───────────────────────────────────────────── */
+
+.settings {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* Deliberately not `.choice` — the request sheet owns that name for its own
+   radios (styles/guest.css), and a shared class across two surfaces is how one
+   of them silently restyles the other. */
+.settings__modes {
+  display: grid;
+  gap: 9px;
+  margin-top: 11px;
+}
+
+.mode {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.mode:hover {
+  border-color: var(--line-strong);
+}
+
+.mode.is-on {
+  border-color: var(--sage);
+  background: var(--sage-tint);
+}
+
+.mode__input {
+  appearance: auto;
+  width: 15px;
+  height: 15px;
+  margin: 3px 0 0;
+  accent-color: var(--sage-deep);
+}
+
+.mode__body {
+  display: grid;
+  gap: 3px;
+}
+
+.mode__label {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.mode__blurb {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.settings__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+/* ── the mock payout screen ─────────────────────────────────────────────── */
+
+.payoutscreen {
+  width: min(470px, 100%);
+  padding: 26px 28px 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: 0 40px 80px -40px rgba(42, 38, 32, 0.65);
+  transform: translateY(10px);
+  transition: transform 220ms var(--ease);
+}
+
+.modal__layer.is-open .payoutscreen {
+  transform: none;
+}
+
+.payoutscreen > .eyebrow {
+  color: var(--terracotta-deep);
+}
+
+.payoutscreen__title {
+  margin: 8px 0 14px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.payoutscreen__body {
+  display: grid;
+  gap: 12px;
+}
+
+.payoutscreen__list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.payoutscreen__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.payoutscreen__fineprint {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.payoutscreen.is-working {
+  opacity: 0.72;
 }
 
 /* ── the schedule ribbon ────────────────────────────────────────────────── */

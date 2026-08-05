@@ -52,12 +52,14 @@ const STEPS = [
   { id: 'publish', label: 'Publish' },
 ];
 
-// The identity beat is the guest's, said in the host's words.
+// The identity beat is the guest's, said in the host's words. Hosting is entered
+// through a session, so by the time anybody reads this there is one: the step
+// confirms whose listing this will be, and does not ask again.
 const HOST_IDENTITY = {
   eyebrow: 'Verify',
-  title: 'Sign in to Steeple',
+  title: 'Whose listing this is',
   blurb:
-    'Signing in once puts a verified mark on everything you list. Groups see the mark and your name; nothing else about your account.',
+    'Everything you list carries this account\u2019s verified mark. Groups see the mark and your name; nothing else about your account is shared.',
   carryOn: (name) => `Continue as ${name}`,
   signedOutAgain: 'Signed out.',
   missingEmail: 'An email address, so your listings have an owner.',
@@ -184,9 +186,15 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     if (step === 'availability') renderFoot();
   });
 
+  // Hosting cannot be entered without a session at all — "I have space to share"
+  // signs somebody in first (v2_migration D4, owner decision 2026-08-05) — so
+  // this step never asks anybody to sign in. It confirms who the listing will
+  // belong to, and the only signed-out state it can reach is a session that died
+  // mid-flow, which says so rather than offering a second front door.
   const identity = createIdentityStep({
     announce,
     words: HOST_IDENTITY,
+    requireSession: true,
     onVerify: () => advance(),
   });
 
@@ -223,9 +231,6 @@ export function createListingFlow({ announce, onChanged, onClose }) {
 
   /** Whether steeple is a party to this listing at all, right now. */
   const withSteeple = () => !draft.localOnly && draft.offline !== true;
-
-  const OFFLINE_NOTE =
-    'Steeple could not be reached. You can carry on — what you write is kept on this device until it is back.';
 
   /**
    * The local record's own id. Two venues can honestly carry one name, and a
@@ -444,17 +449,6 @@ export function createListingFlow({ announce, onChanged, onClose }) {
 
   function verifyStep() {
     identity.reset();
-    // A host who cannot sign in is owed the reason. Asked once, on the step
-    // where signing in is the whole business, and only when there is no session
-    // to sign in with.
-    if (!manage.signedIn() && draft.offline == null) {
-      manage.reachable().then((up) => {
-        draft.offline = !up;
-        if (step !== 'verify') return;
-        if (!up) say(OFFLINE_NOTE, 'quiet');
-        renderStep();
-      });
-    }
     return [noticeBlock(), identity.element];
   }
 
@@ -1051,7 +1045,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         draft.venue.suburb.trim().length > 1 &&
         draft.venue.postcode.trim().length > 2
       );
-    if (step === 'verify') return manage.signedIn() || draft.offline === true;
+    if (step === 'verify') return manage.signedIn();
     if (step === 'describe')
       return (
         draft.room.name.trim().length > 1 &&
@@ -1081,7 +1075,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
           ? 'Seats are counted in whole numbers.'
           : 'A name, a description, a capacity, and who may use it.';
       if (step === 'availability') return 'Paint at least one open window to carry on.';
-      if (step === 'verify') return 'Sign in once and the verified mark follows your listings.';
+      if (step === 'verify') return 'Sign in from the top of the page to carry on — nothing you have written is lost.';
       if (step === 'publish') return blockers()[0]?.text ?? '';
     }
     return '';
