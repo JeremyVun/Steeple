@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  The catalog, printed plainly — a verification page, not a product surface.
+
+  The product's list is being built in another workstream; this page stands in
+  for it, asking data/catalog.js exactly what the list will ask and showing what
+  came back, so a screenshot can prove the answers are the API's and not the
+  bundled seed's. Dev-only: vite builds index.html, never this.
+
+  node tools/shot.mjs "http://localhost:5323/tools/catalog-proof.html" /tmp/shot.png
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Catalog proof</title>
+    <!-- The shot harness counts every console error, favicons included. -->
+    <link rel="icon" href="data:," />
+    <style>
+      body { font: 14px/1.5 ui-monospace, Menlo, monospace; margin: 24px; background: #f6f3ec; color: #24211c; }
+      h1 { font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
+      .source { display: inline-block; padding: 4px 10px; border-radius: 3px; color: #fff; background: #2e7d32; }
+      .source.is-seed { background: #a1450f; }
+      table { border-collapse: collapse; margin-top: 16px; }
+      th, td { border-bottom: 1px solid #d9d2c4; padding: 6px 12px; text-align: left; vertical-align: middle; }
+      img { display: block; width: 88px; height: 58px; object-fit: cover; background: #ddd6c8; }
+      .url { font-size: 11px; color: #6b6355; }
+    </style>
+  </head>
+  <body>
+    <h1>data/catalog.js</h1>
+    <p><span id="source" class="source">…</span> <span id="fence"></span></p>
+    <table>
+      <thead>
+        <tr><th>photo</th><th>room</th><th>venue</th><th>suburb</th><th>cap</th><th>price</th><th>activities</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <p id="detail"></p>
+    <p id="profile"></p>
+    <script type="module">
+      import {
+        getGeofence,
+        getListing,
+        getSuburbs,
+        getVenueProfile,
+        isLive,
+        searchListings,
+      } from '/src/data/catalog.js';
+
+      const params = new URLSearchParams(location.search);
+      const query = {};
+      if (params.get('suburb')) query.suburb = params.get('suburb');
+      if (params.get('minCapacity')) query.minCapacity = Number(params.get('minCapacity'));
+      if (params.get('activities')) query.activities = params.get('activities').split(',');
+      if (params.get('date')) query.date = params.get('date');
+      if (params.get('timeOfDay')) query.timeOfDay = params.get('timeOfDay');
+
+      const [fence, suburbs, result, listing, profile] = await Promise.all([
+        getGeofence(),
+        getSuburbs(),
+        searchListings(query),
+        getListing('vienna-presbyterian', 'garden-meeting-room'),
+        getVenueProfile('merrifield-fellowship'),
+      ]);
+
+      // Read the source after every call: one silent fallback must show here.
+      const source = document.getElementById('source');
+      source.textContent = isLive() ? 'LIVE API' : 'BUNDLED SEED';
+      source.classList.toggle('is-seed', !isLive());
+      document.getElementById('fence').textContent =
+        `${fence.areaName} · ${fence.center.lat}, ${fence.center.lng} · suburbs: ${suburbs.join(', ')} · ${result.total} listings`;
+
+      document.getElementById('rows').innerHTML = result.items
+        .map(
+          (item) => `<tr>
+            <td>${item.primaryPhotoUrl ? `<img src="${item.primaryPhotoUrl}" alt="" />` : '—'}
+              <span class="url">${item.primaryPhotoUrl ?? 'no photo'}</span></td>
+            <td>${item.name}</td><td>${item.venueShortName}</td><td>${item.suburb}</td>
+            <td>${item.capacity}</td>
+            <td>${item.pricePerHour === null ? 'Free' : `$${item.pricePerHour}/hr`}</td>
+            <td>${item.activities.join(', ')}</td>
+          </tr>`
+        )
+        .join('');
+
+      document.getElementById('detail').textContent = listing
+        ? `getListing → ${listing.name} · ${listing.venue.addressLine} · ${listing.photos.length} photos · ${listing.description}`
+        : 'getListing → null';
+
+      document.getElementById('profile').textContent = profile
+        ? `getVenueProfile → ${profile.shortName} · ${profile.addressLine} · ${profile.contactEmail} · verified: ${profile.isIdentityVerified} · ${profile.transitInfo}`
+        : 'getVenueProfile → null';
+
+      window.__steepleReady = true;
+    </script>
+  </body>
+</html>

@@ -1,0 +1,711 @@
+// THE APPLY FLOW — asking a church for a space.
+//
+// One sheet laid over the village: a heading naming the space, a note in the
+// guest's own words, the two facts a church needs (what the group does, how
+// many are coming) and the week card where the hours are chosen. Every rule
+// shown here is the store's own (validateApplication); nothing is checked twice
+// in different words.
+//
+// The sheet is an overlay over the room it is about, and there is exactly one
+// way out of it — `onLeave`, which puts the guest back on that room. The back
+// arrow at the top left, a click on the paper around the sheet, and Escape all
+// take it. The identity step is one level deeper, so those three close that
+// first: you never lose a written request to a key you pressed to dismiss a
+// card.
+
+import {
+  blackoutsFor,
+  effectiveRoom,
+  scheduleConflicts,
+  todayIso,
+  addDays,
+  validateApplication,
+} from '../../data/store.js';
+import { getVenue } from '../../data/venues.js';
+import { priceParts } from '../copy.js';
+import { el, replaceChildren } from '../dom.js';
+import {
+  formatDate,
+  occurrenceCount,
+  plural,
+  scheduleSentence,
+} from './copy.js';
+import { sendRequest } from './send.js';
+import { createIdentityStep } from './sso.js';
+import { createWeekCard } from './weekCard.js';
+
+const INTENT_LIMIT = 2000;
+const COUNT_FROM = 1600;
+
+// Drafts survive leaving the request — a stray click on the village must never
+// cost a guest the paragraph they just wrote.
+const drafts = new Map();
+
+const blankDraft = (venueId, roomId, room) => ({
+  venueId,
+  roomId,
+  activityType: room.activities.length === 1 ? room.activities[0] : null,
+  groupSize: '',
+  frequency: 'oneOff',
+  startDate: null,
+  endDate: null,
+  daysOfWeekMask: 0,
+  startTime: null,
+  endTime: null,
+  intentText: '',
+});
+
+export function createComposer({ announce, onSent, onLeave }) {
+  let venue = null;
+  let room = null;
+  let draft = null;
+  let attempted = false;
+  const touched = new Set();
+
+  const week = createWeekCard({
+    announce,
+    onChange: (schedule) => {
+      Object.assign(draft, schedule);
+      touched.add('schedule');
+      renderWhen();
+      renderFoot();
+    },
+  });
+
+  const identity = createIdentityStep({
+    announce,
+    // The guest has already asked to send; naming themselves is the last beat.
+    onVerify: () => dispatch(),
+    onCancel: () => closeIdentity(),
+  });
+  identity.element.hidden = true;
+
+  // The way back, where a way back belongs: an arrow at the top left, before
+  // anything the sheet asks for.
+  const back = el(
+    'button',
+    {
+      type: 'button',
+      class: 'letter__back',
+      'aria-label': 'Back to the space',
+      onclick: () => leaveSheet(),
+    },
+    [el('span', { class: 'letter__backglyph', 'aria-hidden': 'true', text: '←' })]
+  );
+
+  const head = el('header', { class: 'letter__head' });
+  const noteCol = el('div', { class: 'letter__col letter__col--note' });
+  const whenCol = el('div', { class: 'letter__col letter__col--when' });
+  const columns = el('div', { class: 'letter__columns' }, [noteCol, whenCol]);
+  const foot = el('footer', { class: 'letter__foot' });
+  const sheet = el('form', { class: 'letter__sheet', novalidate: true }, [
+    el('div', { class: 'letter__nav' }, [back]),
+    head,
+    columns,
+    foot,
+    identity.element,
+  ]);
+  sheet.addEventListener('submit', (event) => {
+    event.preventDefault();
+    seal();
+  });
+
+  // The paper around the sheet, as a thing a mouse can land on. It stops below
+  // the top line so the breadcrumb and the porch stay reachable over an open
+  // request — they are ways out too, and a modal that swallows them is a trap.
+  const backdrop = el('div', { class: 'letter__backdrop', 'aria-hidden': 'true' });
+
+  const element = el('div', { class: 'guest__surface guest__surface--letter' }, [backdrop, sheet]);
+
+  const isOpen = () => element.classList.contains('is-open');
+  const signing = () => !identity.element.hidden;
+
+  /** The one exit. One step deeper closes first; otherwise the room returns. */
+  function leaveSheet() {
+    if (signing()) return closeIdentity();
+    onLeave?.();
+  }
+
+  // Only a press that both starts and ends on the backdrop counts — a text
+  // selection dragged out of the note must not throw the request away.
+  let pressedOutside = false;
+  backdrop.addEventListener('pointerdown', () => {
+    pressedOutside = true;
+  });
+  element.addEventListener('pointerdown', (event) => {
+    if (event.target !== backdrop) pressedOutside = false;
+  });
+  backdrop.addEventListener('click', () => {
+    if (!pressedOutside) return;
+    pressedOutside = false;
+    leaveSheet();
+  });
+
+  // Escape, wherever focus sits inside the request. Capture, and stop: the
+  // journey's own Escape would guess at where to go back to, and this sheet
+  // knows exactly.
+  window.addEventListener(
+    'keydown',
+    (event) => {
+      if (event.key !== 'Escape' || !isOpen()) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      event.preventDefault();
+      event.stopPropagation();
+      leaveSheet();
+    },
+    { capture: true }
+  );
+
+  // ── fields ────────────────────────────────────────────────────────────────
+
+  const intent = el('textarea', {
+    class: 'field__input field__input--note',
+    id: 'letter-intent',
+    rows: '7',
+    maxlength: String(INTENT_LIMIT + 200),
+    spellcheck: 'true',
+    placeholder: 'Who your group is, what you would do in the space, and anything the host would want to know.',
+  });
+  intent.addEventListener('input', () => {
+    draft.intentText = intent.value;
+    touched.add('intentText');
+    renderCount();
+    renderFoot();
+  });
+
+  const count = el('p', { class: 'field__count' });
+  const intentNote = el('p', { class: 'field__note' });
+
+  // Group size: a stepper, because the number is small, bounded by the room's
+  // own capacity, and most often nudged rather than typed. The field stays a
+  // real spinbutton, so a screen reader hears the value, its floor and its
+  // ceiling, and the arrow keys work without anyone being told they do.
+  const size = el('input', {
+    class: 'stepper__value',
+    id: 'letter-size',
+    type: 'number',
+    min: '1',
+    step: '1',
+    inputmode: 'numeric',
+    placeholder: '—',
+  });
+
+  const fewer = el(
+    'button',
+    { type: 'button', class: 'stepper__step', 'aria-label': 'Fewer people', onclick: () => stepSize(-1) },
+    '−'
+  );
+  const more = el(
+    'button',
+    { type: 'button', class: 'stepper__step', 'aria-label': 'More people', onclick: () => stepSize(1) },
+    '+'
+  );
+  const stepper = el('div', { class: 'stepper' }, [
+    fewer,
+    size,
+    more,
+    el('span', { class: 'stepper__unit', 'aria-hidden': 'true', text: 'people' }),
+  ]);
+
+  /** The typed value as an integer, or null while the field is empty. */
+  const sizeValue = () => {
+    const raw = String(draft.groupSize ?? '').trim();
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isInteger(n) ? n : null;
+  };
+
+  const clampSize = (n) => Math.min(Math.max(n, 1), room.capacity);
+
+  function setSize(next, spoken) {
+    draft.groupSize = String(next);
+    size.value = draft.groupSize;
+    touched.add('groupSize');
+    syncStepper();
+    renderNote();
+    renderFoot();
+    if (spoken) announce?.(spoken);
+  }
+
+  function stepSize(delta) {
+    const now = sizeValue();
+    const next = clampSize(now === null ? 1 : now + delta);
+    if (next === now) return;
+    setSize(next, `${plural(next, 'person', 'people')}.`);
+  }
+
+  /** The buttons stop where the room does; the value says so out loud. */
+  function syncStepper() {
+    const now = sizeValue();
+    fewer.disabled = now === null || now <= 1;
+    more.disabled = now !== null && now >= room.capacity;
+    size.max = String(room.capacity);
+    size.setAttribute('aria-valuemin', '1');
+    size.setAttribute('aria-valuemax', String(room.capacity));
+    if (now === null) size.removeAttribute('aria-valuetext');
+    else size.setAttribute('aria-valuetext', plural(now, 'person', 'people'));
+  }
+
+  // Focusing a number that is already there means replacing it, not editing a
+  // digit of it: a number field has no text selection to fall back on, so
+  // clearing one by hand is four backspaces at the wrong end of the caret.
+  size.addEventListener('focus', () => size.select?.());
+
+  size.addEventListener('input', () => {
+    draft.groupSize = size.value;
+    touched.add('groupSize');
+    syncStepper();
+    renderNote();
+    renderFoot();
+  });
+  // Typing past the room's capacity is a mistake worth catching gently, and
+  // when the guest has finished typing rather than in the middle of it.
+  size.addEventListener('change', () => {
+    const now = sizeValue();
+    if (now === null) return;
+    const held = clampSize(now);
+    if (held === now) return;
+    setSize(held, `${room.name} seats up to ${room.capacity}.`);
+  });
+
+  const sizeNote = el('p', { class: 'field__note' });
+  const activities = el('div', { class: 'choices' });
+  const activityNote = el('p', { class: 'field__note' });
+
+  const frequency = el('div', { class: 'choices choices--segment' });
+  const until = el('div', { class: 'field field--until' });
+  const summary = el('p', { class: 'letter__summary' });
+  const scheduleNote = el('p', { class: 'field__note' });
+
+  const errors = el('div', { class: 'letter__errors', role: 'status' });
+  const send = el('button', { type: 'submit', class: 'pill pill--primary pill--wide' }, 'Send request');
+
+  // ── render ────────────────────────────────────────────────────────────────
+
+  function renderCount() {
+    const length = intent.value.length;
+    count.textContent =
+      length >= COUNT_FROM
+        ? `${plural(Math.max(INTENT_LIMIT - length, 0), 'character', 'characters')} left`
+        : '';
+    count.classList.toggle('is-over', length > INTENT_LIMIT);
+  }
+
+  function renderNote() {
+    const value = Number(draft.groupSize);
+    sizeNote.textContent =
+      Number.isInteger(value) && value > 0 && value <= room.capacity
+        ? `${room.name} seats up to ${room.capacity}.`
+        : `Seats up to ${room.capacity}.`;
+  }
+
+  function fieldError(field) {
+    if (!attempted && !touched.has(field)) return null;
+    return validate().errors[field] ?? null;
+  }
+
+  let cachedDraft = null;
+  let cachedResult = null;
+  function validate() {
+    const key = JSON.stringify(draft);
+    if (key !== cachedDraft) {
+      cachedDraft = key;
+      cachedResult = validateApplication(draft);
+    }
+    return cachedResult;
+  }
+
+  function renderHead() {
+    const { amount, unit, free } = priceParts(room);
+    replaceChildren(head, [
+      el('div', { class: 'letter__heading' }, [
+        el('p', { class: 'eyebrow', text: 'Booking request' }),
+        el('h1', { class: 'letter__title', text: room.name }),
+        el('p', { class: 'letter__from', text: `${venue.name} · ${venue.suburb}` }),
+      ]),
+      el('div', { class: 'letter__stamp' }, [
+        el('p', { class: 'letter__date', text: formatDate(todayIso()) }),
+        el('p', { class: `price price--sm${free ? ' price--free' : ''}` }, [
+          el('span', { class: 'price__amount', text: amount }),
+          unit && el('span', { class: 'price__unit', text: unit }),
+        ]),
+      ]),
+    ]);
+  }
+
+  function renderNoteColumn() {
+    const accepted = room.activities;
+    replaceChildren(
+      activities,
+      accepted.map((activity) => {
+        const id = `activity-${activity.toLowerCase()}`;
+        const input = el('input', {
+          type: 'radio',
+          name: 'letter-activity',
+          id,
+          class: 'choice__input',
+          value: activity,
+          checked: draft.activityType === activity,
+        });
+        input.addEventListener('change', () => {
+          draft.activityType = activity;
+          touched.add('activityType');
+          renderFoot();
+          announce?.(`${activity} chosen.`);
+        });
+        return el('label', { class: 'choice', for: id }, [input, el('span', { text: activity })]);
+      })
+    );
+
+    replaceChildren(noteCol, [
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label', for: 'letter-intent', text: 'Your plans' }),
+        intent,
+        el('div', { class: 'field__underline' }, [intentNote, count]),
+      ]),
+      el('fieldset', { class: 'field field--choices' }, [
+        el('legend', { class: 'field__label', text: 'The kind of activity' }),
+        activities,
+        activityNote,
+      ]),
+      el('div', { class: 'field field--inline' }, [
+        el('label', { class: 'field__label', for: 'letter-size', text: 'Group size' }),
+        stepper,
+        sizeNote,
+      ]),
+      // Not decoration: the terms the request is made under, printed where a
+      // form would print them — small, complete, before you send.
+      el('aside', { class: 'letter__rules' }, [
+        el('h2', { class: 'eyebrow', text: 'The house rules here' }),
+        el('p', { class: 'prose prose--sm', text: room.houseRules }),
+      ]),
+    ]);
+    renderNote();
+  }
+
+  function renderWhen() {
+    const weekly = draft.frequency === 'weekly';
+    replaceChildren(
+      frequency,
+      [
+        ['oneOff', 'One time'],
+        ['weekly', 'Every week'],
+      ].map(([value, label]) => {
+        const id = `letter-freq-${value}`;
+        const input = el('input', {
+          type: 'radio',
+          name: 'letter-frequency',
+          id,
+          class: 'choice__input',
+          value,
+          checked: draft.frequency === value,
+        });
+        input.addEventListener('change', () => setFrequency(value));
+        return el('label', { class: 'choice choice--segment', for: id }, [
+          input,
+          el('span', { text: label }),
+        ]);
+      })
+    );
+
+    if (weekly) {
+      const end = el('input', {
+        class: 'field__input field__input--date',
+        id: 'letter-until',
+        type: 'date',
+        min: draft.startDate ? addDays(draft.startDate, 7) : addDays(todayIso(), 7),
+        max: draft.startDate ? addDays(draft.startDate, 366) : addDays(todayIso(), 366),
+        value: draft.endDate ?? '',
+      });
+      end.addEventListener('change', () => {
+        draft.endDate = end.value || null;
+        touched.add('endDate');
+        week.setSchedule(draft);
+        week.render();
+        renderFoot();
+        renderSummary();
+      });
+      replaceChildren(until, [
+        el('label', { class: 'field__label', for: 'letter-until', text: 'Weekly until' }),
+        end,
+      ]);
+      until.hidden = false;
+    } else {
+      until.hidden = true;
+      replaceChildren(until, []);
+    }
+
+    week.setSchedule(draft);
+    week.render();
+    renderSummary();
+  }
+
+  function setFrequency(value) {
+    if (draft.frequency === value) return;
+    draft.frequency = value;
+    touched.add('schedule');
+    if (value === 'weekly') {
+      draft.endDate = draft.endDate ?? (draft.startDate ? addDays(draft.startDate, 56) : null);
+      if (!draft.daysOfWeekMask && draft.startDate) {
+        draft.daysOfWeekMask = 1 << new Date(...dateArgs(draft.startDate)).getDay();
+      }
+    } else {
+      draft.endDate = null;
+    }
+    renderWhen();
+    renderFoot();
+    announce?.(value === 'weekly' ? 'Repeating every week.' : 'A single visit.');
+  }
+
+  const dateArgs = (iso) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return [y, m - 1, d];
+  };
+
+  function renderSummary() {
+    if (!draft.startTime) {
+      summary.textContent = '';
+      summary.hidden = true;
+      week.setNote('');
+      scheduleNote.textContent = '';
+      return;
+    }
+    summary.hidden = false;
+    const blackouts = blackoutsFor(draft.venueId, draft.roomId);
+    const dates = occurrenceCount(draft, blackouts);
+    const lines = [scheduleSentence(draft)];
+    if (draft.frequency === 'weekly' && draft.endDate && dates) {
+      lines.push(`${plural(dates, 'date', 'dates')} in all.`);
+    }
+    replaceChildren(summary, [
+      el('span', { class: 'letter__summaryline', text: lines[0] }),
+      lines[1] && el('span', { class: 'letter__summarycount', text: lines[1] }),
+    ]);
+
+    const notes = [];
+    const skipped = blackouts.filter((b) => {
+      if (draft.frequency !== 'weekly') return b.date === draft.startDate;
+      return (
+        draft.endDate &&
+        b.date >= draft.startDate &&
+        b.date <= draft.endDate &&
+        draft.daysOfWeekMask & (1 << new Date(...dateArgs(b.date)).getDay())
+      );
+    });
+    for (const b of skipped) {
+      notes.push(`${formatDate(b.date)} is set aside for the ${b.reason.toLowerCase()}, so that week is skipped.`);
+    }
+    if (validate().ok) {
+      const { clashes } = scheduleConflicts(draft.venueId, draft.roomId, draft);
+      if (clashes.length) {
+        notes.push(
+          `${plural(clashes.length, 'date is', 'dates are')} already held by another group — the host will see that when it reads your request.`
+        );
+      }
+    }
+    scheduleNote.textContent = notes.join(' ');
+  }
+
+  // What the service said when it refused the last send, if it did. It is the
+  // one message here that is not the store's own, so it is held separately and
+  // cleared the moment the guest tries again.
+  let refusal = '';
+
+  function renderFoot(problem) {
+    if (problem !== undefined) refusal = problem ?? '';
+    const result = validate();
+    intentNote.textContent = fieldError('intentText') ?? '';
+    activityNote.textContent = fieldError('activityType') ?? '';
+    sizeNote.classList.toggle('is-wrong', Boolean(fieldError('groupSize')));
+    if (fieldError('groupSize')) sizeNote.textContent = fieldError('groupSize');
+    else renderNote();
+
+    const scheduleProblem =
+      fieldError('schedule') ?? fieldError('startDate') ?? fieldError('startTime') ??
+      fieldError('endTime') ?? fieldError('endDate') ?? fieldError('daysOfWeekMask');
+    week.setNote(scheduleProblem ?? '');
+
+    const outstanding = attempted
+      ? Object.entries(result.errors)
+          .filter(([field]) => !SHOWN_INLINE.has(field))
+          .map(([, message]) => message)
+      : [];
+    replaceChildren(
+      errors,
+      [...(refusal ? [refusal] : []), ...outstanding].map((message) =>
+        el('p', { class: 'letter__error', text: message })
+      )
+    );
+
+    renderSummary();
+  }
+
+  const SHOWN_INLINE = new Set([
+    'intentText', 'activityType', 'groupSize', 'schedule',
+    'startDate', 'startTime', 'endTime', 'endDate', 'daysOfWeekMask',
+  ]);
+
+  function renderFootShell() {
+    replaceChildren(foot, [
+      // What is about to be asked for, stated once, immediately above the act
+      // of asking for it — the only place a summary is worth the room.
+      summary,
+      errors,
+      send,
+    ]);
+  }
+
+  // ── the commitment point ──────────────────────────────────────────────────
+
+  function seal() {
+    attempted = true;
+    const result = validate();
+    if (!result.ok) {
+      renderFoot(null);
+      const first = Object.keys(result.errors)[0];
+      announce?.(`Not quite ready. ${Object.values(result.errors)[0]}`);
+      focusField(first);
+      return;
+    }
+    // Who is asking is the last thing settled, every time — with a session it
+    // is a confirmation, without one it is the sign-in.
+    openIdentity();
+  }
+
+  function focusField(field) {
+    if (field === 'intentText') intent.focus();
+    else if (field === 'groupSize') size.focus();
+    else if (field === 'activityType') activities.querySelector('input')?.focus();
+    else week.element.querySelector('[data-day][tabindex="0"]')?.focus();
+  }
+
+  function openIdentity() {
+    identity.reset();
+    identity.element.hidden = false;
+    sheet.classList.add('is-signing');
+    columns.setAttribute('inert', '');
+    identity.focus();
+    announce?.('Confirm who you are before the request is sent.');
+  }
+
+  function closeIdentity() {
+    identity.element.hidden = true;
+    sheet.classList.remove('is-signing');
+    columns.removeAttribute('inert');
+    renderFoot();
+    intent.focus();
+  }
+
+  let sending = false;
+
+  async function dispatch() {
+    if (sending) return;
+    sending = true;
+    send.disabled = true;
+    send.textContent = 'Sending';
+    identity.element.setAttribute('inert', '');
+    let result;
+    try {
+      result = await sendRequest(draft);
+    } finally {
+      sending = false;
+      send.disabled = false;
+      send.textContent = 'Send request';
+      identity.element.removeAttribute('inert');
+    }
+
+    if (!result.ok) {
+      attempted = true;
+      // A refusal from the service belongs beside the send, where the request
+      // still is — not behind a card the guest has to dismiss first.
+      // A sign-in that died between opening this step and pressing send: the
+      // step is still the right place to stand, so it says so itself.
+      if (result.signedOut) {
+        identity.reset();
+        identity.say(result.problem);
+        renderFoot(null);
+        identity.focus();
+        announce?.(result.problem);
+        return;
+      }
+      closeIdentity();
+      renderFoot(result.problem);
+      announce?.(`This request could not be sent. ${result.problem}`);
+      return;
+    }
+    drafts.delete(`${draft.venueId}/${draft.roomId}`);
+    identity.element.hidden = true;
+    sheet.classList.remove('is-signing');
+    columns.removeAttribute('inert');
+    sheet.classList.add('is-away');
+    announce?.(
+      `Your request is on its way to ${venue.shortName}. It is waiting in your inbox.`
+    );
+    const settle = () => {
+      sheet.classList.remove('is-away');
+      onSent?.(result.application);
+    };
+    setTimeout(settle, document.documentElement.classList.contains('reduced-motion') ? 60 : 900);
+  }
+
+  // ── opening ───────────────────────────────────────────────────────────────
+
+  function open(venueId, roomId) {
+    venue = getVenue(venueId);
+    room = effectiveRoom(venueId, roomId);
+    if (!venue || !room) return false;
+
+    const key = `${venueId}/${roomId}`;
+    draft = drafts.get(key) ?? blankDraft(venueId, roomId, room);
+    drafts.set(key, draft);
+    attempted = false;
+    touched.clear();
+    cachedDraft = null;
+    identity.reset();
+    identity.element.hidden = true;
+    sheet.classList.remove('is-signing', 'is-away');
+    columns.removeAttribute('inert');
+
+    intent.value = draft.intentText;
+    size.value = draft.groupSize;
+    syncStepper();
+    week.setRoom(venueId, roomId);
+    week.setSchedule(draft);
+
+    renderHead();
+    renderNoteColumn();
+    replaceChildren(whenCol, [
+      el('h2', { class: 'eyebrow', text: 'When you would come' }),
+      el('div', { class: 'field field--freq' }, [frequency, until]),
+      week.element,
+      scheduleNote,
+    ]);
+    renderWhen();
+    renderFootShell();
+    renderCount();
+    renderFoot(null);
+    sheet.scrollTop = 0;
+    return true;
+  }
+
+  function spoken() {
+    return [
+      `Your request to ${venue.name} about ${room.name}, ${venue.suburb}.`,
+      `Seats ${room.capacity}. Welcomes ${room.activities.join(', ')}.`,
+      'Write your plans, choose one activity and a group size, then paint your hours on the week card.',
+      draft.startTime ? `Chosen so far: ${scheduleSentence(draft)}.` : 'No hours chosen yet.',
+    ].join(' ');
+  }
+
+  return {
+    element,
+    open,
+    spoken,
+    focus: () => sheet.focus?.(),
+    refresh: () => {
+      if (!venue || !room) return;
+      week.render();
+      renderFoot();
+    },
+  };
+}

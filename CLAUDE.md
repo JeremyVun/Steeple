@@ -3,7 +3,8 @@
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
 organizers. Request→approve booking (not instant-book), required host-set hourly pricing
 (free listings removed 2026-07-07), one NoVA beachhead.
-.NET 10 API + HTMX web + HTMX admin + PostgreSQL + Flutter mobile (`/mobile`, Phase 4).
+.NET 10 API + web (v1 HTMX funnel, being replaced by the v2 Vite frontend — see the
+Steeple.Web.v2 section) + HTMX admin + PostgreSQL + Flutter mobile (`/mobile`, Phase 4).
 Shipped (Phases 0–3): the full web loop — discovery → SSO → apply → approve →
 booking with DB-enforced integrity. Solo-operated; lean (~$100 AUD/mo ceiling).
 
@@ -40,8 +41,13 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   `Controllers/`, `Services/` (use-cases + **port** interfaces), `Proxies/` (adapters),
   `Configuration/ Extensions/ Utils/` — each grown by **module subfolder**
   (e.g. `Services/Applications/`) — see SYSTEM_DESIGN §4.
-- `/src/Steeple.Web` — MVC + HTMX + Leaflet BFF. **No DB, no shared server assembly.**
-  Mirrors API JSON in `Models/ApiModels.cs` by convention (CONTRACTS.md governs).
+- `/src/Steeple.Web.v1` — MVC + HTMX + Leaflet BFF (renamed from `Steeple.Web`
+  2026-08-05; csproj/assembly/namespaces still `Steeple.Web`). **No DB, no shared server
+  assembly.** Mirrors API JSON in `Models/ApiModels.cs` by convention (CONTRACTS.md
+  governs). The shipped v1 funnel — kept running as reference until v2 reaches parity.
+- `/src/Steeple.Web.v2` — the replacement web frontend (Vite + vanilla JS + Leaflet;
+  Three.js splash only), consolidated 2026-08-05 from `~/projects/animated-web`.
+  Same BFF rule: talks to the API over HTTP only. See the Steeple.Web.v2 section below.
 - `/src/Steeple.Admin` — operator dashboard; reads Postgres via Persistence. No in-app
   auth **by design** — authelia gates it at the edge proxy in the deployed environment.
 - `/db/changelog` — Liquibase formatted SQL (`001…005-*.sql` + master manifest).
@@ -76,7 +82,8 @@ docker compose up -d --build      # full stack: postgres → migrate → api/adm
                                   # Web http://localhost:8080 · Admin http://localhost:8082/admin
 docker compose up -d postgres migrate   # DB only, then:
 dotnet run --project src/Steeple.Api    # http://localhost:5200
-dotnet run --project src/Steeple.Web    # http://localhost:5187 (needs Api:BaseUrl)
+dotnet run --project src/Steeple.Web.v1 # http://localhost:5187 (needs Api:BaseUrl)
+npm run dev --prefix src/Steeple.Web.v2 # http://localhost:5173 (vite; proxies /api → :5200)
 dotnet run --project src/Steeple.Admin
 docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
 ```
@@ -141,6 +148,64 @@ localhost:5433; Docker: `ConnectionStrings__SteepleDb` env). Web has **no** DB �
   signs everyone out.
 - Compose runs containers in **Production** (HSTS, secure cookies); the dotnet-run loop is
   Development. Only web/admin publish host ports; api is compose-internal.
+
+## Steeple.Web.v2 — the new frontend (integration in progress)
+
+Built 2026-08-03→05 as the `animated-web` experiment ("Steeple — The Village"); the
+direction succeeded and it was consolidated here 2026-08-05. Map-first product surface
+(Leaflet ~58% + list/filters + panels) under a Three.js village splash joined by a
+scroll-scrubbed "roll" (`state.roll` 0→1; the engine fully pauses at roll=1 — Three.js
+does zero work in-product). Its own `README.md` and `docs/CONTRACT2–6.md` (the historical
+wave briefs) live inside the project; code comments citing "CONTRACT4 §5" etc. mean those
+files, while "CONTRACTS §n" means this repo's `docs/CONTRACTS.md`.
+
+**Git:** v2 still carries its own embedded `.git` (full 7-wave history, no remote) —
+steeple's git sees it as one untracked directory. Decide at commit time: `git subtree add`
+to keep the history in steeple's graph, or delete `src/Steeple.Web.v2/.git` to flatten.
+
+**Run/verify:** `npm run dev` (vite :5173, proxies `/api` → API :5200 — the API serves no
+CORS by design, the proxy is the missing BFF); `npm run build:flat` = no-Three build
+(~310kB vs ~988kB) for A/B. Harnesses in `tools/*.mjs` drive real browser events; each
+documents its own flags/env in its header (some are world-ON, some world-OFF —
+**inverting a suite's documented flags produces convincing, meaningless failures**).
+Headless GL runs app-time ~6× slow: tests wait on state, never wall-clock. Known-stale
+failure sets that predate wave 7: guest-test 3, wave2-test 6, world-test 12.
+E2E suites mint real accounts/venues/applications on the local API each run.
+
+**Seams (frozen — the day an upstream name changes, one file moves):**
+- `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
+- `src/data/catalog.js` — product vocabulary over the wire, with `bundledCatalog.js`
+  fallback when the API is down (seed slugs match the bundled ids 1:1).
+- `src/data/session.js` — token pair (single-flight refresh rotation, `withAccess()`
+  401-retry-once, localStorage). Sign-in = dev SSO (`POST /auth/sessions
+  {provider:"dev", idToken:"email|Name"}`, DevLoginEnabled — Development only);
+  Google/Apple later swap only `signIn()`.
+- `src/data/store.js` — localStorage demo correspondence mirroring db/changelog
+  004/005/009 exactly. Still the source for the guest inbox and host request handling.
+
+**Real vs demo (the integration work):** Real — catalog reads, auth sessions,
+application submit (`Idempotency-Key`, mirrors into local store), and the whole hosting
+chain (dev SSO → POST venue → room → photo upload → PUT availability → PATCH published;
+publish requires a photo; moderation answers `draft` + `publishRequestedAtUtc`). Demo —
+guest inbox/letters and host request decisions run on store.js **hardcoded as
+`GUEST_ID='maria-alvarez'` regardless of session** (the API's `GET /me/applications` is
+never read by the UI); send falls back to filing locally when the API is unreachable
+(honest in a demo, a lie in production); no signed-out header affordance (account chip
+hidden when signed out — sign-in only appears mid-flow); dev provider only, no Turnstile
+client-side. Accounts-consolidation order agreed 2026-08-05: signed-out header state →
+inbox onto `/me/applications` → real providers.
+
+**Hazards found in the waves (unfixed):** the 4s-abort retry can double-create venues —
+manage routes need idempotency keys API-side; `draft.roomId` is always `'main-space'`
+(second room per venue collides); dev geocoding = `StubGeocodingGateway` (every address →
+village centre, so geofence-rejection paths are locally unreachable). API gaps compiled
+for steeple: v2 `docs/CONTRACT4.md` §5 (CORS, venue-profile endpoint, missing RoomDetail
+fields, no vocabulary endpoint, undocumented daysOfWeek/timeOfDay grammar…).
+
+**Design taste (Jeremy):** calm, sophisticated, professional — never childish or tacky;
+A/B alternatives ship behind query params (`?style= ?map= ?desk= ?letter= ?world=off`),
+never branches. Copy says venue/space/host, never church. Verify by driving the real
+flow — debug screenshots don't prove interactivity; real-event tests are mandatory.
 
 ## Working agreements
 

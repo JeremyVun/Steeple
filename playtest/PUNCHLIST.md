@@ -88,7 +88,7 @@ commit).
 ## P0 — hot-path trust-breakers (bugs, not polish)
 
 ### 1. Apply form: changing "From" can produce a negative duration
-`src/Steeple.Web/wwwroot/js/slot-picker.js` (~lines 200–280: `applyDuration`,
+`src/Steeple.Web.v1/wwwroot/js/slot-picker.js` (~lines 200–280: `applyDuration`,
 `updateReadout`, the `[data-range-*]` handlers). Setting From=6:00 PM with a stale
 To=10:00 AM shows "6:00 PM–10:00 AM · **-8 hours**" even while a "2 hours" duration pill
 is selected. Fix: when From changes, re-derive To from the selected duration pill (and
@@ -99,7 +99,7 @@ Verify: re-run `find-space-weekly-group` discovery case; journeys `apply-signed-
 `search-and-open-listing`.
 
 ### 2. Apply draft loses the selected time slot across the sign-in round-trip
-Apply flow (`src/Steeple.Web/Views/Apply/Index.cshtml` + the draft stash/restore path —
+Apply flow (`src/Steeple.Web.v1/Views/Apply/Index.cshtml` + the draft stash/restore path —
 the SSO gate flow per CONTRACTS §4). Message, activity, people survive; the selected
 date/window/duration is dropped — while the post-login banner says "Welcome back — your
 request is still here" and the header still says "Asking for: Tuesday, July 28". Fix:
@@ -125,7 +125,7 @@ Verify: journey `apply-signed-out-gate`; `dotnet test`.
 ### 4. Web `/search` 500s when a time band is chosen with no day/date
 Repro: `GET /search?timeOfDay=evening` → 500. The API deliberately 400s
 (`invalid_when`: "A time-of-day filter needs a date or days of the week"); the Web BFF
-(`src/Steeple.Web/Controllers/DiscoveryController.cs` `BuildViewModelAsync` /
+(`src/Steeple.Web.v1/Controllers/DiscoveryController.cs` `BuildViewModelAsync` /
 `SteepleApiClient.SearchAsync`) doesn't handle it. HTMX swallows the error so the panel
 just goes dead. Preferred fix: make the Web When-popover not emit `timeOfDay` without a
 day/date **and** surface the API's message as inline guidance if it ever comes back;

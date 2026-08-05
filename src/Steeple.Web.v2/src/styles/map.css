@@ -1,0 +1,1252 @@
+/* THE DISCOVERY SURFACE — Workstream B owns this file (CONTRACT4 §1).
+   Derive every value from the :root tokens in main.css; no raw colors.
+
+   Past the roll this is the page: the map holds the left and the full height,
+   the search pill stands at the top of the column beside it, and the spaces it
+   finds read as rows underneath. It does not fold away — there is nothing
+   behind it to reveal.
+
+   The map is real cartography, so the brand cannot be drawn into it — it is
+   applied to it. Two things do the work: the tiles are laid slightly
+   transparent over the card's own paper, and the whole tile pane goes through
+   one filter chain toward warm, low-saturation ink. `?map=` chooses which:
+
+     simple — the daylight toning: sage and paper, a friendly plain layer that
+              belongs beside the painted village rather than beneath it.
+     dusk   — the same streets read by lamplight, the village's golden hour
+              taken indoors.
+
+   Everything is scoped to .discovery. */
+
+.discovery {
+  --dm-pin: var(--terracotta);
+  --dm-pin-stroke: var(--paper);
+  --dm-pin-eye: #fff;
+  --dm-tile-wash: var(--paper-deep);
+  --dm-tile-filter: saturate(0.56) sepia(0.22) hue-rotate(-6deg) brightness(1.06)
+    contrast(0.92);
+  --dm-tile-opacity: 0.93;
+  --dm-map-frame: var(--line);
+  --dm-gutter: 30px;
+
+  position: absolute;
+  inset: var(--browse-bar) 0 0;
+  z-index: 1;
+  border-top: 1px solid var(--line);
+}
+
+.dm-card {
+  pointer-events: auto;
+  height: 100%;
+  display: grid;
+  grid-template-columns: var(--browse-map) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+/* Coming up, the column follows the map rather than arriving with it — the
+   small lag that makes a page turn read as paper and not as a slide. */
+.dm-mapwrap,
+.dm-search,
+.dm-head,
+.dm-list {
+  transform: translateY(calc(var(--roll-fall, 0) * var(--dm-lag, 0px)));
+}
+
+.dm-mapwrap {
+  --dm-lag: 30px;
+}
+
+.dm-search,
+.dm-head,
+.dm-list {
+  --dm-lag: 86px;
+}
+
+.is-landed .dm-mapwrap,
+.is-landed .dm-search,
+.is-landed .dm-head,
+.is-landed .dm-list {
+  transform: none;
+}
+
+/* ── the map ────────────────────────────────────────────────────────────── */
+
+/* The hero: the left of the page, floor to ceiling. */
+.dm-mapwrap {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  border-right: 1px solid var(--dm-map-frame);
+}
+
+/* Leaflet's own stylesheet claims `position` on this element, so the map fills
+   its column by height rather than by inset. */
+.dm-map {
+  height: 100%;
+  background: var(--dm-tile-wash);
+  overflow: hidden;
+  /* The surface owns its own edge: Leaflet's panes must not spill past it. */
+  isolation: isolate;
+}
+
+.dm-map .leaflet-tile-pane {
+  filter: var(--dm-tile-filter);
+}
+
+.dm-map .dm-tiles {
+  opacity: var(--dm-tile-opacity);
+}
+
+.dm-map.leaflet-container {
+  font-family: var(--sans);
+  background: var(--dm-tile-wash);
+  outline-offset: -2px;
+}
+
+/* Attribution is not decoration — it is the licence. Legible, never shouted. */
+.dm-map .leaflet-control-attribution {
+  padding: 1px 7px;
+  border-radius: 5px 0 0 0;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  font-family: var(--sans);
+  font-size: 9.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-faint);
+}
+
+.dm-map .leaflet-control-attribution a {
+  color: var(--ink-soft);
+}
+
+.dm-map .leaflet-bar {
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  box-shadow: var(--shadow-chip);
+  overflow: hidden;
+}
+
+.dm-map .leaflet-bar a {
+  width: 26px;
+  height: 26px;
+  line-height: 26px;
+  border-bottom-color: var(--line);
+  background: var(--paper-sheet);
+  color: var(--ink-soft);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.dm-map .leaflet-bar a:hover {
+  background: var(--paper-deep);
+  color: var(--terracotta-deep);
+}
+
+.dm-map .leaflet-control-zoom {
+  margin: 14px 14px 0 0;
+}
+
+/* ── pins ───────────────────────────────────────────────────────────────── */
+
+.dm-pin {
+  position: relative;
+  cursor: pointer;
+  transition: transform 160ms var(--ease), opacity 200ms var(--ease);
+  transform-origin: 50% 100%;
+}
+
+.dm-pin__mark {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 2px 3px rgba(42, 38, 32, 0.32));
+}
+
+.dm-pin__body {
+  fill: var(--dm-pin);
+  stroke: var(--dm-pin-stroke);
+  stroke-width: 2;
+  transition: fill 160ms var(--ease), stroke 160ms var(--ease);
+}
+
+.dm-pin__eye {
+  fill: var(--dm-pin-eye);
+}
+
+/* The tag is set relative to the pin, never on top of it, and never inside the
+   hit target — a label that intercepts clicks steals them from its neighbour.
+
+   It is a small card rather than words floating on the map, because a price is
+   a figure and a figure needs a ground to be read against: over a green park
+   and over a pink motorway, the same chip. */
+.dm-pin__tag {
+  position: absolute;
+  left: 33px;
+  top: 5px;
+  display: grid;
+  gap: 1px;
+  padding: 3px 8px 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  box-shadow: 0 5px 12px -8px rgba(42, 38, 32, 0.75);
+  white-space: nowrap;
+  transition: border-color 160ms var(--ease), box-shadow 200ms var(--ease);
+}
+
+/* The tag answers the pointer, unlike the bare name it replaced. A name set
+   loose on the map had to stay out of the hit test or it would steal the click
+   meant for the pin beside it; a tag is a drawn object with an edge, it is the
+   biggest target a thumb has on this map, and it is what people aim at. It is
+   inside its own marker, so the press it takes is that church's either way.
+   Verified by real clicks in tools/surface-test.mjs — the tags are hand-placed
+   (NAME_SET, ui/map/atlas.js) and none of them stands over another's pin. */
+.dm-pin__tag {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.dm-pin__price {
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.05;
+  color: var(--ink);
+}
+
+/* A church whose spaces do not answer the search quotes nothing, so its tag is
+   its name — set in the italic the map uses for things that are there but not
+   on offer. */
+.dm-pin[data-shows='name'] .dm-pin__price {
+  font-style: italic;
+  color: var(--ink-soft);
+}
+
+/* Whose it is: under the price, and only once you are pointing at it. */
+.dm-pin__who {
+  display: none;
+  font-family: var(--sans);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  color: var(--ink-faint);
+}
+
+.dm-pin:hover .dm-pin__who,
+.dm-pin.is-hovered .dm-pin__who,
+.dm-pin.is-current .dm-pin__who,
+.dm-pin:focus-visible .dm-pin__who {
+  display: block;
+}
+
+.dm-pin[data-shows='name'] .dm-pin__who {
+  display: none;
+}
+
+.dm-pin--left .dm-pin__tag {
+  left: auto;
+  right: 33px;
+}
+
+/* Above the pin the tag has to grow upward, or opening it would put the name
+   over the teardrop it belongs to. */
+.dm-pin--above .dm-pin__tag {
+  left: 50%;
+  top: auto;
+  bottom: 41px;
+  transform: translateX(-50%);
+}
+
+.dm-pin--below .dm-pin__tag {
+  left: 50%;
+  top: 41px;
+  transform: translateX(-50%);
+}
+
+.dm-pin:hover,
+.dm-pin.is-hovered {
+  transform: scale(1.1);
+  z-index: 700;
+}
+
+.dm-pin.is-current {
+  transform: scale(1.15);
+  z-index: 800;
+}
+
+.dm-pin.is-current .dm-pin__body {
+  stroke: var(--ink);
+}
+
+.dm-pin.is-current .dm-pin__tag {
+  border-color: var(--terracotta);
+  box-shadow: 0 8px 16px -9px rgba(42, 38, 32, 0.8);
+}
+
+.dm-pin:hover .dm-pin__tag,
+.dm-pin.is-hovered .dm-pin__tag {
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 16px -9px rgba(42, 38, 32, 0.8);
+}
+
+/* A church whose spaces do not answer the search rests: dimmed, never hidden,
+   still named — it is still there, it just has nothing for you today. */
+.dm-pin.is-resting {
+  opacity: 0.42;
+}
+
+.dm-pin:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A church a host has placed but not yet published: shown, never clickable. */
+.dm-newpin {
+  position: relative;
+}
+
+.dm-newpin__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 12px;
+  border: 1.5px dashed var(--terracotta);
+  border-radius: 50%;
+  background: var(--paper);
+}
+
+.dm-newpin__name {
+  position: absolute;
+  left: 17px;
+  top: 1px;
+  font-family: var(--serif);
+  font-size: 11.5px;
+  font-style: italic;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  text-shadow: 0 0 3px var(--paper), 0 0 7px var(--paper);
+}
+
+/* ── the search pill ────────────────────────────────────────────────────── */
+
+/* One control, four questions, and the answer to each of them set under its
+   own quiet label. It is a single object: the segments divide it, they do not
+   detach from it. */
+.dm-search {
+  position: relative;
+  z-index: 6;
+  grid-column: 2;
+  grid-row: 1;
+  padding: 20px var(--dm-gutter) 2px;
+}
+
+.dm-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.05fr) minmax(0, 1fr) auto;
+  align-items: stretch;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  box-shadow: var(--shadow-chip);
+}
+
+/* A segment is a share of the bar, not an object on it. Its highlight fills the
+   bar's height and takes the bar's own rounded end where it has one — so
+   pointing at the middle of the pill lights a section of the pill, instead of
+   floating a stadium inside it with paper showing above and below. */
+.dm-seg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 18px;
+  border-radius: 0;
+  transition: background 160ms var(--ease);
+}
+
+.dm-bar > .dm-seg:first-child {
+  border-start-start-radius: var(--radius-pill);
+  border-end-start-radius: var(--radius-pill);
+}
+
+.dm-bar > .dm-seg:last-child {
+  border-start-end-radius: var(--radius-pill);
+  border-end-end-radius: var(--radius-pill);
+}
+
+/* The hairline between two questions, kept off the rounded ends. */
+.dm-seg + .dm-seg::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1px;
+  background: var(--line);
+  transition: opacity 160ms var(--ease);
+}
+
+.dm-seg:hover,
+.dm-seg.is-open,
+.dm-seg:focus-within {
+  background: var(--paper-deep);
+}
+
+.dm-seg:hover::before,
+.dm-seg.is-open::before,
+.dm-seg:hover + .dm-seg::before,
+.dm-seg.is-open + .dm-seg::before {
+  opacity: 0;
+}
+
+.dm-seg__label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.dm-seg__value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.25;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-seg.is-set .dm-seg__value {
+  color: var(--ink);
+  font-weight: 550;
+}
+
+.dm-seg__icon {
+  flex: none;
+  display: block;
+  color: var(--terracotta);
+}
+
+/* The whole segment is the target; the label and the value are what you read. */
+.dm-seg__open {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  border-radius: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+.dm-seg__input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+}
+
+.dm-seg__input::placeholder {
+  color: var(--ink-soft);
+  opacity: 1;
+}
+
+/* The funnel closes the pill: an icon, a word, and a number when it is holding
+   something. It is the only segment that is itself a button. */
+.dm-seg--filters {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px 9px 16px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dm-seg--filters:hover,
+.dm-seg--filters.is-open {
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.dm-seg--filters.is-set {
+  color: var(--terracotta-deep);
+}
+
+.dm-seg__funnel {
+  display: block;
+}
+
+.dm-seg__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--terracotta);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.dm-seg__badge[hidden] {
+  display: none;
+}
+
+/* ── the panels the segments open ───────────────────────────────────────── */
+
+.dm-pop {
+  position: absolute;
+  top: calc(100% + 7px);
+  z-index: 20;
+  min-width: 250px;
+  max-width: min(400px, calc(100% - var(--dm-gutter) * 2));
+  padding: 15px 17px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  /* The same white the pill is cut from — a panel you can read through is not
+     a panel. */
+  background: var(--card);
+  box-shadow: var(--shadow-sheet);
+}
+
+.dm-pop[hidden] {
+  display: none;
+}
+
+.dm-pop--where {
+  padding: 6px;
+  min-width: 232px;
+}
+
+/* Every chip in every panel answers the same way when it is holding: main.css
+   only ever spoke for the activity chips. */
+.dm-pop .pill.is-on,
+.dm-pop .pill.is-on:hover {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: #fff;
+}
+
+/* Suburbs, typed at or chosen from. */
+.dm-typeahead {
+  margin: 0;
+  padding: 0;
+  max-height: 246px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.dm-typeahead__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.dm-typeahead__icon {
+  display: block;
+  color: var(--ink-faint);
+}
+
+.dm-typeahead__item.is-anywhere {
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.dm-typeahead__item:hover,
+.dm-typeahead__item.is-active {
+  background: var(--paper-deep);
+}
+
+.dm-typeahead__item[aria-selected='true'] {
+  font-weight: 600;
+  color: var(--terracotta-deep);
+}
+
+/* Just once, or every week: the two ways a group meets. */
+.dm-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--paper-deep);
+}
+
+.dm-switch__option {
+  border: 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-pill);
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 160ms var(--ease), color 160ms var(--ease);
+}
+
+.dm-switch__option.is-on {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow-chip);
+}
+
+.dm-when__once,
+.dm-when__weekly {
+  margin-top: 12px;
+}
+
+.dm-when__once[hidden],
+.dm-when__weekly[hidden] {
+  display: none;
+}
+
+.dm-date {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.dm-when__weekly {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.pill--day {
+  flex: 1 1 auto;
+  padding: 7px 0;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.pill--band {
+  display: grid;
+  gap: 1px;
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.dm-band__name {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.dm-band__hint {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.pill--band.is-on .dm-band__hint {
+  color: color-mix(in srgb, #fff 78%, var(--sage));
+}
+
+/* How many. The presets are what people actually ask for; the number is for
+   everyone else. */
+.dm-capacity__exact {
+  display: block;
+  margin-top: 13px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.dm-capacity__input {
+  width: 76px;
+  margin: 0 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--card);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ── the funnel's own groups ────────────────────────────────────────────── */
+
+.dm-filters {
+  display: grid;
+  gap: 14px;
+}
+
+.dm-group__label {
+  margin: 0 0 7px;
+  color: var(--ink-faint);
+}
+
+.dm-group__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.dm-group__chips .pill {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.dm-group__clear {
+  justify-self: start;
+  font-size: 12px;
+}
+
+.dm-when .dm-group {
+  margin-top: 14px;
+}
+
+.dm-when .dm-group__clear {
+  display: block;
+  margin-top: 13px;
+}
+
+/* ── head ───────────────────────────────────────────────────────────────── */
+
+.dm-panel {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dm-head {
+  flex: none;
+  padding: 15px var(--dm-gutter) 14px;
+}
+
+.dm-count {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+/* ── results ────────────────────────────────────────────────────────────── */
+
+.dm-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--dm-gutter) 16px;
+  border-top: 1px solid var(--line);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Two spaces across, each under its own picture. The column gave the map back
+   the width it was borrowing, and spent it on the photographs: a space is
+   chosen by the look of the room long before the price is read. */
+.dm-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 6px;
+  /* Pulled out by the cards' own padding so the photographs, not the hover
+     plates behind them, line up with the gutter and with the head above. */
+  margin: 16px -6px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dm-empty {
+  margin: 22px 2px;
+  max-width: 34ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.dm-empty[hidden] {
+  display: none;
+}
+
+/* The card: the photograph across the top, the name and its church under it at
+   the full width of the card, and the last line the two numbers — seats on the
+   left, price on the right. Five areas, so that the phone's row further down
+   can lay the very same five out in a line. */
+.dm-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'pic pic'
+    'name name'
+    'where where'
+    'meta price';
+  align-content: start;
+  gap: 2px 12px;
+  width: 100%;
+  height: 100%;
+  padding: 6px 6px 9px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease), opacity 200ms var(--ease);
+}
+
+.dm-row:hover,
+.dm-row.is-hovered {
+  background: var(--paper-deep);
+}
+
+/* The banner is the card: the width of the whole thing, and deep enough that a
+   hall reads as a hall. */
+.dm-row .dm-banner {
+  grid-area: pic;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 9px;
+  border-radius: 8px;
+}
+
+.dm-row__name {
+  grid-area: name;
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.18;
+  color: var(--ink);
+  /* Two lines, and no name cut off mid-word in a column this narrow. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.dm-row:hover .dm-row__name,
+.dm-row.is-hovered .dm-row__name {
+  color: var(--terracotta-deep);
+}
+
+.dm-row__where {
+  grid-area: where;
+  font-size: 12px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-row__meta {
+  grid-area: meta;
+  align-self: end;
+  margin-top: 4px;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.dm-row__price {
+  grid-area: price;
+  flex: none;
+  align-self: end;
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 15px;
+  white-space: nowrap;
+  color: var(--ink-soft);
+}
+
+.dm-row__price.is-free {
+  color: var(--sage-deep);
+}
+
+.dm-row.is-current {
+  background: var(--paper-deep);
+  box-shadow: inset 0 0 0 1.5px var(--terracotta);
+}
+
+.dm-row.is-current .dm-row__name {
+  font-weight: 600;
+}
+
+/* ── banners ────────────────────────────────────────────────────────────── */
+
+/* The picture serves the row: a thumbnail the height of the type beside it,
+   never a card the row has to live inside. */
+.dm-banner {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 88px;
+  aspect-ratio: 4 / 3;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--paper-deep);
+}
+
+/* The same trick the tiles get: photographs from a hundred different cameras
+   are pulled a little way toward the paper so the column reads as one page. */
+.dm-banner__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.88) sepia(0.08) contrast(0.97);
+}
+
+.dm-banner__letter {
+  display: none;
+}
+
+/* No photograph is not an error: a plate in the brand's tones with the room's
+   own initial set in the serif, the way steeple's own card does it. */
+.dm-banner.is-lettered .dm-banner__img {
+  display: none;
+}
+
+.dm-banner.is-lettered .dm-banner__letter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: var(--serif);
+  font-size: 27px;
+  line-height: 1;
+  color: var(--dm-plate-ink, var(--ink-soft));
+  background: var(--dm-plate, var(--paper-deep));
+}
+
+.dm-banner[data-tone='terracotta'] {
+  --dm-plate: var(--terracotta-tint);
+  --dm-plate-ink: var(--terracotta-deep);
+}
+
+.dm-banner[data-tone='sage'] {
+  --dm-plate: var(--sage-tint);
+  --dm-plate-ink: var(--sage-deep);
+}
+
+.dm-banner[data-tone='paper'] {
+  --dm-plate: var(--paper-deep);
+  --dm-plate-ink: var(--ink-faint);
+}
+
+/* The handle belongs to the narrow page only. */
+.dm-grab {
+  display: none;
+}
+
+/* ── dusk ───────────────────────────────────────────────────────────────── */
+
+/* Lamplight, not a dimmer switch: the lightness of the plate is inverted and
+   the hues turned back the way they came, so the land goes to ink while the
+   roads and the parks stay themselves — then the whole thing is warmed toward
+   the village's golden hour. */
+.discovery[data-map='dusk'] {
+  --dm-tile-wash: color-mix(in srgb, var(--ink) 82%, var(--sage-deep));
+  --dm-tile-filter: invert(0.93) hue-rotate(178deg) saturate(0.62) sepia(0.26)
+    hue-rotate(-14deg) brightness(0.98) contrast(0.9);
+  --dm-tile-opacity: 0.88;
+  --dm-map-frame: color-mix(in srgb, var(--ink) 46%, var(--line));
+  --dm-pin: color-mix(in srgb, var(--terracotta) 76%, var(--paper));
+  --dm-pin-stroke: color-mix(in srgb, var(--ink) 72%, var(--terracotta));
+  --dm-pin-eye: var(--paper);
+}
+
+.discovery[data-map='dusk'] .dm-newpin__name {
+  color: var(--paper);
+  text-shadow: 0 0 3px rgba(20, 18, 15, 0.9), 0 0 8px rgba(20, 18, 15, 0.75);
+}
+
+/* By lamplight the tag is a lit card rather than a paper one: the same object,
+   seen after dark. */
+.discovery[data-map='dusk'] .dm-pin__tag {
+  border-color: color-mix(in srgb, var(--ink) 52%, var(--line));
+  background: color-mix(in srgb, var(--ink) 74%, var(--paper));
+  box-shadow: 0 5px 14px -8px rgba(12, 10, 8, 0.9);
+}
+
+.discovery[data-map='dusk'] .dm-pin__price {
+  color: var(--paper);
+}
+
+.discovery[data-map='dusk'] .dm-pin[data-shows='name'] .dm-pin__price {
+  color: color-mix(in srgb, var(--paper) 76%, var(--ink));
+}
+
+.discovery[data-map='dusk'] .dm-pin__who {
+  color: color-mix(in srgb, var(--paper) 64%, var(--ink));
+}
+
+.discovery[data-map='dusk'] .dm-pin.is-current .dm-pin__tag {
+  border-color: var(--terracotta);
+}
+
+.discovery[data-map='dusk'] .dm-pin.is-current .dm-pin__body {
+  stroke: var(--paper);
+}
+
+.discovery[data-map='dusk'] .dm-pin.is-resting {
+  opacity: 0.34;
+}
+
+.discovery[data-map='dusk'] .dm-newpin__dot {
+  background: transparent;
+}
+
+.discovery[data-map='dusk'] .leaflet-bar {
+  border-color: color-mix(in srgb, var(--ink) 60%, var(--line));
+}
+
+.discovery[data-map='dusk'] .leaflet-bar a {
+  border-bottom-color: color-mix(in srgb, var(--ink) 60%, var(--line));
+  background: color-mix(in srgb, var(--ink) 72%, var(--paper));
+  color: color-mix(in srgb, var(--paper) 82%, var(--ink));
+}
+
+.discovery[data-map='dusk'] .leaflet-bar a:hover {
+  background: color-mix(in srgb, var(--ink) 58%, var(--paper));
+  color: var(--paper);
+}
+
+.discovery[data-map='dusk'] .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--ink) 74%, transparent);
+  color: color-mix(in srgb, var(--paper) 74%, transparent);
+}
+
+.discovery[data-map='dusk'] .leaflet-control-attribution a {
+  color: color-mix(in srgb, var(--paper) 88%, transparent);
+}
+
+/* ── narrow: the map takes the page and the list is drawn up over it ────── */
+
+@media (max-width: 900px) {
+  .discovery {
+    --dm-gutter: 20px;
+  }
+
+  .dm-card {
+    display: block;
+    position: relative;
+  }
+
+  .dm-mapwrap {
+    position: absolute;
+    inset: 0;
+    border-right: 0;
+  }
+
+  /* The pill keeps the top of the page whatever the sheet is doing: you must
+     always be able to ask a different question. */
+  .dm-search {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    right: 12px;
+    padding: 0;
+  }
+
+  .dm-bar {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+
+  /* The zoom steps drop clear of the pill rather than hiding under it. */
+  .dm-map .leaflet-top.leaflet-right {
+    top: 62px;
+  }
+
+  .dm-seg {
+    padding: 7px 12px;
+  }
+
+  .dm-seg__value,
+  .dm-seg__input {
+    font-size: 12px;
+  }
+
+  .dm-seg__label {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+  }
+
+  /* The funnel keeps its icon and gives up its word. The number rides the
+     corner of it rather than standing beside it: a segment that grows when it
+     is holding something takes the width off the question next to it, and
+     "Anywhere nearby" is the one that can least afford it. */
+  .dm-seg--filters {
+    padding: 7px 14px;
+  }
+
+  .dm-seg__filters-label {
+    display: none;
+  }
+
+  .dm-seg__badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    min-width: 15px;
+    height: 15px;
+    font-size: 9px;
+  }
+
+  .dm-pop {
+    left: 0 !important;
+    right: 0;
+    max-width: none;
+  }
+
+  .dm-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 5;
+    height: 100%;
+    border-radius: 16px 16px 0 0;
+    background: var(--paper);
+    box-shadow: 0 -12px 34px -20px rgba(42, 38, 32, 0.7);
+    will-change: transform;
+  }
+
+  .dm-panel.is-sheet {
+    transition: transform 340ms var(--ease);
+  }
+
+  /* Nothing is transitioned while a finger is on it. */
+  .dm-panel.is-dragging {
+    transition: none;
+  }
+
+  /* The handle: the thing you take hold of, and a real button for everyone who
+     will not be taking hold of anything. */
+  .dm-grab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 100%;
+    padding: 11px 0 7px;
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .dm-grab:active {
+    cursor: grabbing;
+  }
+
+  .dm-grab__bar {
+    width: 42px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
+    transition: background 160ms var(--ease), width 160ms var(--ease);
+  }
+
+  .dm-grab:hover .dm-grab__bar,
+  .dm-grab:focus-visible .dm-grab__bar {
+    width: 56px;
+    background: var(--terracotta);
+  }
+
+  .dm-head {
+    padding: 2px var(--dm-gutter) 11px;
+  }
+
+  .dm-count {
+    font-size: 21px;
+  }
+
+  /* On the way to the foot of the page the list must not keep its own scroll
+     under the edge it is leaving. */
+  .dm-panel[data-detent='bottom'] .dm-list {
+    overflow: hidden;
+  }
+
+  /* The phone keeps its rows. A sheet drawn up over a map is read at a detent
+     at a time, and a detent has to be worth stopping at: four spaces you can
+     scan beats one photograph you cannot get past. Same three areas, laid out
+     in a line. */
+  .dm-results {
+    display: block;
+    margin: 0;
+  }
+
+  .dm-results__item + .dm-results__item {
+    border-top: 1px solid var(--line);
+  }
+
+  .dm-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'pic name  price'
+      'pic where price'
+      'pic meta  price';
+    align-content: center;
+    gap: 2px 14px;
+    width: calc(100% + 16px);
+    margin-inline: -8px;
+    padding: 11px 8px;
+    border-radius: 7px;
+  }
+
+  .dm-row .dm-banner {
+    align-self: center;
+    width: 88px;
+    aspect-ratio: 4 / 3;
+    margin-bottom: 0;
+    border-radius: 7px;
+  }
+
+  .dm-row__name {
+    -webkit-line-clamp: 1;
+    font-size: 17px;
+    line-height: 1.15;
+  }
+
+  .dm-row__meta {
+    margin-top: 0;
+  }
+
+  .dm-row__price {
+    align-self: center;
+    margin-top: 0;
+    font-size: 14px;
+  }
+
+  .dm-row.is-current {
+    box-shadow: inset 2px 0 0 var(--terracotta);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-pin,
+  .dm-panel.is-sheet,
+  .dm-grab__bar {
+    transition: none;
+  }
+}

@@ -1,0 +1,154 @@
+// THE INBOX — every request the guest has sent, and everything the churches
+// have said back. Sorted by whose move it is, because that is the only question
+// a waiting organizer actually has.
+
+import {
+  GUEST_ID,
+  ORGANIZERS,
+  bookingFor,
+  effectiveRoom,
+  guestApplications,
+  occurrencesFor,
+} from '../../data/store.js';
+import { getVenue } from '../../data/venues.js';
+import { el, replaceChildren } from '../dom.js';
+import { verifiedChip } from './sso.js';
+import {
+  isYourMove,
+  plural,
+  scheduleLine,
+  statusLabel,
+  statusNote,
+  statusTone,
+  timeAgo,
+} from './copy.js';
+
+const GROUPS = [
+  { key: 'yours', title: 'Waiting on you', note: 'These need an answer from you before they can move.' },
+  { key: 'waiting', title: 'With the hosts', note: 'Sent, and waiting for an answer.' },
+  { key: 'settled', title: 'Settled', note: null },
+  { key: 'closed', title: 'Closed', note: null },
+];
+
+export function createJournal({ announce, onOpen, onBrowse }) {
+  const head = el('header', { class: 'journal__head' });
+  const body = el('div', { class: 'journal__body' });
+  const element = el('div', { class: 'guest__surface guest__surface--journal' }, [
+    el('article', { class: 'journal' }, [head, body]),
+  ]);
+
+  function letterRow(app) {
+    const venue = getVenue(app.venueId);
+    const room = effectiveRoom(app.venueId, app.roomId);
+    const booking = app.status === 'approved' ? bookingFor(app.id) : null;
+    const dates = booking ? occurrencesFor(booking.id).length : 0;
+
+    const open = () => onOpen?.(app);
+    return el('li', { class: 'jitem' }, [
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'jrow',
+          dataset: { tone: statusTone(app.status), status: app.status, id: app.id },
+          onclick: open,
+        },
+        [
+          el('span', { class: 'jrow__status' }, [
+            el('span', { class: 'jrow__seal', 'aria-hidden': 'true' }),
+            el('span', { text: statusLabel(app.status) }),
+          ]),
+          el('span', { class: 'jrow__space' }, [
+            el('span', { class: 'jrow__room', text: room?.name ?? app.roomId }),
+            el('span', { class: 'jrow__venue', text: `${venue?.shortName ?? app.venueId} · ${venue?.suburb ?? ''}` }),
+          ]),
+          el('span', { class: 'jrow__when', text: scheduleLine(app) }),
+          el('span', { class: 'jrow__note', text: statusNote(app, { occurrences: dates }) }),
+          el('span', { class: 'jrow__excerpt', text: app.intentText }),
+          el('span', { class: 'jrow__sent', text: `Sent ${timeAgo(app.createdAt)}` }),
+        ]
+      ),
+    ]);
+  }
+
+  function bucket(app) {
+    if (isYourMove(app.status)) return 'yours';
+    if (app.status === 'pending') return 'waiting';
+    if (app.status === 'approved') return 'settled';
+    return 'closed';
+  }
+
+  function render() {
+    const apps = guestApplications();
+    const person = ORGANIZERS[GUEST_ID];
+    const needing = apps.filter((a) => isYourMove(a.status)).length;
+
+    replaceChildren(head, [
+      el('div', {}, [
+        el('p', { class: 'eyebrow', text: 'Your requests' }),
+        el('h1', { class: 'journal__title', text: 'Inbox' }),
+        el('p', { class: 'journal__who', text: `${person.org} · ${person.name}` }),
+      ]),
+      el('div', { class: 'journal__aside' }, [
+        verifiedChip(),
+        el('p', {
+          class: 'journal__tally',
+          text: needing
+            ? `${plural(needing, 'request', 'requests')} waiting on you`
+            : apps.length
+              ? `${plural(apps.length, 'request', 'requests')}, nothing waiting on you`
+              : 'No requests yet',
+        }),
+      ]),
+    ]);
+
+    if (!apps.length) {
+      replaceChildren(body, [
+        el('p', { class: 'prose journal__empty', text: 'Nothing here yet. Find a space that suits your group and send your first request.' }),
+        el('button', { type: 'button', class: 'pill', onclick: () => onBrowse?.() }, 'Find a space'),
+      ]);
+      return;
+    }
+
+    const sections = [];
+    for (const group of GROUPS) {
+      const items = apps.filter((a) => bucket(a) === group.key);
+      if (!items.length) continue;
+      sections.push(
+        el('section', { class: `jgroup jgroup--${group.key}` }, [
+          el('div', { class: 'jgroup__head' }, [
+            el('h2', { class: 'eyebrow', text: group.title }),
+            group.note && el('p', { class: 'jgroup__note', text: group.note }),
+          ]),
+          el('ul', { class: 'jlist' }, items.map(letterRow)),
+        ])
+      );
+    }
+    sections.push(
+      el('div', { class: 'journal__foot' }, [
+        el('button', { type: 'button', class: 'linkish', onclick: () => onBrowse?.() }, 'Find another space'),
+      ])
+    );
+    replaceChildren(body, sections);
+  }
+
+  function spoken() {
+    const apps = guestApplications();
+    const needing = apps.filter((a) => isYourMove(a.status));
+    const lines = apps.map(
+      (app) =>
+        `${effectiveRoom(app.venueId, app.roomId)?.name} at ${getVenue(app.venueId)?.shortName}: ${statusLabel(
+          app.status
+        ).toLowerCase()}, ${scheduleLine(app)}`
+    );
+    return [
+      `Inbox. ${plural(apps.length, 'request', 'requests')} in all,`,
+      needing.length
+        ? `${plural(needing.length, 'request', 'requests')} waiting on you.`
+        : 'none waiting on you.',
+      lines.join('. '),
+    ].join(' ');
+  }
+
+  return { element, render, spoken };
+}

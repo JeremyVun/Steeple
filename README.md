@@ -35,7 +35,7 @@ docker compose up -d --build
 # Or the local dev loop (hot reload):
 docker compose up -d postgres migrate      # provision + seed the DB
 dotnet run --project src/Steeple.Api     # http://localhost:5200
-dotnet run --project src/Steeple.Web     # http://localhost:5187 (calls the API via Api:BaseUrl)
+dotnet run --project src/Steeple.Web.v1     # http://localhost:5187 (calls the API via Api:BaseUrl)
 dotnet run --project src/Steeple.Admin   # http://localhost:5198
 ```
 
@@ -83,7 +83,7 @@ docs/                      product + design docs (PRD, system design, roadmap, m
 db/changelog/              Liquibase changelog — owns schema + seed
 src/Steeple.Persistence  domain entities, value objects, enums, DbContext, EF configs
 src/Steeple.Api          the one JSON API (web + mobile): Contracts/Controllers/Services/Proxies
-src/Steeple.Web          MVC + HTMX + Leaflet funnel — no DB, no shared server assembly
+src/Steeple.Web.v1          MVC + HTMX + Leaflet funnel — no DB, no shared server assembly
 src/Steeple.Admin        HTMX operator dashboard — reads Postgres via Persistence
 tests/                     xUnit unit tests + Testcontainers integration tests
 mobile/                    Flutter app (planned — docs/MOBILE_DESIGN.md)

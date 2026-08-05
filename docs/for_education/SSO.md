@@ -67,13 +67,13 @@ Key files:
 
 | Concern | File |
 |---|---|
-| Login page (flag-gated UI states) | `src/Steeple.Web/Views/Site/Login.cshtml` |
-| Browser glue (GIS button, Turnstile) | `src/Steeple.Web/wwwroot/js/auth.js` |
-| BFF endpoints (both providers, sign-out) | `src/Steeple.Web/Controllers/AuthController.cs` |
-| Silent token refresh inside the cookie | `src/Steeple.Web/Services/SteepleCookieEvents.cs` |
+| Login page (flag-gated UI states) | `src/Steeple.Web.v1/Views/Site/Login.cshtml` |
+| Browser glue (GIS button, Turnstile) | `src/Steeple.Web.v1/wwwroot/js/auth.js` |
+| BFF endpoints (both providers, sign-out) | `src/Steeple.Web.v1/Controllers/AuthController.cs` |
+| Silent token refresh inside the cookie | `src/Steeple.Web.v1/Services/SteepleCookieEvents.cs` |
 | API: session/refresh/verify orchestration | `src/Steeple.Api/Services/Identity/IdentityService.cs` |
 | API: shared OIDC verification | `src/Steeple.Api/Proxies/Identity/OidcIdTokenVerifier.cs` (+ per-provider `GoogleIdTokenVerifier.cs`, `AppleIdTokenVerifier.cs`) |
-| Config (public ids only, Web side) | `src/Steeple.Web/Configuration/AuthFlowOptions.cs` |
+| Config (public ids only, Web side) | `src/Steeple.Web.v1/Configuration/AuthFlowOptions.cs` |
 
 ## Flow 1 — Google (Google Identity Services, all in the browser)
 

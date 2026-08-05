@@ -103,7 +103,7 @@ services:
     container_name: steeple-web
     build:
       context: .
-      dockerfile: src/Steeple.Web/Dockerfile
+      dockerfile: src/Steeple.Web.v1/Dockerfile
     environment:
       # Pure frontend — no database. It calls the API for all data.
       ASPNETCORE_ENVIRONMENT: Production

@@ -2,7 +2,7 @@
 
 > **Status:** Adopted 2026-07-04. The **single source of truth for Steeple's visual and
 > interaction language across all surfaces** (Web funnel, Flutter app; Admin may adopt
-> pragmatically). `src/Steeple.Web/wwwroot/css/site.css` is the as-built **web binding**
+> pragmatically). `src/Steeple.Web.v1/wwwroot/css/site.css` is the as-built **web binding**
 > of these tokens; the Flutter theme (`/mobile/lib/app/theme/`) must be a 1:1 binding of
 > the same tokens. **No component ships styled with raw values — everything derives from
 > a token in this doc.**

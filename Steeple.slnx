@@ -8,7 +8,7 @@
     <Project Path="src/Steeple.Admin/Steeple.Admin.csproj" />
     <Project Path="src/Steeple.Api/Steeple.Api.csproj" />
     <Project Path="src/Steeple.Persistence/Steeple.Persistence.csproj" />
-    <Project Path="src/Steeple.Web/Steeple.Web.csproj" />
+    <Project Path="src/Steeple.Web.v1/Steeple.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Steeple.Api.Tests/Steeple.Api.Tests.csproj" />

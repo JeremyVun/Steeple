@@ -4,11 +4,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 # Pure frontend: shares no project with the server (talks to the API over HTTP). Self-contained.
-COPY src/Steeple.Web/Steeple.Web.csproj src/Steeple.Web/
-RUN dotnet restore src/Steeple.Web/Steeple.Web.csproj
+COPY src/Steeple.Web.v1/Steeple.Web.csproj src/Steeple.Web.v1/
+RUN dotnet restore src/Steeple.Web.v1/Steeple.Web.csproj
 
-COPY src/Steeple.Web/ src/Steeple.Web/
-RUN dotnet publish src/Steeple.Web/Steeple.Web.csproj \
+COPY src/Steeple.Web.v1/ src/Steeple.Web.v1/
+RUN dotnet publish src/Steeple.Web.v1/Steeple.Web.csproj \
     -c Release -o /app --no-restore -p:UseAppHost=false
 
 # ---- Runtime stage ----

@@ -1,0 +1,836 @@
+/* VENUE & ROOM PANELS — the two property sheets in the right-hand rail.
+   Moved verbatim out of main.css (the "Rail & sheets" section) and map.css
+   (the banner sizes the sheets borrow) so the sheets have one home; restyled
+   here afterwards. The map's own rules stayed in map.css, and .dm-banner's
+   base — which these variants extend — is still there.
+
+   Load order matters and is set in index.html: main.css → map.css →
+   panels.css → guest.css → host.css, exactly the order these rules were in
+   before the move. Note that .verified, .block, .facts and .ticks were
+   authored here for these sheets but are borrowed by ui/guest and ui/host —
+   they are shared type primitives now, so nothing here may be narrowed to
+   .sheet without checking those two. */
+
+/* ── Rail & sheets ──────────────────────────────────────────────────────── */
+
+/* The right of the reading: the map is where, this is the thing you chose. The
+   sheet takes the list's own column whole, so choosing a church replaces the
+   list with the church rather than floating a card over it. */
+.rail {
+  position: fixed;
+  right: 0;
+  top: var(--browse-bar);
+  bottom: 0;
+  z-index: 5;
+  width: calc(100% - var(--browse-map));
+}
+
+.browse .sheet {
+  bottom: 0;
+  max-height: none;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  background: var(--paper);
+  box-shadow: -16px 0 40px -30px rgba(42, 38, 32, 0.55);
+}
+
+.sheet {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--sheet-radius);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-sheet);
+  opacity: 0;
+  transform: translateX(14px);
+  transition: opacity 170ms var(--ease), transform 220ms var(--ease),
+    visibility 0s linear 230ms;
+  visibility: hidden;
+}
+
+.sheet.is-open {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* The handle belongs to the phone's presentation only (ui/rail.js). */
+.sheet__grab {
+  display: none;
+}
+
+.sheet__head {
+  padding: 22px 26px 17px;
+}
+
+.sheet__head > .eyebrow {
+  color: var(--terracotta-deep);
+}
+
+.sheet__up {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.sheet__title {
+  margin: 6px 0 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.sheet__address {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 26px 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.sheet__foot {
+  padding: 16px 26px 18px;
+  border-top: 1px solid var(--line);
+  background: linear-gradient(rgba(243, 236, 224, 0), rgba(243, 236, 224, 0.55));
+  border-radius: 0 0 var(--sheet-radius) var(--sheet-radius);
+}
+
+.sheet__foot--quiet {
+  padding: 14px 26px 15px;
+  text-align: center;
+}
+
+.sheet__disclaimer {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 0;
+  padding: 5px 12px 5px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font-size: 12px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+}
+
+.verified__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sage);
+  position: relative;
+}
+
+.verified__dot::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 3px;
+  width: 5px;
+  height: 2.5px;
+  border-left: 1.5px solid #fff;
+  border-bottom: 1.5px solid #fff;
+  transform: rotate(-45deg);
+}
+
+/* The same fact, said quietly. A filled pill is how you mark something out of
+   the ordinary; a church being who it says it is should read as ordinary — the
+   day it is missing is the day anyone should notice. So: no ground, no weight,
+   an outlined tick in sage and the words in the address's own key. Scoped to
+   this modifier — `.verified` is shared with ui/guest and ui/host. */
+.verified--quiet {
+  margin: 0;
+  padding: 0;
+  gap: 6px;
+  border-radius: 0;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.verified--quiet .verified__dot {
+  width: 13px;
+  height: 13px;
+  background: none;
+  border: 1.2px solid var(--sage);
+}
+
+.verified--quiet .verified__dot::after {
+  left: 3.2px;
+  top: 3.6px;
+  width: 5.2px;
+  height: 2.6px;
+  border-left-color: var(--sage);
+  border-bottom-color: var(--sage);
+}
+
+/* ── the address, and taking a copy of it ───────────────────────────────── */
+
+.addressline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  min-width: 0;
+}
+
+/* Quiet until you go looking for it, and unmistakable once you are near it. */
+.copyaddr {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  padding: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  opacity: 0.72;
+  transition: background 160ms var(--ease), color 160ms var(--ease),
+    opacity 160ms var(--ease);
+}
+
+.copyaddr:hover,
+.copyaddr:focus-visible {
+  background: var(--paper-deep);
+  color: var(--terracotta-deep);
+  opacity: 1;
+}
+
+.copyaddr.is-done,
+.copyaddr.is-done:hover {
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  opacity: 1;
+}
+
+.copyaddr__said {
+  font-size: 11.5px;
+  color: var(--sage-deep);
+}
+
+.copyaddr__said:empty {
+  display: none;
+}
+
+.headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.headline__capacity {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.block {
+  margin: 0;
+}
+
+.block--access {
+  padding: 11px 14px 12px;
+  border-radius: 6px;
+  background: var(--sage-tint);
+}
+
+.block--rules {
+  padding: 11px 14px 12px;
+  border-radius: 6px;
+  background: var(--paper-deep);
+}
+
+.block--rules .prose {
+  margin-top: 7px;
+}
+
+.facts {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.facts dt {
+  margin-top: 12px;
+}
+
+.facts dt:first-child {
+  margin-top: 0;
+}
+
+.facts dd {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.ticks {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.ticks__item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--sage-deep);
+}
+
+.ticks__mark {
+  flex: none;
+  width: 9px;
+  height: 5px;
+  border-left: 1.6px solid var(--sage);
+  border-bottom: 1.6px solid var(--sage);
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.aside {
+  margin: 11px 0 0;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+/* ── the banners the sheets borrow ──────────────────────────────────────── */
+
+/* A sheet opens with a picture of the thing it is about: full width, and short
+   enough that the name and the price are still above the fold. */
+.dm-banner--hero {
+  width: calc(100% + 52px);
+  margin: -22px -26px 18px;
+  aspect-ratio: 16 / 7;
+  border-radius: 0;
+}
+
+.dm-banner--hero.is-lettered .dm-banner__letter {
+  font-size: 46px;
+}
+
+/* ── the venue sheet: the rooms first ───────────────────────────────────── */
+
+/* A visitor who has chosen a church has one question left, and it is not what
+   the parking is like. The spaces are the first thing under the name, as cards
+   with a picture apiece, and everything a two-space church has to say fits a
+   1440×900 page without a scroll — which is a budget, and the numbers below are
+   spent against it: 828px of rail, of which the head takes 271 (the band 162,
+   the name and its standing the rest), the foot 48, the cards about 250, and
+   the words and the practicalities what is left. tools/panel-fit.mjs measures
+   it; every value here was set against that reading, not by eye. */
+.sheet--venue .dm-banner--hero {
+  aspect-ratio: 16 / 6;
+  max-height: 162px;
+  margin-bottom: 14px;
+}
+
+.sheet--venue .sheet__head {
+  padding-bottom: 15px;
+}
+
+.sheet--venue .sheet__title {
+  font-size: 25px;
+}
+
+.standing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 9px;
+}
+
+.standing .sheet__address {
+  margin: 0;
+}
+
+.standing .verified {
+  margin: 0;
+}
+
+/* The address may wrap; the mark of standing follows it rather than being
+   pushed off the line. */
+.standing .addressline {
+  flex: 1 1 auto;
+}
+
+/* How wide the rail is depends on how much of the page the map is given
+   (--browse-map, ui/browse.js), which is not the width of the window — so this
+   sheet's parts ask the column they are set in, not the viewport. */
+.sheet--venue .sheet__body {
+  container-type: inline-size;
+  gap: 15px;
+  padding: 16px 26px 18px;
+}
+
+.spaces__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 11px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17.5px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.spaces__count {
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--paper-deep);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+/* Two to a row on the rail as it stands, one when the rail is narrow. The
+   pictures are the argument, so they get the width. */
+.spaces__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(196px, 1fr));
+  gap: 13px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One space is a full-width card, not a card and a gap — and lying down, so
+   that the only room in the church does not take half the page to say so. */
+.spaces__grid--one {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.spaces__grid--one .spacecard__photo {
+  aspect-ratio: 16 / 5.4;
+}
+
+.spaces__grid--one .spacecard__body {
+  gap: 7px;
+  padding: 13px 16px 14px;
+}
+
+.spaces__grid--one .spacecard__name {
+  font-size: 19px;
+}
+
+.spaces__item {
+  display: flex;
+}
+
+/* The card is the call to action this sheet was missing: a picture, a name, a
+   size, a price, and the whole of it a button. */
+.spacecard {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease), box-shadow 200ms var(--ease),
+    transform 200ms var(--ease);
+}
+
+.spacecard:hover {
+  border-color: var(--terracotta);
+  box-shadow: 0 14px 28px -20px rgba(42, 38, 32, 0.62);
+  transform: translateY(-2px);
+}
+
+.spacecard:active {
+  transform: translateY(0);
+}
+
+/* The card fills whatever column it is given, so the picture needs a ceiling:
+   on a page where the rail is the whole width, a 16/9 photo would be a
+   billboard and two of them the entire page. */
+.spacecard__photo {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 190px;
+  border-radius: 0;
+}
+
+/* No photograph is not an error (ui/map/banner.js): the plate carries the
+   room's initial, and on a card this size it is set to the card. */
+.spacecard__photo.is-lettered .dm-banner__letter {
+  font-size: 40px;
+}
+
+.spacecard__photo .dm-banner__img {
+  transition: transform 480ms var(--ease);
+}
+
+.spacecard:hover .dm-banner__img {
+  transform: scale(1.035);
+}
+
+.spacecard__body {
+  display: grid;
+  gap: 6px;
+  padding: 11px 13px 12px;
+}
+
+.spacecard__name {
+  font-family: var(--serif);
+  font-size: 16.5px;
+  line-height: 1.15;
+  color: var(--ink);
+  transition: color 160ms var(--ease);
+}
+
+.spacecard:hover .spacecard__name {
+  color: var(--terracotta-deep);
+}
+
+.spacecard__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.spacecard__seats {
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+/* Parking and getting there are one thought apiece and read side by side; a
+   column of them was taking the height the rooms now use. */
+.facts--pair {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px 22px;
+}
+
+.facts--pair dd {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Give the map more of the page and the rail gets narrow enough that two cards
+   no longer stand side by side (196 + 13 + 196), and a card with its picture on
+   top becomes a poster: two of them would be a scroll again. At exactly that
+   width the card lies down instead — picture beside the words, the same card,
+   the same target, a third of the height.
+
+   The floor this buys: with --browse-map at 68% (a 460px rail) a two-space
+   church still stands on a 1440×900 page whole. Past 70% the parking and the
+   transit go below the fold — the spaces themselves never do. Anyone giving
+   the map more of the page than that should re-run tools/panel-fit.mjs. */
+@container (max-width: 404px) {
+  .spaces__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .spacecard {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .spacecard__photo,
+  .spaces__grid--one .spacecard__photo {
+    flex: none;
+    width: 38%;
+    max-width: 168px;
+    aspect-ratio: 4 / 3;
+  }
+
+  .spacecard__body {
+    flex: 1;
+    align-content: center;
+    gap: 7px;
+  }
+
+  .spaces__grid--one .spacecard__name {
+    font-size: 17px;
+  }
+
+  /* Side by side needs width; in a narrow column they stack, and the type
+     comes down with them so the page still ends where it should. */
+  .prose--sm {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .facts--pair {
+    gap: 10px;
+  }
+
+  .facts--pair dd {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+}
+
+/* ── the room sheet: the photograph, the price, and the way in ──────────── */
+
+/* The listing is one page and stands as one: the picture of the room, what it
+   costs and holds, everything the church says about it, and the request. It is
+   read top to bottom without a scroll on a 1440×900 page, so the head is a band
+   rather than a poster and the sections are set close. */
+.sheet--room .dm-banner--hero {
+  aspect-ratio: 16 / 5.4;
+  max-height: 200px;
+  margin-bottom: 13px;
+}
+
+.sheet--room .sheet__head {
+  padding: 18px 26px 14px;
+}
+
+.sheet--room .sheet__up {
+  margin-bottom: 9px;
+}
+
+.sheet--room .sheet__title {
+  font-size: 25px;
+}
+
+/* The price belongs to the name, not to a row of its own: a rule and twelve
+   pixels of air were being spent to say something the eye already had. */
+.sheet--room .headline {
+  margin-top: 9px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sheet--room .price__amount {
+  font-size: 28px;
+}
+
+.sheet--room .sheet__body {
+  gap: 13px;
+  padding: 15px 26px 16px;
+}
+
+.sheet--room .block--access,
+.sheet--room .block--rules {
+  padding: 10px 13px 11px;
+}
+
+.sheet--room .ticks {
+  margin-top: 6px;
+  gap: 4px;
+}
+
+.sheet--room .chips {
+  margin-top: 6px;
+}
+
+.sheet--room .sheet__foot {
+  padding: 13px 26px 15px;
+}
+
+/* ── the sheet held behind the booking overlay ──────────────────────────── */
+
+/* Asking for a space is an overlay over the space (CONTRACT5 §1.1). The room
+   stays where it was — under the veil, out of the hit test, still holding its
+   scroll — so putting the sheet down hands the page straight back instead of
+   dropping the guest into the search they left three steps ago.
+
+   The veil is the browse surface's own (`.browse::after`, main.css), and under
+   a booking sheet it is lighter than it is under a letter or a desk: there is
+   something behind this one worth seeing. */
+:root[data-view='apply'] .browse::after {
+  opacity: 0.52;
+}
+
+/* Nothing in a sheet that is only being looked past should answer a pointer;
+   `inert` says so to the browser, this says so to the eye. */
+.sheet.is-behind,
+.sheet.is-behind * {
+  cursor: default;
+}
+
+@media (max-width: 1024px) {
+  /* The rail is the whole page here, and the page scrolls: the head can be a
+     photograph again rather than a band. */
+  .sheet--venue .dm-banner--hero,
+  .sheet--room .dm-banner--hero {
+    max-height: 230px;
+  }
+
+  .spaces__grid--one .spacecard__photo {
+    aspect-ratio: 16 / 7;
+  }
+
+  /* The sheet takes the page — all of it under the top line, which stays: the
+     way back out of a listing must never be inside the listing. */
+  .rail {
+    left: 0;
+    width: auto;
+  }
+
+  .browse .sheet {
+    border-width: 0;
+    box-shadow: none;
+  }
+}
+
+/* ── the phone: a sheet over the map, not a page instead of it ──────────── */
+
+/* The whole of CONTRACT6 §2.2 is in this block and ui/rail.js. A band of map
+   stands above the sheet, so you never lose your place and the next church is
+   one tap through it; the sheet wears a handle and is put down by dragging it
+   down; and the step back is at the top of the sheet in words. The wordmark's
+   chevron is left to mean the one thing it has always meant. */
+@media (max-width: 900px) {
+  .rail {
+    top: calc(var(--browse-bar) + var(--sheet-band, 172px));
+  }
+
+  .browse .sheet {
+    border-radius: 16px 16px 0 0;
+    background: var(--paper);
+    box-shadow: 0 -14px 34px -20px rgba(42, 38, 32, 0.75);
+    /* Closed, it is below the page rather than beside it: on a phone a sheet
+       comes up off the foot, it does not slide in from the right. */
+    transform: translateY(26px);
+  }
+
+  .browse .sheet.is-open {
+    transform: none;
+  }
+
+  /* Nothing is transitioned while a finger is on it; on the way out the sheet
+     is seen to go down rather than fade where it stands. */
+  .browse .sheet.is-dragging {
+    transition: none;
+  }
+
+  .browse .sheet.is-going {
+    transition: transform 190ms var(--ease);
+  }
+
+  .sheet__grab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 100%;
+    padding: 10px 0 6px;
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    background: none;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .sheet__grab:active {
+    cursor: grabbing;
+  }
+
+  .sheet__grab-bar {
+    width: 42px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--line-strong);
+    transition: background 160ms var(--ease), width 160ms var(--ease);
+  }
+
+  .sheet__grab:hover .sheet__grab-bar,
+  .sheet__grab:focus-visible .sheet__grab-bar {
+    width: 56px;
+    background: var(--terracotta);
+  }
+
+  /* The handle takes the top of the sheet, so the picture starts under it. */
+  .sheet--venue .sheet__head,
+  .sheet--room .sheet__head {
+    padding-top: 0;
+  }
+
+  .sheet--venue .dm-banner--hero,
+  .sheet--room .dm-banner--hero {
+    margin-top: 0;
+    max-height: 168px;
+  }
+
+  /* The step back is a control, not a caption: on a phone it is set as a chip
+     so a thumb has something to land on. Scoped to the property sheets —
+     `.sheet__up` is borrowed by ui/host's letter page, which is not this. */
+  .sheet--venue .sheet__up,
+  .sheet--room .sheet__up {
+    margin: 12px 0 2px;
+    padding: 5px 12px 5px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--paper-deep);
+  }
+
+  /* While a property sheet stands over the map, the map behind it is for
+     orientation and for the next church — the search pill and the results
+     sheet are not the question being asked, and a pill floating over a sheet
+     is clutter. Hidden rather than removed: the results sheet measures itself
+     against the pill's box (ui/map/sheet.js), and a box that vanishes takes
+     the sheet's top detent with it. */
+  :root[data-view='venue'] .browse .dm-search,
+  :root[data-view='room'] .browse .dm-search,
+  :root[data-view='apply'] .browse .dm-search,
+  :root[data-view='venue'] .browse .dm-panel,
+  :root[data-view='room'] .browse .dm-panel,
+  :root[data-view='apply'] .browse .dm-panel {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browse .sheet.is-going,
+  .sheet__grab-bar {
+    transition: none;
+  }
+}

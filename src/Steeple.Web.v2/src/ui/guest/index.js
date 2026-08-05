@@ -1,0 +1,260 @@
+// GUEST REQUESTS — Workstream B (CONTRACT2 §4). One module owning the apply
+// composer, the identity beat, the inbox, and a request opened in the guest's
+// lens.
+//
+//   createGuestFlows({ announce, porch }) -> { element }
+//
+// Self-managing: it listens to the bus and shows or hides itself. Nothing in
+// here holds product truth — every fact, status and rule comes from
+// data/store.js, and every mutation goes back through it.
+//
+// Hit-testing rule this layer obeys absolutely: the root never takes pointer
+// events, a closed surface is `visibility: hidden` + `inert`, and only the
+// sheet itself opts back in. A closed surface must not swallow the village.
+
+import { bus, setView, state } from '../../core/bus.js';
+import { getApplication, guestApplications } from '../../data/store.js';
+import { getVenue } from '../../data/venues.js';
+import { el, replaceChildren } from '../dom.js';
+import { createComposer } from './composer.js';
+import { createJournal } from './journal.js';
+import { createLetterView } from './letter.js';
+import { isYourMove, plural } from './copy.js';
+
+// An exploration flag in the house style (CONTRACT2 §0), parsed once by the bus
+// as `state.letter`: the same truth and the same interaction, set in two hands.
+//   stationery — warm printed sheet, the canonical direction
+//   ledger     — the parish register: hairline rules, tabular, administrative
+
+// Clicking away from the inbox puts it down. These are the things a click can
+// land on that are not "away": any guest sheet (a closed one never takes an
+// event at all), the top line and the porch — which are how you leave on
+// purpose — and anything modal, which has its own way out.
+const NOT_AWAY = '.guest__surface, .sent, .nav, .porch, [role="dialog"], .modal__layer';
+
+export function createGuestFlows({ announce, porch } = {}) {
+  document.documentElement.dataset.letter = state.letter;
+
+  const wash = el('div', { class: 'guest__wash', 'aria-hidden': 'true' });
+
+  const composer = createComposer({
+    announce,
+    onLeave: () => setView('room', { venueId: state.venueId, roomId: state.roomId }),
+    onSent: (application) => {
+      // Out of the way: the world flies the envelope, the guest keeps their place.
+      setView('room', { venueId: application.venueId, roomId: application.roomId });
+      showConfirmation(application);
+    },
+  });
+
+  const journal = createJournal({
+    announce,
+    onOpen: (app) =>
+      setView('letter', { applicationId: app.id, venueId: app.venueId, roomId: app.roomId }),
+    onBrowse: () => setView('village'),
+  });
+
+  const letter = createLetterView({
+    announce,
+    onBack: () => setView('journal'),
+    onBrowse: () => setView('village'),
+  });
+
+  const surfaces = [
+    { view: 'apply', surface: composer },
+    { view: 'journal', surface: journal },
+    { view: 'letter', surface: letter },
+  ];
+
+  // ── the confirmation slip ─────────────────────────────────────────────────
+
+  const confirmation = el('aside', {
+    class: 'sent',
+    role: 'status',
+    hidden: true,
+  });
+  let confirmationTimer = null;
+  let confirmationView = null;
+
+  function showConfirmation(application) {
+    confirmationView = state.view;
+    const venue = getVenue(application.venueId);
+    replaceChildren(confirmation, [
+      el('p', { class: 'sent__line', text: `Your request is on its way to ${venue.shortName}.` }),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'linkish',
+          onclick: () => {
+            hideConfirmation();
+            setView('letter', {
+              applicationId: application.id,
+              venueId: application.venueId,
+              roomId: application.roomId,
+            });
+          },
+        },
+        'Open it in your inbox'
+      ),
+    ]);
+    confirmation.hidden = false;
+    requestAnimationFrame(() => confirmation.classList.add('is-open'));
+    clearTimeout(confirmationTimer);
+    confirmationTimer = setTimeout(hideConfirmation, 9000);
+  }
+
+  function hideConfirmation() {
+    clearTimeout(confirmationTimer);
+    confirmationView = null;
+    confirmation.classList.remove('is-open');
+    confirmation.hidden = true;
+  }
+
+  // ── the porch: a word, and a count of what is waiting ─────────────────────
+
+  const tabCount = el('span', { class: 'letters__count' });
+  const tab = el(
+    'button',
+    {
+      type: 'button',
+      class: 'letters',
+      onclick: () => setView('journal'),
+    },
+    [el('span', { class: 'letters__word', text: 'Inbox' }), tabCount]
+  );
+  porch?.append(tab);
+
+  function renderTab() {
+    const guest = state.mode === 'guest';
+    tab.hidden = !guest;
+    if (!guest) return;
+    const waiting = guestApplications().filter((a) => isYourMove(a.status)).length;
+    tabCount.textContent = waiting ? String(waiting) : '';
+    tabCount.hidden = !waiting;
+    tab.classList.toggle('is-on', state.view === 'journal' || state.view === 'letter');
+    tab.setAttribute(
+      'aria-label',
+      waiting
+        ? `Inbox — ${plural(waiting, 'request needs', 'requests need')} you`
+        : 'Inbox'
+    );
+  }
+
+  // ── visibility ────────────────────────────────────────────────────────────
+
+  const element = el('div', { class: 'guest' }, [
+    wash,
+    composer.element,
+    journal.element,
+    letter.element,
+    confirmation,
+  ]);
+
+  function setOpen(surface, open) {
+    surface.element.classList.toggle('is-open', open);
+    surface.element.toggleAttribute('inert', !open);
+    surface.element.setAttribute('aria-hidden', open ? 'false' : 'true');
+  }
+
+  let spokenFor = null;
+
+  function render() {
+    const guest = state.mode === 'guest';
+    let active = null;
+
+    for (const { view, surface } of surfaces) {
+      const open = guest && state.view === view;
+      if (open) active = { view, surface };
+      setOpen(surface, open);
+    }
+
+    if (active?.view === 'apply') {
+      if (!composer.open(state.venueId, state.roomId)) {
+        setOpen(composer, false);
+        active = null;
+      }
+    } else if (active?.view === 'journal') {
+      journal.render();
+    } else if (active?.view === 'letter') {
+      const id = state.applicationId;
+      if (!letter.open(id)) {
+        // A cold link to a request that is not ours: go where it does exist.
+        setOpen(letter, false);
+        active = null;
+      } else {
+        const app = getApplication(id);
+        // A cold-loaded request carries only an id; the rest is the store's to say.
+        if (app && !state.venueId) {
+          state.venueId = app.venueId;
+          state.roomId = app.roomId;
+        }
+      }
+    }
+
+    element.classList.toggle('is-open', Boolean(active));
+    wash.classList.toggle('is-on', Boolean(active));
+    // The slip belongs to the moment the request left; move on and it goes.
+    if (confirmationView && state.view !== confirmationView) hideConfirmation();
+    renderTab();
+
+    // The shared announcer speaks for every view change; ours must land after
+    // it, so the guest hears the request and not the listing behind it.
+    const key = `${state.view}:${state.applicationId ?? state.roomId ?? ''}`;
+    if (active && key !== spokenFor) {
+      spokenFor = key;
+      setTimeout(() => {
+        if (state.view === active.view) announce?.(active.surface.spoken());
+      }, 0);
+    } else if (!active) {
+      spokenFor = null;
+    }
+  }
+
+  // A click on the page behind the inbox closes the inbox, and does nothing
+  // else: the visitor was reaching past it, not through it. Only the inbox — a
+  // request being read or written is not something to lose to a stray click.
+  // Capture, because the surfaces underneath stop their own events before they
+  // ever bubble this far.
+  document.addEventListener(
+    'click',
+    (event) => {
+      if (state.mode !== 'guest' || state.view !== 'journal') return;
+      if (event.target?.closest?.(NOT_AWAY)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setView('village');
+    },
+    { capture: true }
+  );
+
+  bus.on('view:change', render);
+  bus.on('mode:change', render);
+  // The stationery/ledger flag is set entirely in CSS off this one attribute,
+  // so switching it live is the attribute and nothing else. Nothing on the page
+  // offers the switch yet — `?letter=` still opens on one of them.
+  bus.on('letter:change', ({ letter }) => {
+    document.documentElement.dataset.letter = letter;
+  });
+  // A mutation rebuilds whichever surface is open. Rebuilding must not cost the
+  // keyboard its place: what was focused is put back, or the page takes focus.
+  bus.on('store:change', ({ type }) => {
+    renderTab();
+    if (state.mode !== 'guest') return;
+    if (state.view === 'journal') {
+      const openId = document.activeElement?.closest?.('.jrow')?.dataset.id;
+      journal.render();
+      if (openId) journal.element.querySelector(`.jrow[data-id="${openId}"]`)?.focus();
+    } else if (state.view === 'letter' && type !== 'submit') {
+      const held = letter.element.contains(document.activeElement);
+      letter.render();
+      if (held) letter.focusBody();
+    } else if (state.view === 'apply') {
+      composer.refresh();
+    }
+  });
+
+  render();
+
+  return { element };
+}

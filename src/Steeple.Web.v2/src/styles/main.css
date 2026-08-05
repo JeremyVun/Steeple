@@ -1,0 +1,1211 @@
+/* Steeple design tokens — web binding of steeple docs/DESIGN_SYSTEM.md.
+   Every UI element derives from these; no raw color values in components. */
+
+:root {
+  --paper: #fbf7f0;
+  --paper-deep: #f3ece0;
+  --card: #ffffff;
+  --ink: #2a2620;
+  --ink-soft: #5c544a;
+  --ink-faint: #6b6253;
+  --sage: #5b7553;
+  --sage-deep: #46603f;
+  --sage-tint: #e7eee3;
+  --terracotta: #c0623f;
+  --terracotta-strong: #b0552f;
+  --terracotta-deep: #a44d2e;
+  --terracotta-tint: #f6e4db;
+  --line: #e6decf;
+  --line-strong: #d8ceba;
+
+  --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+
+  --radius-card: 14px;
+  --radius-pill: 999px;
+}
+
+/* ── Interface layer tokens ─────────────────────────────────────────────── */
+
+#ui {
+  --rail-width: 400px;
+  --rail-inset: 34px;
+  --sheet-radius: 8px;
+  --paper-sheet: rgba(251, 247, 240, 0.965);
+  --shadow-sheet: 0 18px 40px -22px rgba(42, 38, 32, 0.5),
+    0 3px 10px -6px rgba(42, 38, 32, 0.22);
+  --shadow-chip: 0 8px 20px -14px rgba(42, 38, 32, 0.55);
+  --ease: cubic-bezier(0.22, 0.7, 0.28, 1);
+  --dur: 200ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--paper);
+  font-family: var(--sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  display: block;
+  /* A finger on the title page is drawing the page up, and the browser must be
+     told so: left to guess, it reads the first move as a scroll it owns, takes
+     the gesture back with a pointercancel, and the roll gets one frame of a
+     drag that was going to be a whole one. */
+  touch-action: none;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none; /* interactive children opt back in */
+  font-family: var(--sans);
+  color: var(--ink);
+}
+
+#ui button,
+#ui a,
+.sheet,
+.nav,
+.scenery,
+.porch {
+  pointer-events: auto;
+}
+
+/* Anything the visitor cannot see must not be in the way of the pointer. */
+.arrival:not(.is-open),
+.nav:not(.is-open),
+.scenery:not(.is-open),
+.porch:not(.is-open) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── The roll ───────────────────────────────────────────────────────────────
+   Two acts, one scroll (core/bus.js, journey/roll.js). The village cranes down
+   onto its own ground while the browse surface rises off the foot of the page,
+   and the two are the same motion: the ground becomes the paper the map is
+   printed on. ui/browse.js publishes the numbers; everything below reads them.
+
+     --roll        0..1, the roll as it stands
+     --roll-fall   1..0, how far the surface still has to rise
+     --roll-title  1..0, how much of the title page is left
+     --roll-sheet  1..0, how much of an overlay sheet is still on the page   */
+
+.browse {
+  --browse-bar: 72px;
+  /* The column beside the map is a column of pictures now, two across. It needs
+     less width to say more, so the map takes what it gives up. */
+  --browse-map: 64%;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: var(--paper);
+  pointer-events: none;
+  /* The lifted edge of a sheet of paper drawn up over the world behind it. */
+  box-shadow: 0 -30px 64px -34px rgba(42, 38, 32, 0.6);
+  transform: translateY(calc(var(--roll-fall, 1) * 100%));
+  will-change: transform;
+}
+
+/* At rest nothing is transformed: the map measures a plain page, and the paper
+   takes its own pointer events instead of passing them to the world behind. */
+.browse.is-landed {
+  transform: none;
+  pointer-events: auto;
+}
+
+/* A letter, a desk or a listing is laid over the surface — the page beneath
+   goes quiet so the correspondence is the only thing being read. */
+.browse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: var(--paper);
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+}
+
+.browse.is-under::after {
+  opacity: 0.86;
+}
+
+/* An open sheet — a desk, an inbox, a letter, the listing flow — is laid over
+   the surface rather than inside it, so it has to be told to leave. It rides
+   --roll-sheet, which starts moving on the first frame of a roll-up: the sheet
+   goes down and out ahead of the paper and is clear of it well before it lands.
+   Anything that sits still over a moving roll reads as a page that has hung.
+
+   At rest the transform is dropped entirely — a transformed ancestor is the
+   containing block for everything `position: fixed` inside it, and the sheets
+   are laid out against the viewport when they are being read. */
+:root:not(.roll-landed) .guest,
+:root:not(.roll-landed) .hostdesk {
+  transform: translateY(calc((1 - var(--roll-sheet, 1)) * 62vh));
+  opacity: var(--roll-sheet, 1);
+  will-change: transform, opacity;
+}
+
+/* The top line rides the roll with everything else: `position: fixed` inside a
+   transformed surface is fixed to the surface. It stands above the veil too —
+   the way out of a letter must never be dimmed along with what is under it. */
+.browse .nav,
+.browse .porch {
+  z-index: 7;
+}
+
+.browse .nav {
+  top: 15px;
+}
+
+.browse .nav::before {
+  display: none;
+}
+
+.browse .porch {
+  top: 19px;
+}
+
+/* Without a village there is no scenery to choose between, and an instrument
+   that changes nothing is worse than one that is not there (?world=off). */
+:root[data-world='off'] .scenery {
+  display: none;
+}
+
+/* ── Browse ambience ────────────────────────────────────────────────────────
+   The title page has weather over it; the product should not feel as though it
+   moved indoors. Two cloud shadows cross the paper over three or four minutes,
+   and now and then a bird passes along the top line, between the wordmark and
+   the porch. CSS only — the village's renderer stays asleep behind all of this
+   — and none of it is meant to be noticed. The map is opaque, so what this
+   actually washes is the top line and the paper the results are set on. */
+
+.browse__sky {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* A cloud shadow is drawn as one tile, repeated across the page, and moved by
+   exactly one tile. Two rules keep it a shadow rather than a shape, and both
+   are load-bearing — breaking either one is the grey band that used to sweep
+   across the search view (wave 6):
+
+     1. Every gradient reaches `transparent` well inside its own tile, in both
+        axes. A gradient still carrying ink where its box ends leaves the box's
+        own edge printed on the paper as a step of a few units of grey, and the
+        animation then walks that step across the page. Keep
+        centre ± radius × stop inside 0–100%, and check it when you retune.
+     2. The travel is exactly one tile, so the loop closes on itself: no snap
+        back to a full sky every few minutes.
+
+   The element is one tile wider than the page and offset by one tile, so its
+   own edges are never on screen either — and the tile is measured in vw so that
+   the layer stays the same size relative to the page it is washing. A fixed
+   pixel tile makes a phone carry a composited layer ten screens wide, and the
+   page pays for it in dropped taps. */
+.browse__cloud {
+  --cloud-tile: 150vw;
+
+  position: absolute;
+  top: -40%;
+  left: calc(var(--cloud-tile) * -1);
+  width: calc(100% + var(--cloud-tile));
+  height: 180%;
+  background-repeat: repeat-x;
+  background-size: var(--cloud-tile) 100%;
+  background-image:
+    radial-gradient(
+      33% 30% at 26% 26%,
+      color-mix(in srgb, var(--ink) 7%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      23% 21% at 50% 66%,
+      color-mix(in srgb, var(--ink) 5.5%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      33% 26% at 74% 40%,
+      color-mix(in srgb, var(--ink) 6%, transparent),
+      transparent 70%
+    );
+  animation: browse-clouds 190s linear infinite;
+}
+
+/* A second, thinner layer the other way, on a wider tile: two speeds and two
+   periods is what stops a drift from reading as one image being slid across. */
+.browse__cloud--high {
+  --cloud-tile: 190vw;
+
+  top: -66%;
+  height: 150%;
+  opacity: 0.66;
+  animation-duration: 355s;
+  animation-direction: reverse;
+}
+
+@keyframes browse-clouds {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(var(--cloud-tile), 0, 0);
+  }
+}
+
+/* Three minutes apart, and it takes twenty seconds to cross: at this size and
+   this weight it is a mark on the paper you catch out of the corner of an eye. */
+.browse__bird {
+  position: absolute;
+  top: 21px;
+  left: 0;
+  width: 15px;
+  height: 9px;
+  opacity: 0;
+  background: center / contain no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 8'%3E%3Cpath d='M1 6.2c2.4-.2 3.9-1.6 5-4.1.4-.9 1.6-.9 2 0 1.1 2.5 2.6 3.9 5 4.1' fill='none' stroke='%232a2620' stroke-width='1' stroke-linecap='round'/%3E%3C/svg%3E");
+  animation: browse-bird 187s linear infinite;
+}
+
+@keyframes browse-bird {
+  0%,
+  84% {
+    transform: translate3d(19vw, 11px, 0);
+    opacity: 0;
+  }
+  86% {
+    opacity: 0.16;
+  }
+  95% {
+    opacity: 0.16;
+  }
+  97%,
+  100% {
+    transform: translate3d(76vw, -5px, 0);
+    opacity: 0;
+  }
+}
+
+/* The porch: shared top-right shelf where the wave-2 entry affordances stand —
+   journal tab (guest), the quiet mode switch (host), map toggle if wanted. */
+.porch {
+  position: fixed;
+  top: 24px;
+  right: var(--rail-inset);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+    visibility 0s linear var(--dur);
+}
+
+.porch.is-open {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* ── the account on the porch ───────────────────────────────────────────── */
+
+/* The same chip the other two doors on the shelf are cut from (.letters,
+   .porchswitch), with a monogram where they have a word. It is not on the page
+   at all until somebody is signed in. */
+.account__wrap {
+  position: relative;
+}
+
+.account__wrap[hidden] {
+  display: none;
+}
+
+.account {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.account:hover,
+.account__wrap.is-open .account {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.account__mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+}
+
+/* A layer of its own, above a letter and a desk, under the modal — set under
+   the button by measurement (ui/account.js). */
+.account__card {
+  position: fixed;
+  z-index: 8;
+  min-width: 200px;
+  max-width: min(280px, calc(100vw - 2 * var(--rail-inset)));
+  padding: 13px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-sheet);
+}
+
+.account__card[hidden] {
+  display: none;
+}
+
+.account__name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.account__email {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.account__out {
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  width: 100%;
+  text-align: left;
+}
+
+.rail,
+.label,
+.arrival {
+  pointer-events: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:where(#ui) :focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 3px;
+}
+
+/* ── Type primitives ────────────────────────────────────────────────────── */
+
+.eyebrow {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.prose {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.prose--sm {
+  font-size: 13.5px;
+  line-height: 1.58;
+}
+
+.linkish {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.linkish:hover {
+  color: var(--terracotta-deep);
+}
+
+.price {
+  margin: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  font-family: var(--serif);
+  color: var(--ink);
+  line-height: 1;
+}
+
+.price__amount {
+  font-size: 32px;
+  letter-spacing: -0.01em;
+}
+
+.price__unit {
+  font-size: 16px;
+  color: var(--ink-faint);
+}
+
+.price--free .price__amount {
+  color: var(--sage-deep);
+}
+
+.price--sm .price__amount {
+  font-size: 17px;
+}
+
+.price--sm .price__unit {
+  font-size: 12px;
+}
+
+/* ── Buttons & chips ────────────────────────────────────────────────────── */
+
+.pill {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  color: var(--ink);
+  padding: 8px 15px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), transform 120ms var(--ease);
+}
+
+.pill:hover {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.pill:active {
+  transform: translateY(1px);
+}
+
+.pill--primary,
+.pill--primary:hover {
+  background: var(--terracotta-strong);
+  border-color: var(--terracotta-strong);
+  color: #fff;
+  font-size: 14px;
+  padding: 11px 22px;
+}
+
+.pill--primary:hover {
+  background: var(--terracotta-deep);
+  border-color: var(--terracotta-deep);
+}
+
+.pill--wide {
+  width: 100%;
+}
+
+.pill--filter.is-on,
+.pill--filter.is-on:hover {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: #fff;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 7px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--ink-soft);
+  background: var(--card);
+}
+
+.chip--activity {
+  background: var(--sage-tint);
+  border-color: transparent;
+  color: var(--sage-deep);
+}
+
+/* ── Arrival ────────────────────────────────────────────────────────────── */
+
+.arrival {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 320ms var(--ease), visibility 0s linear 330ms;
+}
+
+.arrival::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    62% 52% at 50% 40%,
+    rgba(251, 247, 240, 0.88),
+    rgba(251, 247, 240, 0.6) 46%,
+    rgba(251, 247, 240, 0) 78%
+  );
+}
+
+.arrival.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* Once the roll is moving the title gives way by the roll's own measure, frame
+   by frame — a transition of its own would only smear a scrub. The words and
+   the paper under them leave separately: type never sits half-transparent over
+   a village on the move. */
+.arrival.is-going {
+  transition: none;
+}
+
+.arrival.is-going::before {
+  opacity: var(--roll-wash, 1);
+}
+
+.arrival.is-going .arrival__sheet {
+  opacity: var(--roll-title, 1);
+}
+
+.arrival__sheet {
+  position: relative;
+  max-width: 40rem;
+  padding: 0 24px;
+  transform: translateY(calc(-5vh - var(--roll) * 7vh));
+}
+
+.arrival__eyebrow {
+  color: var(--ink-faint);
+}
+
+.arrival__mark {
+  margin: 22px 0 16px;
+  color: var(--terracotta);
+  line-height: 0;
+}
+
+.arrival__wordmark {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(3.6rem, 7.4vw, 5.6rem);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.018em;
+  color: var(--ink);
+}
+
+.arrival__line {
+  margin: 20px auto 0;
+  max-width: 30rem;
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: balance;
+}
+
+/* Two ways in, and they are not equals: one is what almost everyone came for,
+   the other is the door for a church with a hall standing empty. */
+.arrival__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.arrival__cta {
+  pointer-events: auto;
+  box-shadow: var(--shadow-chip);
+}
+
+.arrival__host,
+.arrival__host:hover {
+  padding: 11px 20px;
+  font-size: 14px;
+  background: color-mix(in srgb, var(--paper) 62%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+  color: var(--ink-soft);
+}
+
+.arrival__host:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta-deep);
+}
+
+.arrival__hint {
+  margin: 14px auto 0;
+  max-width: 23rem;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  text-wrap: balance;
+}
+
+/* The invitation to scroll: a thread off the foot of the page and the smallest
+   chevron, breathing about as fast as the village does. */
+.arrival__scroll {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  margin-top: 22px;
+  padding: 6px 14px 4px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  cursor: pointer;
+  animation: arrival-breathe 4.6s var(--ease) infinite;
+}
+
+@keyframes arrival-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+.arrival__thread {
+  width: 1px;
+  height: 26px;
+  background: linear-gradient(
+    color-mix(in srgb, var(--ink) 0%, transparent),
+    color-mix(in srgb, var(--ink) 34%, transparent)
+  );
+}
+
+.arrival__chevron {
+  width: 8px;
+  height: 8px;
+  border-right: 1.4px solid var(--ink-faint);
+  border-bottom: 1.4px solid var(--ink-faint);
+  transform: rotate(45deg);
+  transition: border-color 160ms var(--ease);
+}
+
+.arrival__scroll:hover .arrival__chevron {
+  border-color: var(--terracotta);
+}
+
+/* ── Wordmark + breadcrumb ──────────────────────────────────────────────── */
+
+.nav {
+  position: fixed;
+  top: 26px;
+  left: var(--rail-inset);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+    visibility 0s linear var(--dur);
+}
+
+.nav.is-open {
+  opacity: 1;
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* A soft wash of paper so the wordmark stays readable over any sky. */
+.nav::before {
+  content: '';
+  position: absolute;
+  left: -60px;
+  top: -60px;
+  width: 460px;
+  height: 230px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    58% 58% at 26% 34%,
+    rgba(251, 247, 240, 0.86),
+    rgba(251, 247, 240, 0) 72%
+  );
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--serif);
+  font-size: 20px;
+  color: var(--ink);
+  border-radius: 4px;
+}
+
+.wordmark svg {
+  color: var(--terracotta);
+}
+
+.wordmark:hover svg {
+  color: var(--terracotta-deep);
+}
+
+/* The way back out of the product: small enough to be quiet, present enough to
+   be found. */
+.wordmark__up {
+  width: 7px;
+  height: 7px;
+  margin-right: 1px;
+  border-left: 1.4px solid var(--ink-faint);
+  border-top: 1.4px solid var(--ink-faint);
+  transform: translateY(1px) rotate(45deg);
+  transition: border-color 160ms var(--ease), transform 200ms var(--ease);
+}
+
+.wordmark:hover .wordmark__up {
+  border-color: var(--terracotta-deep);
+  transform: translateY(-1px) rotate(45deg);
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crumbs__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.crumb {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.015em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.crumb:hover {
+  color: var(--terracotta-deep);
+}
+
+.crumb--current {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+
+.crumbs__sep {
+  font-size: 11px;
+  color: var(--line-strong);
+}
+
+/* ── Hovered venue label ────────────────────────────────────────────────── */
+
+.label {
+  position: fixed;
+  z-index: 3;
+  top: 30px;
+  left: 50%;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 18px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  transition: opacity 160ms var(--ease), transform 180ms var(--ease);
+}
+
+.label.is-open {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.label__title {
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.label__meta {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.label__meta::before {
+  content: '·';
+  margin-right: 9px;
+  color: var(--line-strong);
+}
+
+/* ── Scenery switcher ───────────────────────────────────────────────────── */
+
+/* Both edges of the page are spoken for — discovery on the left, the property
+   sheet on the right — so the exploration flags stand under the world itself. */
+.scenery {
+  position: fixed;
+  z-index: 2;
+  left: 50%;
+  bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+    visibility 0s linear var(--dur);
+}
+
+.scenery.is-open {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.segments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 3px 3px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+}
+
+.segments__label {
+  margin-right: 5px;
+  font-size: 9.5px;
+}
+
+.segment {
+  border: 0;
+  border-radius: var(--radius-pill);
+  padding: 5px 13px;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease);
+}
+
+.segment:hover {
+  color: var(--ink);
+}
+
+.segment.is-on {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ── The printed layer's stacking order, said once ──────────────────────────
+   The browse surface is the page (z 1, set with .browse). The title sheet and
+   the scenery switch lie over it while the roll is still up top; a letter, a
+   desk or a listing lies over all of it; the demo modal over everything. */
+
+.guest,
+.hostdesk {
+  z-index: 4;
+}
+
+/* ── Demo modal ─────────────────────────────────────────────────────────── */
+
+.modal__layer {
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(42, 38, 32, 0.42);
+  opacity: 0;
+  transition: opacity 180ms var(--ease);
+  /* A closed modal must not exist for hit-testing: it covers the whole
+     viewport, and every pointer event in the experience passes through here. */
+  pointer-events: none;
+}
+
+.modal__layer[hidden] {
+  display: none;
+}
+
+.modal__layer.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal {
+  width: min(460px, 100%);
+  padding: 26px 28px 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  box-shadow: 0 40px 80px -40px rgba(42, 38, 32, 0.65);
+  transform: translateY(10px);
+  transition: transform 220ms var(--ease);
+}
+
+.modal__layer.is-open .modal {
+  transform: none;
+}
+
+.modal > .eyebrow {
+  color: var(--terracotta-deep);
+}
+
+.modal__title {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 27px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.modal__prose {
+  margin-top: 14px;
+  display: grid;
+  gap: 11px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.modal__prose p {
+  margin: 0;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Narrow viewports ───────────────────────────────────────────────────── */
+
+@media (max-width: 1180px) {
+  .browse {
+    --browse-map: 58%;
+  }
+}
+
+/* Below this the map takes the top of the page and the list runs under it, so
+   a property sheet has nowhere to sit but over the whole of it. */
+@media (max-width: 900px) {
+  .browse {
+    --browse-bar: 60px;
+  }
+
+  .browse .nav {
+    top: 11px;
+  }
+
+  .browse .porch {
+    top: 14px;
+  }
+
+  /* A phone's top line already has three things on it and no sky between them.
+     The cloud shadow stays — the results run the whole width here, so there is
+     more paper for it, not less. */
+  .browse__bird {
+    display: none;
+  }
+}
+
+/* A phone-width page has one line across the top and everything must fit on it:
+   the wordmark, the inbox, and the way in for a church with space to share. */
+@media (max-width: 560px) {
+  #ui {
+    --rail-inset: 20px;
+  }
+
+  .browse .nav {
+    top: 13px;
+  }
+
+  .browse .porch {
+    top: 15px;
+  }
+
+  /* One line, three things, and the two on the right are doors that have to be
+     read to be used. The brand gives up its word and keeps its mark — with the
+     chevron still on it, that is the whole affordance. */
+  .browse .wordmark__word,
+  .browse .crumbs {
+    display: none;
+  }
+
+  .porch {
+    gap: 5px;
+  }
+
+  .porch > * {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  /* The account keeps its monogram and gives up its name — the shelf has three
+     things on it here and the two words have to be readable. */
+  .porch > .account__wrap {
+    padding: 0;
+  }
+
+  .account {
+    padding: 4px;
+    font-size: 11px;
+  }
+
+  .account__who {
+    display: none;
+  }
+
+  .account__mark {
+    width: 23px;
+    height: 23px;
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+
+/* No scrub, no crane, nothing sliding: the two acts simply cross over, and the
+   roll's short tween drives the fade instead of a transition. */
+@media (prefers-reduced-motion: reduce) {
+  .browse {
+    transform: none;
+    opacity: calc(1 - var(--roll-fall, 1));
+  }
+
+  /* The sheets cross over with the surface rather than falling away from it. */
+  :root:not(.roll-landed) .guest,
+  :root:not(.roll-landed) .hostdesk {
+    transform: none;
+  }
+
+  .browse .dm-mapwrap,
+  .browse .dm-head,
+  .browse .dm-list,
+  .browse .dm-filters,
+  .arrival__sheet {
+    transform: none;
+  }
+
+  .arrival__scroll {
+    animation: none;
+  }
+
+  #ui *,
+  #ui *::before,
+  #ui *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
+
+.reduced-motion #ui *,
+.reduced-motion #ui *::before,
+.reduced-motion #ui *::after {
+  transition-duration: 1ms !important;
+  animation-duration: 1ms !important;
+}
+
+/* The weather is nothing but drift, so with drift refused there is no weather —
+   and the blanket rule above would otherwise run it at a thousand times speed. */
+@media (prefers-reduced-motion: reduce) {
+  .browse__sky {
+    display: none;
+  }
+}
+
+.reduced-motion .browse__sky {
+  display: none;
+}

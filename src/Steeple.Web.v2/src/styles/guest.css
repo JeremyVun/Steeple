@@ -1,0 +1,2060 @@
+/* GUEST CORRESPONDENCE — Workstream B (CONTRACT2 §4).
+   The world is a storybook; these are the instruments. Everything here is set
+   like a fine printed form: serif for the moments (names, dates, prices), sans
+   for the work, hairline rules, generous margins, no toy chrome.
+   Every value derives from the :root tokens in main.css. */
+
+.guest {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+
+  --sheet: color-mix(in srgb, var(--card) 84%, var(--paper));
+  --rule: var(--line);
+  --rule-firm: var(--line-strong);
+  --ink-wash: color-mix(in srgb, var(--ink) 8%, transparent);
+  --lift: 0 34px 64px -34px color-mix(in srgb, var(--ink) 55%, transparent),
+    0 4px 14px -8px color-mix(in srgb, var(--ink) 22%, transparent);
+  --slot: 10px;
+  --gutter: 46px;
+}
+
+/* A breath of paper behind an open letter, so type stays legible over any sky.
+   Purely optical: it never takes a pointer event, so the wordmark, the porch
+   and the village behind it all stay live. */
+.guest__wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 260ms var(--ease);
+  background: radial-gradient(
+    78% 66% at 50% 46%,
+    color-mix(in srgb, var(--paper) 82%, transparent),
+    color-mix(in srgb, var(--paper) 40%, transparent) 58%,
+    transparent 84%
+  );
+}
+
+.guest__wash.is-on {
+  opacity: 1;
+}
+
+/* `hidden` outranks any display we set. A chip that has not been earned yet is
+   not a chip, and a class from main.css must not resurrect it. */
+.guest [hidden] {
+  display: none !important;
+}
+
+/* A closed surface is not merely invisible — it is out of the hit test. */
+.guest__surface {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 86px var(--rail-inset) 30px;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 190ms var(--ease), visibility 0s linear 200ms;
+}
+
+.guest__surface.is-open {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+/* The request is laid over the room it is about, and the paper around it is a
+   way out rather than a window through. It stops short of the top line: the
+   breadcrumb and the porch are the other ways out of a request and must stay
+   live above it (72px is main.css's --browse-bar, which does not reach here). */
+.letter__backdrop {
+  position: absolute;
+  inset: 72px 0 0;
+  transform: none;
+  max-height: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.guest__surface--letter.is-open .letter__backdrop {
+  pointer-events: auto;
+}
+
+.guest__surface > * {
+  pointer-events: auto;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  transform: translateY(9px);
+  transition: transform 240ms var(--ease);
+}
+
+.guest__surface.is-open > * {
+  transform: none;
+}
+
+/* ── The stationery ─────────────────────────────────────────────────────── */
+
+.letter__sheet {
+  width: min(1030px, 100%);
+  padding: 28px 38px 0;
+  position: relative;
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+}
+
+/* The way back sits above the letterhead, at the sheet's top left, where a
+   reader's eye starts. An arrow and nothing else: the room it returns to is
+   already named in the breadcrumb overhead. */
+.letter__nav {
+  display: flex;
+  margin: -4px 0 2px -8px;
+}
+
+.letter__back {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+
+.letter__back:hover {
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+  border-color: var(--rule);
+  color: var(--ink);
+}
+
+.letter__back:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.letter__backglyph {
+  font-size: 17px;
+  line-height: 1;
+  /* The glyph's own bearing sits it a hair right of centre. */
+  transform: translateX(-0.5px);
+}
+
+/* The engraved double rule of a letterhead. */
+.letter__head,
+.opened__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ink);
+  position: relative;
+}
+
+.letter__head::after,
+.opened__head::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  border-bottom: 1px solid var(--rule-firm);
+}
+
+.letter__title,
+.opened__title {
+  margin: 5px 0 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 31px;
+  line-height: 1.08;
+  letter-spacing: -0.014em;
+  color: var(--ink);
+}
+
+.letter__from,
+.opened__from {
+  margin: 6px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+}
+
+.letter__stamp,
+.opened__stamp {
+  flex: none;
+  text-align: right;
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+}
+
+.letter__date,
+.opened__sent {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.letter__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 452px;
+  gap: 30px 38px;
+  padding-top: 14px;
+}
+
+.letter__col--when {
+  padding-left: 34px;
+  border-left: 1px solid var(--rule);
+}
+
+.letter__salutation {
+  margin: 0 0 12px;
+  font-family: var(--serif);
+  font-size: 18px;
+  color: var(--ink);
+}
+
+/* ── Fields: a printed form, not a web form ─────────────────────────────── */
+
+.field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: block;
+}
+
+.field + .field,
+.field + .field--choices,
+.field--choices + .field {
+  margin-top: 18px;
+}
+
+.field__label {
+  display: block;
+  margin: 0 0 7px;
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.field__input {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  padding: 11px 13px;
+  width: 100%;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease);
+}
+
+.field__input::placeholder {
+  color: color-mix(in srgb, var(--ink-faint) 62%, transparent);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--terracotta-strong);
+  background: var(--card);
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.field__input--note {
+  resize: vertical;
+  min-height: 92px;
+}
+
+.letter__col--note .field__input--note {
+  min-height: 148px;
+}
+
+.letter__rules {
+  margin-top: 14px;
+  padding: 13px 16px 14px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 62%, transparent);
+}
+
+.letter__rules .prose {
+  margin-top: 7px;
+}
+
+/* Particulars are ruled, the way a form rules them. */
+.field__input--number,
+.field__input--date {
+  width: auto;
+  padding: 5px 2px;
+  border: 0;
+  border-bottom: 1.5px solid var(--rule-firm);
+  border-radius: 0;
+  background: none;
+  font-size: 15px;
+}
+
+.field__input--number {
+  width: 5.5ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.field__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.field__unit {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.field__underline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 6px;
+  min-height: 15px;
+}
+
+.field__note {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+.field__underline .field__note {
+  margin: 0;
+}
+
+.field__note.is-wrong,
+.field__underline .field__note:not(:empty) {
+  color: var(--terracotta-deep);
+}
+
+.field__count {
+  margin: 0;
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.field__count.is-over {
+  color: var(--terracotta-deep);
+}
+
+.field--inline .field__row {
+  margin-top: 2px;
+}
+
+/* ── The group size ─────────────────────────────────────────────────────────
+   A number small enough to nudge: two quiet keys either side of a serif
+   numeral, ruled like the other particulars on the sheet. The field stays a
+   real spinbutton underneath — the keys are for the mouse, not instead of the
+   keyboard. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  /* host.css blockifies `.field` into a grid, which would stretch this rule the
+     full width of the column. The stepper is as wide as its number. */
+  justify-self: start;
+  align-self: start;
+  width: max-content;
+  margin-top: 2px;
+  padding: 2px 4px;
+  border-bottom: 1.5px solid var(--rule-firm);
+}
+
+.stepper__step {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease),
+    border-color 150ms var(--ease), opacity 150ms var(--ease);
+}
+
+.stepper__step:hover:not(:disabled) {
+  background: var(--card);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.stepper__step:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.stepper__step:disabled {
+  opacity: 0.34;
+  cursor: default;
+}
+
+.stepper__value {
+  width: 4.5ch;
+  padding: 3px 0;
+  border: 0;
+  background: none;
+  font-family: var(--serif);
+  font-size: 23px;
+  line-height: 1.1;
+  text-align: center;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--ink);
+  /* Our own keys are the spinner; the browser's would crowd them. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.stepper__value::-webkit-outer-spin-button,
+.stepper__value::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.stepper__value::placeholder {
+  color: color-mix(in srgb, var(--ink-faint) 62%, transparent);
+}
+
+.stepper__value:focus {
+  outline: none;
+}
+
+.stepper__value:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.stepper__unit {
+  margin-left: 5px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.field--freq {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 10px;
+}
+
+.field--until {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex: none;
+}
+
+.field--until:empty {
+  display: none;
+}
+
+.field--until .field__label {
+  margin: 0;
+}
+
+/* ── Choices ────────────────────────────────────────────────────────────── */
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice {
+  position: relative;
+  display: inline-flex;
+}
+
+.choice__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  margin: 0;
+}
+
+.choice > span {
+  display: inline-block;
+  padding: 6px 13px;
+  border: 1px solid var(--rule-firm);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 150ms var(--ease), color 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+
+.choice > span:hover {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.choice__input:checked + span {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: var(--card);
+}
+
+.choice__input:focus-visible + span {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 3px;
+}
+
+.choices--segment {
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--paper-deep) 60%, transparent);
+}
+
+.choice--segment > span {
+  border: 0;
+  background: none;
+  font-size: 12px;
+  padding: 5px 14px;
+  color: var(--ink-faint);
+}
+
+.choice--segment > span:hover {
+  color: var(--ink);
+}
+
+.choice--segment .choice__input:checked + span {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ── The week card ──────────────────────────────────────────────────────── */
+
+.week {
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--card) 62%, transparent);
+  padding: 8px 11px 10px;
+}
+
+.week__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 6px;
+}
+
+.week__barmid {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.week__range {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.week__jump {
+  font-size: 11px;
+  color: var(--terracotta-deep);
+}
+
+.week__step {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  color: var(--ink-faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease);
+}
+
+.week__step:hover {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.week__heads {
+  display: grid;
+  grid-template-columns: var(--gutter) repeat(7, 1fr);
+  border-bottom: 1px solid var(--ink);
+}
+
+.week__head {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 3px 0 5px;
+}
+
+.week__dayname {
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.week__daynum {
+  font-family: var(--serif);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.week__head.is-today .week__daynum {
+  color: var(--terracotta-deep);
+  font-weight: 600;
+}
+
+.week__head.is-past .week__dayname,
+.week__head.is-past .week__daynum {
+  color: color-mix(in srgb, var(--ink-faint) 55%, transparent);
+}
+
+.week__closed {
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  color: var(--terracotta-deep);
+}
+
+.week__body {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--gutter) 1fr;
+}
+
+.week__hours {
+  display: grid;
+  grid-auto-rows: calc(var(--slot) * 2);
+  padding-right: 8px;
+}
+
+/* The label names the hour it stands beside, so nothing rides above the rule. */
+.week__hour {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.week__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: var(--slot);
+  border-left: 1px solid var(--rule-firm);
+  touch-action: none;
+}
+
+.week__row {
+  display: contents;
+}
+
+.week__cell {
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px dashed color-mix(in srgb, var(--rule) 45%, transparent);
+  cursor: crosshair;
+}
+
+.week__cell:nth-child(7n) {
+  border-right: 0;
+}
+
+.week__cell.is-half {
+  border-bottom: 1px solid var(--rule);
+  border-bottom-style: solid;
+}
+
+.week__cell:hover:not(.is-inert) {
+  background: color-mix(in srgb, var(--sage-tint) 70%, transparent);
+}
+
+.week__cell.is-inert {
+  cursor: default;
+}
+
+.week__cell:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: -2px;
+}
+
+.week__marks {
+  position: absolute;
+  left: var(--gutter);
+  right: 0;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: 1fr;
+  pointer-events: none;
+}
+
+.mark {
+  grid-row: 1;
+  align-self: start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mark--shut {
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 4px,
+    color-mix(in srgb, var(--ink) 4%, transparent) 4px 5px
+  );
+}
+
+.mark--past {
+  background: color-mix(in srgb, var(--paper-deep) 60%, transparent);
+}
+
+.mark--busy {
+  margin-inline: 1px;
+  border-radius: 2px;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--ink) 5%, transparent) 0 4px,
+    color-mix(in srgb, var(--ink) 10%, transparent) 4px 8px
+  );
+}
+
+.mark--busy .mark__label {
+  display: block;
+  padding: 2px 0 0 4px;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink-faint) 90%, transparent);
+}
+
+.mark--band {
+  margin-inline: 1px;
+  border: 1.5px solid var(--terracotta-strong);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--terracotta) 15%, transparent);
+  box-shadow: 0 2px 8px -4px color-mix(in srgb, var(--terracotta) 70%, transparent);
+}
+
+.mark--band .mark__label {
+  display: block;
+  padding: 3px 4px;
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--terracotta-deep);
+}
+
+.mark--band.is-preview {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--terracotta) 9%, transparent);
+}
+
+.mark--band.is-outside {
+  opacity: 0.3;
+  box-shadow: none;
+}
+
+.week__note,
+.week__empty {
+  margin: 9px 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--terracotta-deep);
+  min-height: 16px;
+}
+
+.week__empty {
+  color: var(--ink-faint);
+}
+
+.letter__summary {
+  margin: 0 0 3px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 12px;
+  text-align: center;
+}
+
+.letter__summaryline {
+  font-family: var(--serif);
+  font-size: 16.5px;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.letter__summarycount {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  color: var(--sage-deep);
+}
+
+.letter__summarycount::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--line-strong);
+}
+
+.letter__summary.is-empty {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* ── The foot, and the send ─────────────────────────────────────────────── */
+
+/* The one action stays in reach however long the letter runs. */
+.letter__foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 0 15px;
+  border-top: 1px solid var(--rule);
+  background: linear-gradient(
+    color-mix(in srgb, var(--sheet) 90%, transparent),
+    var(--sheet) 22%
+  );
+}
+
+.letter__errors:empty {
+  display: none;
+}
+
+.letter__error {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  color: var(--terracotta-deep);
+  text-align: center;
+}
+
+.letter__foot .pill--primary {
+  max-width: 360px;
+}
+
+.letter__footnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.letter__disclaimer {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.letter__disclaimer::before {
+  content: '·';
+  margin-right: 12px;
+  color: var(--line-strong);
+}
+
+.letter__sheet.is-signing .letter__columns,
+.letter__sheet.is-signing .letter__foot,
+.letter__sheet.is-signing .letter__head {
+  opacity: 0.24;
+  filter: saturate(0.5);
+  transition: opacity 200ms var(--ease);
+}
+
+.letter__sheet.is-away {
+  animation: letter-away 880ms var(--ease) forwards;
+  transform-origin: 50% 22%;
+}
+
+@keyframes letter-away {
+  0% {
+    transform: none;
+    opacity: 1;
+  }
+  38% {
+    transform: scaleY(0.66) translateY(-6px);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.42, 0.05) translateY(-52vh);
+    opacity: 0;
+  }
+}
+
+/* ── The identity beat ──────────────────────────────────────────────────── */
+
+.identity {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(430px, calc(100% - 56px));
+  /* Above the foot, which is sticky and carries a z-index of its own. */
+  z-index: 2;
+  max-height: 78vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 26px 22px;
+  border: 1px solid var(--rule-firm);
+  border-radius: 4px;
+  background: var(--paper);
+  box-shadow: var(--lift);
+}
+
+.identity[hidden] {
+  display: none;
+}
+
+.identity:focus {
+  outline: none;
+}
+
+.identity__title {
+  margin: 7px 0 10px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.identity__card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 16px 0 0;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+}
+
+.identity__initials {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font-family: var(--serif);
+  font-size: 16px;
+}
+
+.identity__name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.identity__org {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.identity__since {
+  margin: 3px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.identity .verified {
+  width: 100%;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.identity__actions {
+  display: grid;
+  justify-items: center;
+  gap: 11px;
+  margin-top: 18px;
+}
+
+.identity.is-signing .identity__card {
+  opacity: 0.6;
+}
+
+/* Signing in: the people this village already knows, offered by name, and a
+   plain pair of fields for anyone else. Three rows of the same card the signed
+   -in state shows, so choosing one is visibly choosing who the host will see. */
+.identity__eyebrow {
+  margin: 18px 0 8px;
+}
+
+.identity__people {
+  display: grid;
+  gap: 7px;
+}
+
+.identity__person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease),
+    transform 150ms var(--ease);
+}
+
+.identity__person:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+
+.identity__person:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.identity__person:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.identity__person .identity__initials {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.identity__person .identity__name {
+  font-size: 15.5px;
+}
+
+.identity__personwords {
+  display: grid;
+}
+
+.identity__form {
+  display: grid;
+  gap: 12px;
+}
+
+.identity__form .pill {
+  justify-self: start;
+}
+
+.identity__fineprint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.identity__problem {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--terracotta-deep);
+}
+
+.identity__actions--quiet {
+  margin-top: 14px;
+}
+
+/* ── The journal ────────────────────────────────────────────────────────── */
+
+.journal {
+  width: min(880px, 100%);
+  padding: 28px 34px 26px;
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+}
+
+.journal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 26px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.journal__title {
+  margin: 5px 0 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 34px;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.journal__who {
+  margin: 7px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.journal__aside {
+  flex: none;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.journal__aside .verified {
+  margin: 0;
+}
+
+.journal__tally {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.journal__body {
+  padding-top: 6px;
+}
+
+.journal__empty {
+  margin: 22px 0 14px;
+}
+
+.jgroup {
+  padding-top: 18px;
+}
+
+.jgroup__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+
+.jgroup__note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.jgroup--yours {
+  margin-top: 4px;
+  padding: 14px 14px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--terracotta-tint) 42%, transparent);
+}
+
+.jgroup--yours .eyebrow {
+  color: var(--terracotta-deep);
+}
+
+.jlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.jitem + .jitem {
+  border-top: 1px solid var(--rule);
+}
+
+.jrow {
+  display: grid;
+  grid-template-columns: 162px minmax(0, 1fr);
+  align-items: start;
+  gap: 3px 22px;
+  width: calc(100% + 20px);
+  margin-inline: -10px;
+  padding: 14px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease);
+}
+
+.jrow:hover {
+  background: color-mix(in srgb, var(--paper-deep) 75%, transparent);
+}
+
+.jrow__status {
+  grid-column: 1;
+  grid-row: 1 / span 5;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--ink-faint);
+}
+
+.jrow__seal {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  transform: translateY(-1px);
+}
+
+.jrow[data-tone='yours'] .jrow__status {
+  color: var(--terracotta-deep);
+}
+
+.jrow[data-tone='yours'] .jrow__seal {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+}
+
+.jrow[data-tone='settled'] .jrow__status {
+  color: var(--sage-deep);
+}
+
+.jrow[data-tone='settled'] .jrow__seal {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+
+.jrow[data-tone='closed'] .jrow__status {
+  color: color-mix(in srgb, var(--ink-faint) 78%, transparent);
+}
+
+.jrow[data-tone='closed'] .jrow__seal {
+  border-color: var(--line-strong);
+}
+
+.jrow__space {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.jrow__room {
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.jrow:hover .jrow__room {
+  color: var(--terracotta-deep);
+}
+
+.jrow__venue {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.jrow__when {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.jrow__excerpt {
+  grid-column: 2;
+  grid-row: 3;
+  margin-top: 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.jrow__note {
+  grid-column: 2;
+  grid-row: 4;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.jrow[data-tone='yours'] .jrow__note {
+  color: var(--terracotta-deep);
+}
+
+.jrow__sent {
+  grid-column: 2;
+  grid-row: 5;
+  margin-top: 3px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ink-faint) 80%, transparent);
+}
+
+.journal__foot {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+  text-align: center;
+}
+
+/* ── A letter, opened ───────────────────────────────────────────────────── */
+
+.opened:focus {
+  outline: none;
+}
+
+.opened {
+  width: min(760px, 100%);
+  padding: 26px 34px 24px;
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  background: var(--sheet);
+  box-shadow: var(--lift);
+}
+
+.opened__up {
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.opened__status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.opened__seal {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  transform: translateY(-1px);
+}
+
+.opened__head[data-tone='yours'] .opened__status {
+  color: var(--terracotta-deep);
+}
+
+.opened__head[data-tone='yours'] .opened__seal {
+  background: var(--terracotta);
+  border-color: var(--terracotta);
+}
+
+.opened__head[data-tone='settled'] .opened__status {
+  color: var(--sage-deep);
+}
+
+.opened__head[data-tone='settled'] .opened__seal {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+
+.opened__state {
+  margin: 16px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.particulars {
+  margin: 14px 0 0;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  border-top: 1px solid var(--rule);
+}
+
+.particulars dt,
+.particulars dd {
+  margin: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.particulars dt {
+  padding-top: 12px;
+}
+
+.particulars__value {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.opened__note {
+  margin: 20px 0 0;
+  padding: 18px 22px 16px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 65%, transparent);
+}
+
+.opened__salutation {
+  margin: 0 0 9px;
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.opened__prose {
+  color: var(--ink);
+}
+
+.opened__sign {
+  margin: 14px 0 0;
+  text-align: right;
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink);
+}
+
+.opened__signorg {
+  margin: 1px 0 0;
+  text-align: right;
+  font-size: 11.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+}
+
+/* ── The counter-offer ──────────────────────────────────────────────────── */
+
+.counter {
+  margin: 20px 0 0;
+  padding: 17px 20px 18px;
+  border: 1px solid var(--terracotta);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--terracotta-tint) 40%, transparent);
+}
+
+.counter .eyebrow {
+  color: var(--terracotta-deep);
+}
+
+.counter__message {
+  margin: 9px 0 0;
+  color: var(--ink);
+}
+
+.counter__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 15px 0 0;
+}
+
+.counter__side {
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 80%, transparent);
+}
+
+.counter__side--theirs {
+  background: var(--sage-tint);
+}
+
+.counter__label {
+  margin: 0 0 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.counter__side--theirs .counter__label {
+  color: var(--sage-deep);
+}
+
+.counter__sched {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.counter__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.counter__confirm {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule-firm);
+}
+
+/* ── Dates held ─────────────────────────────────────────────────────────── */
+
+.held {
+  margin: 20px 0 0;
+  padding: 16px 20px 18px;
+  border-radius: 4px;
+  background: var(--sage-tint);
+}
+
+.held__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.held .eyebrow {
+  color: var(--sage-deep);
+}
+
+.held__tally {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--sage-deep);
+}
+
+.held__list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 2px 18px;
+}
+
+.held__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--sage) 22%, transparent);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.held__item.is-past {
+  color: color-mix(in srgb, var(--ink-soft) 55%, transparent);
+}
+
+.held__time {
+  font-variant-numeric: tabular-nums;
+  color: var(--sage-deep);
+}
+
+.held__item.is-past .held__time {
+  color: inherit;
+}
+
+/* ── The thread ─────────────────────────────────────────────────────────── */
+
+.thread {
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.thread__list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+
+.thread__item {
+  padding: 11px 15px;
+  border-left: 2px solid var(--sage);
+  border-radius: 0 4px 4px 0;
+  background: color-mix(in srgb, var(--paper-deep) 60%, transparent);
+}
+
+.thread__item--guest {
+  margin-left: 34px;
+  border-left-color: var(--terracotta);
+  background: color-mix(in srgb, var(--terracotta-tint) 34%, transparent);
+}
+
+.thread__who {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 5px;
+}
+
+.thread__name {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.thread__when {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.thread__body {
+  color: var(--ink);
+}
+
+.reply {
+  margin-top: 18px;
+  padding-top: 15px;
+  border-top: 1px dashed var(--rule-firm);
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+}
+
+.reply--asked {
+  padding: 15px 17px 16px;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--terracotta-tint) 45%, transparent);
+}
+
+.reply--asked .field__label {
+  color: var(--terracotta-deep);
+  margin: 0;
+}
+
+.reply__hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+
+.closing {
+  margin: 20px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--rule);
+}
+
+.closing--declined {
+  padding: 16px 20px 18px;
+  border-top: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+}
+
+.closing__note {
+  margin: 9px 0 14px;
+  color: var(--ink);
+}
+
+.closing__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+/* ── The porch tab and the confirmation slip ────────────────────────────── */
+
+.letters {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.letters:hover {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.letters.is-on {
+  border-color: var(--ink);
+}
+
+.letters[hidden] {
+  display: none;
+}
+
+.letters__count {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--terracotta);
+  color: var(--card);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.letters__count[hidden] {
+  display: none;
+}
+
+.sent {
+  position: fixed;
+  top: 74px;
+  right: var(--rail-inset);
+  width: min(288px, calc(100vw - 2 * var(--rail-inset)));
+  padding: 13px 16px 14px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--sage);
+  border-radius: 4px;
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-sheet);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 220ms var(--ease), transform 220ms var(--ease);
+}
+
+.sent[hidden] {
+  display: none;
+}
+
+.sent.is-open {
+  opacity: 1;
+  transform: none;
+}
+
+.sent__line {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* ── ?letter=ledger — the same truth kept as a parish register ──────────── */
+
+[data-letter='ledger'] .guest {
+  --sheet: var(--paper);
+  --lift: 0 24px 48px -30px color-mix(in srgb, var(--ink) 60%, transparent);
+  --slot: 11px;
+}
+
+[data-letter='ledger'] .guest__wash {
+  background: linear-gradient(
+    color-mix(in srgb, var(--paper) 46%, transparent),
+    color-mix(in srgb, var(--paper) 22%, transparent)
+  );
+}
+
+[data-letter='ledger'] .guest .letter__sheet,
+[data-letter='ledger'] .guest .journal,
+[data-letter='ledger'] .guest .opened {
+  border-radius: 0;
+  border-color: var(--ink);
+  padding-inline: 30px;
+}
+
+[data-letter='ledger'] .guest .letter__title,
+[data-letter='ledger'] .guest .journal__title,
+[data-letter='ledger'] .guest .opened__title {
+  font-size: 26px;
+  letter-spacing: -0.005em;
+}
+
+[data-letter='ledger'] .guest .journal__title {
+  font-size: 28px;
+}
+
+/* The register: one ruled line per letter, columns that line up down the page. */
+[data-letter='ledger'] .guest .jgroup--yours {
+  background: none;
+  padding-inline: 0;
+  border-left: 3px solid var(--terracotta);
+  padding-left: 12px;
+  border-radius: 0;
+}
+
+[data-letter='ledger'] .guest .jrow {
+  grid-template-columns: 152px minmax(0, 1fr) 184px 118px;
+  align-items: baseline;
+  gap: 0 16px;
+  border-radius: 0;
+  padding-block: 9px;
+}
+
+[data-letter='ledger'] .guest .jrow__status {
+  grid-row: 1;
+  font-size: 10px;
+}
+
+[data-letter='ledger'] .guest .jrow__space {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+[data-letter='ledger'] .guest .jrow__room {
+  font-size: 15.5px;
+}
+
+[data-letter='ledger'] .guest .jrow__when {
+  grid-column: 3;
+  grid-row: 1;
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-letter='ledger'] .guest .jrow__sent {
+  grid-column: 4;
+  grid-row: 1;
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-letter='ledger'] .guest .jrow__note {
+  grid-column: 2 / span 3;
+  grid-row: 2;
+  margin-top: 2px;
+  font-size: 11.5px;
+}
+
+[data-letter='ledger'] .guest .jrow__excerpt {
+  display: none;
+}
+
+[data-letter='ledger'] .guest .jitem + .jitem {
+  border-top-color: var(--line-strong);
+}
+
+/* The timetable, ruled rather than drawn. */
+[data-letter='ledger'] .guest .week {
+  border-radius: 0;
+  border-color: var(--ink);
+  background: none;
+}
+
+[data-letter='ledger'] .guest .week__cell {
+  border-right-color: color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+[data-letter='ledger'] .guest .mark--band {
+  border-radius: 0;
+  border-width: 1px;
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--terracotta) 24%, transparent);
+  box-shadow: none;
+  margin-inline: 0;
+}
+
+[data-letter='ledger'] .guest .mark--band .mark__label {
+  color: var(--ink);
+}
+
+[data-letter='ledger'] .guest .mark--busy {
+  border-radius: 0;
+  margin-inline: 0;
+}
+
+[data-letter='ledger'] .guest .held,
+[data-letter='ledger'] .guest .counter,
+[data-letter='ledger'] .guest .counter__side,
+[data-letter='ledger'] .guest .opened__note,
+[data-letter='ledger'] .guest .reply--asked,
+[data-letter='ledger'] .guest .thread__item {
+  border-radius: 0;
+  background: none;
+}
+
+[data-letter='ledger'] .guest .held,
+[data-letter='ledger'] .guest .counter,
+[data-letter='ledger'] .guest .opened__note {
+  border: 1px solid var(--line-strong);
+  border-left-width: 3px;
+  padding: 12px 16px;
+}
+
+[data-letter='ledger'] .guest .counter {
+  border-left-color: var(--terracotta);
+}
+
+[data-letter='ledger'] .guest .held {
+  border-left-color: var(--sage);
+}
+
+[data-letter='ledger'] .guest .counter__side {
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+[data-letter='ledger'] .guest .thread__item {
+  border-left-width: 3px;
+  padding-left: 12px;
+}
+
+[data-letter='ledger'] .guest .choices--segment {
+  border-radius: 0;
+  background: none;
+}
+
+[data-letter='ledger'] .guest .choice > span,
+[data-letter='ledger'] .guest .choice--segment > span {
+  border-radius: 0;
+}
+
+[data-letter='ledger'] .guest .choice > span {
+  border: 1px solid var(--line-strong);
+}
+
+/* ── Narrow viewports ───────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .letter__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .letter__col--when {
+    padding-left: 0;
+    padding-top: 22px;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .guest__surface {
+    place-items: start center;
+  }
+}
+
+@media (max-width: 720px) {
+  .letter__sheet,
+  .journal,
+  .opened {
+    padding-inline: 22px;
+  }
+
+  .journal__head,
+  .letter__head,
+  .opened__head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .journal__aside,
+  .letter__stamp,
+  .opened__stamp {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .jrow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jrow__status {
+    grid-column: 1;
+    grid-row: 1;
+    margin-bottom: 4px;
+  }
+
+  .jrow__space,
+  .jrow__when,
+  .jrow__excerpt,
+  .jrow__note,
+  .jrow__sent {
+    grid-column: 1;
+  }
+
+  .jrow__space {
+    grid-row: 2;
+  }
+  .jrow__when {
+    grid-row: 3;
+  }
+  .jrow__excerpt {
+    grid-row: 4;
+  }
+  .jrow__note {
+    grid-row: 5;
+  }
+  .jrow__sent {
+    grid-row: 6;
+  }
+
+  .counter__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
