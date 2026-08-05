@@ -3,11 +3,14 @@ using Steeple.Api.Contracts.Manage;
 
 namespace Steeple.Api.Services.Manage;
 /// <summary>
-/// Default <see cref="IManageService"/>. Providers create and edit freely; publishing is the
-/// moderated step: a never-approved room's "publish" becomes a publish *request* for the Admin
-/// queue, while an already-approved room relists directly. Edits to live listings are applied
-/// immediately but flagged (<c>ProviderEditedAtUtc</c>) for the Admin review feed — quality gate
-/// without edit friction (ROADMAP Phase 5).
+/// Default <see cref="IManageService"/> and the <em>single</em> enforcement point of the
+/// moderation model (`docs/backlog/v2_migration/design.md` D2). Providers create and edit freely;
+/// publishing is the gated step, and the gate is per-host, not per-listing: an untrusted host's
+/// publish becomes a publish *request* for the Admin review queue, while a trusted host (one who
+/// already had a listing approved) publishes immediately, as does any relist of a
+/// previously-approved room. Every path that reaches <c>Published</c> also verifies the venue —
+/// the invariant is <em>published ⇒ venue verified</em>. Edits to live listings apply immediately
+/// but stamp <c>ProviderEditedAtUtc</c> as the dormant abuse-response seam.
 /// </summary>
 public sealed class ManageService : IManageService
 {
@@ -372,6 +375,8 @@ public sealed class ManageService : IManageService
 
         // Status transition first — it can fail, and nothing should be half-applied.
         var publishNewlyRequested = false;
+        var publishedNow = false;
+        var autoPublished = false;
         if (requestedStatus is { } target && target != room!.Status)
         {
             if (room.Status == RoomStatus.Published)
@@ -403,13 +408,23 @@ public sealed class ManageService : IManageService
 
                 if (room.FirstPublishedAtUtc is not null)
                 {
-                    // Already passed moderation once — relisting is provider-controlled.
+                    // Already passed the gate once — relisting is provider-controlled.
                     room.Status = RoomStatus.Published;
                     room.ProviderEditedAtUtc = now;
+                    publishedNow = true;
+                }
+                else if (await _repository.IsTrustedHostAsync(callerId, ct).ConfigureAwait(false))
+                {
+                    // Trusted host (D2): the human gate was their first listing, not this one.
+                    room.Status = RoomStatus.Published;
+                    room.FirstPublishedAtUtc = now;
+                    room.PublishRequestedAtUtc = null;
+                    publishedNow = true;
+                    autoPublished = true;
                 }
                 else if (room.PublishRequestedAtUtc is null)
                 {
-                    room.PublishRequestedAtUtc = now; // joins the Admin moderation queue
+                    room.PublishRequestedAtUtc = now; // joins the Admin review queue
                     publishNewlyRequested = true;
                 }
             }
@@ -423,6 +438,15 @@ public sealed class ManageService : IManageService
         if (requestedStatus is RoomStatus.Draft or RoomStatus.Unlisted)
         {
             room!.PublishRequestedAtUtc = null;
+        }
+
+        // Invariant: published ⇒ venue verified. The badge means "this belongs to a vetted host",
+        // and after D2 every route to Published *is* that vetting (Admin's decision, or the trust
+        // it granted the host). Enforced here so no publish path can drift away from it.
+        if (publishedNow && room!.Venue is { IsIdentityVerified: false } venue)
+        {
+            venue.IsIdentityVerified = true;
+            venue.UpdatedAtUtc = now;
         }
 
         var contentChanged = name != room!.Name
@@ -467,6 +491,16 @@ public sealed class ManageService : IManageService
         if (publishNewlyRequested)
         {
             await TrackSafelyAsync("listing_publish_requested", new { roomId = room.Id, venueId = room.VenueId }).ConfigureAwait(false);
+        }
+
+        if (autoPublished)
+        {
+            // Same event Admin logs for a human decision, marked as the trusted-host auto-approval
+            // so the moderation funnel stays complete (analytics.md).
+            await TrackSafelyAsync(
+                "listing_moderated",
+                new { roomId = room.Id, venueId = room.VenueId, outcome = "approved", actor = "auto:trusted_host" })
+                .ConfigureAwait(false);
         }
 
         return ManageResult<ManagedRoomDto>.Ok(room.ToManagedDto());

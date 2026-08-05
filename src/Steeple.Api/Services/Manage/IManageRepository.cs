@@ -50,4 +50,12 @@ public interface IManageRepository
 
     /// <summary>Whether the venue already has an undecided verification request.</summary>
     Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Whether the user is a <em>trusted host</em>: they manage at least one room that has been
+    /// approved for publication at least once (<c>FirstPublishedAtUtc</c> set). Trust is derived
+    /// from listings, never stored — the one human gate is a host's first listing, not each one
+    /// (`docs/backlog/v2_migration/design.md` D2).
+    /// </summary>
+    Task<bool> IsTrustedHostAsync(Guid userId, CancellationToken ct = default);
 }
