@@ -206,11 +206,20 @@ calendar reads `RoomDetail.openHours` + `GET /listings/{id}/availability`, so a 
 can file a request. A `402 payment_method_required` opens a minimal mock-card step and the
 send resumes itself; instant venues answer the submit with the booking and say so. Email CTA
 deep links (`?goto=`) are followed at boot. All of it is **driven end to end** by
-`tools/correspondence-test.mjs` (61/61, §0–§7), two people in two browsers against real rows,
-including D5's honest-offline send. Demo — dev provider only, no Turnstile;
-`organizationName` is sent as `null` until Phase 4's input; the card step is deliberately
-plain (mock gateway); nothing renders a booking's payment fields, the host's rescind lever,
-or the notifications inbox yet. Accounts-consolidation order agreed 2026-08-05: signed-out
+`tools/correspondence-test.mjs` (62/62, §0–§7), two people in two browsers against real rows,
+including D5's honest-offline send. **Real (Phase 2.5, 2026-08-05) — the money, both sides:**
+the desk is **Bookings · Requests · Spaces** and opens on Bookings (Requests renders only for a
+manual venue, or one still owing answers after leaving manual); a confirmed booking carries the
+frozen per-session price, the next charge, each date's `paymentStatus`, and the host's cancel
+behind a two-press warning (it frees every remaining date and refunds everything charged); the
+guest's letter prints the same truth and, on a failed charge, steeple's own ladder with the
+card step a press away; the card on file is reachable from the account chip through one shared
+panel (`ui/cardPanel.js`, brand + last4 only); the payout prompt → mock KYC → connected state
+lives on the desk; booking mode is a setting on Spaces; and `GET /me/notifications` renders as
+**ambience** — one slip on arrival, quiet lines in the inbox, no bell and no new nav tab.
+Driven by `tools/payments-ui-test.mjs` (63/63). Demo — dev provider only, no Turnstile;
+`organizationName` is sent as `null` until Phase 4's input; the card step and the payout screen
+are the mock gateway's own stand-ins. Accounts-consolidation order agreed 2026-08-05: signed-out
 header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.
 
 **Hazards found in the waves (unfixed):** the desk's Spaces tab reads open hours from the
