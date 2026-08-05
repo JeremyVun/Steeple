@@ -19,8 +19,12 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
   </ItemGroup>
 
+  <!-- Admin is referenced because the moderation loop spans both halves: the API stamps the
+       request, Admin's workspace decides it. The single-gate tests drive the real decision code
+       rather than a reimplementation of it. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Steeple.Api\Steeple.Api.csproj" />
+    <ProjectReference Include="..\..\src\Steeple.Admin\Steeple.Admin.csproj" />
     <ProjectReference Include="..\..\src\Steeple.Persistence\Steeple.Persistence.csproj" />
   </ItemGroup>
 

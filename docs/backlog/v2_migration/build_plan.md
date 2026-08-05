@@ -118,7 +118,16 @@ the closest existing harness — run them with documented flags; extend rather t
 
 ---
 
-## Phase 3 — Single-gate moderation + Admin gutting (API + Admin) `[ ]`
+## Phase 3 — Single-gate moderation + Admin gutting (API + Admin) `[x]` *(landed 2026-08-05)*
+
+> **Landed as specified**, with three notes for whoever reads this next:
+> (a) the takedown lever is a per-room **Unlist** on `/admin/listings`, and Admin's routes moved
+> (`/admin/review`, `/admin/venue-managers`; `/admin/moderation` is gone);
+> (b) Admin's CSP was blocking every queue photo (`img-src 'self' data:`) — now config-pinned via
+> `Admin:MediaImageOrigins`; a pre-existing bug, found by screenshotting the queue;
+> (c) the first-listing decision now also marks the venue's pending evidence submission decided,
+> so a declined host isn't locked out of resubmitting by `409 verification_pending`.
+> `Steeple.Integration.Tests` references `Steeple.Admin` so the loop is tested across both halves.
 
 **Implements:** D2, D3. **Independent of P1/P2.**
 **Touches:** `src/Steeple.Api/Services/Manage/ManageService.cs` (publish path,

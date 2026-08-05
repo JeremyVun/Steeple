@@ -7,13 +7,13 @@
 <section class="admin-page wrap">
     @await Html.PartialAsync("_AdminNav", Model)
 
-    <section class="admin-panel" id="admin-analytics" aria-labelledby="admin-analytics-heading">
+    <section class="admin-panel" id="admin-review" aria-labelledby="admin-review-heading">
         <div class="admin-panel-header">
             <div>
-                <p class="admin-eyebrow">Events</p>
-                <h2 id="admin-analytics-heading">Analytics stream</h2>
+                <p class="admin-eyebrow">Quality gate</p>
+                <h2 id="admin-review-heading">Review queue</h2>
             </div>
         </div>
-        @await Html.PartialAsync("_AnalyticsPanel", Model)
+        @await Html.PartialAsync("_ReviewQueuePanel", Model)
     </section>
 </section>

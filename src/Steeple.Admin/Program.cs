@@ -24,21 +24,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 // Reads the shared Postgres (same tables as the web funnel). The Liquibase migrate service owns
 // the schema — Admin never migrates. The workspace is a singleton that resolves the scoped
-// DbContext per operation, so listing/analytics views stay live and coherent with the web app.
+// DbContext per operation, so every screen stays live and coherent with the web app.
 builder.Services.AddDbContext<SteepleDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SteepleDb")));
 builder.Services.AddSingleton<IAdminWorkspace, PostgresAdminWorkspace>();
-
-builder.Services.AddSession(options =>
-{
-    options.Cookie.Name = "steeple.admin.sid";
-    options.Cookie.HttpOnly = true;
-    options.Cookie.IsEssential = true;
-    options.Cookie.SameSite = SameSiteMode.Strict;
-    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
-        ? CookieSecurePolicy.SameAsRequest
-        : CookieSecurePolicy.Always;
-});
 
 var app = builder.Build();
 
@@ -55,6 +44,11 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Listing photos are served by the media origin (the API or a CDN), never by Admin — and a review
+// queue whose photos are blocked is a decision made blind. Pin the origin per environment;
+// the dev loop's API may sit on either of the two local ports.
+var mediaImageOrigins = builder.Configuration["Admin:MediaImageOrigins"] ?? "https:";
+
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -63,7 +57,7 @@ app.Use(async (context, next) =>
     headers["Referrer-Policy"] = "no-referrer";
     headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "img-src 'self' data:; " +
+        $"img-src 'self' data: {mediaImageOrigins}; " +
         "style-src 'self' 'unsafe-inline'; " +
         "script-src 'self'; " +
         "connect-src 'self'; " +
@@ -73,7 +67,6 @@ app.Use(async (context, next) =>
 
 app.UseStaticFiles();
 app.UseRouting();
-app.UseSession();
 
 // Lightweight liveness probe (matches api/flags); independent of the DB-backed dashboard page.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

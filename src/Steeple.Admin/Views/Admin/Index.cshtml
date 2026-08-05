@@ -2,6 +2,7 @@
 @{
     Layout = "_Layout";
     ViewData["Robots"] = "noindex,nofollow";
+    var waiting = Model.ReviewQueue.PublishRequests.Count;
 }
 
 <section class="admin-page wrap">
@@ -18,26 +19,23 @@
         }
     </div>
 
-    <section class="admin-panel" aria-labelledby="admin-activity-heading">
+    <section class="admin-panel" aria-labelledby="admin-today-heading">
         <div class="admin-panel-header">
             <div>
                 <p class="admin-eyebrow">Operations</p>
-                <h2 id="admin-activity-heading">Recent activity</h2>
+                <h2 id="admin-today-heading">What needs you</h2>
             </div>
-            <a class="admin-link-button" href="~/admin/analytics">View analytics</a>
+            <a class="admin-link-button" href="~/admin/review">Open the review queue</a>
         </div>
-        <ol class="admin-activity">
-            @foreach (var item in Model.Shell.Activity)
+        <p class="admin-hint">
+            @if (waiting == 0)
             {
-                <li class="admin-activity-item">
-                    <span class="admin-activity-marker" aria-hidden="true"></span>
-                    <div class="admin-activity-body">
-                        <p class="admin-activity-line"><strong>@item.Actor</strong> · @item.Event</p>
-                        <p class="admin-activity-detail">@item.Detail</p>
-                    </div>
-                    <time class="admin-activity-time">@item.At.ToLocalTime().ToString("MMM d, h:mm tt")</time>
-                </li>
+                <text>Nothing is waiting. Hosts publish and unlist their own listings — the only listing you decide is a host's first one.</text>
             }
-        </ol>
+            else
+            {
+                <text>@waiting first @(waiting == 1 ? "listing is" : "listings are") waiting for a decision. Approving one publishes it, verifies the venue, and lets that host publish everything after it themselves.</text>
+            }
+        </p>
     </section>
 </section>
