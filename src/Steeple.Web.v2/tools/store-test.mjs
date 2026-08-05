@@ -1,11 +1,43 @@
-// Status-machine regression test for src/data/store.js — runs in plain node
-// (the store falls back to in-memory storage when localStorage is absent).
+// Status-machine regression test for src/data/store.js — runs in plain node.
 //   node tools/store-test.mjs
 // Exits non-zero on the first failed expectation. Every agent runs this before
 // declaring done; if you change the store, prove your new guard bites by
 // breaking it once.
+//
+// A store belongs to somebody (D6): the key is `steeple-village-store:{id}`
+// and "your requests" means the signed-in person's, so this suite stands a
+// browser up and signs one in before it asks the store anything. localStorage
+// comes first because data/session.js and data/store.js both probe for it as
+// they are imported — hence the dynamic import below.
 
-import {
+function browserStorage() {
+  const cells = new Map();
+  return {
+    getItem: (k) => cells.get(k) ?? null,
+    setItem: (k, v) => cells.set(k, String(v)),
+    removeItem: (k) => cells.delete(k),
+    key: (i) => [...cells.keys()][i] ?? null,
+    get length() {
+      return cells.size;
+    },
+  };
+}
+
+globalThis.localStorage = browserStorage();
+
+const MARIA = {
+  id: 'maria-alvarez-user',
+  displayName: 'Maria Alvarez',
+  email: 'maria@demo.steeple.test',
+  createdAtUtc: '2025-09-01T00:00:00Z',
+};
+
+localStorage.setItem(
+  'steeple-village-session',
+  JSON.stringify({ accessToken: 'test-access', refreshToken: 'test-refresh', user: MARIA })
+);
+
+const {
   APP_STATUS,
   COUNTER_STATUS,
   GUEST_ID,
@@ -15,7 +47,8 @@ import {
   store,
   todayIso,
   weekdayOf,
-} from '../src/data/store.js';
+} = await import('../src/data/store.js');
+const session = await import('../src/data/session.js');
 
 let failures = 0;
 function expect(label, actual, wanted) {
@@ -247,6 +280,39 @@ expect('signals: Grace shows undecided letters', signals.get('grace-community-vi
 store.resetDemo();
 expect('reset: seed restored', store.guestApplications().length, 5);
 expect('reset: guest id stable', store.guestApplications()[0].organizerId, GUEST_ID);
+
+// ---- one store per person (D6) ----------------------------------------------
+// The demo village is a fixture every namespace starts from; what a person did
+// is theirs. Signed out there is no inbox to read at all, and the key the
+// signed-in person filled is left exactly where it was.
+expect('identity: the store is keyed to the person', store.currentOrganizerId(), GUEST_ID);
+expect(
+  'identity: their key exists',
+  localStorage.getItem(`steeple-village-store:${GUEST_ID}`) !== null,
+  true
+);
+
+store.sendMessage(store.guestApplications()[0].id, 'guest', 'A line only Maria wrote.');
+const hersBefore = localStorage.getItem(`steeple-village-store:${GUEST_ID}`);
+
+await session.signOut();
+expect('identity: signed out, the browser is nobody', store.currentOrganizerId(), 'anon');
+expect('identity: signed out, there is no inbox', store.guestApplications().length, 0);
+expect(
+  'identity: signing out leaves their store where it was',
+  localStorage.getItem(`steeple-village-store:${GUEST_ID}`),
+  hersBefore
+);
+// Reading anything now opens the anonymous namespace: a fresh village with the
+// demo fixture in it and nothing anybody typed.
+store.venueApplications('grace-community-vienna');
+const anon = JSON.parse(localStorage.getItem('steeple-village-store:anon') ?? 'null');
+expect('identity: the anonymous namespace is its own', anon !== null, true);
+expect(
+  'identity: and holds none of her correspondence',
+  anon.messages.some((m) => m.body === 'A line only Maria wrote.'),
+  false
+);
 
 if (failures) {
   console.error(`\n${failures} failure(s)`);

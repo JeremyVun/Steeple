@@ -373,6 +373,13 @@ check('...without rolling', (await state('roll')) === 1, String(await state('rol
 check('...and without choosing a church on the way through', (await state('venueId')) === null, String(await state('venueId')));
 check('...and the desk is closed', await page.evaluate('!document.querySelector(".desk.is-open")'));
 
+// An inbox belongs to somebody (D6), so there has to be a somebody before
+// there is an inbox to click away from. The sign-in is the real one — the
+// local API's dev provider, exactly as the identity panel calls it.
+await page.evaluate(
+  "__steeple.session.signIn({email:'maria@demo.steeple.test',displayName:'Maria Alvarez'})"
+);
+await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
 await ready(`${url}#/journal`);
 check('the inbox opens on a deep link', await page.evaluate('!!document.querySelector(".guest__surface--journal.is-open")'));
 const journalBox = await box('.journal');

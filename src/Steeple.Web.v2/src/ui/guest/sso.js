@@ -12,7 +12,7 @@
 //     provider creates the account the first time it sees one.
 //   · a session   — the person, the chip, and one button that carries on.
 
-import { ORGANIZERS } from '../../data/store.js';
+import { ORGANIZERS, PERSONA_IDS } from '../../data/store.js';
 import * as session from '../../data/session.js';
 import { VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
@@ -25,11 +25,11 @@ const MONTHS = [
 // The people this village already knows, given the addresses the local API will
 // mint accounts for. The names and groups are the store's own, so a request
 // sent as one of them reads the same everywhere it appears afterwards.
-export const PERSONAS = [
-  { id: 'maria-alvarez', email: 'maria@demo.steeple.test' },
-  { id: 'daniel-okafor', email: 'daniel@demo.steeple.test' },
-  { id: 'priya-raman', email: 'priya@demo.steeple.test' },
-].map((persona) => ({ ...persona, ...ORGANIZERS[persona.id] }));
+export const PERSONAS = Object.entries(PERSONA_IDS).map(([email, id]) => ({
+  id,
+  email,
+  ...ORGANIZERS[id],
+}));
 
 /** The group a signed-in person belongs to, when this village knows of one. */
 export const organizationFor = (email) =>

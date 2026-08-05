@@ -1,18 +1,19 @@
 // WHO YOU ARE, on the shelf at the top right.
 //
 // Signing in happens where it is needed — inside a request, inside a listing —
-// and until this there was nowhere at all to see who steeple thinks you are, or
-// to stop being them. That is a small thing until the browser is shared, or the
-// wrong email was typed, and then it is the only thing.
+// but who you are must be answerable at any moment, not only mid-flow. That is
+// a small thing until the browser is shared, or the wrong email was typed, and
+// then it is the only thing.
 //
-// Signed out it is not on the page. A door out of a room you are not in is
-// clutter, and the porch is already carrying two words; the way *in* belongs to
-// the flows that need a name, not to a header.
+// So the shelf carries the account in both states (D6): a monogram and a card
+// when there is somebody, and one quiet word — Sign in — when there is not. The
+// word opens the very panel the flows open (ui/guest/sso.js); there is one way
+// into steeple and this is a second door onto it, not a second way.
 //
-// It talks to nothing but data/session.js. Signing out here puts the request
-// sheet's identity block back to signing in, and the host flow's with it,
-// because both watch the same session (CONTRACT6 §1.1) — no module here calls
-// another's code.
+// It talks to nothing but data/session.js and whoever hands it that panel.
+// Signing out here puts the request sheet's identity block back to signing in,
+// and the host flow's with it, because both watch the same session
+// (CONTRACT6 §1.1) — no module here calls another's code.
 
 import { CORRESPONDENCE_VIEWS, setView, state } from '../core/bus.js';
 import * as session from '../data/session.js';
@@ -29,7 +30,7 @@ function initials(person) {
 const firstName = (person) =>
   String(person?.displayName ?? '').trim().split(/\s+/)[0] || (person?.email ?? 'Account');
 
-export function createAccount({ announce = () => {} } = {}) {
+export function createAccount({ announce = () => {}, onSignIn = null } = {}) {
   const mark = el('span', { class: 'account__mark', 'aria-hidden': 'true' });
   const who = el('span', { class: 'account__who' });
 
@@ -41,7 +42,12 @@ export function createAccount({ announce = () => {} } = {}) {
       'aria-expanded': 'false',
       'aria-haspopup': 'true',
       'aria-controls': 'account-card',
-      onclick: () => setOpen(!open),
+      onclick: () => {
+        // Signed out the chip is not a menu — it is the door. There is nothing
+        // to show about an account that does not exist yet.
+        if (!session.isSignedIn()) return onSignIn?.();
+        setOpen(!open);
+      },
     },
     [mark, who]
   );
@@ -89,36 +95,66 @@ export function createAccount({ announce = () => {} } = {}) {
     if (open) place();
   });
 
-  function signOut() {
+  // Leaving is local the instant it is asked for; steeple is told straight
+  // after and its answer changes nothing here (data/session.js). A revocation
+  // that cannot be delivered must never leave somebody signed in on a browser
+  // they asked to be signed out of.
+  function signOut({ everywhere = false } = {}) {
     const person = session.currentUser();
-    session.signOut();
+    session.signOut({ everywhere });
     setOpen(false);
     // Every surface that asks who you are reads the session, so most of the
     // page corrects itself. A correspondence is the exception: an inbox, a desk
     // or a letter is somebody's, and once it is nobody's the honest place to
     // stand is the map.
     if (CORRESPONDENCE_VIEWS.has(state.view)) setView('village');
-    announce(`Signed out${person ? ` of ${person.displayName}` : ''}.`);
+    announce(
+      everywhere
+        ? `Signed out everywhere${person ? `, ${person.displayName}` : ''}.`
+        : `Signed out${person ? ` of ${person.displayName}` : ''}.`
+    );
     trigger.focus();
   }
 
   function render() {
     const person = session.currentUser();
-    element.hidden = !person;
+    element.hidden = false;
+    element.classList.toggle('is-out', !person);
+
     if (!person) {
       setOpen(false);
+      mark.textContent = '';
+      mark.hidden = true;
+      who.textContent = 'Sign in';
+      trigger.setAttribute('aria-label', 'Sign in to Steeple');
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.setAttribute('aria-expanded', 'false');
       return;
     }
+
+    mark.hidden = false;
     mark.textContent = initials(person);
     who.textContent = firstName(person);
     trigger.setAttribute('aria-label', `Your account — ${person.displayName}`);
+    trigger.setAttribute('aria-haspopup', 'true');
     replaceChildren(card, [
       el('p', { class: 'account__name', text: person.displayName }),
       person.email && el('p', { class: 'account__email', text: person.email }),
       el(
         'button',
-        { type: 'button', class: 'linkish account__out', onclick: signOut },
+        { type: 'button', class: 'linkish account__out', onclick: () => signOut() },
         'Sign out'
+      ),
+      // The shared-computer answer, and the one for a laptop left behind: it
+      // ends every session this person holds, not just the one on this page.
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'linkish account__all',
+          onclick: () => signOut({ everywhere: true }),
+        },
+        'Sign out everywhere'
       ),
     ]);
   }

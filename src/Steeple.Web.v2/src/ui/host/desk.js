@@ -71,9 +71,17 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
       [
         el('span', { class: 'card__status', text: STATUS_WORD[application.status] }),
         el('span', { class: 'card__from', text: organizer.org ?? organizer.name }),
+        // The mark is a fact about the person who asked, not a decoration on
+        // the card: an organizer steeple has not confirmed does not carry one.
         el('span', {
           class: 'card__who',
-          text: organizer.org ? `${organizer.name} · ${VERIFIED_LABEL}` : VERIFIED_LABEL,
+          text: organizer.verified
+            ? organizer.org
+              ? `${organizer.name} · ${VERIFIED_LABEL}`
+              : VERIFIED_LABEL
+            : organizer.org
+              ? organizer.name
+              : '',
         }),
         el('span', {
           class: 'card__room',
@@ -237,10 +245,14 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
       el('div', { class: 'desk__title' }, [
         el('p', { class: 'eyebrow', text: 'Hosting' }),
         el('h1', { class: 'sheet__title', text: venue?.name ?? 'Your venue' }),
+        // A venue wears the mark once steeple has confirmed it — never on the
+        // strength of standing on this desk. One newly listed here has not
+        // been through the gate yet, and says nothing rather than something
+        // untrue.
         el('p', { class: 'desk__address' }, [
           venue?.address ?? '',
-          venue?.address ? el('span', { class: 'desk__dot', text: '·' }) : null,
-          verifiedChip(),
+          venue?.address && venue?.verified ? el('span', { class: 'desk__dot', text: '·' }) : null,
+          venue?.verified ? verifiedChip() : null,
         ]),
       ]),
       el('div', { class: 'desk__switch' }, [

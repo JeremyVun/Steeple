@@ -21,7 +21,7 @@ wave2-test 6, world-test 12.
 
 ---
 
-## Phase 1 — Signed-out truth & the account surface (web) `[ ]`
+## Phase 1 — Signed-out truth & the account surface (web) `[x]` (landed 2026-08-05)
 
 **Implements:** D6, and the visible half of D4's "no demo data for strangers".
 **Touches:** `src/Steeple.Web.v2/src/ui/account.js`, `ui/guest/index.js`,
@@ -64,6 +64,19 @@ surface, and a second account on the same browser sees none of the first's state
 the old demo behavior (that behavior is *removed by design* — update the suite, note it
 in the phase summary).
 
+**Landed 2026-08-05.** `tools/account-test.mjs` is the live probe (47 checks: signed-out
+truth, the shelf's way in, sign-in, server-side revocation proven by replaying the old
+refresh token, account isolation on one browser, the expiry notice). Store keys are
+`steeple-village-store:{organizerId}` where the id is the session user's — or, **in dev
+builds only**, the seeded persona an address belongs to (`store.PERSONA_IDS`), which is
+what keeps the demo village's correspondence legible while it still exists. The demo seed
+is gone from production builds (`import.meta.env.PROD`); `hostVenueId` still defaults to a
+bundled venue, so P2's `GET /manage/venues` scoping is what actually empties the desk.
+Re-baselined suites: `store-test` (signs a person in; new per-person assertions),
+`surface-test` §2.6 (the shelf now carries the way in), `world-off-test` §6 (signs in and
+skips the ladder where there is no seed), `world-test` §7 (reads a seeded date from the
+venue, not from an inbox), `input-test` §11 (signs in before the inbox deep link).
+
 ---
 
 ## Phase 2 — Correspondence onto the wire (web) `[ ]`
@@ -103,7 +116,10 @@ Tasks:
    the key is what makes retry safe).
 6. **Availability truth.** The apply calendar reads
    `GET /listings/{id}/availability` (already in `api.js:303`, unused) instead of the
-   synthetic 08:00–22:00 seed (`weekCard.js` ← `store.openHoursFor`).
+   synthetic 08:00–22:00 seed (`weekCard.js` ← `store.openHoursFor`). **Blocking after P1:**
+   the 08:00–22:00 windows were part of the demo seed, so a production build now has none —
+   the week card says "no open hours published yet" and nothing can be sent. This task is
+   what makes a built bundle able to file a request at all.
 7. **Demo seed containment.** Seeded applications/venues/personas load only in dev
    builds; production starts empty. `store-test.mjs` re-baselined to the cache-mirror
    role (its schema-fidelity assertions stay — they now guard the mirror translators).
