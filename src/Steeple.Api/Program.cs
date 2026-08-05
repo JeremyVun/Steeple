@@ -50,8 +50,12 @@ app.UseForwardedHeaders();
 // Turns empty status-code responses (e.g. a controller's NotFound()) into ProblemDetails JSON.
 app.UseStatusCodePages();
 
-app.UseRateLimiter();
 app.UseAuthentication();
+// After authentication, on purpose: the per-account policies partition on the `sub`
+// claim, and before this line `context.User` is still anonymous — every one of them
+// silently fell back to per-IP, so everyone behind one NAT shared a single bucket,
+// which is precisely what those policies were written to avoid.
+app.UseRateLimiter();
 app.UseAuthorization();
 
 // Liveness/readiness probe for the container healthcheck.

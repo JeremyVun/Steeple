@@ -19,6 +19,14 @@ public static class RateLimitPolicies
     /// <summary>Per-IP limiter for the anonymous-friendly analytics ingest endpoint (CONTRACTS §7).</summary>
     public const string Events = "events";
 
+    /// <summary>
+    /// Per-account limiter for putting a card on file. Deliberately not <see cref="Apply"/>:
+    /// the card step is the middle of an ordinary first request (submit → 402 → setup →
+    /// mock-confirm → submit), and counting it against the apply budget spent four of five
+    /// permits before the guest could answer the host's first question.
+    /// </summary>
+    public const string Payments = "payments";
+
     /// <summary>Per-account limiter for provider CRUD writes (Manage module, CONTRACTS §6).</summary>
     public const string Manage = "manage";
 
@@ -37,6 +45,7 @@ public static class RateLimitingExtensions
 {
     private const int AuthPermitLimit = 10;
     private const int ApplyPermitLimit = 5;
+    private const int PaymentsPermitLimit = 10;
     private const int EventsPermitLimit = 60;
     private const int ManagePermitLimit = 30;
     private const int MediaPermitLimit = 12;
@@ -70,6 +79,18 @@ public static class RateLimitingExtensions
                     _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = ApplyPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.Payments, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    // Card setup requires auth — per-account, IP only as a safety net. Two calls
+                    // per attempt, so the budget has to hold a few retries of a declined card.
+                    partitionKey: context.User.FindFirst("sub")?.Value ?? ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = PaymentsPermitLimit,
                         Window = Window,
                         QueueLimit = 0,
                     }));

@@ -33,7 +33,8 @@ identically — no existence leak), `404 geofence_rejected` (reserved, defense i
 `409 schedule_unavailable` (any occurrence outside open hours / on a blackout / already booked —
 body carries the per-date conflict list, `manage.md` "Guest availability reads"; skipped for
 rooms with no availability rules), `409 slot_taken` *(instant venues only, below)*,
-`429 rate_limited` (per-account `apply` policy, shared with messages).
+`429 rate_limited` (per-account `apply` policy, shared with messages — **not** with card
+setup, which has its own `payments` policy since 2026-08-05; see `api-ports.md`).
 
 **Instant book ✅ *(2026-08-05 — `docs/backlog/booking-modes.md`; behind `payments.enabled`)*:**
 when the room's venue is in `instant` mode (`RoomDetail.bookingMode`, `discovery.md`), the

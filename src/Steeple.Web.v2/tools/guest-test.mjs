@@ -6,6 +6,10 @@
 //
 //   node tools/guest-test.mjs "http://localhost:5312/?q=low"
 //
+// The correspondence itself (send, inbox, counter-offer, answer, withdraw) is
+// NOT here: it is real wire traffic now and lives in correspondence-test.mjs.
+// This suite is the composer under real input — pointer, drag, keyboard, Esc.
+//
 // Nothing here drives window.__steeple except resetDemo and reads: every
 // affordance is exercised with the mouse and the keyboard.
 import puppeteer from 'puppeteer';
@@ -195,12 +199,38 @@ await page.mouse.up();
 await wait(400);
 
 // ── 6. the identity beat, exactly at the commitment point ───────────────────
+//
+// Re-baselined for v2_migration Phase 2. Two things this used to assert are no
+// longer true and were not regressions:
+//
+//   · the primary pill said "Send request" because every venue was
+//     request→approve. Venues are **instant by default** now (booking-modes,
+//     2026-08-05) and the seeded ones are, so the pill says what the venue
+//     actually does — this reads the mode off the wire rather than hardcoding
+//     either sentence;
+//   · pressing through the step filed a request into the demo store as a seeded
+//     persona. Sending is a real account, a real card and a real row at steeple
+//     now, and it is driven end to end in `correspondence-test.mjs` — which is
+//     also where the inbox, the counter-offer, the answered question and the
+//     withdrawal moved (§§1–7 there). What is left here is what this suite is
+//     uniquely for: that the beats of the composer happen under real input, in
+//     the right order, at the right moment.
 console.log('\n6. the identity beat');
 checkThat('no identity step before sending', await page.evaluate(() => document.querySelector('.identity')?.hidden === true));
-await clickText('.letter__foot .pill--primary', /Send request/, 'Send request');
+const filedBefore = await page.evaluate('__steeple.store.guestApplications().length');
+
+const mode = await page.evaluate(async () => {
+  const venue = window.__steeple.state.venueId;
+  const room = window.__steeple.state.roomId;
+  const answer = await fetch(`/api/v1/listings/by-slug/${venue}/${room}`).then((r) => r.json());
+  return answer?.bookingMode ?? null;
+});
+const wantedLabel = mode === 'manual' ? 'Send request' : 'Book this space';
+check('the send says what this venue actually does', await text('.letter__foot .pill--primary'), wantedLabel);
+
+await clickText('.letter__foot .pill--primary', new RegExp(wantedLabel), wantedLabel);
 await wait(400);
 checkThat('identity step appears', await page.evaluate(() => document.querySelector('.identity')?.hidden === false));
-check('it names the persona', await text('.identity__name'), 'Maria Alvarez');
 checkThat(
   'the trust chip is not claimed before verifying',
   await page.evaluate(() => {
@@ -208,140 +238,49 @@ checkThat(
     return !chip || getComputedStyle(chip).display === 'none';
   })
 );
-check('and the group', await text('.identity__org'), 'Little Sparrows Playgroup');
+// The way in is offered here, to somebody who is nobody yet: this is the
+// commitment point, and it is the first moment steeple asks who you are.
+checkThat(
+  'and the step offers a way in rather than assuming one',
+  (await countOf('.identity__person')) > 0 || (await countOf('.identity input')) > 0
+);
 await page.screenshot({ path: '/tmp/gsb-sso.png' });
-// Wave 6: the step signs in for real. Choosing a person calls steeple's own
-// /auth/sessions, and only a session that came back earns the chip.
-await clickText('.identity__person', /Maria Alvarez/, 'sign in as Maria');
-await page.waitForFunction('!!document.querySelector(".identity .verified")', { timeout: 15000 }).catch(() => {});
+
+// Escaping the commitment leaves the written request exactly where it was —
+// nothing is filed, and nothing is lost, by backing out of signing in.
+const writtenBefore = await page.evaluate(() => document.querySelector('#letter-intent')?.value ?? null);
+await page.keyboard.press('Escape');
 await wait(600);
-check('trust wording is exact', await text('.identity .verified'), 'Identity verified (SSO)');
-await page.screenshot({ path: '/tmp/gsb-sso-verified.png' });
+check('backing out of the identity step keeps the words', await page.evaluate(() => document.querySelector('#letter-intent')?.value ?? null), writtenBefore);
+check('and files nothing', await page.evaluate('__steeple.store.guestApplications().length'), filedBefore);
 
-// ── 7. send, and get out of the way ─────────────────────────────────────────
-console.log('\n7. sending');
-const beforeSend = await page.evaluate('__steeple.store.guestApplications().length');
-// "Continue as …" is the send: the guest asked for that when they pressed
-// Send request, and naming themselves was the last thing left.
-await clickText('.identity__actions .pill--primary', /Continue as Maria Alvarez/, 'continue as Maria');
-await page.waitForFunction("__steeple.state.view === 'room'", { timeout: 25000 }).catch(() => {});
-await wait(1200);
-const afterSend = await page.evaluate('__steeple.store.guestApplications().length');
-check('a request was filed', afterSend, beforeSend + 1);
-check('the newest is pending', await page.evaluate('__steeple.store.guestApplications()[0].status'), 'pending');
-check('the guest is back at the room', await state('view'), 'room');
-checkThat('a quiet confirmation stands', await page.evaluate(() => document.querySelector('.sent')?.hidden === false));
-check('the sheet is folded away', await countOf('.guest__surface--letter.is-open'), 0);
-await page.screenshot({ path: '/tmp/gsb-sent.png' });
-checkThat(
-  'the folded sheet does not swallow the village',
-  !(await topmostAtCentre()).includes('letter'),
-  await topmostAtCentre()
-);
-
-// ── 8. the inbox, through the porch ─────────────────────────────────────────
-console.log('\n8. the inbox');
-await clickText('.letters', /Inbox/, 'porch tab');
-await wait(900);
-check('view', await state('view'), 'journal');
-check('every seeded request is here', await countOf('.jrow'), afterSend);
-const statuses = await page.evaluate(() =>
-  [...document.querySelectorAll('.jrow')].map((n) => n.dataset.status)
-);
-for (const wanted of ['pending', 'needsInfo', 'counterOffered', 'approved', 'declined']) {
-  checkThat(`the inbox shows a ${wanted} request`, statuses.includes(wanted), statuses.join(','));
-}
-const spokenJournal = await text('#a11y');
-checkThat('the live region reads the inbox aloud', /Inbox\. \d+ requests/.test(spokenJournal ?? ''), spokenJournal?.slice(0, 70));
-await page.screenshot({ path: '/tmp/gsb-journal.png' });
-
-// ── 9. accepting the seeded counter-offer ───────────────────────────────────
-console.log('\n9. the counter-offer');
-await clickText('.jrow[data-id="app-sparrows-stories"]', /./, 'the counter-offered request');
-await wait(900);
-check('view', await state('view'), 'letter');
-check('applicationId', await state('applicationId'), 'app-sparrows-stories');
-checkThat('the counter is shown beside your own time', (await countOf('.counter__side')) === 2);
-await page.screenshot({ path: '/tmp/gsb-letter-counter.png' });
-// Declining opens a note first — reveal it, then think better of it.
-await clickText('.counter .linkish', /Keep my original time/, 'keep my original time');
-checkThat('declining asks before it acts', (await countOf('.counter__confirm')) === 1);
-await page.screenshot({ path: '/tmp/gsb-counter-decline.png' });
-await clickText('.counter__confirm .linkish', /^Cancel$/, 'cancel the decline');
-checkThat('cancelling puts it away', (await countOf('.counter__confirm')) === 0);
-check(
-  'and changes nothing',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-stories").status'),
-  'counterOffered'
-);
-await clickText('.counter .pill--primary', /Accept this time/, 'accept the counter');
-await wait(900);
-check(
-  'status is approved',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-stories").status'),
-  'approved'
-);
-checkThat('the held dates appear', (await countOf('.held__item')) > 0, `${await countOf('.held__item')} dates`);
-await page.screenshot({ path: '/tmp/gsb-letter-approved.png' });
-
-// ── 10. answering a question returns the request to the church ──────────────
-console.log('\n10. answering NeedsInfo');
-await ready(`${url}#/letter/app-sparrows-craft`);
-check('cold link opens the request', await state('view'), 'letter');
-check(
-  'it starts as needsInfo',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-craft").status'),
-  'needsInfo'
-);
-checkThat('the reply is framed as an answer', (await text('.reply .pill')) === 'Send your answer');
-await page.screenshot({ path: '/tmp/gsb-letter-needsinfo.png' });
-await page.click('#letter-reply');
-await page.keyboard.type('Six adults will be with us, and yes we would like to paint. Thank you for covering the tables.');
-await clickText('.reply .pill', /Send your answer/, 'send the answer');
-await wait(800);
-check(
-  'the request is back with the church',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-craft").status'),
-  'pending'
-);
-checkThat('the answer joined the thread', (await countOf('.thread__item--guest')) === 1);
-checkThat(
-  'the rebuild keeps the keyboard inside the request',
-  await page.evaluate(() => document.querySelector('.opened')?.contains(document.activeElement) ?? false)
-);
-await page.screenshot({ path: '/tmp/gsb-letter-answered.png' });
-
-// ── 10b. withdrawing ────────────────────────────────────────────────────────
-console.log('\n10b. withdrawing a request');
-await ready(`${url}#/letter/app-sparrows-mornings`);
-await clickText('.closing .linkish', /Withdraw this request/, 'withdraw');
-checkThat('withdrawing asks before it acts', (await countOf('.closing--confirm')) === 1);
-await page.screenshot({ path: '/tmp/gsb-letter-withdraw.png' });
-await clickText('.closing--confirm .linkish', /Keep it with the host/, 'keep it');
-check(
-  'thinking better of it changes nothing',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-mornings").status'),
-  'pending'
-);
-await clickText('.closing .linkish', /Withdraw this request/, 'withdraw again');
-await clickText('.closing--confirm .pill', /Yes, withdraw it/, 'confirm the withdrawal');
-await wait(600);
-check(
-  'the request is withdrawn',
-  await page.evaluate('__steeple.store.getApplication("app-sparrows-mornings").status'),
-  'withdrawn'
-);
-checkThat('and offers nothing more to do', (await countOf('.closing .linkish')) === 0);
+// §§7–10b used to live here: sending, the inbox, accepting a counter-offer,
+// answering a question and withdrawing — all of them against the demo store's
+// seeded personas and seeded requests. Every one of those is a wire write now
+// (v2_migration Phase 2, D4), so asserting them against a fixture would be
+// asserting a thing the product no longer does. They are driven for real, by
+// two people in two browsers against real rows at steeple, in
+// `tools/correspondence-test.mjs` §§1–7.
 
 // ── 11. Esc paths: a request returns to where it was opened from ────────────
 // (Workstream D's return-path memory: Esc leaves a request view for the last
 // place the visitor actually stood in the world.)
 console.log('\n11. Esc');
+// This used to open `#/letter/app-sparrows-craft` and press Esc. Two Phase 1/2
+// changes make that unaskable here rather than broken: a cold link to a letter
+// **while signed out** lands in the village and corrects the address bar with
+// it, and the store is keyed per person, so a seeded demo request is not in any
+// real account's inbox to open. The return path from an opened letter is driven
+// where opened letters now come from — correspondence-test.mjs. What this suite
+// can still say about that link is the thing Phase 1 promised about it.
 await ready(`${url}#/room/dunn-loring-umc/art-studio`);
 await ready(`${url}#/letter/app-sparrows-craft`);
-await page.keyboard.press('Escape');
-await wait(1400);
-check('Esc from a request returns to the room it was read from', await state('view'), 'room');
+check('a letter nobody is signed in to read lands in the village', await state('view'), 'village');
+check(
+  '...and the address bar is corrected with it, not left lying',
+  await page.evaluate('location.hash'),
+  '#/village'
+);
 
 await ready(`${url}#/village`);
 await ready(`${url}#/journal`);

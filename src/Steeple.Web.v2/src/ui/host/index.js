@@ -115,7 +115,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     return slugs;
   }
 
-  /** Ask steeple, once, unless `again` insists (a listing just landed). */
+  /** Ask steeple, once, unless `again` insists (a listing just landed, or the desk was opened). */
   function readDesk({ again = false } = {}) {
     if (read && !again && !reading) return Promise.resolve(mine());
     read = true;
@@ -240,10 +240,18 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
   // its thread and a redraw after a decision does not ask again.
   let shown = null;
 
+  // Whether the last render was already showing the board, so arriving at it can
+  // be told from redrawing it. `render()` runs on every bus and store change, so
+  // only the arrival may ask steeple again — otherwise the answer's own mirror
+  // would trigger the next read, and the desk would poll itself forever.
+  let wasDesk = false;
+
   function render() {
     const host = state.mode === 'host';
     const isDesk = host && state.view === 'desk';
     const isLetter = host && state.view === 'letter';
+    const arrivedAtDesk = isDesk && !wasDesk;
+    wasDesk = isDesk;
     renderSwitch();
 
     if (!isDesk && !isLetter && listing.isOpen()) listing.close();
@@ -268,7 +276,11 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       // is settled again once it lands rather than left on an empty one — and a
       // signed-in person who keeps no venue is taken to the flow that would
       // give them one rather than left on an empty board.
-      readDesk().then(() => {
+      // Opening the board is a question, not a memory: between one visit and the
+      // next a guest can withdraw, accept a counter, or take the slot elsewhere,
+      // and a board that answered once at sign-in would still be showing the
+      // request as waiting on you.
+      readDesk({ again: arrivedAtDesk }).then(() => {
         if (state.mode !== 'host' || state.view !== 'desk') return;
         const settled = deskVenue();
         if (!settled) {

@@ -79,22 +79,71 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 
 ---
 
-## Phase 2 — Correspondence onto the wire (web) `[~]` *(code landed 2026-08-05; verification debt below)*
+## Phase 2 — Correspondence onto the wire (web) `[~]` *(code landed + driven 2026-08-05; suite debt below)*
 
-> **Code landed as specified** (agent stopped at its token budget before finishing
-> verification), against an API that grew payments and instant book the same day.
-> **Outstanding — owned by the P2 continuation:**
-> 1. Guest letter actions (withdraw / counter accept+decline / thread messages) are coded
->    through `correspondence.js` but **not yet driven end-to-end** — `correspondence-test.mjs`
->    §3 stalls at the guest `#letter-reply` step (isolated probes of the same path pass;
->    suspect suite timing/ordering, not `letter.js`). §4–§6 (email CTA out of the dev
->    mailbox, instant-book loop, cross-account isolation) were never reached.
-> 2. The honest-offline path (D5: API down ⇒ draft preserved + retry, idempotency key kept
->    on timeout) is coded but not driven.
-> 3. Suites stale vs this phase and not re-run: `guest-test.mjs`, `wave2-test.mjs` (both
->    drive the old demo-store apply path and need re-baselining), `host-*.mjs`,
->    `input-test.mjs`, `surface-test.mjs`; `account-test.mjs`/`world-test.mjs` were edited
->    onto `mirrorApplication` but not re-run.
+> **The phase's own acceptance script is met and driven.** `correspondence-test.mjs` is
+> **61/61 green** across §0–§7: a stranger is shown no business; the request goes through the
+> `402` card step; the desk finds it by server truth; question → answer → counter-offer →
+> accept → booking, with localStorage cleared twice mid-flow; the decision email's `?goto=`
+> CTA is followed out of the dev mailbox; instant book books on the spot; one guest never
+> sees another's inbox; and D5's honest-offline send files nothing, loses nothing and
+> retries with the same idempotency key.
+>
+> **Driving it found four defects that every green test suite had missed** (all fixed
+> 2026-08-05, all with their reasoning in the owning doc):
+> 1. **Rate limiting was per-IP, never per-account** — `UseRateLimiter()` ran before
+>    `UseAuthentication()`, so the policies partitioned on an anonymous principal and fell
+>    back to the client IP. Everyone behind one NAT shared one bucket (`contracts/api-ports.md`).
+> 2. **Card setup spent the apply budget** — a first request (submit → 402 → setup →
+>    confirm → submit) burned four of five permits, so the guest was refused when they
+>    answered the host's first question. `payments` is its own policy now.
+> 3. **A list read forgot a live counter-offer** — the API omits `counterOffer` from lists by
+>    design; the client's mirror replaced it unconditionally, so a background inbox refresh
+>    erased the accept/decline controls under a letter somebody was reading.
+> 4. **The host's desk read its venues once per page load** — a guest's withdrawal or
+>    accepted counter stayed invisible until a reload. Opening the board asks again.
+>
+> Plus one copy defect only a real outage shows: "unreachable" meant `status === 0`, but this
+> app is always behind a proxy and a proxy with a dead upstream answers **502**, so the one
+> outage a person actually meets got the vaguest sentence in the vocabulary and no promise
+> that nothing had been sent. `neverArrived()` covers 0/502/503 — and deliberately not 504.
+>
+> **Outstanding (suite debt only — no product debt known):**
+> 1. `wave2-test.mjs`, `host-test.mjs` still drive the demo-store apply/desk path (send as a
+>    seeded persona, decide on seeded requests). Their subject is `correspondence-test.mjs`'s
+>    now; they need the same treatment `guest-test.mjs` got — keep what is uniquely theirs
+>    (real-input drive), drop what the product stopped doing.
+> 2. `host-publish-test.mjs` is green through §5 (the whole publish chain and its copy); one
+>    tail assertion, `effectiveRoom(venue,'main-space')` for the host's own new room, now
+>    returns null — likely the per-person store scoping (D6). Worth a look, not yet chased.
+> 3. `host-offline-test.mjs` **cannot be re-baselined without a product decision.** It exists
+>    to prove a listing can still be written while steeple is away, and since D4 there is no
+>    way into hosting at all without a session — which needs the API. Either the flow opens
+>    before sign-in (and Verify is the gate), or writing a listing offline is not a promise
+>    the product makes any more. Same question makes the signed-out half of the listing
+>    flow's **Verify step unreachable** in the product's own order (`host-input-test.mjs` §2).
+> 4. `input-test.mjs` §12 (board ↔ ledger) is **skipped, not passing**, and two desk-specific
+>    plumbing checks beside it ("the porch switch still works over an open desk", "a click
+>    inside the desk is the desk's own") are **removed, owed**: driving them on the inbox
+>    instead was tried and asserts the wrong thing — the two sheets sit in different modes.
+>    All three need a host fixture. The right fix is to lift
+>    `correspondence-test.mjs:mintVenue` into a shared `tools/fixtures.mjs` and let any suite
+>    ask for a host who keeps a venue; that one change unblocks this, `host-test.mjs` and
+>    `wave2-test.mjs` together, and is the highest-leverage next move on suite debt.
+> 5. `input-test.mjs` also fails 7 checks in its **opening** section (the roll/arrival beats
+>    and three "the canvas is topmost" hit tests). These are map-first drift that predates
+>    this phase — the same family as `guest-test.mjs`'s documented known-stale 3 — and were
+>    not touched here.
+>
+> **Re-baselined and green:** `account-test.mjs` 47/47 · `host-input-test.mjs` 61/61 ·
+> `guest-test.mjs` (§§7–10b removed — their subject moved to `correspondence-test.mjs`; the
+> composer pill now reads the venue's booking mode off the wire rather than assuming
+> request→approve) · `input-test.mjs` (a deep link to `#/desk` while signed out must open no
+> desk). `world-test.mjs` still fails its documented 12; the 3 extra are environmental — the
+> shared dev database holds room photos with **absolute** URLs baked in at upload
+> (`Media:PublicBaseUrl`), so rows written by other agents' API instances point at ports that
+> are no longer listening. Worth knowing for production: renaming the media host orphans
+> every photo already stored.
 > Suite environment: API `:5210` (`--urls`; launchSettings pins 5200), vite `:5273` via the
 > new `STEEPLE_API_ORIGIN` env in `vite.config.js`; `correspondence-test.mjs` needs
 > `STEEPLE_API` + `STEEPLE_PSQL` (psql stands in for the operator's first-listing approve),

@@ -21,13 +21,13 @@ public sealed class PaymentsController : ControllerBase
 
     /// <summary>Ensures the caller's payment customer and opens a setup intent for saving a method.</summary>
     [HttpPost("me/payments/setup")]
-    [EnableRateLimiting(RateLimitPolicies.Apply)]
+    [EnableRateLimiting(RateLimitPolicies.Payments)]
     public async Task<ActionResult<SetupIntentResponse>> CreateSetup(CancellationToken ct) =>
         Ok(await _payments.CreateSetupAsync(User.GetUserId(), ct));
 
     /// <summary>Mock confirm: records the saved method's brand + last4 (display data only, never a PAN).</summary>
     [HttpPost("me/payments/setup/mock-confirm")]
-    [EnableRateLimiting(RateLimitPolicies.Apply)]
+    [EnableRateLimiting(RateLimitPolicies.Payments)]
     public async Task<ActionResult<MyPaymentsDto>> MockConfirmSetup(
         [FromBody] MockConfirmSetupRequest request, CancellationToken ct)
     {
