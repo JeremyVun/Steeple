@@ -116,7 +116,10 @@ Tasks:
    the key is what makes retry safe).
 6. **Availability truth.** The apply calendar reads
    `GET /listings/{id}/availability` (already in `api.js:303`, unused) instead of the
-   synthetic 08:00–22:00 seed (`weekCard.js` ← `store.openHoursFor`).
+   synthetic 08:00–22:00 seed (`weekCard.js` ← `store.openHoursFor`). **Blocking after P1:**
+   the 08:00–22:00 windows were part of the demo seed, so a production build now has none —
+   the week card says "no open hours published yet" and nothing can be sent. This task is
+   what makes a built bundle able to file a request at all.
 7. **Demo seed containment.** Seeded applications/venues/personas load only in dev
    builds; production starts empty. `store-test.mjs` re-baselined to the cache-mirror
    role (its schema-fidelity assertions stay — they now guard the mirror translators).

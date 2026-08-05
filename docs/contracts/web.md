@@ -148,6 +148,11 @@ D9 (CSP, `window.__steeple` gated to dev).
   geofence-rejection paths are locally unreachable.
 - API gaps compiled for steeple live in this project's `docs/CONTRACT4.md` §5 (CORS,
   venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint, …).
+- **A production build cannot send a request yet.** Open hours were part of the demo seed, and
+  an empty store has none: the week card says "This space has no open hours published yet." and
+  `validateApplication` refuses every schedule. The fix is P2 task 6 — read
+  `GET /listings/{id}/availability` (already in `api.js`, unused) instead of the seed. Verified
+  by driving `npm run build` + `vite preview` on 2026-08-05.
 - `hostVenueId` still defaults to a bundled venue in an empty store, so a production build's
   host mode opens on a seeded venue's desk with nothing on it. P2 scopes the desk to
   `GET /manage/venues`, which is the real fix.
