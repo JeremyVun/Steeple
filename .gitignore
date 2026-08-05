@@ -10,3 +10,4 @@ build/
 # Local-disk media store (dev-only; Spaces in prod)
 media-store/
 runs/
+.DS_Store
