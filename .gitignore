@@ -9,5 +9,8 @@ build/
 
 # Local-disk media store (dev-only; Spaces in prod)
 media-store/
+
+# Dev mailbox capture (Development only; real addresses/bodies never belong in git)
+dev-mailbox/
 runs/
 .DS_Store

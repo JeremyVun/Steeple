@@ -113,8 +113,23 @@ restricted to `venue_managers`. 14-day expiry is a **lazy sweep on read** (no wo
 `GET /manage/venues` tells clients whether to show a provider surface.
 
 **Notifications** — dispatcher writes the inbox row first (inbox = truth), then
-fire-and-forget plain-text email. `GET /me/notifications` is cursor-paginated (opaque
-`(CreatedAtUtc, Id)` cursor); `POST /me/notifications/read` is caller-scoped.
+fire-and-forget plain-text email (optional HTML alternative part). The dispatcher composes
+each email's closing CTA from the payload's own `deepLink` —
+`{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` — so email, push and the inbox row can never
+point at different things, and no composition site builds URLs. `GET /me/notifications` is
+cursor-paginated (opaque `(CreatedAtUtc, Id)` cursor); `POST /me/notifications/read` is
+caller-scoped. In Development (`Email:DevMailboxEnabled`, omitted from base appsettings) a
+decorator captures every send to a file-backed **dev mailbox** browsable at `/dev/mailbox`
+(`.json` for harnesses) so local CTAs are actually clickable.
+
+**Reminders** — the API's one `BackgroundService` (default cadence 15 min, `Reminders:`
+options). For confirmed bookings it sends a "coming up" nudge 7 days before the booking's
+**first** upcoming occurrence and a "tomorrow" nudge 1 day before **every** occurrence
+(asymmetric on purpose: a weekly booking would otherwise collect two emails a week), to the
+organizer *and* the venue's managers, through the normal dispatcher. Each send is claimed in
+the `booking_reminders` ledger (unique `(OccurrenceId, Kind)`) before it goes out, so a double
+run can't double-send; a failed dispatch releases its claim for the next sweep. Bookings and
+occurrences are read-only to this module.
 
 **Bookings** — **approval is the booking transaction**: application flip + booking +
 materialized occurrences commit in one `SaveChanges` (one DB transaction); an exclusion

@@ -32,6 +32,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount (+ additive `weekdayCount`, `viaCounterOffer`) / cancelledBy / markedBy |
 | `rating_submitted` ✅ | server | rateeType, stars, hasComment |
 | `notification_sent` ✅ / `notification_opened` ✅ | server / client | type, channel, recipientCount |
+| `booking_reminder_sent` ✅ | server | bookingId, kind (`comingUp` \| `tomorrow`), recipientCount — one per claimed reminder, both parties counted together |
 | `venue_created` ✅ / `room_created` ✅ | server | venueId, suburb / roomId, venueId |
 | `venue_verification_requested` ✅ | server | venueId, documentCount |
 | `venue_verification_decided` ✅ | Admin (stdout only) | venueId, requestId, outcome (approved/declined), actor |
