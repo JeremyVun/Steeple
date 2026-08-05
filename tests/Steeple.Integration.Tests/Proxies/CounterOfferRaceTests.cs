@@ -98,9 +98,12 @@ public class CounterOfferRaceTests
         new EfBookingRepository(db),
         new NullVenueManagers(),
         new NullRatings(),
+        new NullPaymentService(),
+        new TestFeatureFlags(),
         new NullNotifications(),
         new NullAnalytics(),
-        new FixedTimeProvider(FixedNow));
+        new FixedTimeProvider(FixedNow),
+        PaymentTestOptions.Payments());
 
     private async Task<Guid> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly date, TimeOnly startTime, TimeOnly endTime, ApplicationStatus status)

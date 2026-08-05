@@ -29,7 +29,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |
 | `sso_started` ✅ / `sso_completed` ✅ | web BFF¹ / server | provider?, surface, trigger / provider, surface, isNewUser |
 | `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path; additive `viaCounterOffer`) |
-| `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount (+ additive `weekdayCount`, `viaCounterOffer`) / cancelledBy / markedBy |
+| `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount (+ additive `weekdayCount`, `viaCounterOffer`; + additive 2026-08-05 `instant`, `isPaid`) / cancelledBy (+ additive `cancelledBy: "system"`, `reason: "payment_failure"`, `cancelRemainingTerm` on the failure-ladder path) / markedBy |
 | `rating_submitted` ✅ | server | rateeType, stars, hasComment |
 | `notification_sent` ✅ / `notification_opened` ✅ | server / client | type, channel, recipientCount |
 | `booking_reminder_sent` ✅ | server | bookingId, kind (`comingUp` \| `tomorrow`), recipientCount — one per claimed reminder, both parties counted together |
@@ -45,6 +45,11 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `counter_offer_responded` ✅ | server | applicationId, decision, timeToResponseHours |
 | `listing_moderated` ✅ | Admin (stdout, same log-line shape) **and** server (`IAnalyticsSink`, on a trusted host's auto-publish) | roomId, venueId, outcome (approved/declined), actor — `actor` is the operator's `Remote-User`, or `"auto:trusted_host"` when `ManageService` published without a human (`v2_migration` D2) |
 | `listing_unlisted_by_operator` ✅ | Admin (stdout only) | roomId, venueId, actor — the abuse/DMCA takedown lever |
+| `application_submitted` gains additive `instant` ✅ *(2026-08-05)* | server | (dimension on the existing row above) |
+| `payment_method_saved` ✅ | server | brand |
+| `payment_succeeded` ✅ / `payment_failed` ✅ | server | bookingId, occurrenceId, amount, currency / bookingId, occurrenceId, failureCode |
+| `refund_issued` ✅ | server | bookingId, occurrenceId, amount, currency |
+| `payout_onboarding_started` ✅ / `payout_onboarding_completed` ✅ | server | venueId |
 
 ¹ The deprecated v1 BFF emits these client-ish funnel events server-side (`IWebAnalytics`,
 same stdout log line shape). Active web v2 does not yet emit them; it must call the built

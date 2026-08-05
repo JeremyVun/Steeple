@@ -78,6 +78,8 @@ rate limiting → JwtBearer auth (`MapInboundClaims=false`) → ProblemDetails e
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) / `LoggingPushGateway` when unconfigured |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save) |
+| `IPaymentGateway` | `MockPaymentGateway` (mock era — instant success, synthetic ids, card ending 0002 declines; the Stripe adapter is the drop-in at Stripe-time) |
+| `IPaymentRepository` | `EfPaymentRepository` (claim-first payment rows under the one-live-payment partial unique index; SQLSTATE 23505 → lost claim; session advisory lock for the sweep) |
 | `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only — Admin writes the venue↔manager links) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (decode-as-validation, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 content-addressed keys; pinned to ImageSharp 3.1.x — SYSTEM_DESIGN §17) |
 | `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) / `LocalDiskMediaStore` (dev fallback, served at `/media`) — chosen at startup by whether `Media:ServiceUrl` etc. are configured |
@@ -144,6 +146,25 @@ recurring term entering its last 14 days gets its one renewal nudge
 (`RenewalNudgeSentAtUtc`). Cancel (either party): occurrences starting beyond the **48h
 notice window** are freed, nearer ones stand; other party notified. No-show: either party
 marks the other on a past, non-cancelled occurrence (feeds ratings in Phase 6).
+
+**Payments** (built 2026-08-05 — mock-gateway era; wire truth `docs/contracts/payments.md`,
+design `docs/backlog/payments.md` + charge timing `docs/backlog/booking-modes.md`; behind the
+`payments.enabled` flag) — guest method-on-file (`/me/payments/*`; display brand/last4 only,
+never a PAN), the apply-time 402 gate, price snapshot at confirmation, per-occurrence charging
+(first occurrence at confirmation, later ones at T−48h), the failure ladder (notify → paced
+retries → auto-cancel at T−24h → 2 consecutive cancels end the term), the declarative refund
+rule (every charge on a cancelled occurrence refunds in full — host rescinds and guest ≥48h
+cancels both reduce to it), and the venue payout-onboarding stub. Double-charge is impossible
+by construction: a charge *claims* its occurrence with a Pending `payments` row under the
+partial unique index before the gateway is called, and the gateway idempotency key is the
+occurrence id. **`PaymentSweeper` is the system's first background worker** (SYSTEM_DESIGN
+§17): ~5-min `IHostedService` under a Postgres advisory lock — charges due occurrences,
+returns the ladder's auto-cancels (executed through the Bookings service — Payments never
+mutates occurrences), and re-runs the refund rule crash-safely. **Booking modes** ride the
+same slice: `venues.BookingMode` (instant default, host-set via Manage) makes an instant
+venue's submit *be* the booking transaction — same one-`SaveChanges` machinery and exclusion
+constraint as approval; a lost race answers `409 slot_taken` with nothing persisted. Public
+listing detail emits the *effective* mode (manual while the flag is off).
 
 **Ratings** — Phase 6 Slice 1. `POST /bookings/{id}/ratings` writes one immutable
 rating per booking direction (`RateeType = Venue` for organizer→venue,
@@ -303,11 +324,17 @@ rooms 1─* applications *─1 users (organizer)
   IntentText, Status, ExpiresAtUtc; unique filtered (OrganizerId, IdempotencyKey)
   applications 1─* application_messages (the "ask" thread)
 
-applications 1─0..1 bookings (created only by approval; unique ApplicationId; EndDate always bounded)
+applications 1─0..1 bookings (created by approval or an instant-mode submit; unique ApplicationId;
+  EndDate always bounded; + PricePerOccurrence?/Currency? price snapshot at confirmation — 014)
   bookings 1─* booking_occurrences (denormalized RoomId; UTC StartUtc/EndUtc; venue-local LocalDate)
     EXCLUDE USING gist ("RoomId" WITH =, tstzrange("StartUtc","EndUtc") WITH &&)
       WHERE ("Status" <> 3)      ← cancelled rows leave the constraint = cancellation frees slots
   bookings 1─* ratings (unique (BookingId, RateeType); Stars 1..5; Comment?; HiddenAtUtc?; VenueId/OrganizerId denormalized)
+
+venues + BookingMode (013: instant DEFAULT | manual)   venues 1─0..1 venue_payment_accounts (014)
+users + PaymentCustomerId?/method display cache (014)
+booking_occurrences 1─* payments (014; partial unique (OccurrenceId) WHERE Status <> Failed
+  ← at most one live payment per occurrence — the no-double-charge invariant)
 ```
 
 - **No double-booking:** occurrence rows exist only for confirmed bookings; the

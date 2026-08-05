@@ -950,6 +950,128 @@ public class ApplicationServiceTests
         Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
     }
 
+    // ----- Booking modes + payments gate (booking-modes.md, docs/contracts/payments.md) ---------
+
+    [Fact]
+    public async Task SubmitAsync_PaymentsOn_NoMethodOnFile_Returns402Gate()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _,
+            flags: new FakeFeatureFlags().Enable(PaymentService.PaymentsFlag),
+            payments: new StubPaymentService { HasMethod = false });
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.PaymentMethodRequired, result.Error!.Code);
+        Assert.Empty(repo.Applications); // the gate fires before anything persists
+    }
+
+    [Fact]
+    public async Task SubmitAsync_PaymentsOn_InstantVenue_ConfirmsBookingAndKicksCharge()
+    {
+        var (repo, managers, venue, room, organizer, manager) = NewScenario();
+        Assert.Equal(BookingMode.Instant, venue.BookingMode); // instant is the product default
+        var bookings = new FakeBookingService();
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out var notifications, out _, out _,
+            bookings: bookings,
+            flags: new FakeFeatureFlags().Enable(PaymentService.PaymentsFlag),
+            payments: payments);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Equal("approved", result.Value!.Application.Status);
+
+        var created = Assert.Single(repo.Applications);
+        Assert.Equal(ApplicationStatus.Approved, created.Status);
+        Assert.Equal(FixedNow, created.DecidedAtUtc);
+
+        Assert.True(bookings.LastInstant); // the submit was the booking transaction
+        Assert.Single(bookings.Confirmed);
+        Assert.Single(payments.ChargeKicks); // post-commit charge kick
+
+        // Organizer gets the confirmation; the venue's managers get the host-side notice.
+        Assert.Contains(notifications.Calls, c =>
+            c.Type == NotificationType.ApplicationApproved && c.Recipients.Any(r => r.UserId == organizer.Id));
+        Assert.Contains(notifications.Calls, c =>
+            c.Type == NotificationType.BookingReceived && c.Recipients.Any(r => r.UserId == manager.Id));
+    }
+
+    [Fact]
+    public async Task SubmitAsync_PaymentsOn_ManualVenue_StaysRequestApprove()
+    {
+        var (repo, managers, venue, room, organizer, _) = NewScenario();
+        venue.BookingMode = BookingMode.Manual;
+        var bookings = new FakeBookingService();
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out _, out _, out _,
+            bookings: bookings,
+            flags: new FakeFeatureFlags().Enable(PaymentService.PaymentsFlag),
+            payments: payments);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Pending, Assert.Single(repo.Applications).Status);
+        Assert.Empty(bookings.Confirmed);
+        Assert.Empty(payments.ChargeKicks);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_PaymentsOff_NoGateAndNoInstantBook_EvenOnInstantVenue()
+    {
+        var (repo, managers, venue, room, organizer, _) = NewScenario();
+        Assert.Equal(BookingMode.Instant, venue.BookingMode);
+        var bookings = new FakeBookingService();
+        var service = CreateService(repo, managers, out _, out _, out _,
+            bookings: bookings,
+            payments: new StubPaymentService { HasMethod = false }); // no flag, no card — still fine
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Pending, Assert.Single(repo.Applications).Status);
+        Assert.Empty(bookings.Confirmed);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_InstantVenue_SlotRaceLost_FailsSlotTakenAndPersistsNothing()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var bookings = new FakeBookingService { SlotTaken = true };
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out var notifications, out _, out _,
+            bookings: bookings,
+            flags: new FakeFeatureFlags().Enable(PaymentService.PaymentsFlag),
+            payments: payments);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.SlotTaken, result.Error!.Code);
+        Assert.Empty(payments.ChargeKicks);
+        Assert.Empty(notifications.Calls);
+        // The fake repo tracked the AddPending; against EF nothing commits because the one
+        // SaveChanges aborted — the integration suite proves the persisted side.
+    }
+
+    [Fact]
+    public async Task DecideAsync_Approve_KicksThePostCommitCharge()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out _, out _, out _, payments: payments);
+
+        var result = await service.DecideAsync(application.Id, manager.Id, new ApplicationDecisionRequest("approve", null));
+
+        Assert.Null(result.Error);
+        Assert.Single(payments.ChargeKicks);
+    }
+
     private static (FakeApplicationRepository Repo, FakeVenueManagerRepository Managers, Venue Venue, Room Room, User Organizer, User Manager) NewScenario()
     {
         var venue = NewVenue();
@@ -1091,14 +1213,16 @@ public class ApplicationServiceTests
         out FakeAnalyticsSink analytics,
         FakeBookingService? bookings = null,
         FakeAvailabilityService? availability = null,
-        FakeFeatureFlags? flags = null)
+        FakeFeatureFlags? flags = null,
+        StubPaymentService? payments = null)
     {
         notifications = new FakeNotificationDispatcher();
         turnstile = new FakeTurnstileVerifier();
         analytics = new FakeAnalyticsSink();
         return new ApplicationService(
             repo, managers, bookings ?? new FakeBookingService(), new FakeRatingService(),
-            availability ?? new FakeAvailabilityService(), flags ?? new FakeFeatureFlags(),
+            availability ?? new FakeAvailabilityService(), payments ?? new StubPaymentService(),
+            flags ?? new FakeFeatureFlags(),
             notifications, turnstile, analytics,
             new FixedTimeProvider(FixedNow));
     }
@@ -1117,8 +1241,11 @@ public class ApplicationServiceTests
         /// <summary>The schedule the last confirmation booked (the counter's, or null for the ask).</summary>
         public ScheduleSpec? LastSpec { get; private set; }
 
+        /// <summary>Whether the last confirmation was flagged as instant book.</summary>
+        public bool LastInstant { get; private set; }
+
         public Task<BookingConfirmation> ConfirmFromApplicationAsync(
-            Application application, ScheduleSpec? schedule = null, CancellationToken ct = default)
+            Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
         {
             if (SlotTaken)
             {
@@ -1126,8 +1253,34 @@ public class ApplicationServiceTests
             }
 
             LastSpec = schedule;
+            LastInstant = instant;
             Confirmed.Add(application);
-            return Task.FromResult(new BookingConfirmation(null, SlotTaken: false));
+
+            // A minimal confirmed-booking DTO — callers only read Id off it (the charge kick).
+            var dto = new Steeple.Api.Contracts.Bookings.BookingDto(
+                Id: Guid.NewGuid(),
+                ApplicationId: application.Id,
+                RoomId: application.RoomId,
+                RoomName: "",
+                VenueName: "",
+                VenueSlug: "",
+                RoomSlug: "",
+                VenueTimezone: "America/New_York",
+                OrganizerId: application.OrganizerId,
+                OrganizerName: "",
+                Type: "oneOff",
+                StartDate: application.StartDate,
+                EndDate: application.EndDate ?? application.StartDate,
+                Schedule: application.ToScheduleDto(),
+                Status: "confirmed",
+                CreatedAtUtc: DateTimeOffset.UtcNow,
+                CancelledBy: null,
+                CancelledAtUtc: null,
+                CancelReason: null,
+                NextOccurrence: null,
+                Occurrences: [],
+                Ratings: null);
+            return Task.FromResult(new BookingConfirmation(dto, SlotTaken: false));
         }
 
         public Task<BookingResult<Steeple.Api.Contracts.Bookings.BookingListResult>> GetForOrganizerAsync(
@@ -1148,6 +1301,10 @@ public class ApplicationServiceTests
 
         public Task<BookingResult<Steeple.Api.Contracts.Bookings.BookingDto>> MarkNoShowAsync(
             Guid occurrenceId, Guid callerId, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
+        public Task CancelOccurrencesForPaymentFailureAsync(
+            Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default) =>
             throw new NotSupportedException();
     }
 
@@ -1343,6 +1500,11 @@ public class ApplicationServiceTests
             Applications.Add(application);
             return Task.CompletedTask;
         }
+
+        public void AddPending(Application application) => Applications.Add(application);
+
+        public Task<User?> GetOrganizerAsync(Guid organizerId, CancellationToken ct = default) =>
+            Task.FromResult(Users.FirstOrDefault(u => u.Id == organizerId));
 
         public Task<Application?> GetAsync(Guid applicationId, CancellationToken ct = default)
         {

@@ -14,6 +14,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.DisplayName).IsRequired().HasMaxLength(200);
         builder.Property(u => u.Email).HasMaxLength(320);
+        // Payment identity display cache (014-payments.sql) — brand/last4 only, never a PAN.
+        builder.Property(u => u.PaymentCustomerId).HasMaxLength(255);
+        builder.Property(u => u.PaymentMethodBrand).HasMaxLength(20);
+        builder.Property(u => u.PaymentMethodLast4).HasMaxLength(4);
 
         // Non-unique: the same verified email may legitimately appear on a second provider —
         // we detect it to say "sign in with your original provider", never auto-link (SYSTEM_DESIGN §6).

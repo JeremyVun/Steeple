@@ -273,14 +273,17 @@ public class BookingIntegrityTests
             .UseNpgsql(_fixture.ConnectionString)
             .Options);
 
-    /// <summary>The real service over the real repository; notification/analytics ports are inert.</summary>
+    /// <summary>The real service over the real repository; notification/analytics/payment ports are inert.</summary>
     private static BookingService CreateBookingService(SteepleDbContext db) => new(
         new EfBookingRepository(db),
         new NullVenueManagers(),
         new NullRatings(),
+        new NullPaymentService(),
+        new TestFeatureFlags(),
         new NullNotifications(),
         new NullAnalytics(),
-        new FixedTimeProvider(FixedNow));
+        new FixedTimeProvider(FixedNow),
+        PaymentTestOptions.Payments());
 
     private async Task<(Guid ApplicationId, Guid OrganizerId)> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly startDate, DateOnly endDate,

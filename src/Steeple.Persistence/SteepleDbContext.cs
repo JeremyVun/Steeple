@@ -81,6 +81,12 @@ public class SteepleDbContext : DbContext
     /// <summary>Host counter-offers proposed on pending applications.</summary>
     public DbSet<ApplicationCounterOffer> ApplicationCounterOffers => Set<ApplicationCounterOffer>();
 
+    /// <summary>Payout-side onboarding state per venue (Payments module).</summary>
+    public DbSet<VenuePaymentAccount> VenuePaymentAccounts => Set<VenuePaymentAccount>();
+
+    /// <summary>Charge/refund attempts on booking occurrences (Payments module).</summary>
+    public DbSet<Payment> Payments => Set<Payment>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

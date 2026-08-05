@@ -17,6 +17,16 @@ public interface IApplicationRepository
     /// <summary>Persists a new application.</summary>
     Task AddAsync(Application application, CancellationToken ct = default);
 
+    /// <summary>
+    /// Tracks a new application <b>without saving</b> — the instant-book path (booking-modes.md):
+    /// the application must commit atomically with the booking + occurrences inside the Bookings
+    /// module's one-SaveChanges transaction, so an exclusion-constraint abort leaves nothing behind.
+    /// </summary>
+    void AddPending(Application application);
+
+    /// <summary>The organizer user row (display + payment identity). Null when unknown.</summary>
+    Task<User?> GetOrganizerAsync(Guid organizerId, CancellationToken ct = default);
+
     /// <summary>The application with its full graph. Null when unknown.</summary>
     Task<Application?> GetAsync(Guid applicationId, CancellationToken ct = default);
 

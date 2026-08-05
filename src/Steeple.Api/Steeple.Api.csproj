@@ -42,6 +42,7 @@
     <Using Include="Steeple.Api.Services.Media" />
     <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Services.Reminders" />
+    <Using Include="Steeple.Api.Services.Payments" />
     <Using Include="Steeple.Api.Proxies" />
     <Using Include="Steeple.Api.Proxies.Availability" />
     <Using Include="Steeple.Api.Proxies.Identity" />
@@ -52,6 +53,7 @@
     <Using Include="Steeple.Api.Proxies.Media" />
     <Using Include="Steeple.Api.Proxies.Notifications" />
     <Using Include="Steeple.Api.Proxies.Reminders" />
+    <Using Include="Steeple.Api.Proxies.Payments" />
     <Using Include="Steeple.Api.Extensions" />
     <Using Include="Steeple.Api.Utils" />
   </ItemGroup>

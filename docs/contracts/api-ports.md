@@ -31,6 +31,7 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
 | Bookings | approval-as-transaction, occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
+| Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `ChargePlanner` (pure) |
 | Notifications | inbox rows (= truth), cursor paging, email/push fan-out (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
 | Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller — the API's one `BackgroundService`) | `IBookingReminderService`, `IBookingReminderRepository` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
@@ -60,6 +61,8 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IAvailabilityRepository` | `EfAvailabilityRepository` |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save; translates SQLSTATE 23P01) |
 | `IRatingRepository` | `EfRatingRepository` |
+| `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — `StripePaymentGateway` is the drop-in at Stripe-time |
+| `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |
 | `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM push per recipient) |
 | `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; log-only without `Email:ApiKey`); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` (Development only) |

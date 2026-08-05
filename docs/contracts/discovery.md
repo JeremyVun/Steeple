@@ -64,7 +64,11 @@ Published** (Draft/Unlisted never leak via direct URL), or **outside the geofenc
 (defense in depth).
 
 `RoomDetail` also carries additive `openHours?` (the `days` shape from the availability rules
-in `manage.md`; null when the room has no rules rows).
+in `manage.md`; null when the room has no rules rows) and additive `bookingMode` ✅
+*(2026-08-05 — booking-modes.md)*: the **effective** mode, `"instant"` (a valid request
+confirms immediately — the apply UI must say so) or `"manual"` (request → approve). Emits
+`manual` while `payments.enabled` is off regardless of the host's stored choice, so the UI
+never promises an instant confirmation the server won't give (`payments.md`).
 
 ### `GET /api/v1/venues/{id}/ratings` ✅
 Public, revealed venue review comments, newest first. Returns an empty page unless the venue has

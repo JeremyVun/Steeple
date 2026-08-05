@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSteepleIdentity(configuration);
         services.AddSteepleApplications(configuration);
+        services.AddSteeplePayments(configuration);
         services.AddSteepleManage(configuration);
         services.AddSteepleAvailability();
         services.AddSteepleMedia(configuration);
@@ -47,6 +48,28 @@ public static class ServiceCollectionExtensions
         services.AddSteepleAnalyticsIngest();
         services.AddSteepleReminders(configuration);
         services.AddSteepleRateLimiting();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Payments module (docs/contracts/payments.md): the mock gateway era of the payments.md
+    /// design — method-on-file, per-occurrence charge machinery, refunds, payout-onboarding stub,
+    /// and the <see cref="PaymentSweeper"/> (the first background worker; SYSTEM_DESIGN §17).
+    /// Swapping <see cref="MockPaymentGateway"/> for the Stripe adapter is the whole Stripe cost.
+    /// </summary>
+    private static IServiceCollection AddSteeplePayments(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<PaymentsOptions>(configuration.GetSection(PaymentsOptions.SectionName));
+
+        services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IPaymentRepository, EfPaymentRepository>();
+
+        // Stateless and synchronous -> singleton; the Stripe adapter later becomes a typed
+        // HttpClient registration behind the same port.
+        services.AddSingleton<IPaymentGateway, MockPaymentGateway>();
+
+        services.AddHostedService<PaymentSweeper>();
 
         return services;
     }

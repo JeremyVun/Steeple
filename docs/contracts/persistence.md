@@ -3,7 +3,7 @@
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–012` and `src/Steeple.Persistence/` (2026-08-05).
+> Verified against `db/changelog/001–014` and `src/Steeple.Persistence/` (2026-08-05).
 
 ## Ownership rule (non-negotiable)
 
@@ -23,6 +23,7 @@
 ```
 Venue 1─* Room 1─* RoomPhoto
   slug, address, lat/long (indexed), IsIdentityVerified, venue type, Timezone (IANA),
+  BookingMode (013: int, 0=Instant DEFAULT, 1=Manual — host-chosen, read at submit time),
   UpdatedAtUtc, ProviderEditedAtUtc
                         Room: capacity, price (NOT NULL, CHECK > 0), house rules, flags enums as
                         int bitmasks (Amenity / AccessibilityFeature / ActivityType),
@@ -57,6 +58,18 @@ applications 1─0..1 bookings (created only by approval; unique ApplicationId; 
   bookings 1─* ratings (unique (BookingId, RateeType); Stars 1..5; Comment ≤1000; HiddenAtUtc?;
     VenueId/OrganizerId denormalized)
 
+users + PaymentCustomerId?, PaymentMethodBrand?, PaymentMethodLast4?, PaymentMethodSetAtUtc?
+  (014 — provider customer id + a DISPLAY cache of the saved method; never a PAN)
+bookings + PricePerOccurrence?, Currency? (014 — price snapshot at confirmation; both null =
+  legacy/offline booking, nothing ever charges)
+venues 1─0..1 venue_payment_accounts (014: ProviderAccountId unique, DetailsSubmitted,
+  ChargesEnabled, PayoutsEnabled, OptedInAtUtc? — payout onboarding state, mock era)
+booking_occurrences 1─* payments (014: Amount, Currency, ApplicationFee, ProviderPaymentId
+  unique-when-set, Status int (0 Pending|1 RequiresAction|2 Succeeded|3 Failed|4 Refunded|
+  5 Disputed), FailureCode?, RefundedAtUtc?; BookingId denormalized;
+  partial unique (OccurrenceId) WHERE Status <> 3   ← at most one LIVE payment per occurrence;
+  failed attempts are superseded history, never deleted)
+
 analytics_events — legacy table (001); the live analytics path is stdout → Promtail → Loki.
 ```
 
@@ -77,6 +90,10 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
 - **One reminder per occurrence per kind:** unique `booking_reminders (OccurrenceId, Kind)` —
   the sweep claims the row (`INSERT … ON CONFLICT DO NOTHING`) *before* dispatching, so a
   double run, a restart mid-sweep or a second replica cannot double-send (015).
+- **No double-charging:** partial unique `payments (OccurrenceId) WHERE Status <> 3` — a
+  charge claims its occurrence with a Pending row *before* the gateway is called, so a
+  concurrent sweeper/request loses the insert, not the money; failed attempts leave the
+  predicate so retries can claim again (`contracts/payments.md`).
 - **Slug uniqueness:** unique `venues.Slug`, unique `rooms (VenueId, Slug)`; slugs are derived
   once from the name and never change.
 - **Identity:** unique `user_logins (Provider, Subject)`; refresh tokens stored only as SHA-256

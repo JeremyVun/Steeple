@@ -1,6 +1,9 @@
 # Booking modes — instant book by default, manual approval by choice
 
-> **Status:** Adopted 2026-08-05 (owner decision, in-session). Supersedes the
+> **Status: IMPLEMENTED 2026-08-05** (mock-gateway era — as-built wire truth:
+> `docs/contracts/payments.md`; schema 013/014; behind the `payments.enabled` flag, on in
+> dev, off in prod until rollout). The chronic-rescinder signal (§3) and the deferred items
+> below remain future work. Adopted 2026-08-05 (owner decision, in-session). Supersedes the
 > request→approve-only model for the parts it names; `payments.md` §5's
 > charge-at-T−48h-only rule is **superseded in part** by the charge timing below —
 > fold the corrective pass into `payments.md` in the commit that implements this.

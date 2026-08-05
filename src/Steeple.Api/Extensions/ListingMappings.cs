@@ -50,7 +50,8 @@ public static class ListingMappings
     public static RoomDetailDto ToDetailDto(
         this Room room,
         RatingSummaryDto? rating = null,
-        IReadOnlyList<DayOpenHoursDto>? openHours = null) =>
+        IReadOnlyList<DayOpenHoursDto>? openHours = null,
+        string bookingMode = "manual") =>
         new(
             RoomId: room.Id,
             RoomSlug: room.Slug,
@@ -72,7 +73,8 @@ public static class ListingMappings
                 ? venue.ToSummaryDto()
                 : throw new InvalidOperationException($"Room {room.Id} has no loaded venue for detail mapping."),
             Rating: rating,
-            OpenHours: openHours);
+            OpenHours: openHours,
+            BookingMode: bookingMode);
 
     /// <summary>Maps a <see cref="Venue"/> to its presentation summary (no rooms collection).</summary>
     public static VenueSummaryDto ToSummaryDto(this Venue venue) =>

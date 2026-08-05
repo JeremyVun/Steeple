@@ -124,4 +124,10 @@ public static class ApplicationErrorCodes
     /// <c>available</c>/<c>totalOccurrences</c>/<c>conflicts</c> payload.
     /// </summary>
     public const string ScheduleUnavailable = "schedule_unavailable";
+
+    /// <summary>
+    /// Submit requires a payment method on file (402 — docs/contracts/payments.md): the caller
+    /// must run the <c>/me/payments/setup</c> loop first. Card-at-request, booking-modes.md.
+    /// </summary>
+    public const string PaymentMethodRequired = "payment_method_required";
 }

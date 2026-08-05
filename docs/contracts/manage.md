@@ -51,7 +51,9 @@ geofence on the venue's address). Then:
 - `GET /api/v1/manage/venues/{id}` ✅ → `ManagedVenueDetailDto`: `{id, name, slug, description,
   venueType, addressLine, suburb, postcode, contactEmail?, parkingInfo, transitInfo, latitude,
   longitude, timezone, isIdentityVerified, verificationStatus, verificationRequestedAtUtc?,
-  rooms: [ManagedRoomSummaryDto]}`. `verificationStatus` ∈ `unverified | pending | verified |
+  rooms: [ManagedRoomSummaryDto], bookingMode /* additive 2026-08-05: "instant"|"manual" —
+  the host's stored choice (the public read emits the effective mode, `discovery.md`) */}`.
+  `verificationStatus` ∈ `unverified | pending | verified |
   declined` and summarizes the latest host verification request plus the venue's verified flag.
 - `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address/suburb/postcode
   required on create); the caller becomes the first `venue_manager`. Address is geocoded
@@ -60,6 +62,10 @@ geofence on the venue's address). Then:
 - `PATCH /api/v1/manage/venues/{id}` ✅ — same `SaveVenueRequest` shape; `null` fields mean
   "unchanged". Address-affecting changes re-geocode (same geofence check) and stamp
   `ProviderEditedAtUtc`.
+- `SaveVenueRequest.bookingMode` ✅ *(additive 2026-08-05 — `docs/backlog/booking-modes.md`)* —
+  `"instant" | "manual"`; null = unchanged; create default **instant**. Unknown token →
+  `400 invalid_venue`. Read at submit time only: flipping the mode never touches pending
+  applications or confirmed bookings.
 - `SaveVenueRequest.timezone` ✅ *(additive 2026-07-05)* — IANA identifier (must contain `/`
   and resolve, e.g. `"America/New_York"`); invalid → `400 invalid_venue`. Create default:
   `America/New_York` (single-timezone beachhead). Changing it while the venue has upcoming
@@ -74,6 +80,13 @@ geofence on the venue's address). Then:
   does **not** store raw document contents. `200 ManagedVenueDetailDto` with
   `verificationStatus: "pending"`. Errors: `400 invalid_verification`, `409 already_verified`,
   `409 verification_pending`.
+
+### Venue payments (payout onboarding) ✅ *(2026-08-05 — full shapes + mock-era caveats: `payments.md`)*
+`POST /manage/venues/{id}/payments/onboarding` → `{url, mock}` ·
+`POST …/payments/onboarding/mock-complete` (mock-only one-step completion) ·
+`GET …/payments` → `{onboardingStarted, detailsSubmitted, chargesEnabled, payoutsEnabled,
+optedIn, dashboardUrl?, mock}`. Manager-scoped like everything here; state is owned by the
+Payments module and read through its service.
 
 ### Rooms
 - `GET /api/v1/manage/rooms/{id}` ✅ → `ManagedRoomDto`: `{id, venueId, venueName, venueSlug,

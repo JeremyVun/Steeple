@@ -69,6 +69,8 @@ humanize for display:
 | `daysOfWeek` (flags, `Weekdays`) | `sunday, monday, tuesday, wednesday, thursday, friday, saturday` — emitted sorted Sunday-first |
 | `venueType` | `church, publicSpace, other` |
 | `status` (room, Manage only — never on public reads) | `draft, published, unlisted` |
+| `bookingMode` | `instant, manual` (booking-modes.md; public reads emit the *effective* mode — `discovery.md`) |
+| `paymentStatus` (occurrence rows) | `pending, requiresAction, succeeded, failed, refunded, disputed` (`payments.md`) |
 
 Application/booking/occurrence status and notification-type tokens are enumerated at their
 shapes in `applications.md`.

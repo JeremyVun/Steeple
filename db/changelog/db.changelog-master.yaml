@@ -39,5 +39,11 @@ databaseChangeLog:
       file: 012-room-photo-curation.sql
       relativeToChangelogFile: true
   - include:
+      file: 013-booking-modes.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 014-payments.sql
+      relativeToChangelogFile: true
+  - include:
       file: 015-reminders.sql
       relativeToChangelogFile: true

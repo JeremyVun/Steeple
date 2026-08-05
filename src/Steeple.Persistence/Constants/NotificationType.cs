@@ -42,6 +42,15 @@ public enum NotificationType
     /// <summary>The organizer declined the host's counter-offer (application back to pending).</summary>
     CounterOfferDeclined = 11,
 
+    /// <summary>A charge for one of the recipient's booking occurrences failed (failure ladder).</summary>
+    PaymentFailed = 12,
+
+    /// <summary>A charged occurrence was cancelled and the recipient's payment refunded in full.</summary>
+    OccurrenceRefunded = 13,
+
+    /// <summary>An instant booking landed at a venue the recipient manages (host-side notice).</summary>
+    BookingReceived = 14,
+
     /// <summary>
     /// An upcoming booking occurrence is close (the reminder worker's "coming up" / "tomorrow"
     /// nudges; the payload's <c>reminderKind</c> says which). Deliberately numbered well clear of

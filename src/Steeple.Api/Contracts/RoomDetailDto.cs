@@ -20,6 +20,12 @@ namespace Steeple.Api.Contracts;
 /// The room's weekly open windows (all seven days, Sunday-first; closed days have empty windows),
 /// in venue-local wall-clock. Null for pre-gate legacy rooms with no declared hours.
 /// </param>
+/// <param name="BookingMode">
+/// Additive 2026-08-05 (booking-modes): the <b>effective</b> mode — <c>"instant"</c> (a valid
+/// request confirms immediately) or <c>"manual"</c> (request → approve). Emits <c>manual</c>
+/// while the payments rails are disabled regardless of the host's stored choice, so the apply
+/// UI never promises an instant confirmation the server won't give.
+/// </param>
 public record RoomDetailDto(
     Guid RoomId,
     string RoomSlug,
@@ -35,4 +41,5 @@ public record RoomDetailDto(
     IReadOnlyList<RoomPhotoDto> Photos,
     VenueSummaryDto Venue,
     RatingSummaryDto? Rating,
-    IReadOnlyList<DayOpenHoursDto>? OpenHours = null);
+    IReadOnlyList<DayOpenHoursDto>? OpenHours = null,
+    string BookingMode = "manual");

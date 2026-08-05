@@ -54,6 +54,12 @@ public class Venue
     public bool IsIdentityVerified { get; set; }
 
     /// <summary>
+    /// How this venue accepts booking requests: <see cref="BookingMode.Instant"/> (default) or
+    /// <see cref="BookingMode.Manual"/> request→approve (docs/backlog/booking-modes.md).
+    /// </summary>
+    public BookingMode BookingMode { get; set; }
+
+    /// <summary>
     /// IANA timezone (e.g. <c>America/New_York</c>) that venue-local schedules resolve against.
     /// Occurrence materialization is per-date in this zone so DST lands correctly (SYSTEM_DESIGN §5).
     /// </summary>

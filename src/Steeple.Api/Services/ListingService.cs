@@ -14,15 +14,17 @@ public sealed class ListingService : IListingService
     private readonly IGeofencePolicy _geofence;
     private readonly IRatingService _ratings;
     private readonly IAvailabilityService _availability;
+    private readonly Flags.IFeatureFlags _flags;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
 
-    /// <summary>Creates the service from its repository, geofence, ratings, availability, and analytics ports.</summary>
+    /// <summary>Creates the service from its repository, geofence, ratings, availability, flags, and analytics ports.</summary>
     public ListingService(
         IRoomRepository rooms,
         IGeofencePolicy geofence,
         IRatingService ratings,
         IAvailabilityService availability,
+        Flags.IFeatureFlags flags,
         IAnalyticsSink analytics,
         TimeProvider clock)
     {
@@ -30,6 +32,7 @@ public sealed class ListingService : IListingService
         _geofence = geofence;
         _ratings = ratings;
         _availability = availability;
+        _flags = flags;
         _analytics = analytics;
         _clock = clock;
     }
@@ -211,7 +214,12 @@ public sealed class ListingService : IListingService
         // Cross-module read through the Availability port (never queries its tables directly);
         // null for pre-gate legacy rooms with no declared hours.
         var openHours = await _availability.GetPublicOpenHoursAsync(room.Id, ct).ConfigureAwait(false);
-        var dto = room.ToDetailDto(ratingSummaries.GetValueOrDefault(venue.Id), openHours);
+        // Effective booking mode: the host's choice only takes effect while the payments rails
+        // are on — the apply UI must never promise an instant confirmation the server won't give.
+        var bookingMode = _flags.IsEnabled(Payments.PaymentService.PaymentsFlag) && venue.BookingMode == BookingMode.Instant
+            ? "instant"
+            : "manual";
+        var dto = room.ToDetailDto(ratingSummaries.GetValueOrDefault(venue.Id), openHours, bookingMode);
 
         await TrackSafelyAsync(
             "listing_viewed",
