@@ -283,8 +283,7 @@ public class BookingIntegrityTests
         new NullNotifications(),
         new NullAnalytics(),
         new FixedTimeProvider(FixedNow),
-        PaymentTestOptions.Payments(),
-        PaymentTestOptions.Email());
+        PaymentTestOptions.Payments());
 
     private async Task<(Guid ApplicationId, Guid OrganizerId)> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly startDate, DateOnly endDate,

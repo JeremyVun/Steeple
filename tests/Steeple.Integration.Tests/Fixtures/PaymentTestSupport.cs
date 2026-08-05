@@ -76,6 +76,4 @@ public static class PaymentTestOptions
             CancelDeadlineHours = cancelDeadlineHours,
             RetryIntervalSeconds = retryIntervalSeconds,
         });
-
-    public static IOptions<EmailOptions> Email() => Options.Create(new EmailOptions());
 }

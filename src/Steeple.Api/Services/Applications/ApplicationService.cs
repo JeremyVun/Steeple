@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Extensions.Options;
 using Steeple.Api.Contracts.Applications;
 using Steeple.Api.Services.Availability;
 using Steeple.Api.Services.Flags;
@@ -42,7 +41,6 @@ public sealed class ApplicationService : IApplicationService
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
-    private readonly string? _webBaseUrl;
 
     /// <summary>Creates the service from its ports.</summary>
     public ApplicationService(
@@ -56,8 +54,7 @@ public sealed class ApplicationService : IApplicationService
         INotificationDispatcher notifications,
         ITurnstileVerifier turnstile,
         IAnalyticsSink analytics,
-        TimeProvider clock,
-        IOptions<EmailOptions> emailOptions)
+        TimeProvider clock)
     {
         _repository = repository;
         _venueManagers = venueManagers;
@@ -70,7 +67,6 @@ public sealed class ApplicationService : IApplicationService
         _turnstile = turnstile;
         _analytics = analytics;
         _clock = clock;
-        _webBaseUrl = emailOptions.Value.WebBaseUrl;
     }
 
     /// <inheritdoc />
@@ -251,9 +247,9 @@ public sealed class ApplicationService : IApplicationService
                 TextBody:
                     $"Your booking of {room.Name} at {venue.Name} is confirmed.\n\n" +
                     $"When: {DescribeSchedule(application)}\n\n" +
+                    // CTA appended centrally by NotificationDispatcher from the payload deepLink.
                     "This venue books instantly — no approval needed. Your card covers each " +
-                    "session as it comes up; the first payment is being taken now." +
-                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+                    "session as it comes up; the first payment is being taken now."),
             ct).ConfigureAwait(false);
 
         // Host-side notice: a booking landed without a decision from them (the rescind lever is
@@ -273,8 +269,7 @@ public sealed class ApplicationService : IApplicationService
                         $"When: {DescribeSchedule(application)}\n\n" +
                         $"\"{application.IntentText}\"\n\n" +
                         "Your venue books instantly, so this is confirmed. If it doesn't fit, you can " +
-                        "cancel it any time from your Steeple inbox — the organizer is refunded in full." +
-                        EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+                        "cancel it any time from your Steeple inbox — the organizer is refunded in full."),
                 ct).ConfigureAwait(false);
         }
 
@@ -570,7 +565,6 @@ public sealed class ApplicationService : IApplicationService
         // every materialized occurrence. When the exclusion constraint aborts that save, the slot
         // is already held — the application auto-declines with notice, and the provider gets
         // slot_taken instead of a half-approved state.
-        Guid? bookingId = null;
         if (approve)
         {
             var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct: ct).ConfigureAwait(false);
@@ -579,12 +573,10 @@ public sealed class ApplicationService : IApplicationService
                 return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: false, ct).ConfigureAwait(false);
             }
 
-            bookingId = confirmation.Booking!.Id;
-
             // Post-commit charge kick (booking-modes.md): the first occurrence charges at
             // confirmation — approval and instant book share the same machinery. No-op for
             // bookings without a price snapshot (payments disabled at confirmation).
-            await _payments.ChargeAtConfirmationAsync(bookingId.Value, ct).ConfigureAwait(false);
+            await _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, ct).ConfigureAwait(false);
         }
 
         if (request.Message is { Length: > 0 } note)
@@ -613,8 +605,7 @@ public sealed class ApplicationService : IApplicationService
                     $"Good news — {venueName} approved your request to use {application.Room.Name}.\n\n" +
                     $"When: {DescribeSchedule(application)}\n\n" +
                     (request.Message is { Length: > 0 } m ? $"They added: \"{m}\"\n\n" : "") +
-                    "Your booking is confirmed — the details are in your Steeple inbox." +
-                    (bookingId is { } cta ? EmailLinks.CtaLine(_webBaseUrl, $"/bookings/{cta}") : ""))
+                    "Your booking is confirmed — the details are in your Steeple inbox.")
             : new EmailContent(
                 Subject: $"About your request for {application.Room.Name}",
                 TextBody:

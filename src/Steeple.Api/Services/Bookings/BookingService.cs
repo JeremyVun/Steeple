@@ -35,7 +35,6 @@ public sealed class BookingService : IBookingService
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
     private readonly TimeSpan _chargeWindow;
-    private readonly string? _webBaseUrl;
 
     /// <summary>Creates the service from its ports.</summary>
     public BookingService(
@@ -47,8 +46,7 @@ public sealed class BookingService : IBookingService
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
         TimeProvider clock,
-        IOptions<PaymentsOptions> paymentsOptions,
-        IOptions<EmailOptions> emailOptions)
+        IOptions<PaymentsOptions> paymentsOptions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
@@ -59,7 +57,6 @@ public sealed class BookingService : IBookingService
         _analytics = analytics;
         _clock = clock;
         _chargeWindow = TimeSpan.FromHours(paymentsOptions.Value.ChargeWindowHours);
-        _webBaseUrl = emailOptions.Value.WebBaseUrl;
     }
 
     /// <inheritdoc />
@@ -418,11 +415,11 @@ public sealed class BookingService : IBookingService
             new EmailContent(
                 Subject: $"Session cancelled — payment didn't go through for {room.Name}",
                 TextBody:
+                    // CTA appended centrally by NotificationDispatcher from the payload deepLink.
                     $"We couldn't collect payment for {room.Name} at {venue.Name} ({dates}), " +
                     "so that session has been cancelled and the time released.\n\n" +
                     termLine.TrimEnd() + "\n\n" +
-                    "You can check your payment method and book again at any time." +
-                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+                    "You can check your payment method and book again at any time."),
             ct).ConfigureAwait(false);
 
         await NotifyManagersAsync(
@@ -433,8 +430,7 @@ public sealed class BookingService : IBookingService
                 TextBody:
                     $"{booking.Organizer!.DisplayName}'s booking of {room.Name} ({dates}) was cancelled " +
                     "because their payment didn't go through. The time is open to new requests.\n\n" +
-                    (cancelRemainingTerm ? "The remaining term was cancelled as well." : "The rest of the booking stands.") +
-                    EmailLinks.CtaLine(_webBaseUrl, deepLink)),
+                    (cancelRemainingTerm ? "The remaining term was cancelled as well." : "The rest of the booking stands.")),
             ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
@@ -626,7 +622,7 @@ public sealed class BookingService : IBookingService
         deepLink = $"/bookings/{booking.Id}",
     };
 
-    private EmailContent BuildCancellationEmail(Booking booking, bool cancelledByOrganizer)
+    private static EmailContent BuildCancellationEmail(Booking booking, bool cancelledByOrganizer)
     {
         var room = booking.Room!;
         var venue = room.Venue!;
@@ -650,8 +646,7 @@ public sealed class BookingService : IBookingService
                     reasonLine +
                     "All upcoming sessions are cancelled, and anything you've already paid for them " +
                     "will be refunded in full automatically. " +
-                    "There are more spaces nearby on Steeple — the details are in your inbox." +
-                    EmailLinks.CtaLine(_webBaseUrl, $"/bookings/{booking.Id}"));
+                    "There are more spaces nearby on Steeple — the details are in your inbox.");
     }
 
     // ----- Copy helpers (email text only — clients humanize wire tokens themselves) --------------

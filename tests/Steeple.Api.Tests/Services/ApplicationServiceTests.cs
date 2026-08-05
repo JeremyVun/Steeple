@@ -1102,8 +1102,7 @@ public class ApplicationServiceTests
             availability ?? new FakeAvailabilityService(), payments ?? new StubPaymentService(),
             flags ?? new FakeFeatureFlags(),
             notifications, turnstile, analytics,
-            new FixedTimeProvider(FixedNow),
-            Microsoft.Extensions.Options.Options.Create(new EmailOptions()));
+            new FixedTimeProvider(FixedNow));
     }
 
     /// <summary>

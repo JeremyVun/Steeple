@@ -403,8 +403,7 @@ public class BookingServiceTests
         return new BookingService(
             repo, managers, new FakeRatingService(), payments ?? new StubPaymentService(),
             flags ?? new FakeFeatureFlags(), notifications, analytics, new FixedTimeProvider(FixedNow),
-            Microsoft.Extensions.Options.Options.Create(new PaymentsOptions()),
-            Microsoft.Extensions.Options.Options.Create(new EmailOptions()));
+            Microsoft.Extensions.Options.Options.Create(new PaymentsOptions()));
     }
 
     /// <summary>Config-free feature-flag stub: flags off unless explicitly enabled.</summary>

@@ -24,7 +24,6 @@ public sealed class PaymentService : IPaymentService
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
     private readonly PaymentsOptions _options;
-    private readonly EmailOptions _email;
 
     /// <summary>Creates the service from its ports.</summary>
     public PaymentService(
@@ -34,8 +33,7 @@ public sealed class PaymentService : IPaymentService
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
         TimeProvider clock,
-        IOptions<PaymentsOptions> options,
-        IOptions<EmailOptions> email)
+        IOptions<PaymentsOptions> options)
     {
         _repository = repository;
         _gateway = gateway;
@@ -44,7 +42,6 @@ public sealed class PaymentService : IPaymentService
         _analytics = analytics;
         _clock = clock;
         _options = options.Value;
-        _email = email.Value;
     }
 
     private TimeSpan ChargeWindow => TimeSpan.FromHours(_options.ChargeWindowHours);
@@ -461,10 +458,11 @@ public sealed class PaymentService : IPaymentService
                 TextBody:
                     $"We couldn't charge your card{last4} for {room?.Name} at {venue?.Name} " +
                     $"on {FormatDate(payment.Occurrence?.LocalDate)}.\n\n" +
+                    // The email CTA is appended centrally by NotificationDispatcher from the
+                    // payload's deepLink — bodies stay URL-free by convention.
                     "Please check your payment method. We'll retry automatically — if the payment " +
                     "still hasn't gone through 24 hours before the session, that session will be " +
-                    "cancelled and the time offered to others." +
-                    EmailLinks.CtaLine(_email.WebBaseUrl, deepLink)),
+                    "cancelled and the time offered to others."),
             ct);
     }
 
@@ -482,8 +480,7 @@ public sealed class PaymentService : IPaymentService
                 Subject: $"You've been refunded for {room?.Name}",
                 TextBody:
                     $"Your payment of {payment.Amount.ToString("0.00", CultureInfo.InvariantCulture)} {payment.Currency} " +
-                    $"for {room?.Name} at {venue?.Name} on {FormatDate(payment.Occurrence?.LocalDate)} has been refunded in full." +
-                    EmailLinks.CtaLine(_email.WebBaseUrl, deepLink)),
+                    $"for {room?.Name} at {venue?.Name} on {FormatDate(payment.Occurrence?.LocalDate)} has been refunded in full."),
             ct);
     }
 

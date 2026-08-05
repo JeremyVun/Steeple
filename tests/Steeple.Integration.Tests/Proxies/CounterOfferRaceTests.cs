@@ -103,8 +103,7 @@ public class CounterOfferRaceTests
         new NullNotifications(),
         new NullAnalytics(),
         new FixedTimeProvider(FixedNow),
-        PaymentTestOptions.Payments(),
-        PaymentTestOptions.Email());
+        PaymentTestOptions.Payments());
 
     private async Task<Guid> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly date, TimeOnly startTime, TimeOnly endTime, ApplicationStatus status)
