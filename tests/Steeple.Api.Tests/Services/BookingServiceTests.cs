@@ -300,6 +300,124 @@ public class BookingServiceTests
         Assert.Equal(confirmed.Id, item.Id);
     }
 
+    // ----- Payments rails: refund-policy table + price snapshot (booking-modes.md) --------------
+
+    [Fact]
+    public async Task CancelAsync_ByVenueManager_FreesEveryUpcomingOccurrence_AndKicksRefunds()
+    {
+        // The provider-cancel asymmetry: host rescind frees ALL upcoming occurrences — the 48h
+        // window binds only guests — and any charges on the freed slots refund in full.
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [
+            TimeSpan.FromHours(1), TimeSpan.FromHours(24), TimeSpan.FromHours(72),
+        ]);
+        repo.Bookings.Add(booking);
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out _, out _, payments: payments);
+
+        var result = await service.CancelAsync(booking.Id, manager.Id, new CancelBookingRequest("Roof repairs"));
+
+        Assert.Null(result.Error);
+        Assert.All(booking.Occurrences, o => Assert.Equal(OccurrenceStatus.Cancelled, o.Status));
+        Assert.Equal(booking.Id, Assert.Single(payments.RefundKicks));
+    }
+
+    [Fact]
+    public async Task CancelAsync_ByOrganizer_KeepsInWindowOccurrences_AndStillKicksRefunds()
+    {
+        // Guest cancel: <48h occurrences stand (their charges stand with them); freed ones refund.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [
+            TimeSpan.FromHours(24), TimeSpan.FromHours(72),
+        ]);
+        repo.Bookings.Add(booking);
+        var payments = new StubPaymentService();
+        var service = CreateService(repo, managers, out _, out _, payments: payments);
+
+        var result = await service.CancelAsync(booking.Id, organizer.Id, new CancelBookingRequest(null));
+
+        Assert.Null(result.Error);
+        var byOffset = booking.Occurrences.OrderBy(o => o.StartUtc).ToList();
+        Assert.Equal(OccurrenceStatus.Scheduled, byOffset[0].Status); // +24h — notice was owed
+        Assert.Equal(OccurrenceStatus.Cancelled, byOffset[1].Status); // +72h — freed, refunds
+        Assert.Equal(booking.Id, Assert.Single(payments.RefundKicks));
+    }
+
+    [Fact]
+    public async Task ConfirmFromApplicationAsync_PaymentsEnabled_SnapshotsPerOccurrencePrice()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        room.PricePerHour = 40m;
+        room.Currency = "USD";
+        var application = NewApprovedApplication(room, organizer);
+        var service = CreateService(repo, managers, out _, out _,
+            flags: new FakeFeatureFlags().Enable(PaymentService.PaymentsFlag));
+
+        var confirmation = await service.ConfirmFromApplicationAsync(application);
+
+        Assert.False(confirmation.SlotTaken);
+        var booking = Assert.Single(repo.Bookings);
+        Assert.Equal(100m, booking.PricePerOccurrence); // $40/h × 2.5h — frozen at confirmation
+        Assert.Equal("USD", booking.Currency);
+        Assert.Equal("inApp", confirmation.Booking!.Payment!.Mode);
+        Assert.Equal(100m, confirmation.Booking.Payment.PerOccurrenceAmount);
+    }
+
+    [Fact]
+    public async Task ConfirmFromApplicationAsync_PaymentsDisabled_NoSnapshot_BookingIsOffline()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        room.PricePerHour = 40m;
+        var application = NewApprovedApplication(room, organizer);
+        var service = CreateService(repo, managers, out _, out _); // flag off
+
+        var confirmation = await service.ConfirmFromApplicationAsync(application);
+
+        Assert.False(confirmation.SlotTaken);
+        Assert.Null(Assert.Single(repo.Bookings).PricePerOccurrence);
+        Assert.Equal("offline", confirmation.Booking!.Payment!.Mode);
+    }
+
+    [Fact]
+    public async Task CancelOccurrencesForPaymentFailure_SingleOccurrence_FreesItAndNotifiesBothParties()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [
+            TimeSpan.FromHours(30), TimeSpan.FromHours(200),
+        ]);
+        repo.Bookings.Add(booking);
+        var service = CreateService(repo, managers, out var notifications, out _);
+        var target = booking.Occurrences.OrderBy(o => o.StartUtc).First();
+
+        await service.CancelOccurrencesForPaymentFailureAsync(booking.Id, [target.Id], cancelRemainingTerm: false);
+
+        Assert.Equal(OccurrenceStatus.Cancelled, target.Status);
+        Assert.Equal(BookingStatus.Confirmed, booking.Status); // the term survives
+        Assert.Equal(OccurrenceStatus.Scheduled, booking.Occurrences.OrderBy(o => o.StartUtc).Last().Status);
+        Assert.Contains(notifications.Calls, c =>
+            c.Type == NotificationType.BookingCancelled && c.Recipients.Any(r => r.UserId == organizer.Id));
+        Assert.Contains(notifications.Calls, c =>
+            c.Type == NotificationType.BookingCancelled && c.Recipients.Any(r => r.UserId == manager.Id));
+    }
+
+    [Fact]
+    public async Task CancelOccurrencesForPaymentFailure_SecondConsecutive_CancelsTheRemainingTerm()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [
+            TimeSpan.FromHours(30), TimeSpan.FromHours(200), TimeSpan.FromHours(400),
+        ], type: BookingType.Recurring);
+        repo.Bookings.Add(booking);
+        var service = CreateService(repo, managers, out _, out _);
+        var target = booking.Occurrences.OrderBy(o => o.StartUtc).First();
+
+        await service.CancelOccurrencesForPaymentFailureAsync(booking.Id, [target.Id], cancelRemainingTerm: true);
+
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Null(booking.CancelledBy); // system, not a party
+        Assert.All(booking.Occurrences, o => Assert.Equal(OccurrenceStatus.Cancelled, o.Status));
+    }
+
     // ----- Scenario / fixture builders ----------------------------------------------------------
 
     private static (FakeBookingRepository Repo, FakeVenueManagerRepository Managers, Venue Venue, Room Room, User Organizer, User Manager) NewScenario()
@@ -342,6 +460,29 @@ public class BookingServiceTests
         DisplayName = displayName,
         Email = email,
         CreatedAtUtc = FixedNow,
+    };
+
+    /// <summary>An approved application (room + organizer attached) ready for confirmation: a
+    /// one-off ten days out, 9:00–11:30 venue-local (2.5 hours).</summary>
+    private static Application NewApprovedApplication(Room room, User organizer) => new()
+    {
+        Id = Guid.NewGuid(),
+        RoomId = room.Id,
+        OrganizerId = organizer.Id,
+        ActivityType = ActivityType.Community,
+        GroupSize = 20,
+        Frequency = ScheduleFrequency.OneOff,
+        StartDate = DateOnly.FromDateTime(FixedNow.UtcDateTime).AddDays(10),
+        EndDate = null,
+        DaysOfWeek = null,
+        StartTime = new TimeOnly(9, 0),
+        EndTime = new TimeOnly(11, 30),
+        IntentText = "A community meetup.",
+        Status = ApplicationStatus.Approved,
+        CreatedAtUtc = FixedNow,
+        DecidedAtUtc = FixedNow,
+        Room = room,
+        Organizer = organizer,
     };
 
     private static Booking NewBooking(

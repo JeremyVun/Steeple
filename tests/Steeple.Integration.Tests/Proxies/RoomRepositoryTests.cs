@@ -198,12 +198,16 @@ public class RoomRepositoryTests
         var orderedPhotos = room.Photos.OrderBy(p => p.SortOrder).ToList();
         Assert.Equal(3, orderedPhotos.Count);
         Assert.Equal(new[] { 0, 1, 2 }, orderedPhotos.Select(p => p.SortOrder));
+        // Curated URLs from 012-room-photo-curation.sql (the fixture now applies it).
         Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-1/1200/800", orderedPhotos[0].Url);
+            "https://images.unsplash.com/photo-1679205691826-9157415559c2?w=1600&h=1000&fit=crop&q=80&auto=format",
+            orderedPhotos[0].Url);
         Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-2/1200/800", orderedPhotos[1].Url);
+            "https://images.unsplash.com/photo-1759477274116-e3cb02d2b9d8?w=1600&h=1000&fit=crop&q=80&auto=format",
+            orderedPhotos[1].Url);
         Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-3/1200/800", orderedPhotos[2].Url);
+            "https://images.unsplash.com/photo-1775918427144-51f0bf53f8c4?w=1600&h=1000&fit=crop&q=80&auto=format",
+            orderedPhotos[2].Url);
         Assert.Single(room.Photos, p => p.IsPrimary);
         Assert.True(orderedPhotos[0].IsPrimary);
     }
