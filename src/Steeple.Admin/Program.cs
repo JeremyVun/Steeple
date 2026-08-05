@@ -44,6 +44,11 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+// Listing photos are served by the media origin (the API or a CDN), never by Admin — and a review
+// queue whose photos are blocked is a decision made blind. Pin the origin per environment;
+// the dev loop's API may sit on either of the two local ports.
+var mediaImageOrigins = builder.Configuration["Admin:MediaImageOrigins"] ?? "https:";
+
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -52,7 +57,7 @@ app.Use(async (context, next) =>
     headers["Referrer-Policy"] = "no-referrer";
     headers["Content-Security-Policy"] =
         "default-src 'self'; " +
-        "img-src 'self' data:; " +
+        $"img-src 'self' data: {mediaImageOrigins}; " +
         "style-src 'self' 'unsafe-inline'; " +
         "script-src 'self'; " +
         "connect-src 'self'; " +
