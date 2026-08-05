@@ -1,22 +1,31 @@
-// The correspondence store — steeple's application/booking model, venue-local,
-// persisted in localStorage so every state survives a reload and is demo-able
-// from first load. Schema truth: the repo's db/changelog/004-applications.sql,
-// 005-bookings.sql, 009-availability.sql. Nothing here is invented; statuses,
-// schedule shapes and validation mirror those files.
+// The correspondence store — a MIRROR of what steeple holds, in the product's
+// own vocabulary, kept in localStorage so a surface can be drawn before the wire
+// answers and redrawn the moment it does.
 //
-// Status machine (exact):
+// The server is the record (v2_migration D4). Nothing here decides a status,
+// books a date, or invents a row: every application, counter-offer, message and
+// booking arrives as steeple's own document through `mirrorApplication` /
+// `mirrorBooking`, and those are the only ways in. Losing this cache costs a
+// reload, never a fact — clear localStorage mid-flow and the next read from the
+// wire puts everything back.
+//
+// Schema truth for the shapes it mirrors: db/changelog/004-applications.sql,
+// 005-bookings.sql, 009-availability.sql.
 //   application: pending → (needsInfo ⇄ guest answer returns to pending)
 //                → approved | declined | withdrawn | expired
 //                counterOffered = live host counter, undecided, guest's court
 //   counter:     open → accepted | declinedByOrganizer | superseded | lapsed
-// Approval materializes booking occurrences; live occurrences are the only
-// authority on double-booking. Open hours and blackouts are advisory at
-// decision time but validated at submit, as in the real service.
 //
 // One store per person: the localStorage key is `steeple-village-store:{id}`,
 // where the id is whoever data/session.js says is signed in, or `anon` when
 // nobody is. A shared browser therefore never shows one account another's
 // correspondence, and signing out drops what was in memory (D6).
+//
+// Outside a production build the village also carries a demo fixture — the
+// letters the seeded churches have waiting, the hours their rooms keep. It is
+// scenery for the 3D village and nothing else: its people are the seed's own
+// ids, and a real account's id is a GUID, so no signed-in person ever inherits
+// it and no managed desk ever shows it (v2_migration D4, task 7).
 //
 // Every mutation emits bus 'store:change' ({ type, ...context }); so does a
 // change of person ({ type: 'identity' }).
@@ -60,19 +69,8 @@ export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday
 export const daysToMask = (days) => days.reduce((m, d) => m | (1 << d), 0);
 export const maskToDays = (mask) => DAY_LABELS.map((_, d) => d).filter((d) => mask & (1 << d));
 
+/** The label the demo fixture's letters are written under. Not an identity. */
 export const GUEST_ID = 'maria-alvarez';
-
-/**
- * The demo village's people, by the address the dev provider mints them at.
- * Signing in as one of them in a dev build stands in their shoes, so the seeded
- * correspondence reads as theirs. It is a fixture, not identity: production
- * builds have no seed and no personas, and this table goes with them.
- */
-export const PERSONA_IDS = {
-  'maria@demo.steeple.test': 'maria-alvarez',
-  'daniel@demo.steeple.test': 'daniel-okafor',
-  'priya@demo.steeple.test': 'priya-raman',
-};
 
 export const ORGANIZERS = {
   'maria-alvarez': { name: 'Maria Alvarez', org: 'Little Sparrows Playgroup', verified: true, joined: '2025-09' },
@@ -150,11 +148,13 @@ let data = null;
 
 let heldFor = null;
 
-/** Who this browser's correspondence belongs to, in the store's own names. */
+/**
+ * Who this browser's correspondence belongs to: steeple's own user id, or
+ * `anon` when nobody is signed in. There is no second identity system — the
+ * seeded personas that used to stand in for one died with D4.
+ */
 export function currentOrganizerId() {
-  const user = session.currentUser();
-  if (!user) return ANON;
-  return (DEMO && PERSONA_IDS[String(user.email ?? '').toLowerCase()]) || user.id;
+  return session.currentUser()?.id ?? ANON;
 }
 
 const keyFor = (organizerId) => `${STORE_KEY}:${organizerId}`;
@@ -177,7 +177,6 @@ function load() {
     data = seed();
     save();
   }
-  sweepExpiry();
   return data;
 }
 
@@ -319,13 +318,22 @@ function scheduleDays(app) {
 /**
  * Submit-time validation, mirroring the Applications service: intent required
  * and ≤ 2000 chars, one activity the room accepts, group fits capacity,
- * recurrence bounded (endDate required), and the schedule inside open hours.
+ * recurrence bounded (endDate required), and — when the caller knows them — the
+ * schedule inside the room's open hours.
+ *
+ * `windows` is passed in rather than read from here: the room's real hours come
+ * off the wire now (`catalog.getListing().openHours`), and a browser that has
+ * not been told them must not invent a refusal the service would not make. The
+ * service is the authority either way (`409 schedule_unavailable`).
+ *
  * Returns { ok, errors: { field: message } } so composers can validate live.
  */
-export function validateApplication(draft) {
+export function validateApplication(draft, { windows = null, room = null } = {}) {
   const errors = {};
-  const room = effectiveRoom(draft.venueId, draft.roomId);
-  if (!room) return { ok: false, errors: { roomId: 'Choose a space to apply for.' } };
+  // The room may be one steeple published and this village has never had
+  // scenery for, in which case the caller has it and this does not.
+  const space = room ?? effectiveRoom(draft.venueId, draft.roomId);
+  if (!space) return { ok: false, errors: { roomId: 'Choose a space to apply for.' } };
 
   const intent = (draft.intentText ?? '').trim();
   if (!intent) errors.intentText = 'Tell the church what your group would like to do.';
@@ -333,13 +341,13 @@ export function validateApplication(draft) {
 
   if (!ACTIVITY_TYPES.includes(draft.activityType))
     errors.activityType = 'Choose one activity type.';
-  else if (!room.activities.includes(draft.activityType))
-    errors.activityType = `${room.name} does not host ${draft.activityType} activities.`;
+  else if (!space.activities.includes(draft.activityType))
+    errors.activityType = `${space.name} does not host ${draft.activityType} activities.`;
 
   const size = Number(draft.groupSize);
   if (!Number.isInteger(size) || size < 1) errors.groupSize = 'How many people will come?';
-  else if (size > room.capacity)
-    errors.groupSize = `${room.name} seats up to ${room.capacity}.`;
+  else if (size > space.capacity)
+    errors.groupSize = `${space.name} seats up to ${space.capacity}.`;
 
   if (!draft.startDate) errors.startDate = 'Choose a date.';
   else if (draft.startDate < todayIso()) errors.startDate = 'Choose a date that has not passed.';
@@ -359,12 +367,11 @@ export function validateApplication(draft) {
     errors.frequency = 'One-off or weekly.';
   }
 
-  if (!errors.startDate && !errors.startTime && !errors.endTime && !errors.daysOfWeekMask) {
-    const windows = openHoursFor(draft.venueId, draft.roomId);
+  if (windows && !errors.startDate && !errors.startTime && !errors.endTime && !errors.daysOfWeekMask) {
     const days = scheduleDays(draft);
     const closed = days.filter((d) => !hoursFit(windows, d, draft.startTime, draft.endTime));
     if (closed.length)
-      errors.schedule = `${room.name} is not open ${closed
+      errors.schedule = `${space.name} is not open ${closed
         .map((d) => `${DAY_LABELS[d]}s`)
         .join(', ')} at that time.`;
   }
@@ -413,82 +420,26 @@ export function scheduleConflicts(venueId, roomId, schedule) {
   return { clashes, outsideHours, blackoutDates: skipped };
 }
 
-// ---- mutations: guest -------------------------------------------------------
+// ---- the mirror: steeple's documents, in this store's vocabulary ------------
+//
+// One way in. Every application state — filed, questioned, answered,
+// counter-offered, approved, declined, withdrawn — arrives here as the
+// ApplicationDto the service answered the write with, and the row is replaced
+// wholesale. There is no local status machine to disagree with the server's,
+// because there is no second record.
 
-let idCounter = 0;
-const freshId = (prefix) => `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
+/** The wire's activity token as the label this product prints. */
+const ACTIVITY_LABELS = Object.fromEntries(
+  ACTIVITY_TYPES.map((label) => [label.toLowerCase(), label])
+);
 
-/**
- * File a request.
- *
- * With no second argument this is the store acting alone, as it always has: the
- * rules are checked here and the row is invented here.
- *
- * With `remote` — steeple's own ApplicationDto, straight off the wire — the
- * request has already been filed with the service, and this only mirrors it so
- * the inbox, the journal and the opened letter go on working from one place.
- * The server is then the authority: its id, its status, its timestamps, its
- * normalized schedule. Nothing is re-validated, because refusing locally what
- * the service accepted would be a phantom failure after a real success.
- *
- * `organizerId` is whoever is signed in on this browser either way — it is what
- * "your requests" means here — while the person the service actually recorded
- * rides alongside as `organizerName` / `organizationName`.
- */
-export function submitApplication(draft, remote = null) {
-  load();
-  if (!remote) {
-    const check = validateApplication(draft);
-    if (!check.ok) return { ok: false, errors: check.errors };
-  }
-  const mirrored = remote ? fromWireApplication(remote) : null;
-  const application = {
-    id: mirrored?.id ?? freshId('app'),
-    venueId: draft.venueId,
-    roomId: draft.roomId,
-    organizerId: draft.organizerId ?? currentOrganizerId(),
-    activityType: draft.activityType,
-    groupSize: mirrored?.groupSize ?? Number(draft.groupSize),
-    frequency: mirrored?.frequency ?? draft.frequency,
-    startDate: mirrored?.startDate ?? draft.startDate,
-    endDate: mirrored ? mirrored.endDate : draft.frequency === 'weekly' ? draft.endDate : null,
-    daysOfWeekMask: mirrored
-      ? mirrored.daysOfWeekMask
-      : draft.frequency === 'weekly'
-        ? draft.daysOfWeekMask
-        : null,
-    startTime: mirrored?.startTime ?? draft.startTime,
-    endTime: mirrored?.endTime ?? draft.endTime,
-    intentText: (mirrored?.intentText ?? draft.intentText).trim(),
-    status: mirrored?.status ?? APP_STATUS.pending,
-    createdAt: mirrored?.createdAt ?? nowIso(),
-    decidedAt: mirrored?.decidedAt ?? null,
-    expiresAt: mirrored?.expiresAt ?? new Date(Date.now() + EXPIRY_DAYS * MS_DAY).toISOString(),
-    ...(mirrored
-      ? { organizerName: mirrored.organizerName, organizationName: mirrored.organizationName }
-      : {}),
-  };
-  // A replayed submission (same Idempotency-Key) comes back as the request that
-  // is already here: hold one row, not two.
-  const at = data.applications.findIndex((a) => a.id === application.id);
-  if (at >= 0) data.applications[at] = application;
-  else data.applications.push(application);
-  emit('submit', { applicationId: application.id, venueId: application.venueId, roomId: application.roomId });
-  return { ok: true, application };
-}
-
-/** steeple's ApplicationDto in this store's own vocabulary. */
-function fromWireApplication(dto) {
-  const schedule = dto.schedule ?? {};
+/** steeple's ScheduleDto in this store's own vocabulary. */
+function fromWireSchedule(schedule = {}) {
   const weekly = schedule.frequency === 'recurringWeekly';
   const days = (schedule.daysOfWeek ?? []).map((name) =>
     DAY_LABELS.findIndex((label) => label.toLowerCase() === String(name).toLowerCase())
   );
   return {
-    id: dto.id,
-    groupSize: dto.groupSize,
-    intentText: dto.intentText ?? '',
-    status: dto.status,
     frequency: weekly ? 'weekly' : 'oneOff',
     startDate: schedule.startDate ?? null,
     // A one-off is echoed with endDate equal to startDate; here it is simply
@@ -497,136 +448,271 @@ function fromWireApplication(dto) {
     daysOfWeekMask: weekly ? daysToMask(days.filter((d) => d >= 0)) : null,
     startTime: (schedule.startTime ?? '').slice(0, 5),
     endTime: (schedule.endTime ?? '').slice(0, 5),
+  };
+}
+
+/**
+ * steeple's ApplicationDto in this store's own vocabulary.
+ *
+ * The product navigates by slug pair (`grace-community-vienna/fellowship-hall`)
+ * and the wire carries both slugs on every application, so the two id spaces
+ * meet here and nowhere else. `roomId` — steeple's GUID — travels alongside as
+ * `remoteRoomId` for the writes that need it.
+ */
+export function fromWireApplication(dto) {
+  return {
+    id: dto.id,
+    venueId: dto.venueSlug,
+    roomId: dto.roomSlug,
+    remoteRoomId: dto.roomId,
+    roomName: dto.roomName ?? null,
+    venueName: dto.venueName ?? null,
+    organizerId: dto.organizer?.id ?? null,
+    organizerName: dto.organizer?.displayName ?? null,
+    organizationName: dto.organizationName ?? null,
+    hasPaymentMethod: dto.hasPaymentMethod === true,
+    activityType: ACTIVITY_LABELS[String(dto.activityType ?? '').toLowerCase()] ?? dto.activityType,
+    groupSize: dto.groupSize,
+    intentText: dto.intentText ?? '',
+    status: dto.status,
+    ...fromWireSchedule(dto.schedule),
     createdAt: dto.createdAtUtc ?? nowIso(),
     decidedAt: dto.decidedAtUtc ?? null,
     expiresAt: dto.expiresAtUtc ?? null,
-    organizerName: dto.organizer?.displayName ?? null,
-    organizationName: dto.organizationName ?? null,
+    bookingId: dto.bookingId ?? null,
+    messageCount: dto.messageCount ?? 0,
   };
 }
 
-export function withdraw(applicationId) {
-  const app = getApplication(applicationId);
-  if (!app || !UNDECIDED.has(app.status)) return { ok: false };
-  app.status = APP_STATUS.withdrawn;
-  app.decidedAt = nowIso();
-  lapseOpenCounter(applicationId, COUNTER_STATUS.lapsed);
-  emit('withdraw', { applicationId, venueId: app.venueId });
-  return { ok: true, application: app };
+/** steeple's CounterOfferDto, flattened the way the desk and the letter read it. */
+function fromWireCounter(dto, applicationId) {
+  return {
+    id: dto.id,
+    applicationId,
+    ...fromWireSchedule(dto.schedule),
+    message: dto.message ?? null,
+    status: dto.status,
+    createdAt: dto.createdAtUtc ?? nowIso(),
+    respondedAt: dto.respondedAtUtc ?? null,
+  };
 }
 
-/** Either party writes while undecided; a guest's answer resolves NeedsInfo. */
-export function sendMessage(applicationId, sender, body) {
-  const app = getApplication(applicationId);
-  const text = (body ?? '').trim();
-  if (!app || !UNDECIDED.has(app.status) || !text || text.length > 2000) return { ok: false };
-  data.messages.push({
-    id: freshId('msg'),
-    applicationId,
-    sender,
-    body: text,
-    sentAt: nowIso(),
-  });
-  if (sender === 'guest' && app.status === APP_STATUS.needsInfo) {
-    app.status = APP_STATUS.pending;
+const upsertBy = (list, row) => {
+  const at = list.findIndex((entry) => entry.id === row.id);
+  if (at >= 0) list[at] = { ...list[at], ...row };
+  else list.push(row);
+};
+
+/**
+ * Hold one ApplicationDto, exactly as it arrived.
+ *
+ * A list read carries no thread (`messages: []`, `messageCount` set), so the
+ * thread this browser already holds is left alone; a detail read carries the
+ * whole thread and replaces it. `counterOffer` is the latest live counter — the
+ * service returns no history, so neither does this.
+ *
+ * @param {object} dto steeple's ApplicationDto
+ * @param {{thread?: boolean}} options `thread` when the dto carries the full one
+ * @returns {object} the mirrored application
+ */
+export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) && dto.messages.length > 0 } = {}) {
+  load();
+  const application = fromWireApplication(dto);
+  // What changed, for the surfaces that animate a change rather than draw a
+  // state — the village posts a letter and seals a door (flows/world/index.js).
+  const before = data.applications.find((a) => a.id === application.id) ?? null;
+  const filed = !before;
+  const settled = before?.status !== APP_STATUS.approved && application.status === APP_STATUS.approved;
+  upsertBy(data.applications, application);
+
+  if (thread) {
+    const organizerId = dto.organizer?.id ?? null;
+    data.messages = data.messages.filter((m) => m.applicationId !== application.id);
+    for (const message of dto.messages ?? []) {
+      data.messages.push({
+        id: message.id,
+        applicationId: application.id,
+        // The wire names the sender by id; this surface only ever needed to know
+        // which side of the correspondence it came from.
+        sender: message.senderId === organizerId ? 'guest' : 'host',
+        body: message.body,
+        sentAt: message.sentAtUtc,
+      });
+    }
   }
-  emit('message', { applicationId, venueId: app.venueId, sender });
-  return { ok: true };
-}
 
-export function acceptCounter(applicationId) {
-  const app = getApplication(applicationId);
-  const counter = openCounterFor(applicationId);
-  if (!app || !counter || app.status !== APP_STATUS.counterOffered) return { ok: false };
-  const schedule = counterSchedule(counter);
-  const { clashes } = scheduleConflicts(app.venueId, app.roomId, schedule);
-  if (clashes.length) return { ok: false, clashes };
-  Object.assign(app, schedule);
-  counter.status = COUNTER_STATUS.accepted;
-  counter.respondedAt = nowIso();
-  const booked = book(app);
-  emit('counter-accepted', { applicationId, venueId: app.venueId, roomId: app.roomId });
-  return { ok: true, application: app, ...booked };
-}
+  data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
+  if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
 
-export function declineCounter(applicationId, note) {
-  const app = getApplication(applicationId);
-  const counter = openCounterFor(applicationId);
-  if (!app || !counter || app.status !== APP_STATUS.counterOffered) return { ok: false };
-  counter.status = COUNTER_STATUS.declinedByOrganizer;
-  counter.respondedAt = nowIso();
-  app.status = APP_STATUS.pending;
-  if (note?.trim()) sendMessage(applicationId, 'guest', note);
-  emit('counter-declined', { applicationId, venueId: app.venueId });
-  return { ok: true, application: app };
-}
-
-// ---- mutations: host --------------------------------------------------------
-
-export function askQuestion(applicationId, body) {
-  const app = getApplication(applicationId);
-  if (!app || app.status !== APP_STATUS.pending) return { ok: false };
-  app.status = APP_STATUS.needsInfo;
-  data.messages.push({
-    id: freshId('msg'),
-    applicationId,
-    sender: 'host',
-    body: (body ?? '').trim(),
-    sentAt: nowIso(),
+  emit('mirror', {
+    applicationId: application.id,
+    venueId: application.venueId,
+    roomId: application.roomId,
+    status: application.status,
+    filed,
+    settled,
   });
-  emit('needs-info', { applicationId, venueId: app.venueId });
-  return { ok: true, application: app };
+  return application;
 }
 
-export function approve(applicationId) {
-  const app = getApplication(applicationId);
-  if (!app || !UNDECIDED.has(app.status)) return { ok: false };
-  const { clashes } = scheduleConflicts(app.venueId, app.roomId, app);
-  if (clashes.length) return { ok: false, clashes };
-  lapseOpenCounter(applicationId, COUNTER_STATUS.superseded);
-  const booked = book(app);
-  emit('approve', { applicationId, venueId: app.venueId, roomId: app.roomId });
-  return { ok: true, application: app, ...booked };
+/**
+ * Hold a page of applications as the whole of one scope.
+ *
+ * `scope` is a predicate over already-held rows saying which of them this page
+ * is authoritative for — the guest's own inbox, or one venue's desk. Anything
+ * matching it that the page did not carry is gone, which is how a withdrawal
+ * made on another device disappears from this one.
+ */
+export function mirrorApplications(dtos, { scope = null } = {}) {
+  load();
+  const arriving = new Set(dtos.map((dto) => dto.id));
+  if (scope) {
+    const dropped = data.applications.filter((a) => scope(a) && !arriving.has(a.id));
+    for (const gone of dropped) {
+      data.messages = data.messages.filter((m) => m.applicationId !== gone.id);
+      data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== gone.id);
+    }
+    data.applications = data.applications.filter((a) => !scope(a) || arriving.has(a.id));
+  }
+  const mirrored = dtos.map((dto) => {
+    const application = fromWireApplication(dto);
+    upsertBy(data.applications, application);
+    data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
+    if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
+    return application;
+  });
+  emit('mirror-list', { count: mirrored.length });
+  return mirrored;
 }
 
-export function decline(applicationId, note) {
-  const app = getApplication(applicationId);
-  if (!app || !UNDECIDED.has(app.status)) return { ok: false };
-  if (note?.trim()) sendMessage(applicationId, 'host', note);
-  app.status = APP_STATUS.declined;
-  app.decidedAt = nowIso();
-  app.declineNote = note?.trim() || null;
-  lapseOpenCounter(applicationId, COUNTER_STATUS.superseded);
-  emit('decline', { applicationId, venueId: app.venueId });
-  return { ok: true, application: app };
-}
-
-export function counterOffer(applicationId, schedule, message) {
-  const app = getApplication(applicationId);
-  if (!app || !UNDECIDED.has(app.status)) return { ok: false };
-  if (schedule.frequency === 'weekly' && (!schedule.endDate || !(schedule.daysOfWeekMask > 0)))
-    return { ok: false, errors: { schedule: 'A weekly counter needs an end date and weekdays.' } };
-  if (!timeOk(schedule.startTime) || !timeOk(schedule.endTime) || schedule.startTime >= schedule.endTime)
-    return { ok: false, errors: { schedule: 'Counter times must be a valid range.' } };
-  lapseOpenCounter(applicationId, COUNTER_STATUS.superseded);
-  const counter = {
-    id: freshId('counter'),
-    applicationId,
-    frequency: schedule.frequency,
-    startDate: schedule.startDate,
-    endDate: schedule.frequency === 'weekly' ? schedule.endDate : null,
-    daysOfWeekMask: schedule.frequency === 'weekly' ? schedule.daysOfWeekMask : null,
-    startTime: schedule.startTime,
-    endTime: schedule.endTime,
-    message: message?.trim() || null,
-    status: COUNTER_STATUS.open,
-    createdAt: nowIso(),
-    respondedAt: null,
+/**
+ * Hold one BookingDto and the occurrences it carries.
+ *
+ * The payment block and each occurrence's `paymentStatus` travel through
+ * untouched: this browser does not yet render them, and a mirror that drops
+ * fields it does not understand is a mirror that lies to the next surface built
+ * on it (docs/contracts/payments.md).
+ */
+export function mirrorBooking(dto) {
+  load();
+  const schedule = fromWireSchedule(dto.schedule);
+  const key = roomKey(dto.venueSlug, dto.roomSlug);
+  const booking = {
+    id: dto.id,
+    applicationId: dto.applicationId,
+    venueId: dto.venueSlug,
+    roomId: dto.roomSlug,
+    remoteRoomId: dto.roomId,
+    organizerId: dto.organizerId,
+    organizerName: dto.organizerName ?? null,
+    ...schedule,
+    endDate: schedule.endDate ?? dto.endDate ?? schedule.startDate,
+    status: dto.status,
+    createdAt: dto.createdAtUtc,
+    cancelledAt: dto.cancelledAtUtc ?? null,
+    cancelReason: dto.cancelReason ?? null,
+    venueTimezone: dto.venueTimezone ?? null,
+    payment: dto.payment ?? null,
   };
-  data.counterOffers.push(counter);
-  app.status = APP_STATUS.counterOffered;
-  emit('counter', { applicationId, venueId: app.venueId });
-  return { ok: true, counter };
+  upsertBy(data.bookings, booking);
+
+  // A list read carries no occurrence set; only a detail read may replace one.
+  if (Array.isArray(dto.occurrences) && dto.occurrences.length) {
+    data.occurrences = data.occurrences.filter((o) => o.bookingId !== booking.id);
+    for (const occurrence of dto.occurrences) {
+      data.occurrences.push({
+        id: occurrence.id,
+        bookingId: booking.id,
+        roomKey: key,
+        date: occurrence.localDate,
+        start: schedule.startTime,
+        end: schedule.endTime,
+        status: occurrence.status,
+        paymentStatus: occurrence.paymentStatus ?? null,
+      });
+    }
+  }
+  emit('mirror-booking', { bookingId: booking.id, applicationId: booking.applicationId });
+  return booking;
+}
+
+/**
+ * Hold the venues this person manages, and the rooms on each.
+ *
+ * The product navigates venues by slug, so a managed venue lands under its own
+ * slug and carries steeple's id alongside as `remoteId`. A venue the listing
+ * flow placed here under a guessed slug before steeple answered is replaced by
+ * the one steeple named — two records of one venue is how a desk ends up
+ * showing an empty copy of itself.
+ */
+export function mirrorManagedVenues(venues) {
+  load();
+  const remoteIds = new Set(venues.map((v) => v.id));
+  data.placedVenues = data.placedVenues.filter(
+    (v) => !(v.remoteId && remoteIds.has(v.remoteId) && !venues.some((m) => m.slug === v.id))
+  );
+
+  for (const venue of venues) {
+    const rooms = (venue.rooms ?? []).map((room) => ({
+      id: room.slug,
+      remoteId: room.id,
+      name: room.name,
+      description: '',
+      capacity: room.capacity,
+      pricePerHour: Number(room.pricePerHour),
+      houseRules: '',
+      status: room.status,
+      publishRequestedAt: room.publishRequestedAtUtc ?? null,
+      photo: room.primaryPhotoUrl ?? null,
+      amenities: [],
+      accessibility: [],
+      activities: [],
+    }));
+    upsertPlacedVenue({
+      id: venue.slug,
+      remoteId: venue.id,
+      name: venue.name,
+      shortName: venue.name.split(/\s+/).slice(0, 2).join(' '),
+      description: venue.description ?? '',
+      address: [venue.addressLine, [venue.suburb, venue.postcode].filter(Boolean).join(' ')]
+        .filter(Boolean)
+        .join(', '),
+      suburb: venue.suburb,
+      lat: venue.latitude,
+      lng: venue.longitude,
+      verified: venue.isIdentityVerified === true,
+      bookingMode: venue.bookingMode ?? null,
+      rooms,
+    });
+    // A venue the village already carries as scenery keeps its own rooms; what
+    // steeple says about each of them — its status, whether a moderator has it,
+    // its cover — is written over the top so the desk reads the same either way.
+    for (const room of rooms) {
+      const key = roomKey(venue.slug, room.id);
+      data.roomEdits[key] = {
+        ...(data.roomEdits[key] ?? {}),
+        remoteId: room.remoteId,
+        keptLocally: false,
+        name: room.name,
+        capacity: room.capacity,
+        pricePerHour: room.pricePerHour,
+        status: room.status,
+        publishRequestedAt: room.publishRequestedAt,
+        ...(room.photo ? { photo: room.photo } : {}),
+      };
+    }
+  }
+  emit('managed-venues', { count: venues.length });
+  return venues;
+}
+
+/** Forget one application and everything hanging off it (a 404 on re-read). */
+export function forgetApplication(applicationId) {
+  load();
+  data.applications = data.applications.filter((a) => a.id !== applicationId);
+  data.messages = data.messages.filter((m) => m.applicationId !== applicationId);
+  data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== applicationId);
+  emit('mirror', { applicationId, gone: true });
 }
 
 /** Replace-all weekly windows for a room, as the Manage service does. */
@@ -757,72 +843,10 @@ export function setHostVenue(venueId) {
 }
 
 // ---- internals --------------------------------------------------------------
-
-function counterSchedule(counter) {
-  return {
-    frequency: counter.frequency,
-    startDate: counter.startDate,
-    endDate: counter.endDate,
-    daysOfWeekMask: counter.daysOfWeekMask,
-    startTime: counter.startTime,
-    endTime: counter.endTime,
-  };
-}
-
-function lapseOpenCounter(applicationId, status) {
-  const counter = openCounterFor(applicationId);
-  if (counter) {
-    counter.status = status;
-    counter.respondedAt = nowIso();
-  }
-}
-
-function book(app) {
-  const booking = {
-    id: freshId('booking'),
-    applicationId: app.id,
-    venueId: app.venueId,
-    roomId: app.roomId,
-    organizerId: app.organizerId,
-    frequency: app.frequency,
-    startDate: app.startDate,
-    endDate: app.endDate ?? app.startDate,
-    daysOfWeekMask: app.daysOfWeekMask,
-    startTime: app.startTime,
-    endTime: app.endTime,
-    status: 'confirmed',
-    createdAt: nowIso(),
-  };
-  const key = roomKey(app.venueId, app.roomId);
-  const occurrences = materializeDates(app, blackoutsFor(app.venueId, app.roomId)).map((date) => ({
-    id: `${booking.id}-${date}`,
-    bookingId: booking.id,
-    roomKey: key,
-    date,
-    start: app.startTime,
-    end: app.endTime,
-    status: 'scheduled',
-  }));
-  data.bookings.push(booking);
-  data.occurrences.push(...occurrences);
-  app.status = APP_STATUS.approved;
-  app.decidedAt = nowIso();
-  return { booking, occurrences };
-}
-
-/** Lazy expiry, as the real service sweeps: undecided past expiresAt expires. */
-function sweepExpiry() {
-  let swept = false;
-  const now = nowIso();
-  for (const app of data.applications) {
-    if (UNDECIDED.has(app.status) && app.expiresAt < now) {
-      app.status = APP_STATUS.expired;
-      lapseOpenCounter(app.id, COUNTER_STATUS.lapsed);
-      swept = true;
-    }
-  }
-  if (swept) save();
-}
+//
+// Expiry used to be swept here, in the store, the way the service sweeps it
+// lazily on read. It is gone: the service's sweep is the one that counts, and a
+// mirror that ages a row on its own would show a status steeple never wrote.
 
 export function resetDemo() {
   heldFor = currentOrganizerId();
@@ -1166,15 +1190,12 @@ export const store = {
   materializeDates,
   scheduleConflicts,
   hoursFit,
-  submitApplication,
-  withdraw,
-  sendMessage,
-  acceptCounter,
-  declineCounter,
-  askQuestion,
-  approve,
-  decline,
-  counterOffer,
+  mirrorApplication,
+  mirrorApplications,
+  mirrorBooking,
+  mirrorManagedVenues,
+  forgetApplication,
+  fromWireApplication,
   setOpenHours,
   addBlackout,
   removeBlackout,

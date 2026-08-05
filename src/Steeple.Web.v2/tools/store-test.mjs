@@ -1,14 +1,21 @@
-// Status-machine regression test for src/data/store.js — runs in plain node.
+// The mirror's regression test — src/data/store.js, in plain node.
 //   node tools/store-test.mjs
 // Exits non-zero on the first failed expectation. Every agent runs this before
 // declaring done; if you change the store, prove your new guard bites by
 // breaking it once.
 //
-// A store belongs to somebody (D6): the key is `steeple-village-store:{id}`
-// and "your requests" means the signed-in person's, so this suite stands a
-// browser up and signs one in before it asks the store anything. localStorage
-// comes first because data/session.js and data/store.js both probe for it as
-// they are imported — hence the dynamic import below.
+// What this suite is for changed with v2_migration Phase 2 (D4). The store no
+// longer decides anything: steeple does, and this is the cache of its answers.
+// So the assertions are about **fidelity** — that an ApplicationDto, a
+// CounterOfferDto and a BookingDto arrive here as exactly what they were — and
+// about **ownership**: whose correspondence this browser is holding, and that
+// the demo fixture can never be mistaken for somebody's.
+//
+// A store belongs to somebody (D6): the key is `steeple-village-store:{id}` and
+// the id is steeple's own user id, so this suite stands a browser up and signs
+// one in before it asks the store anything. localStorage comes first because
+// data/session.js and data/store.js both probe for it as they are imported —
+// hence the dynamic import below.
 
 function browserStorage() {
   const cells = new Map();
@@ -25,16 +32,16 @@ function browserStorage() {
 
 globalThis.localStorage = browserStorage();
 
-const MARIA = {
-  id: 'maria-alvarez-user',
-  displayName: 'Maria Alvarez',
-  email: 'maria@demo.steeple.test',
+const NADIA = {
+  id: '9f1c0f2a-9d0e-4c0a-9d3e-2b6b8f0a1111',
+  displayName: 'Nadia Prosser',
+  email: 'nadia@example.org',
   createdAtUtc: '2025-09-01T00:00:00Z',
 };
 
 localStorage.setItem(
   'steeple-village-session',
-  JSON.stringify({ accessToken: 'test-access', refreshToken: 'test-refresh', user: MARIA })
+  JSON.stringify({ accessToken: 'test-access', refreshToken: 'test-refresh', user: NADIA })
 );
 
 const {
@@ -46,7 +53,6 @@ const {
   nextWeekday,
   store,
   todayIso,
-  weekdayOf,
 } = await import('../src/data/store.js');
 const session = await import('../src/data/session.js');
 
@@ -63,36 +69,25 @@ function expect(label, actual, wanted) {
 
 store.resetDemo();
 
-// ---- seed shape: every state demo-able from first load ----------------------
-const mine = store.guestApplications();
-const statuses = new Set(mine.map((a) => a.status));
-expect('seed: guest has 5 letters', mine.length, 5);
-for (const s of ['pending', 'needsInfo', 'counterOffered', 'approved', 'declined']) {
-  expect(`seed: a ${s} letter exists`, statuses.has(s), true);
-}
-const desk = store.venueApplications('grace-community-vienna');
-expect('seed: the Grace desk holds 4 letters', desk.length, 4);
-const approvedSeed = mine.find((a) => a.status === APP_STATUS.approved);
-const seedBooking = store.bookingFor(approvedSeed.id);
-expect('seed: approved letter has a booking', !!seedBooking, true);
+// ---- the demo fixture is scenery, and cannot be mistaken for a person -------
+//
+// It still lights the village's lanterns and draws its ribbons, so it is still
+// here outside a production build. What it must never do is look like the
+// signed-in person's correspondence: its letters are written under the seed's
+// own ids, and a real account's id is steeple's GUID.
+
+expect('fixture: the village still has correspondence to light', store.venueApplications('grace-community-vienna').length, 4);
+expect('fixture: it is not written under a real account', GUEST_ID, 'maria-alvarez');
+expect('fixture: so the signed-in person inherits none of it', store.guestApplications().length, 0);
+expect('identity: the store is keyed to steeple’s own user id', store.currentOrganizerId(), NADIA.id);
 expect(
-  'seed: booking has materialized occurrences',
-  store.occurrencesFor(seedBooking.id).length,
-  (n) => n > 4
-);
-expect(
-  'seed: needsInfo letter carries the host question',
-  store.threadFor('app-sparrows-craft').length,
-  (n) => n >= 1
-);
-expect('seed: open counter waits on the guest', !!store.openCounterFor('app-sparrows-stories'), true);
-expect(
-  'seed: open hours backfilled 08:00-22:00 daily',
+  'fixture: open hours are still seeded for the village',
   store.openHoursFor('grace-community-vienna', 'fellowship-hall').length,
   7
 );
 
-// ---- validation -------------------------------------------------------------
+// ---- validation, which is still this browser's to do live -------------------
+
 const monday = nextWeekday(addDays(todayIso(), 7), 1);
 const goodDraft = {
   venueId: 'vienna-presbyterian',
@@ -107,6 +102,8 @@ const goodDraft = {
   endTime: '20:00',
   intentText: 'A community choir looking for a weekly rehearsal hour.',
 };
+const HOURS = [{ day: 1, start: '08:00', end: '22:00' }];
+
 expect('validate: a sound weekly draft passes', store.validateApplication(goodDraft).ok, true);
 expect(
   'validate: recurring without endDate fails',
@@ -124,120 +121,271 @@ expect(
   true
 );
 expect(
-  'validate: outside open hours fails',
-  store.validateApplication({ ...goodDraft, startTime: '06:00', endTime: '07:00' }).errors.schedule !==
-    undefined,
-  true
-);
-expect(
   'validate: intent over 2000 chars fails',
   store.validateApplication({ ...goodDraft, intentText: 'x'.repeat(2001) }).errors.intentText !==
     undefined,
   true
 );
-
-// ---- the full loop: submit → needsInfo ⇄ answer → counter → accept ----------
-const submitted = store.submitApplication(goodDraft);
-expect('submit: accepted', submitted.ok, true);
-const id = submitted.application.id;
-expect('submit: starts pending', store.getApplication(id).status, APP_STATUS.pending);
-
-store.askQuestion(id, 'Which weeks would you start?');
-expect('ask: pending → needsInfo', store.getApplication(id).status, APP_STATUS.needsInfo);
-store.sendMessage(id, 'guest', 'From the first Monday of next month.');
-expect('answer: needsInfo → pending', store.getApplication(id).status, APP_STATUS.pending);
-expect('thread: both messages kept', store.threadFor(id).length, 2);
-
-const counter = store.counterOffer(
-  id,
-  {
-    frequency: 'weekly',
-    startDate: nextWeekday(addDays(todayIso(), 7), 2),
-    endDate: addDays(nextWeekday(addDays(todayIso(), 7), 2), 28),
-    daysOfWeekMask: daysToMask([2]),
-    startTime: '18:00',
-    endTime: '20:00',
-  },
-  'Tuesdays suit the room better.'
-);
-expect('counter: offered', counter.ok, true);
-expect('counter: pending → counterOffered', store.getApplication(id).status, APP_STATUS.counterOffered);
-
-const declinedCounter = store.declineCounter(id, 'Tuesdays clash with our other rehearsal.');
-expect('counter declined: back to pending', declinedCounter.application.status, APP_STATUS.pending);
+// Hours are steeple's now, and are only checked when the caller has been told
+// them. A browser with no hours refuses nothing on its own account.
 expect(
-  'counter declined: history kept',
-  store.countersFor(id)[0].status,
-  COUNTER_STATUS.declinedByOrganizer
+  'validate: outside the hours it was given fails',
+  store.validateApplication({ ...goodDraft, startTime: '06:00', endTime: '07:00' }, { windows: HOURS })
+    .errors.schedule !== undefined,
+  true
 );
-
-const counter2 = store.counterOffer(
-  id,
-  {
-    frequency: 'weekly',
-    startDate: nextWeekday(addDays(todayIso(), 7), 3),
-    endDate: addDays(nextWeekday(addDays(todayIso(), 7), 3), 28),
-    daysOfWeekMask: daysToMask([3]),
-    startTime: '18:00',
-    endTime: '20:00',
-  },
-  'Would Wednesdays work?'
-);
-expect('second counter: offered', counter2.ok, true);
-const accepted = store.acceptCounter(id);
-expect('counter accepted: approved', accepted.ok && accepted.application.status, APP_STATUS.approved);
 expect(
-  'counter accepted: schedule adopted (Wednesdays)',
-  accepted.application.daysOfWeekMask,
-  daysToMask([3])
+  'validate: with no hours given, nothing is invented',
+  store.validateApplication({ ...goodDraft, startTime: '06:00', endTime: '07:00' }).errors.schedule,
+  undefined
 );
-expect('counter accepted: occurrences materialized', accepted.occurrences.length, (n) => n >= 4);
+// A room only the catalog knows is still a room the draft can be checked against.
 expect(
-  'occurrences: all on the counter weekday',
-  accepted.occurrences.every((o) => weekdayOf(o.date) === 3),
+  'validate: a room handed in stands in for one the village has no scenery for',
+  store.validateApplication(
+    { ...goodDraft, venueId: 'saint-bride-hall', roomId: 'long-room' },
+    { room: { name: 'Long Room', capacity: 40, activities: ['Music'] } }
+  ).ok,
   true
 );
 
-// ---- double-booking: the exclusion constraint's demo twin -------------------
-const clashDraft = {
-  ...goodDraft,
-  startDate: accepted.occurrences[0].date,
-  endDate: null,
-  frequency: 'oneOff',
-  daysOfWeekMask: null,
-  startTime: '19:00',
-  endTime: '21:00',
-};
-const clashing = store.submitApplication(clashDraft);
-expect('clash: submit is allowed (applications never hold slots)', clashing.ok, true);
-const blockedApprove = store.approve(clashing.application.id);
-expect('clash: approve refuses an overlapping occurrence', blockedApprove.ok, false);
-expect('clash: names the collision', blockedApprove.clashes.length, (n) => n >= 1);
-store.decline(clashing.application.id, 'That evening is now taken — sorry.');
+// ---- fidelity: steeple's documents, held exactly ----------------------------
+
+const APPLICATION_ID = '11111111-1111-1111-1111-111111111111';
+const ROOM_GUID = '22222222-2222-2222-2222-222222222222';
+
+const dto = (over = {}) => ({
+  id: APPLICATION_ID,
+  roomId: ROOM_GUID,
+  roomName: 'Music Room',
+  venueName: 'Vienna Presbyterian Church',
+  venueSlug: 'vienna-presbyterian',
+  roomSlug: 'music-room',
+  organizer: { id: NADIA.id, displayName: 'Nadia Prosser', ratingSummary: null },
+  activityType: 'music',
+  groupSize: 12,
+  schedule: {
+    frequency: 'recurringWeekly',
+    startDate: monday,
+    endDate: addDays(monday, 28),
+    daysOfWeek: ['monday'],
+    startTime: '18:00:00',
+    endTime: '20:00:00',
+  },
+  intentText: 'A community choir looking for a weekly rehearsal hour.',
+  status: 'pending',
+  createdAtUtc: '2026-08-01T09:00:00Z',
+  decidedAtUtc: null,
+  expiresAtUtc: '2026-08-15T09:00:00Z',
+  bookingId: null,
+  messageCount: 0,
+  messages: [],
+  organizationName: 'Vienna Community Chorale',
+  hasPaymentMethod: true,
+  ...over,
+});
+
+const held = store.mirrorApplication(dto());
+expect('mirror: the id is steeple’s', held.id, APPLICATION_ID);
+expect('mirror: the slugs become the product’s ids', held.venueId, 'vienna-presbyterian');
+expect('mirror: and the room’s', held.roomId, 'music-room');
+expect('mirror: steeple’s room id travels alongside', held.remoteRoomId, ROOM_GUID);
+expect('mirror: the wire’s activity token becomes the printed label', held.activityType, 'Music');
+expect('mirror: recurringWeekly becomes weekly', held.frequency, 'weekly');
+expect('mirror: weekday names become the schema’s mask', held.daysOfWeekMask, daysToMask([1]));
+expect('mirror: seconds are cut off the times', held.startTime, '18:00');
+expect('mirror: the organizer is steeple’s account', held.organizerId, NADIA.id);
+expect('mirror: the group travels with the request', held.organizationName, 'Vienna Community Chorale');
+expect('mirror: the card-on-file signal is kept', held.hasPaymentMethod, true);
+expect('mirror: it is now this person’s', store.guestApplications().length, 1);
+
+// A one-off is echoed with endDate equal to startDate; here it is one date.
+const oneOff = store.mirrorApplication(
+  dto({
+    id: '33333333-3333-3333-3333-333333333333',
+    schedule: {
+      frequency: 'oneOff',
+      startDate: monday,
+      endDate: monday,
+      daysOfWeek: null,
+      startTime: '10:00:00',
+      endTime: '12:00:00',
+    },
+  })
+);
+expect('mirror: a one-off has no end', oneOff.endDate, null);
+expect('mirror: and no weekday mask', oneOff.daysOfWeekMask, null);
+
+// The thread arrives with the detail read, and only then.
+store.mirrorApplication(
+  dto({
+    status: 'needsInfo',
+    messageCount: 2,
+    messages: [
+      { id: 'm1', senderId: 'host-user', body: 'How many tables?', sentAtUtc: '2026-08-02T09:00:00Z' },
+      { id: 'm2', senderId: NADIA.id, body: 'Six, please.', sentAtUtc: '2026-08-02T10:00:00Z' },
+    ],
+  })
+);
+const thread = store.threadFor(APPLICATION_ID);
+expect('mirror: the whole thread is held', thread.length, 2);
+expect('mirror: the sender is read off the organizer’s id', thread[0].sender, 'host');
+expect('mirror: and the other side is the guest', thread[1].sender, 'guest');
+expect('mirror: the status came with it', store.getApplication(APPLICATION_ID).status, APP_STATUS.needsInfo);
+
+// A list read carries no thread; the one already held survives it.
+store.mirrorApplication(dto({ status: 'pending', messageCount: 2, messages: [] }));
+expect('mirror: a list read does not empty the thread', store.threadFor(APPLICATION_ID).length, 2);
+
+// The counter-offer, and only the live one — steeple returns no history.
+store.mirrorApplication(
+  dto({
+    status: 'counterOffered',
+    counterOffer: {
+      id: 'c1',
+      schedule: {
+        frequency: 'recurringWeekly',
+        startDate: addDays(monday, 2),
+        endDate: addDays(monday, 30),
+        daysOfWeek: ['wednesday'],
+        startTime: '18:00:00',
+        endTime: '20:00:00',
+      },
+      message: 'Wednesdays suit the room better.',
+      status: 'open',
+      createdAtUtc: '2026-08-03T09:00:00Z',
+      respondedAtUtc: null,
+    },
+  })
+);
+const counter = store.openCounterFor(APPLICATION_ID);
+expect('mirror: the open counter is held', counter?.status, COUNTER_STATUS.open);
+expect('mirror: on the weekday steeple named', counter.daysOfWeekMask, daysToMask([3]));
+expect('mirror: with its note', counter.message, 'Wednesdays suit the room better.');
+
+// Decided: the counter is gone because steeple stopped sending it.
+store.mirrorApplication(dto({ status: 'approved', bookingId: '44444444-4444-4444-4444-444444444444' }));
+expect('mirror: a decided request has no live counter', store.openCounterFor(APPLICATION_ID), null);
+expect('mirror: and reads approved', store.getApplication(APPLICATION_ID).status, APP_STATUS.approved);
+
+// The booking, with its payment posture passed through untouched.
+const booking = store.mirrorBooking({
+  id: '44444444-4444-4444-4444-444444444444',
+  applicationId: APPLICATION_ID,
+  roomId: ROOM_GUID,
+  roomName: 'Music Room',
+  venueName: 'Vienna Presbyterian Church',
+  venueSlug: 'vienna-presbyterian',
+  roomSlug: 'music-room',
+  venueTimezone: 'America/New_York',
+  organizerId: NADIA.id,
+  organizerName: 'Nadia Prosser',
+  type: 'recurring',
+  startDate: monday,
+  endDate: addDays(monday, 28),
+  schedule: {
+    frequency: 'recurringWeekly',
+    startDate: monday,
+    endDate: addDays(monday, 28),
+    daysOfWeek: ['monday'],
+    startTime: '18:00:00',
+    endTime: '20:00:00',
+  },
+  status: 'confirmed',
+  createdAtUtc: '2026-08-03T09:00:00Z',
+  cancelledBy: null,
+  cancelledAtUtc: null,
+  cancelReason: null,
+  nextOccurrence: null,
+  occurrences: [
+    { id: 'o1', startUtc: '2026-08-10T22:00:00Z', endUtc: '2026-08-11T00:00:00Z', localDate: monday, status: 'scheduled', noShowMarkedBy: null, paymentStatus: 'succeeded' },
+    { id: 'o2', startUtc: '2026-08-17T22:00:00Z', endUtc: '2026-08-18T00:00:00Z', localDate: addDays(monday, 7), status: 'scheduled', noShowMarkedBy: null },
+  ],
+  ratings: null,
+  payment: { mode: 'inApp', perOccurrenceAmount: 40, currency: 'USD', nextChargeAtUtc: '2026-08-15T22:00:00Z' },
+});
+expect('booking: it is the application’s', store.bookingFor(APPLICATION_ID)?.id, booking.id);
+expect('booking: occurrences are held', store.occurrencesFor(booking.id).length, 2);
+expect('booking: dated venue-locally', store.occurrencesFor(booking.id)[0].date, monday);
+expect('booking: with the schedule’s hours', store.occurrencesFor(booking.id)[0].start, '18:00');
 expect(
-  'decline: recorded with the note',
-  store.getApplication(clashing.application.id).declineNote !== null,
-  true
+  'booking: a charge status passes through untouched',
+  store.occurrencesFor(booking.id)[0].paymentStatus,
+  'succeeded'
+);
+expect(
+  'booking: and one never charged stays absent',
+  store.occurrencesFor(booking.id)[1].paymentStatus,
+  null
+);
+expect('booking: the payment block passes through whole', store.bookingFor(APPLICATION_ID)?.payment?.mode, 'inApp');
+expect(
+  'booking: including the next charge steeple planned',
+  store.bookingFor(APPLICATION_ID)?.payment?.nextChargeAtUtc,
+  '2026-08-15T22:00:00Z'
+);
+expect('booking: the room it holds is the ribbon’s', store.roomOccurrences('vienna-presbyterian', 'music-room').length, 2);
+
+// ---- a page is the whole of its scope --------------------------------------
+//
+// Whatever the page did not carry, within the scope it speaks for, is gone —
+// which is how a request withdrawn on another device leaves this browser.
+
+store.mirrorApplications([dto({ status: 'pending' })], { scope: (a) => a.organizerId === NADIA.id });
+expect('scope: the page replaced the person’s whole inbox', store.guestApplications().length, 1);
+expect('scope: and it is the one the page carried', store.guestApplications()[0].id, APPLICATION_ID);
+expect('scope: the village fixture is untouched by it', store.venueApplications('grace-community-vienna').length, 4);
+
+store.forgetApplication(APPLICATION_ID);
+expect('forget: the request is gone', store.getApplication(APPLICATION_ID), null);
+expect('forget: and so is its thread', store.threadFor(APPLICATION_ID).length, 0);
+
+// ---- the venues steeple says this person manages ----------------------------
+
+store.mirrorManagedVenues([
+  {
+    id: '55555555-5555-5555-5555-555555555555',
+    name: 'Saint Bride Hall',
+    slug: 'saint-bride-hall',
+    description: 'A hall kept for the neighbourhood.',
+    addressLine: '10 Maple Avenue East',
+    suburb: 'Vienna',
+    postcode: '22180',
+    latitude: 38.9,
+    longitude: -77.26,
+    isIdentityVerified: true,
+    bookingMode: 'manual',
+    rooms: [
+      {
+        id: '66666666-6666-6666-6666-666666666666',
+        name: 'Long Room',
+        slug: 'long-room',
+        status: 'published',
+        publishRequestedAtUtc: null,
+        capacity: 40,
+        pricePerHour: 20,
+        currency: 'USD',
+        primaryPhotoUrl: null,
+        photoCount: 1,
+        updatedAtUtc: '2026-08-04T09:00:00Z',
+      },
+    ],
+  },
+]);
+const placed = store.placedVenues();
+expect('manage: the venue is held under steeple’s slug', placed.some((v) => v.id === 'saint-bride-hall'), true);
+expect(
+  'manage: with steeple’s id alongside',
+  placed.find((v) => v.id === 'saint-bride-hall')?.remoteId,
+  '55555555-5555-5555-5555-555555555555'
+);
+expect(
+  'manage: and the room’s status is steeple’s',
+  store.effectiveRoom('saint-bride-hall', 'long-room')?.status,
+  'published'
 );
 
-// ---- desk conflict seed: chess club vs chorale ------------------------------
-const chess = store.getApplication('app-chess-club');
-const chessConflicts = store.scheduleConflicts(chess.venueId, chess.roomId, chess);
-expect('seed: chess club collides with the chorale', chessConflicts.clashes.length, (n) => n >= 1);
-const esl = store.getApplication('app-esl-evenings');
-const eslConflicts = store.scheduleConflicts(esl.venueId, esl.roomId, esl);
-expect('seed: the conversation circle is clean', eslConflicts.clashes.length, 0);
-const eslApproved = store.approve(esl.id);
-expect('desk: approving the clean letter books it', eslApproved.ok, true);
-
-// ---- withdraw, hours, publish gate ------------------------------------------
-const withdrawable = store.submitApplication(goodDraft);
-store.withdraw(withdrawable.application.id);
-expect(
-  'withdraw: undecided → withdrawn',
-  store.getApplication(withdrawable.application.id).status,
-  APP_STATUS.withdrawn
-);
+// ---- hours and the publish gate, which the listing flow still keeps ---------
 
 expect(
   'hours: overlapping windows rejected',
@@ -267,50 +415,27 @@ expect(
   store.editRoom('oakton-baptist', 'renovation-annex', { status: 'published' }).ok,
   true
 );
-expect(
-  'publish: effective room reads published',
-  store.effectiveRoom('oakton-baptist', 'renovation-annex').status,
-  'published'
-);
-
-// ---- lantern signals --------------------------------------------------------
-const signals = store.venueSignals();
-expect('signals: Grace shows undecided letters', signals.get('grace-community-vienna').pending, (n) => n >= 1);
-
-store.resetDemo();
-expect('reset: seed restored', store.guestApplications().length, 5);
-expect('reset: guest id stable', store.guestApplications()[0].organizerId, GUEST_ID);
 
 // ---- one store per person (D6) ----------------------------------------------
-// The demo village is a fixture every namespace starts from; what a person did
-// is theirs. Signed out there is no inbox to read at all, and the key the
-// signed-in person filled is left exactly where it was.
-expect('identity: the store is keyed to the person', store.currentOrganizerId(), GUEST_ID);
-expect(
-  'identity: their key exists',
-  localStorage.getItem(`steeple-village-store:${GUEST_ID}`) !== null,
-  true
-);
 
-store.sendMessage(store.guestApplications()[0].id, 'guest', 'A line only Maria wrote.');
-const hersBefore = localStorage.getItem(`steeple-village-store:${GUEST_ID}`);
+store.mirrorApplication(dto());
+expect('identity: their key exists', localStorage.getItem(`steeple-village-store:${NADIA.id}`) !== null, true);
+const hersBefore = localStorage.getItem(`steeple-village-store:${NADIA.id}`);
 
 await session.signOut();
 expect('identity: signed out, the browser is nobody', store.currentOrganizerId(), 'anon');
 expect('identity: signed out, there is no inbox', store.guestApplications().length, 0);
 expect(
   'identity: signing out leaves their store where it was',
-  localStorage.getItem(`steeple-village-store:${GUEST_ID}`),
+  localStorage.getItem(`steeple-village-store:${NADIA.id}`),
   hersBefore
 );
-// Reading anything now opens the anonymous namespace: a fresh village with the
-// demo fixture in it and nothing anybody typed.
 store.venueApplications('grace-community-vienna');
 const anon = JSON.parse(localStorage.getItem('steeple-village-store:anon') ?? 'null');
 expect('identity: the anonymous namespace is its own', anon !== null, true);
 expect(
   'identity: and holds none of her correspondence',
-  anon.messages.some((m) => m.body === 'A line only Maria wrote.'),
+  anon.applications.some((a) => a.id === APPLICATION_ID),
   false
 );
 

@@ -2,21 +2,18 @@
 // own words; everything the host has said back; and whichever single decision
 // is genuinely the guest's to make right now.
 
+import * as wire from '../../data/correspondence.js';
 import {
   APP_STATUS,
   ORGANIZERS,
   UNDECIDED,
-  acceptCounter,
   bookingFor,
-  declineCounter,
   effectiveRoom,
   getApplication,
   occurrencesFor,
   openCounterFor,
-  sendMessage,
   threadFor,
   todayIso,
-  withdraw,
 } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { priceParts } from '../copy.js';
@@ -35,9 +32,41 @@ import {
 export function createLetterView({ announce, onBack, onBrowse }) {
   let applicationId = null;
   let confirming = null; // 'withdraw' | 'declineCounter' | null
+  // What steeple said when it last refused something here. It is not the
+  // store's, so it is held apart and cleared the moment anything is tried again.
+  let refusal = '';
+  let working = false;
+  let fetching = false;
 
   const body = el('article', { class: 'opened', tabindex: '-1' });
   const element = el('div', { class: 'guest__surface guest__surface--opened' }, [body]);
+
+  /**
+   * One move on this letter, at steeple.
+   *
+   * Nothing on the page changes before the answer arrives, and nothing changes
+   * at all if the answer is no: the mirror is written by the wire itself
+   * (data/correspondence.js), so a refusal leaves the letter exactly as it
+   * stands rather than as this browser hoped it would (D5).
+   */
+  async function move(work, said) {
+    if (working) return null;
+    working = true;
+    refusal = '';
+    render();
+    const answer = await work();
+    working = false;
+    if (!answer.ok) {
+      refusal = answer.problem;
+      render();
+      announce?.(answer.problem);
+      return null;
+    }
+    confirming = null;
+    render();
+    if (said) announce?.(said(answer.value));
+    return answer.value;
+  }
 
   const reply = el('textarea', {
     class: 'field__input field__input--note',
@@ -96,11 +125,31 @@ export function createLetterView({ announce, onBack, onBrowse }) {
     ]);
   }
 
-  // A request the service filed is signed by the person the service recorded;
-  // one this browser filed alone is signed by the organizer the store knows.
-  // Same two lines either way — nothing on the page announces which it was.
+  // Every name on a request comes with the request. The village's own scenery
+  // fills in what steeple has no field for — a short name, a suburb — and never
+  // the other way round.
   const nameOf = (app) => app.organizerName ?? ORGANIZERS[app.organizerId]?.name ?? '';
   const organizationOf = (app) => app.organizationName ?? ORGANIZERS[app.organizerId]?.org ?? '';
+  const roomNameOf = (app) => app.roomName ?? effectiveRoom(app.venueId, app.roomId)?.name ?? app.roomId;
+
+  /** The venue as this page prints it, with or without scenery to draw on. */
+  function venueOf(app) {
+    const scenery = getVenue(app.venueId);
+    if (scenery) return scenery;
+    const name = app.venueName ?? app.venueId;
+    return { name, shortName: name, suburb: '' };
+  }
+
+  /** The room as this page prints it. Price is scenery's when steeple has none. */
+  function roomOf(app) {
+    return (
+      effectiveRoom(app.venueId, app.roomId) ?? {
+        name: roomNameOf(app),
+        pricePerHour: null,
+        capacity: app.groupSize,
+      }
+    );
+  }
 
   function counterBlock(app, venue, counter) {
     const decline = el(
@@ -132,15 +181,16 @@ export function createLetterView({ announce, onBack, onBrowse }) {
           {
             type: 'button',
             class: 'pill',
-            onclick: () => {
-              const note = declineNote.value;
-              const result = declineCounter(app.id, note);
-              confirming = null;
-              announce?.(
-                result.ok
-                  ? `Your original time stands, and ${venue.shortName} has been told. The request is with the host again.`
-                  : 'That suggestion is no longer open.'
+            onclick: async () => {
+              const note = declineNote.value.trim();
+              const declined = await move(
+                () => wire.respondToCounter(app.id, false),
+                () =>
+                  `Your original time stands, and ${venue.shortName} has been told. The request is with the host again.`
               );
+              // The line back is a message on the same thread, sent after the
+              // decline lands — never instead of it.
+              if (declined && note) await move(() => wire.sendMessage(app.id, note), null);
             },
           },
           'Send that back'
@@ -172,20 +222,17 @@ export function createLetterView({ announce, onBack, onBrowse }) {
           {
             type: 'button',
             class: 'pill pill--primary',
-            onclick: () => {
-              const result = acceptCounter(app.id);
-              confirming = null;
-              announce?.(
-                result.ok
-                  ? `Accepted. ${effectiveRoom(app.venueId, app.roomId)?.name} is booked — ${plural(
-                      result.occurrences.length,
-                      'date',
-                      'dates'
-                    )} held.`
-                  : 'That time has since been taken. The host will need to suggest another.'
-              );
-              if (!result.ok) render();
-            },
+            onclick: () =>
+              move(
+                () => wire.respondToCounter(app.id, true),
+                (updated) => {
+                  const booking = bookingFor(updated.id);
+                  const dates = booking ? occurrencesFor(booking.id).length : 0;
+                  return `Accepted. ${roomNameOf(updated)} is booked${
+                    dates ? ` — ${plural(dates, 'date', 'dates')} held` : ''
+                  }.`;
+                }
+              ),
           },
           'Accept this time'
         ),
@@ -254,24 +301,26 @@ export function createLetterView({ announce, onBack, onBrowse }) {
       {
         type: 'button',
         class: `pill${asking ? ' pill--primary' : ''}`,
-        onclick: () => {
+        onclick: async () => {
           const text = reply.value.trim();
           if (!text) {
             announce?.('Write your answer first.');
             reply.focus();
             return;
           }
-          const result = sendMessage(app.id, 'guest', text);
-          if (!result.ok) {
-            announce?.('That note could not be sent.');
-            return;
-          }
-          reply.value = '';
-          announce?.(
-            asking
-              ? `Your answer has gone to ${venue.shortName}. The request is back with the host, waiting for a decision.`
-              : `Your note has gone to ${venue.shortName}.`
+          const sent = await move(
+            () => wire.sendMessage(app.id, text),
+            () =>
+              asking
+                ? `Your answer has gone to ${venue.shortName}. The request is back with the host, waiting for a decision.`
+                : `Your note has gone to ${venue.shortName}.`
           );
+          // Only a note steeple took is a note that has been sent, so the box is
+          // only emptied then — a failure leaves the words where they were typed.
+          if (sent) {
+            reply.value = '';
+            render();
+          }
         },
       },
       asking ? 'Send your answer' : 'Send this note'
@@ -318,11 +367,11 @@ export function createLetterView({ announce, onBack, onBrowse }) {
             {
               type: 'button',
               class: 'pill',
-              onclick: () => {
-                withdraw(app.id);
-                confirming = null;
-                announce?.('Withdrawn. The request is closed and the host has been told.');
-              },
+              onclick: () =>
+                move(
+                  () => wire.withdraw(app.id),
+                  () => 'Withdrawn. The request is closed and the host has been told.'
+                ),
             },
             'Yes, withdraw it'
           ),
@@ -352,15 +401,19 @@ export function createLetterView({ announce, onBack, onBrowse }) {
   function render() {
     const app = applicationId ? getApplication(applicationId) : null;
     if (!app) {
+      // A cold link arrives before the wire answers: say it is being fetched
+      // rather than that it does not exist, which is not yet known.
       replaceChildren(body, [
-        el('p', { class: 'prose', text: 'That request is not in your inbox.' }),
+        el('p', {
+          class: 'prose',
+          text: fetching ? 'Opening this request…' : (refusal || 'That request is not in your inbox.'),
+        }),
         el('button', { type: 'button', class: 'pill', onclick: () => onBack?.() }, 'Inbox'),
       ]);
       return;
     }
-    const venue = getVenue(app.venueId);
-    const room = effectiveRoom(app.venueId, app.roomId);
-    if (!venue || !room) return;
+    const venue = venueOf(app);
+    const room = roomOf(app);
     const counter = openCounterFor(app.id);
     const booking = app.status === APP_STATUS.approved ? bookingFor(app.id) : null;
 
@@ -369,6 +422,10 @@ export function createLetterView({ announce, onBack, onBrowse }) {
       el('p', { class: 'opened__state', text: statusNote(app, {
         occurrences: booking ? occurrencesFor(booking.id).length : 0,
       }) }),
+      // What steeple said the last time this page asked it for something. It
+      // stands above the request because it is about the request, not about a
+      // field in it.
+      refusal ? el('p', { class: 'opened__refusal', role: 'alert', text: refusal }) : null,
       particulars(app),
       counter && counterBlock(app, venue, counter),
       booking && occurrenceBlock(app),
@@ -376,13 +433,14 @@ export function createLetterView({ announce, onBack, onBrowse }) {
       threadBlock(app, venue),
       closingBlock(app, venue),
     ]);
+    if (working) for (const control of body.querySelectorAll('button')) control.disabled = true;
   }
 
   function spoken() {
     const app = applicationId ? getApplication(applicationId) : null;
     if (!app) return 'That request is not in your inbox.';
-    const venue = getVenue(app.venueId);
-    const room = effectiveRoom(app.venueId, app.roomId);
+    const venue = venueOf(app);
+    const room = roomOf(app);
     const counter = openCounterFor(app.id);
     const booking = bookingFor(app.id);
     const messages = threadFor(app.id);
@@ -407,11 +465,22 @@ export function createLetterView({ announce, onBack, onBrowse }) {
     open(id) {
       if (applicationId !== id) {
         confirming = null;
+        refusal = '';
         reply.value = '';
       }
       applicationId = id;
+      fetching = true;
       render();
-      return Boolean(getApplication(id));
+      // The thread lives behind the detail read, and only steeple has it. The
+      // mirror draws the page at once; this makes it true a moment later — and
+      // a cold link with nothing mirrored yet waits here rather than bouncing.
+      wire.openApplication(id).then((answer) => {
+        if (applicationId !== id) return;
+        fetching = false;
+        if (!answer.ok) refusal = answer.problem;
+        render();
+      });
+      return true;
     },
     render,
     spoken,

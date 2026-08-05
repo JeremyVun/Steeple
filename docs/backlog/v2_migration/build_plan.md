@@ -79,7 +79,32 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 
 ---
 
-## Phase 2 — Correspondence onto the wire (web) `[ ]`
+## Phase 2 — Correspondence onto the wire (web) `[x]` *(landed 2026-08-05)*
+
+> **Landed as specified**, against an API that grew payments and instant book the same day.
+> Notes for whoever reads this next:
+> (a) the wire for everything after a request is written is one new seam,
+> `src/data/correspondence.js`, and `store.js` is now strictly its mirror — one way in per
+> shape, no local status machine. Its failure vocabulary (`refused | offline | signedOut |
+> unavailable`) is what every surface says something calm about;
+> (b) **the 402 gate** (`payments.enabled` is on in dev) means no request can be sent without a
+> card on file, so the apply flow grew a deliberately-minimal mock-card step,
+> `src/ui/guest/payment.js` — brand + last4 only, and there is **no field a card number could
+> travel in**, here or at the API. Polishing that step is the payments-UI agent's;
+> (c) **instant venues** answer the submit with the booking (`status: approved` + `bookingId`),
+> so the send copy is mode-aware and `409 slot_taken` on submit files nothing at all;
+> (d) `?goto=` deep links from notification emails are implemented (`src/ui/deepLink.js`);
+> `/bookings/{id}` resolves through the booking to its application and opens that letter,
+> which is where this app renders a booking today;
+> (e) two bugs found by driving it: a panel that disabled its controls while waiting never
+> re-enabled them (`payment.js` **and** the pre-existing `sso.js`), and the apply flow could
+> only ever open rooms the bundled scenery knew — both fixed, the second is what makes a
+> production build able to file a request against a host-listed room;
+> (f) the demo fixture stays in dev builds as village scenery and is contained by
+> construction rather than by a flag (its letters are written under the seed's own ids; a real
+> account's id is a GUID; the desk is scoped to `GET /manage/venues`).
+> Live probe: `tools/correspondence-test.mjs`. Re-baselined: `store-test.mjs` (now the
+> mirror's fidelity suite), `account-test.mjs`, `world-test.mjs`.
 
 **Implements:** D4, D5. **Depends on:** P1 (identity is real).
 **Touches:** `data/api.js`, `data/store.js`, `ui/guest/{journal,letter,send,composer,

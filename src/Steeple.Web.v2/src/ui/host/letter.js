@@ -4,23 +4,19 @@
 // can do about it. Approve seals it and gets out of the way.
 
 import { state } from '../../core/bus.js';
+import * as wire from '../../data/correspondence.js';
 import {
   APP_STATUS,
   COUNTER_STATUS,
   DAY_LABELS,
   UNDECIDED,
-  approve,
-  askQuestion,
   bookingFor,
-  counterOffer,
   countersFor,
-  decline,
   effectiveRoom,
   getApplication,
   maskToDays,
   daysToMask,
   occurrencesFor,
-  sendMessage,
   threadFor,
   todayIso,
 } from '../../data/store.js';
@@ -86,6 +82,48 @@ export function createLetterPage({ announce, onBackToDesk }) {
   let mode = 'none'; // none | ask | decline | counter | clash
   let counter = null;
   let sealTimer = 0;
+  let working = false;
+
+  /**
+   * One decision, at steeple.
+   *
+   * A host's four moves are all writes on the same seam, and none of them is
+   * taken here: the answer that comes back is the application, and the mirror is
+   * written from it (data/correspondence.js). A refusal changes nothing on the
+   * page except the sentence explaining it — a desk that shows an approval the
+   * service refused is worse than one that shows nothing.
+   *
+   * @returns {Promise<object|null>} the application as steeple now holds it
+   */
+  async function move(work, { onRefusal = null } = {}) {
+    if (working) return null;
+    working = true;
+    setBusy(true);
+    const answer = await work();
+    working = false;
+    setBusy(false);
+    if (!answer.ok) {
+      if (onRefusal?.(answer)) return null;
+      announce?.(answer.problem);
+      sayRefusal(answer.problem);
+      return null;
+    }
+    return answer.value;
+  }
+
+  const setBusy = (on) => {
+    for (const control of element.querySelectorAll('button')) control.disabled = on;
+  };
+
+  /** A line from the service, printed where the decisions are. */
+  function sayRefusal(text) {
+    let slip = actions.querySelector('.letter__refusal');
+    if (!slip) {
+      slip = el('p', { class: 'letter__refusal', role: 'alert' });
+      actions.append(slip);
+    }
+    slip.textContent = text ?? '';
+  }
 
   // ── the week, redrawn whenever the counter draft moves ────────────────────
 
@@ -161,24 +199,17 @@ export function createLetterPage({ announce, onBackToDesk }) {
         type: 'button',
         class: 'pill pill--primary',
         dataset: { action: 'send-question' },
-        onclick: () => {
+        onclick: async () => {
           const body = box.value.trim();
           if (!body) {
             box.focus();
             announce?.('Write the question first.');
             return;
           }
-          const result =
-            application.status === APP_STATUS.pending
-              ? askQuestion(application.id, body)
-              : sendMessage(application.id, 'host', body);
-          if (!result.ok) {
-            announce?.('That question could not be sent.');
-            return;
-          }
-          announce?.(
-            `Question sent. The request now waits on ${organizerOf(application).name} and shows as question asked.`
-          );
+          const who = organizerOf(application).name;
+          const updated = await move(() => wire.ask(application.id, body));
+          if (!updated) return;
+          announce?.(`Question sent. The request now waits on ${who} and shows as question asked.`);
           show(application.id);
         },
       },
@@ -245,12 +276,11 @@ export function createLetterPage({ announce, onBackToDesk }) {
             type: 'button',
             class: 'pill pill--primary',
             dataset: { action: 'send-decline' },
-            onclick: () => {
-              const result = decline(application.id, box.value);
-              if (!result.ok) {
-                announce?.('That request can no longer be declined.');
-                return;
-              }
+            onclick: async () => {
+              const declined = await move(() =>
+                wire.decide(application.id, 'decline', box.value.trim() || null)
+              );
+              if (!declined) return;
               announce?.('Request declined, with your note. It is now answered.');
               onBackToDesk();
             },
@@ -279,18 +309,26 @@ export function createLetterPage({ announce, onBackToDesk }) {
         type: 'button',
         class: 'pill pill--primary',
         dataset: { action: 'send-counter' },
-        onclick: () => {
-          const result = counterOffer(application.id, counter, message.value);
-          if (!result.ok) {
-            note.textContent = result.errors?.schedule ?? 'That counter could not be offered.';
-            announce?.(note.textContent);
-            return;
-          }
-          announce?.(
-            `Counter-offer sent: ${scheduleLine(counter)}. The request waits with ${
-              organizerOf(application).name
-            } now.`
+        onclick: async () => {
+          const who = organizerOf(application).name;
+          const said = scheduleLine(counter);
+          const updated = await move(
+            () => wire.counterOffer(application.id, counter, message.value),
+            {
+              onRefusal: (answer) => {
+                // The route lives behind a flag at steeple. Off, it is simply
+                // not there — a feature this venue does not have, not a fault.
+                note.textContent =
+                  answer.reach === 'unavailable'
+                    ? 'Suggesting another time is not available here yet.'
+                    : answer.problem;
+                announce?.(note.textContent);
+                return true;
+              },
+            }
           );
+          if (!updated) return;
+          announce?.(`Counter-offer sent: ${said}. The request waits with ${who} now.`);
           show(application.id);
         },
       },
@@ -461,50 +499,6 @@ export function createLetterPage({ announce, onBackToDesk }) {
     announce?.('Counter-offer editor open. The ribbon follows what you change.');
   }
 
-  function showClash(clashes) {
-    mode = 'clash';
-    const dates = [...new Set(clashes.map((c) => c.date))].sort();
-    replaceChildren(drawer, [
-      el('h3', { class: 'eyebrow eyebrow--alert', text: 'Already taken' }),
-      el('p', {
-        class: 'prose prose--sm',
-        text: `${plural(dates.length, 'date is', 'dates are')} held by a booking this venue has already made, so this cannot be approved as it stands.`,
-      }),
-      el(
-        'ul',
-        { class: 'clashlist' },
-        clashes
-          .slice(0, 6)
-          .map((clash) =>
-            el('li', {
-              text: `${fmtDate(clash.date, true)} · ${fmtTimeRange(clash.start, clash.end)} is held`,
-            })
-          )
-      ),
-      dates.length > 6
-        ? el('p', { class: 'field__hint', text: `and ${dates.length - 6} more.` })
-        : null,
-      el('div', { class: 'drawer__foot' }, [
-        el(
-          'button',
-          {
-            type: 'button',
-            class: 'pill pill--primary',
-            dataset: { action: 'counter-instead' },
-            onclick: () => openCounter(),
-          },
-          'Offer another time'
-        ),
-        cancelButton('Look again'),
-      ]),
-    ]);
-    revealDrawer();
-    renderActions();
-    announce?.(
-      `This cannot be approved: ${plural(dates.length, 'date collides', 'dates collide')} with a booking already made. A counter-offer is the way through.`
-    );
-  }
-
   function cancelButton(label = 'Cancel') {
     return el(
       'button',
@@ -513,15 +507,54 @@ export function createLetterPage({ announce, onBackToDesk }) {
     );
   }
 
-  function onApprove() {
-    const result = approve(application.id);
-    if (!result.ok) {
-      if (result.clashes?.length) showClash(result.clashes);
-      else announce?.('That request can no longer be approved.');
-      return;
-    }
-    const dates = result.occurrences.map((o) => o.date);
-    sealed(dates);
+  async function onApprove() {
+    const id = application.id;
+    const approved = await move(() => wire.decide(id, 'approve'), {
+      onRefusal: (answer) => {
+        // The exclusion constraint fired: another group has those dates and the
+        // request was declined at steeple as it happened. That is a moment on
+        // this desk, not an error message.
+        if (answer.code === 'slot_taken') {
+          takenElsewhere();
+          return true;
+        }
+        return false;
+      },
+    });
+    if (!approved) return;
+    const booking = bookingFor(id);
+    sealed(booking ? occurrencesFor(booking.id).map((o) => o.date) : []);
+  }
+
+  /** Approving lost the race. Say what happened, and where it leaves things. */
+  function takenElsewhere() {
+    // The request is decided now — redraw the page as the declined thing it is,
+    // and then explain it, in that order.
+    show(application.id);
+    mode = 'clash';
+    replaceChildren(drawer, [
+      el('h3', { class: 'eyebrow eyebrow--alert', text: 'Already taken' }),
+      el('p', {
+        class: 'prose prose--sm',
+        text: 'Those dates went to another booking before this could be approved, so Steeple has declined this request. The group has been told.',
+      }),
+      el('div', { class: 'drawer__foot' }, [
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'pill pill--primary',
+            dataset: { action: 'back-to-desk' },
+            onclick: onBackToDesk,
+          },
+          'Back to requests'
+        ),
+      ]),
+    ]);
+    revealDrawer();
+    announce?.(
+      'Those dates were taken before this could be approved. Steeple has declined the request and told the group.'
+    );
   }
 
   function sealed(dates) {
@@ -724,9 +757,17 @@ export function createLetterPage({ announce, onBackToDesk }) {
 
   // ── show ──────────────────────────────────────────────────────────────────
 
-  function show(applicationId) {
+  function show(applicationId, { refresh = false } = {}) {
     application = getApplication(applicationId);
     if (!application) return false;
+    // The desk's list read carries no thread — only the detail read does. Asked
+    // once when the letter is opened, never on the redraws a decision causes.
+    if (refresh) {
+      wire.openApplication(applicationId).then((answer) => {
+        if (!answer.ok || application?.id !== applicationId) return;
+        show(applicationId);
+      });
+    }
     clearTimeout(sealTimer);
     element.classList.remove('is-sealed');
     mode = 'none';

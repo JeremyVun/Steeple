@@ -11,7 +11,7 @@ import {
 } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { el, replaceChildren } from '../dom.js';
-import { organizationFor, verifiedChip } from './sso.js';
+import { verifiedChip } from './sso.js';
 import {
   isYourMove,
   plural,
@@ -36,9 +36,13 @@ export function createJournal({ announce, onOpen, onBrowse }) {
     el('article', { class: 'journal' }, [head, body]),
   ]);
 
+  // The names on a request are the request's own — steeple sends them with it,
+  // and a venue this browser has never had in its scenery still reads properly.
+  const roomNameOf = (app) => app.roomName ?? effectiveRoom(app.venueId, app.roomId)?.name ?? app.roomId;
+  const venueNameOf = (app) => getVenue(app.venueId)?.shortName ?? app.venueName ?? app.venueId;
+
   function letterRow(app) {
     const venue = getVenue(app.venueId);
-    const room = effectiveRoom(app.venueId, app.roomId);
     const booking = app.status === 'approved' ? bookingFor(app.id) : null;
     const dates = booking ? occurrencesFor(booking.id).length : 0;
 
@@ -58,8 +62,11 @@ export function createJournal({ announce, onOpen, onBrowse }) {
             el('span', { text: statusLabel(app.status) }),
           ]),
           el('span', { class: 'jrow__space' }, [
-            el('span', { class: 'jrow__room', text: room?.name ?? app.roomId }),
-            el('span', { class: 'jrow__venue', text: `${venue?.shortName ?? app.venueId} · ${venue?.suburb ?? ''}` }),
+            el('span', { class: 'jrow__room', text: roomNameOf(app) }),
+            el('span', {
+              class: 'jrow__venue',
+              text: [venueNameOf(app), venue?.suburb].filter(Boolean).join(' · '),
+            }),
           ]),
           el('span', { class: 'jrow__when', text: scheduleLine(app) }),
           el('span', { class: 'jrow__note', text: statusNote(app, { occurrences: dates }) }),
@@ -79,11 +86,12 @@ export function createJournal({ announce, onOpen, onBrowse }) {
 
   function render() {
     const apps = guestApplications();
-    // Whose inbox this is is a fact about the session, not about a seeded
-    // persona: the line names whoever is signed in, and the trust chip is only
-    // earned by a session that exists.
+    // Whose inbox this is is a fact about the session: the line names whoever is
+    // signed in, and the trust chip is only earned by a session that exists.
+    // The group beside their name is the one they gave with a request, when they
+    // gave one — it belongs to the application, not to the account.
     const person = session.currentUser();
-    const org = organizationFor(person?.email);
+    const org = apps.find((a) => a.organizationName)?.organizationName ?? null;
     const needing = apps.filter((a) => isYourMove(a.status)).length;
 
     replaceChildren(head, [
@@ -143,9 +151,7 @@ export function createJournal({ announce, onOpen, onBrowse }) {
     const needing = apps.filter((a) => isYourMove(a.status));
     const lines = apps.map(
       (app) =>
-        `${effectiveRoom(app.venueId, app.roomId)?.name} at ${getVenue(app.venueId)?.shortName}: ${statusLabel(
-          app.status
-        ).toLowerCase()}, ${scheduleLine(app)}`
+        `${roomNameOf(app)} at ${venueNameOf(app)}: ${statusLabel(app.status).toLowerCase()}, ${scheduleLine(app)}`
     );
     return [
       `Inbox. ${plural(apps.length, 'request', 'requests')} in all,`,

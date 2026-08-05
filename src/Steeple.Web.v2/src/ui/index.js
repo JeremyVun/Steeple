@@ -17,6 +17,7 @@ import { getVenue } from '../data/venues.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
 import { createAccount } from './account.js';
+import { createDeepLink } from './deepLink.js';
 import { createNotice } from './notice.js';
 import { createSignInPanel } from './signIn.js';
 import { createAnnouncer } from './announcer.js';
@@ -54,7 +55,13 @@ export function createUI(_engine, _world) {
   const porch = el('div', { class: 'porch' });
   const discovery = createDiscovery({ announce: announcer.say });
   const guest = createGuestFlows({ announce: announcer.say, porch });
-  const host = createHostFlows({ announce: announcer.say, porch });
+  // Hosting is somebody's, so the switch has to be able to ask who. The panel
+  // itself is made below — this is called on a click, long after.
+  const host = createHostFlows({
+    announce: announcer.say,
+    porch,
+    askToSignIn: () => signIn.open(),
+  });
 
   // Last onto the shelf, so it sits at the end of the line where an account
   // belongs — a monogram when there is somebody to be, one quiet word when
@@ -200,6 +207,10 @@ export function createUI(_engine, _world) {
 
   render();
   announcer.view();
+
+  // Somebody arriving from a notification email. Read once, after the surfaces
+  // exist to be sent to (contracts/web.md — deep links).
+  createDeepLink({ notice, announce: announcer.say, signIn });
 
   return { element: root, announce: announcer.say };
 }

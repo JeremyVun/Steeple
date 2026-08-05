@@ -187,6 +187,25 @@ function profileFrom(venue) {
   };
 }
 
+/**
+ * The room's weekly open hours in the product's own window shape
+ * (`{day, start, end}`, Sunday = 0 — the .NET DayOfWeek convention the schema
+ * and the week card both count in). Null when the wire did not carry them,
+ * which is not the same as a room that keeps no hours.
+ */
+function openHoursFrom(detail) {
+  if (!Array.isArray(detail.openHours)) return null;
+  const windows = [];
+  for (const entry of detail.openHours) {
+    const day = DAYS.indexOf(String(entry.dayOfWeek ?? '').toLowerCase());
+    if (day < 0) continue;
+    for (const w of entry.windows ?? []) {
+      windows.push({ day, start: w.startTime.slice(0, 5), end: w.endTime.slice(0, 5) });
+    }
+  }
+  return windows.sort((a, b) => a.day - b.day || (a.start < b.start ? -1 : 1));
+}
+
 // RoomDetail does not repeat the summary fields — the venue block and photos[]
 // carry them instead — so the listing is assembled from both.
 function listingFrom(detail) {
@@ -198,6 +217,15 @@ function listingFrom(detail) {
 
   return {
     id: `${venue.slug}:${detail.roomSlug}`,
+    // steeple's own id for the room. The product navigates by slug pair, but
+    // every write and the availability feed are addressed by this, so it comes
+    // along rather than being fetched a second time at the commitment point.
+    roomId: detail.roomId,
+    // 'instant' | 'manual' — whether a request is the booking or an ask
+    // (docs/contracts/payments.md). Absent on the bundled seed, where the honest
+    // answer is that this browser does not know.
+    bookingMode: detail.bookingMode ?? null,
+    openHours: openHoursFrom(detail),
     venueSlug: venue.slug,
     roomSlug: detail.roomSlug,
     name: detail.roomName,
@@ -315,6 +343,37 @@ export async function getVenueProfile(venueSlug) {
     },
     () => bundled.getVenueProfile(venueSlug)
   );
+}
+
+/**
+ * A room's real free hours, day by day: open hours minus blackouts minus the
+ * bookings already confirmed. Addressed by steeple's room id (`listing.roomId`).
+ *
+ * There is deliberately no bundled fallback. An invented calendar is the one
+ * thing this surface must never hand a guest about to commit to a date, so a
+ * service that cannot answer answers null and the week card says so.
+ *
+ * @returns {Promise<{timezone:string,days:Array<{date:string,isBlackout:boolean,free:Array<{start:string,end:string}>}>}|null>}
+ */
+export async function getRoomAvailability(roomId, { from, to } = {}) {
+  if (!roomId) return null;
+  try {
+    const answer = await api.getRoomAvailability(roomId, { from, to });
+    if (!answer) return null;
+    return {
+      timezone: answer.timezone,
+      days: (answer.days ?? []).map((day) => ({
+        date: day.date,
+        isBlackout: day.isBlackout,
+        free: (day.freeWindows ?? []).map((w) => ({
+          start: w.startTime.slice(0, 5),
+          end: w.endTime.slice(0, 5),
+        })),
+      })),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** The Where segment's vocabulary. */

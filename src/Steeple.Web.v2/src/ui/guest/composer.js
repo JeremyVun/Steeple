@@ -13,14 +13,8 @@
 // first: you never lose a written request to a key you pressed to dismiss a
 // card.
 
-import {
-  blackoutsFor,
-  effectiveRoom,
-  scheduleConflicts,
-  todayIso,
-  addDays,
-  validateApplication,
-} from '../../data/store.js';
+import { getRoomAvailability, getListing } from '../../data/catalog.js';
+import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { priceParts } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
@@ -30,9 +24,13 @@ import {
   plural,
   scheduleSentence,
 } from './copy.js';
+import { createCardStep } from './payment.js';
 import { sendRequest } from './send.js';
 import { createIdentityStep } from './sso.js';
 import { createWeekCard } from './weekCard.js';
+
+/** How far ahead one availability read reaches. The feed allows up to 92 days. */
+const WEEKS_AHEAD = 6;
 
 const INTENT_LIMIT = 2000;
 const COUNT_FROM = 1600;
@@ -62,6 +60,14 @@ export function createComposer({ announce, onSent, onLeave }) {
   let attempted = false;
   const touched = new Set();
 
+  // What steeple says about this room, once it has been asked: its weekly open
+  // hours, the dates it is closed, and whether a request here books the space
+  // outright or asks the host for it.
+  let roomHours = null;
+  let closedDates = [];
+  let bookingMode = null;
+  let asked = new Set();
+
   const week = createWeekCard({
     announce,
     onChange: (schedule) => {
@@ -70,6 +76,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       renderWhen();
       renderFoot();
     },
+    onWeek: (start) => loadAvailability(start),
   });
 
   const identity = createIdentityStep({
@@ -79,6 +86,18 @@ export function createComposer({ announce, onSent, onLeave }) {
     onCancel: () => closeIdentity(),
   });
   identity.element.hidden = true;
+
+  // A card on file is the last thing steeple asks for, and only when it has to:
+  // the step opens on a 402 and gets out of the way again the moment it is done.
+  const card = createCardStep({
+    announce,
+    onSaved: () => {
+      closeCard();
+      dispatch();
+    },
+    onCancel: () => closeCard(),
+  });
+  card.element.hidden = true;
 
   // The way back, where a way back belongs: an arrow at the top left, before
   // anything the sheet asks for.
@@ -104,6 +123,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     columns,
     foot,
     identity.element,
+    card.element,
   ]);
   sheet.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -119,9 +139,11 @@ export function createComposer({ announce, onSent, onLeave }) {
 
   const isOpen = () => element.classList.contains('is-open');
   const signing = () => !identity.element.hidden;
+  const paying = () => !card.element.hidden;
 
   /** The one exit. One step deeper closes first; otherwise the room returns. */
   function leaveSheet() {
+    if (paying()) return closeCard();
     if (signing()) return closeIdentity();
     onLeave?.();
   }
@@ -280,6 +302,11 @@ export function createComposer({ announce, onSent, onLeave }) {
   const errors = el('div', { class: 'letter__errors', role: 'status' });
   const send = el('button', { type: 'submit', class: 'pill pill--primary pill--wide' }, 'Send request');
 
+  // A venue that books instantly is not being asked a question, so the button
+  // does not pretend it is. Until steeple has said which kind this is, the
+  // neutral wording stands (docs/contracts/payments.md — RoomDetail.bookingMode).
+  const sendLabel = () => (bookingMode === 'instant' ? 'Book this space' : 'Send request');
+
   // ── render ────────────────────────────────────────────────────────────────
 
   function renderCount() {
@@ -310,10 +337,94 @@ export function createComposer({ announce, onSent, onLeave }) {
     const key = JSON.stringify(draft);
     if (key !== cachedDraft) {
       cachedDraft = key;
-      cachedResult = validateApplication(draft);
+      // The room is handed in, because it may be one only the catalog knows —
+      // and the hours check only runs once steeple has said what the hours are.
+      // A browser that has not been told them refuses nothing on its own account.
+      cachedResult = validateApplication(draft, { windows: roomHours, room });
     }
     return cachedResult;
   }
+
+  // ── what steeple says about this room ─────────────────────────────────────
+
+  /**
+   * The room's own truth: steeple's id for it, its open hours, and whether a
+   * request here is the booking. Fetched once per opening of the sheet; until
+   * it lands the week card says it is reading rather than showing an empty week.
+   */
+  async function loadRoom(venueId, roomId) {
+    const listing = await getListing(venueId, roomId);
+    if (opened !== `${venueId}/${roomId}`) return;
+    if (!listing) {
+      if (!room) unreachable();
+      return;
+    }
+    // A room the village has no scenery for is still a room: everything the
+    // sheet prints about it is on the listing, so the sheet is built from that.
+    if (!room) {
+      venue = venueFrom(listing);
+      room = roomFrom(listing);
+      mount(venueId, roomId);
+    }
+    draft.remoteRoomId = listing.roomId ?? draft.remoteRoomId ?? null;
+    bookingMode = listing.bookingMode ?? null;
+    roomHours = listing.openHours ?? null;
+    week.setHours(roomHours);
+    cachedDraft = null;
+    week.render();
+    renderFoot();
+    if (draft.remoteRoomId) loadAvailability(week.weekStart());
+  }
+
+  /** The listing's own words, in the shapes this sheet has always printed. */
+  const roomFrom = (listing) => ({
+    id: listing.roomSlug,
+    name: listing.name,
+    description: listing.description,
+    capacity: listing.capacity,
+    pricePerHour: listing.pricePerHour,
+    houseRules: listing.houseRules ?? '',
+    activities: listing.activities ?? [],
+    amenities: listing.amenities ?? [],
+    accessibility: listing.accessibility ?? [],
+    status: 'published',
+  });
+
+  const venueFrom = (listing) => ({
+    id: listing.venueSlug,
+    name: listing.venueName,
+    shortName: listing.venueShortName ?? listing.venueName,
+    suburb: listing.suburb,
+  });
+
+  function unreachable() {
+    replaceChildren(head, []);
+    replaceChildren(columns, [
+      el('p', {
+        class: 'prose',
+        text: 'Steeple could not open this space just now. Try again in a moment.',
+      }),
+    ]);
+    replaceChildren(foot, []);
+  }
+
+  /** One week of real availability, and the five after it, asked once each. */
+  async function loadAvailability(from) {
+    const roomId = draft?.remoteRoomId;
+    if (!roomId || asked.has(from)) return;
+    asked.add(from);
+    const to = addDays(from, WEEKS_AHEAD * 7 - 1);
+    const answer = await getRoomAvailability(roomId, { from: laterOf(from), to });
+    if (!answer || !draft || draft.remoteRoomId !== roomId) return;
+    for (const day of answer.days) if (day.isBlackout) closedDates.push({ date: day.date, reason: null });
+    week.setAvailability(answer.days);
+    week.render();
+    renderSummary();
+  }
+
+  // The feed refuses a `from` in the past — a week already begun is asked for
+  // from today, which is all of it that can still be booked anyway.
+  const laterOf = (from) => (from < todayIso() ? todayIso() : from);
 
   function renderHead() {
     const { amount, unit, free } = priceParts(room);
@@ -471,7 +582,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       return;
     }
     summary.hidden = false;
-    const blackouts = blackoutsFor(draft.venueId, draft.roomId);
+    const blackouts = closedDates;
     const dates = occurrenceCount(draft, blackouts);
     const lines = [scheduleSentence(draft)];
     if (draft.frequency === 'weekly' && draft.endDate && dates) {
@@ -493,16 +604,14 @@ export function createComposer({ announce, onSent, onLeave }) {
       );
     });
     for (const b of skipped) {
-      notes.push(`${formatDate(b.date)} is set aside for the ${b.reason.toLowerCase()}, so that week is skipped.`);
+      notes.push(
+        b.reason
+          ? `${formatDate(b.date)} is set aside for the ${b.reason.toLowerCase()}, so that week is skipped.`
+          : `${formatDate(b.date)} is a closed day here, so that week is skipped.`
+      );
     }
-    if (validate().ok) {
-      const { clashes } = scheduleConflicts(draft.venueId, draft.roomId, draft);
-      if (clashes.length) {
-        notes.push(
-          `${plural(clashes.length, 'date is', 'dates are')} already held by another group — the host will see that when it reads your request.`
-        );
-      }
-    }
+    // Dates another group already holds are not listed twice: the week card
+    // draws them as held and will not let one be painted.
     scheduleNote.textContent = notes.join(' ');
   }
 
@@ -513,6 +622,7 @@ export function createComposer({ announce, onSent, onLeave }) {
 
   function renderFoot(problem) {
     if (problem !== undefined) refusal = problem ?? '';
+    if (!sending) send.textContent = sendLabel();
     const result = validate();
     intentNote.textContent = fieldError('intentText') ?? '';
     activityNote.textContent = fieldError('activityType') ?? '';
@@ -596,6 +706,23 @@ export function createComposer({ announce, onSent, onLeave }) {
     intent.focus();
   }
 
+  function openCard() {
+    identity.element.hidden = true;
+    card.reset();
+    card.element.hidden = false;
+    sheet.classList.add('is-signing');
+    columns.setAttribute('inert', '');
+    card.open();
+    card.focus();
+  }
+
+  function closeCard() {
+    card.element.hidden = true;
+    sheet.classList.remove('is-signing');
+    columns.removeAttribute('inert');
+    renderFoot();
+  }
+
   let sending = false;
 
   async function dispatch() {
@@ -610,7 +737,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     } finally {
       sending = false;
       send.disabled = false;
-      send.textContent = 'Send request';
+      send.textContent = sendLabel();
       identity.element.removeAttribute('inert');
     }
 
@@ -628,43 +755,96 @@ export function createComposer({ announce, onSent, onLeave }) {
         announce?.(result.problem);
         return;
       }
+      // steeple wants a way to pay before it will take a request. That is a
+      // step, not a refusal: it opens where the identity step stood, and the
+      // send picks up again by itself when the card is saved.
+      if (result.needsCard) {
+        openCard();
+        announce?.('A payment method is needed before this can be sent.');
+        return;
+      }
       closeIdentity();
       renderFoot(result.problem);
-      announce?.(`This request could not be sent. ${result.problem}`);
+      announce?.(
+        result.retake
+          ? result.problem
+          : `This request could not be sent. ${result.problem}`
+      );
+      // Nothing was filed anywhere. The written request is still here, exactly
+      // as it was, and the week card is the way to another time.
+      if (result.retake) week.element.querySelector('[data-day][tabindex="0"]')?.focus();
       return;
     }
     drafts.delete(`${draft.venueId}/${draft.roomId}`);
     identity.element.hidden = true;
+    card.element.hidden = true;
     sheet.classList.remove('is-signing');
     columns.removeAttribute('inert');
     sheet.classList.add('is-away');
+    // Instant venues answer the submit with the booking itself, so the sentence
+    // is what happened, not what is about to.
     announce?.(
-      `Your request is on its way to ${venue.shortName}. It is waiting in your inbox.`
+      result.instant
+        ? `Booked. ${room.name} at ${venue.shortName} is yours — it is in your inbox.`
+        : `Your request is on its way to ${venue.shortName}. It is waiting in your inbox.`
     );
     const settle = () => {
       sheet.classList.remove('is-away');
-      onSent?.(result.application);
+      onSent?.(result.application, { instant: result.instant });
     };
     setTimeout(settle, document.documentElement.classList.contains('reduced-motion') ? 60 : 900);
   }
 
   // ── opening ───────────────────────────────────────────────────────────────
 
+  /**
+   * Open the sheet on a space.
+   *
+   * The village's own scenery is a shortcut, not the source: a room it has never
+   * heard of — every room a host lists — is opened from the catalog a moment
+   * later, and the sheet says it is reading until then. Only ids it cannot use
+   * at all are refused (v2_migration D4).
+   */
   function open(venueId, roomId) {
-    venue = getVenue(venueId);
-    room = effectiveRoom(venueId, roomId);
-    if (!venue || !room) return false;
+    if (!venueId || !roomId) return false;
+    opened = `${venueId}/${roomId}`;
+    venue = getVenue(venueId) ?? null;
+    room = effectiveRoom(venueId, roomId) ?? null;
 
+    roomHours = null;
+    closedDates = [];
+    bookingMode = null;
+    asked = new Set();
+    identity.reset();
+    identity.element.hidden = true;
+    card.element.hidden = true;
+    sheet.classList.remove('is-signing', 'is-away');
+    columns.removeAttribute('inert');
+
+    if (room && venue) mount(venueId, roomId);
+    else waiting();
+    loadRoom(venueId, roomId);
+    return true;
+  }
+
+  /** Which space the sheet is open on, so a late answer for another is dropped. */
+  let opened = null;
+
+  function waiting() {
+    replaceChildren(head, []);
+    replaceChildren(columns, [el('p', { class: 'prose', text: 'Opening this space…' })]);
+    replaceChildren(foot, []);
+  }
+
+  /** Build the sheet, once there is a room to build it about. */
+  function mount(venueId, roomId) {
     const key = `${venueId}/${roomId}`;
     draft = drafts.get(key) ?? blankDraft(venueId, roomId, room);
     drafts.set(key, draft);
     attempted = false;
     touched.clear();
     cachedDraft = null;
-    identity.reset();
-    identity.element.hidden = true;
-    sheet.classList.remove('is-signing', 'is-away');
-    columns.removeAttribute('inert');
+    replaceChildren(columns, [noteCol, whenCol]);
 
     intent.value = draft.intentText;
     size.value = draft.groupSize;
@@ -685,10 +865,10 @@ export function createComposer({ announce, onSent, onLeave }) {
     renderCount();
     renderFoot(null);
     sheet.scrollTop = 0;
-    return true;
   }
 
   function spoken() {
+    if (!venue || !room) return 'Opening this space.';
     return [
       `Your request to ${venue.name} about ${room.name}, ${venue.suburb}.`,
       `Seats ${room.capacity}. Welcomes ${room.activities.join(', ')}.`,

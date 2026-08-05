@@ -417,13 +417,136 @@ export function submitApplication(roomId, body, { accessToken, idempotencyKey = 
 }
 
 /**
- * `GET /me/applications` — the organizer's own inbox, newest first. Here for
- * harnesses and for reconciling what the server holds against what this
- * browser remembers.
+ * `GET /me/applications` — the organizer's own inbox, newest first. This is the
+ * inbox: what the browser holds is a mirror of it, never a second record.
  * @returns {Promise<{items:object[],totalCount:number,page:number,pageSize:number}>}
  */
 export function getMyApplications(accessToken, { status = null, page = null, pageSize = null } = {}) {
   return get('/me/applications', { status, page, pageSize }, { accessToken });
+}
+
+/**
+ * `GET /manage/applications` — the provider's inbox. Somebody who manages no
+ * venue is answered with an empty page, not a refusal.
+ * @returns {Promise<{items:object[],totalCount:number,page:number,pageSize:number}>}
+ */
+export function getManagedApplications(accessToken, { status = null, page = null, pageSize = null } = {}) {
+  return get('/manage/applications', { status, page, pageSize }, { accessToken });
+}
+
+/**
+ * `GET /applications/{id}` — one application in full, thread included. Scoped to
+ * the two parties: anybody else is answered 404, with no existence leak.
+ * @returns {Promise<object>} ApplicationDto
+ */
+export function getApplication(applicationId, accessToken) {
+  return get(`/applications/${encodeURIComponent(applicationId)}`, null, { accessToken });
+}
+
+/**
+ * `POST /applications/{id}/messages` — a line on the ask/answer thread, from
+ * either party. A provider's message on a pending request moves it to
+ * `needsInfo`; the organizer's answer moves it back. The answer is the
+ * application as it now stands.
+ * @returns {Promise<object>} ApplicationDto
+ */
+export function postApplicationMessage(applicationId, body, { accessToken } = {}) {
+  return send('POST', `/applications/${encodeURIComponent(applicationId)}/messages`, { body }, { accessToken });
+}
+
+/**
+ * `POST /applications/{id}/decision` — the venue manager's answer. Approving is
+ * the booking transaction: `409 slot_taken` means the exclusion constraint
+ * fired and the request was auto-declined.
+ * @param {'approve'|'decline'} decision
+ * @returns {Promise<object>} ApplicationDto
+ */
+export function postDecision(applicationId, decision, message = null, { accessToken } = {}) {
+  return send(
+    'POST',
+    `/applications/${encodeURIComponent(applicationId)}/decision`,
+    { decision, message },
+    { accessToken }
+  );
+}
+
+/** `POST /applications/{id}/withdraw` — the organizer takes it back. */
+export function postWithdraw(applicationId, { accessToken } = {}) {
+  return send('POST', `/applications/${encodeURIComponent(applicationId)}/withdraw`, null, { accessToken });
+}
+
+/**
+ * `POST /applications/{id}/counter-offer` — the host proposes another time.
+ * Behind the `booking.counter_offers` flag server-side: with it off the route is
+ * not there, which callers read as "not available" rather than as a failure.
+ * @param {{schedule:WireSchedule, message?:string|null}} body
+ * @returns {Promise<object>} ApplicationDto
+ */
+export function postCounterOffer(applicationId, body, { accessToken } = {}) {
+  return send('POST', `/applications/${encodeURIComponent(applicationId)}/counter-offer`, body, { accessToken });
+}
+
+/**
+ * `POST /applications/{id}/counter-offer/respond` — the organizer's answer to
+ * it. Accepting is a booking transaction on the counter's schedule.
+ * @param {'accept'|'decline'} decision
+ * @returns {Promise<object>} ApplicationDto
+ */
+export function postCounterOfferResponse(applicationId, decision, { accessToken } = {}) {
+  return send(
+    'POST',
+    `/applications/${encodeURIComponent(applicationId)}/counter-offer/respond`,
+    { decision },
+    { accessToken }
+  );
+}
+
+// ─── bookings ────────────────────────────────────────────────────────────────
+
+/**
+ * `GET /bookings/{id}` — one booking with every occurrence. Party-scoped.
+ * @returns {Promise<object>} BookingDto
+ */
+export function getBooking(bookingId, accessToken) {
+  return get(`/bookings/${encodeURIComponent(bookingId)}`, null, { accessToken });
+}
+
+/** `GET /me/bookings` — the organizer's own bookings (occurrences omitted). */
+export function getMyBookings(accessToken, { status = null, page = null, pageSize = null } = {}) {
+  return get('/me/bookings', { status, page, pageSize }, { accessToken });
+}
+
+/** `GET /manage/bookings` — the venues' bookings; empty for non-managers. */
+export function getManagedBookings(accessToken, { status = null, page = null, pageSize = null } = {}) {
+  return get('/manage/bookings', { status, page, pageSize }, { accessToken });
+}
+
+// ─── payments: the method on file a request cannot be sent without ───────────
+//
+// No card number ever travels here. `setup` opens the intent, the mock confirm
+// records brand + last4 as display data, and at Stripe-time the same two fields
+// feed Elements while the mock confirm retires (docs/contracts/payments.md).
+
+/**
+ * `POST /me/payments/setup` → `{clientSecret, publishableKey, mock}`.
+ * `mock: true` says to render the mock card form rather than Stripe Elements.
+ */
+export function createPaymentSetup({ accessToken } = {}) {
+  return send('POST', '/me/payments/setup', null, { accessToken });
+}
+
+/**
+ * `POST /me/payments/setup/mock-confirm` — display data only. `last4` must be
+ * exactly four digits; anything else answers `400 invalid_payment`.
+ * @returns {Promise<{hasPaymentMethod:boolean,method:object|null,mock:boolean}>}
+ */
+export function confirmMockPaymentSetup({ clientSecret, brand, last4 }, { accessToken } = {}) {
+  return send('POST', '/me/payments/setup/mock-confirm', { clientSecret, brand, last4 }, { accessToken });
+}
+
+/** `GET /me/payments` — whether there is a method on file, and how it reads. */
+export function getMyPayments(accessToken) {
+  return get('/me/payments', null, { accessToken });
 }
 
 // ─── manage: the provider's own venues, rooms, hours and photos ──────────────

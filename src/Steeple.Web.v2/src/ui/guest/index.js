@@ -13,6 +13,7 @@
 // sheet itself opts back in. A closed surface must not swallow the village.
 
 import { bus, setView, state } from '../../core/bus.js';
+import { refreshMine } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { getApplication, guestApplications } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
@@ -41,10 +42,10 @@ export function createGuestFlows({ announce, porch } = {}) {
   const composer = createComposer({
     announce,
     onLeave: () => setView('room', { venueId: state.venueId, roomId: state.roomId }),
-    onSent: (application) => {
+    onSent: (application, { instant = false } = {}) => {
       // Out of the way: the world flies the envelope, the guest keeps their place.
       setView('room', { venueId: application.venueId, roomId: application.roomId });
-      showConfirmation(application);
+      showConfirmation(application, instant);
     },
   });
 
@@ -77,11 +78,19 @@ export function createGuestFlows({ announce, porch } = {}) {
   let confirmationTimer = null;
   let confirmationView = null;
 
-  function showConfirmation(application) {
+  function showConfirmation(application, instant = false) {
     confirmationView = state.view;
     const venue = getVenue(application.venueId);
+    const where = venue?.shortName ?? application.venueName ?? 'the venue';
     replaceChildren(confirmation, [
-      el('p', { class: 'sent__line', text: `Your request is on its way to ${venue.shortName}.` }),
+      // An instant venue answered the send with the booking itself. Saying it is
+      // "on its way" would be describing something that has already arrived.
+      el('p', {
+        class: 'sent__line',
+        text: instant
+          ? `Booked. ${application.roomName ?? 'The space'} at ${where} is yours.`
+          : `Your request is on its way to ${where}.`,
+      }),
       el(
         'button',
         {
@@ -251,7 +260,22 @@ export function createGuestFlows({ announce, porch } = {}) {
     { capture: true }
   );
 
-  bus.on('view:change', render);
+  // The inbox is steeple's, not this browser's: it is read whenever the person
+  // changes and whenever the inbox is opened, and the mirror is redrawn from
+  // whatever comes back (D4). Nothing polls; nothing waits for it either — the
+  // mirror draws immediately and the answer corrects it.
+  let reading = null;
+  function readInbox() {
+    if (!session.isSignedIn()) return;
+    reading ??= refreshMine().finally(() => {
+      reading = null;
+    });
+  }
+
+  bus.on('view:change', () => {
+    if (state.view === 'journal' || state.view === 'letter') readInbox();
+    render();
+  });
   bus.on('mode:change', render);
   // Who is signed in decides whether the inbox exists at all. Told, never
   // polled (data/session.js).
@@ -259,7 +283,8 @@ export function createGuestFlows({ announce, porch } = {}) {
   // Deliberately not the whole render: the request sheet asks for a name in the
   // middle of itself, and a full render re-opens the composer — which puts the
   // identity step away at the exact moment somebody has just used it.
-  session.onSessionChange(() => {
+  session.onSessionChange((held) => {
+    if (held) readInbox();
     renderTab();
     if (state.view === 'journal' || state.view === 'letter') render();
   });
@@ -271,14 +296,14 @@ export function createGuestFlows({ announce, porch } = {}) {
   });
   // A mutation rebuilds whichever surface is open. Rebuilding must not cost the
   // keyboard its place: what was focused is put back, or the page takes focus.
-  bus.on('store:change', ({ type }) => {
+  bus.on('store:change', () => {
     renderTab();
     if (state.mode !== 'guest') return;
     if (state.view === 'journal') {
       const openId = document.activeElement?.closest?.('.jrow')?.dataset.id;
       journal.render();
       if (openId) journal.element.querySelector(`.jrow[data-id="${openId}"]`)?.focus();
-    } else if (state.view === 'letter' && type !== 'submit') {
+    } else if (state.view === 'letter') {
       const held = letter.element.contains(document.activeElement);
       letter.render();
       if (held) letter.focusBody();
@@ -288,6 +313,9 @@ export function createGuestFlows({ announce, porch } = {}) {
   });
 
   render();
+  // A remembered session means there is already an inbox to be right about, so
+  // the badge is true from the first paint rather than from the first visit.
+  readInbox();
 
   return { element };
 }

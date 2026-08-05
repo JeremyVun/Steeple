@@ -12,7 +12,6 @@
 //     provider creates the account the first time it sees one.
 //   · a session   — the person, the chip, and one button that carries on.
 
-import { ORGANIZERS, PERSONA_IDS } from '../../data/store.js';
 import * as session from '../../data/session.js';
 import { VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
@@ -22,18 +21,24 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-// The people this village already knows, given the addresses the local API will
-// mint accounts for. The names and groups are the store's own, so a request
-// sent as one of them reads the same everywhere it appears afterwards.
-export const PERSONAS = Object.entries(PERSONA_IDS).map(([email, id]) => ({
-  id,
-  email,
-  ...ORGANIZERS[id],
-}));
+/**
+ * One-tap addresses for the local loop and the harnesses — a shortcut past
+ * typing, and nothing more. They are not identities and they are not a table
+ * the product reads: whoever signs in with one of them is the account steeple
+ * mints for that address, with steeple's own id and steeple's own name. The
+ * seeded-persona mapping that used to stand behind these died with D4.
+ *
+ * Dev builds only. Production sees provider buttons and the email form (D7).
+ */
+const DEV = import.meta.env?.DEV === true;
 
-/** The group a signed-in person belongs to, when this village knows of one. */
-export const organizationFor = (email) =>
-  PERSONAS.find((p) => p.email === String(email ?? '').toLowerCase())?.org ?? null;
+export const PERSONAS = DEV
+  ? [
+      { email: 'maria@demo.steeple.test', name: 'Maria Alvarez', org: 'Little Sparrows Playgroup' },
+      { email: 'daniel@demo.steeple.test', name: 'Daniel Okafor', org: 'Vienna Woods Chess Club' },
+      { email: 'priya@demo.steeple.test', name: 'Priya Raman', org: 'ESL Conversation Circle' },
+    ]
+  : [];
 
 function joinedText(iso) {
   if (!iso) return 'With Steeple';
@@ -99,7 +104,6 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
   // ── the person, once there is one ─────────────────────────────────────────
 
   function personCard(user) {
-    const org = organizationFor(user.email);
     return el('div', { class: 'identity__card' }, [
       el('span', {
         class: 'identity__initials',
@@ -108,7 +112,7 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
       }),
       el('div', {}, [
         el('p', { class: 'identity__name', text: user.displayName }),
-        el('p', { class: 'identity__org', text: org ?? user.email ?? '' }),
+        el('p', { class: 'identity__org', text: user.email ?? '' }),
         el('p', {
           class: 'identity__since',
           text: joinedText((user.createdAtUtc ?? '').slice(0, 7)),
@@ -227,7 +231,10 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
   // sign-in card taller than the request behind it. Which comes first is the
   // caller's to say — the organizers this village knows are the people asking
   // for a room, not the people who keep one.
-  let asking = say.start ?? 'people';
+  // With no one-tap addresses to offer — every build that is not a dev build —
+  // there is only one way in, and no switch between two.
+  const opensOn = () => (PERSONAS.length ? (say.start ?? 'people') : 'email');
+  let asking = opensOn();
 
   function swapTo(next) {
     asking = next;
@@ -294,11 +301,13 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
       }),
       note(),
       quietActions(
-        el(
-          'button',
-          { type: 'button', class: 'linkish', onclick: () => swapTo('people') },
-          'Choose from the list instead'
-        )
+        PERSONAS.length
+          ? el(
+              'button',
+              { type: 'button', class: 'linkish', onclick: () => swapTo('people') },
+              'Choose from the list instead'
+            )
+          : null
       ),
     ];
   }
@@ -310,7 +319,9 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
     element.classList.toggle('is-verified', Boolean(user));
     element.classList.toggle('is-signing', busy);
     replaceChildren(body, user ? signedIn(user) : signedOut().filter(Boolean));
-    if (busy) for (const control of body.querySelectorAll('button, input')) control.disabled = true;
+    // Set from the flag, never only to true: the sign-in form survives a redraw,
+    // so a field disabled while waiting stays disabled unless it is told back.
+    for (const control of body.querySelectorAll('button, input')) control.disabled = busy;
   }
 
   function focusFirst() {
@@ -339,7 +350,7 @@ export function createIdentityStep({ announce, onVerify, onCancel, words = {} })
     reset() {
       problem = '';
       busy = false;
-      asking = say.start ?? 'people';
+      asking = opensOn();
       render();
       // A session remembered from a previous visit may have gone stale while
       // the browser was closed. Ask before the guest commits to it rather than

@@ -92,7 +92,24 @@ export function scheduleSpoken(schedule) {
 
 // ── people and rooms ────────────────────────────────────────────────────────
 
+/**
+ * The person who asked, as the request itself names them.
+ *
+ * `verified` is a fact about the account steeple recorded the request against —
+ * every request on this desk came through a real session, which is what the
+ * chip has always meant. The village's own fixture stands in only for the
+ * seeded letters it wrote itself.
+ */
 export function organizerOf(application) {
+  if (application.organizerName) {
+    return {
+      name: application.organizerName,
+      org: application.organizationName ?? null,
+      verified: true,
+      joined: null,
+      hasPaymentMethod: application.hasPaymentMethod === true,
+    };
+  }
   return (
     ORGANIZERS[application.organizerId] ?? {
       name: 'An organizer',
@@ -120,21 +137,38 @@ export function scheduleOf(source) {
   };
 }
 
-/** Every venue a host can keep the doors of: the five, plus any they placed. */
+/**
+ * The venues this person actually keeps the doors of — steeple's answer to
+ * `GET /manage/venues`, mirrored into the store as placed venues, and nothing
+ * else. The desk used to offer all five seeded churches to anybody who pressed
+ * the switch; a desk you can open onto somebody else's venue is not a desk
+ * (v2_migration D4).
+ */
 export function deskVenues(placed = []) {
-  return [
-    ...VENUES.map((v) => ({ id: v.id, name: v.name, shortName: v.shortName, suburb: v.suburb })),
-    ...placed.map((v) => ({
+  return placed
+    .filter((v) => v.remoteId)
+    .map((v) => ({
       id: v.id,
       name: v.name,
-      shortName: v.shortName ?? v.name,
-      suburb: v.suburb ?? 'Placed by you',
-    })),
-  ];
+      shortName: v.shortName ?? getVenue(v.id)?.shortName ?? v.name,
+      suburb: v.suburb ?? '',
+    }));
 }
 
+/**
+ * One venue as the desk reads it. What steeple holds about a venue this person
+ * manages wins — its name, its address, whether it is verified — and the
+ * village's scenery fills in only what steeple has no field for.
+ */
 export function venueOf(venueId, placed = []) {
-  return getVenue(venueId) ?? placed.find((v) => v.id === venueId) ?? null;
+  const scenery = getVenue(venueId) ?? null;
+  const managed = placed.find((v) => v.id === venueId) ?? null;
+  if (!managed) return scenery;
+  return {
+    ...scenery,
+    ...managed,
+    shortName: managed.shortName ?? scenery?.shortName ?? managed.name,
+  };
 }
 
 export function roomsOf(venueId, placed = []) {
@@ -259,7 +293,9 @@ export function readSchedule(venueId, roomId, proposal) {
       }.`,
     });
   }
-  if (conflicts.outsideHours.length) {
+  // A room whose hours this browser has not been told is not a room that keeps
+  // none: with nothing to compare against, nothing is said about hours at all.
+  if (openHoursFor(venueId, roomId).length && conflicts.outsideHours.length) {
     notes.push({
       tone: 'hours',
       text: `The room is not open ${conflicts.outsideHours
