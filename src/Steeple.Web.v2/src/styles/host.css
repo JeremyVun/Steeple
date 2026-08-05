@@ -200,6 +200,12 @@
   gap: 9px;
 }
 
+/* The foot is a pair, but the layout switch belongs to one tab only — with it
+   gone the remaining button keeps its side rather than sliding to the middle. */
+.desk__foot > .pill:only-child {
+  margin-left: auto;
+}
+
 .segments--flat {
   padding: 2px;
   border-color: var(--line);
@@ -768,13 +774,16 @@
   border-top: 1px solid var(--line);
 }
 
-.settings__choices {
+/* Deliberately not `.choice` — the request sheet owns that name for its own
+   radios (styles/guest.css), and a shared class across two surfaces is how one
+   of them silently restyles the other. */
+.settings__modes {
   display: grid;
   gap: 9px;
   margin-top: 11px;
 }
 
-.choice {
+.mode {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: start;
@@ -787,31 +796,34 @@
   transition: border-color var(--dur) var(--ease);
 }
 
-.choice:hover {
+.mode:hover {
   border-color: var(--line-strong);
 }
 
-.choice.is-on {
+.mode.is-on {
   border-color: var(--sage);
   background: var(--sage-tint);
 }
 
-.choice__input {
+.mode__input {
+  appearance: auto;
+  width: 15px;
+  height: 15px;
   margin: 3px 0 0;
   accent-color: var(--sage-deep);
 }
 
-.choice__body {
+.mode__body {
   display: grid;
   gap: 3px;
 }
 
-.choice__label {
+.mode__label {
   font-size: 14px;
   color: var(--ink);
 }
 
-.choice__blurb {
+.mode__blurb {
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-soft);

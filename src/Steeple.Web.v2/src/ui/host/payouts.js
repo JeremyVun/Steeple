@@ -97,9 +97,25 @@ export function createPayoutScreen({ announce, onDone } = {}) {
     ];
   }
 
+  /**
+   * Before steeple has answered there is nothing to confirm — and finishing
+   * onboarding that has not begun answers `400 invalid_payment`, which would be
+   * this screen's own fault. So the way on does not exist until it can work.
+   */
+  function preparing() {
+    return [
+      el('p', { class: 'prose prose--sm', text: 'Opening this with Steeple…' }),
+      note(),
+      el('div', { class: 'payoutscreen__actions' }, [
+        el('button', { type: 'button', class: 'linkish', onclick: () => close() }, 'Not now'),
+      ]),
+    ];
+  }
+
   function render() {
     sheet.classList.toggle('is-working', busy);
-    replaceChildren(body, (state?.payoutsEnabled ? connected() : form()).filter(Boolean));
+    const shown = state?.payoutsEnabled ? connected() : state ? form() : preparing();
+    replaceChildren(body, shown.filter(Boolean));
     // Set from the flag, never only to true: the sheet survives a redraw, so a
     // control disabled while waiting stays disabled unless it is told back.
     for (const control of body.querySelectorAll('button, input')) control.disabled = busy;

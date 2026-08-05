@@ -452,12 +452,12 @@ export function createDesk({
       el('p', { class: 'eyebrow', text: 'How this venue takes bookings' }),
       el(
         'div',
-        { class: 'settings__choices' },
+        { class: 'settings__modes' },
         ['instant', 'manual'].map((option) =>
-          el('label', { class: `choice${mode === option ? ' is-on' : ''}` }, [
+          el('label', { class: `mode${mode === option ? ' is-on' : ''}` }, [
             el('input', {
               type: 'radio',
-              class: 'choice__input',
+              class: 'mode__input',
               name: 'booking-mode',
               value: option,
               checked: mode === option,
@@ -473,9 +473,9 @@ export function createDesk({
                 });
               },
             }),
-            el('span', { class: 'choice__body' }, [
-              el('span', { class: 'choice__label', text: MODE_WORDS[option].label }),
-              el('span', { class: 'choice__blurb', text: MODE_WORDS[option].blurb }),
+            el('span', { class: 'mode__body' }, [
+              el('span', { class: 'mode__label', text: MODE_WORDS[option].label }),
+              el('span', { class: 'mode__blurb', text: MODE_WORDS[option].blurb }),
             ]),
           ])
         )
@@ -622,7 +622,9 @@ export function createDesk({
 
   function renderFoot() {
     replaceChildren(foot, [
-      el('div', { class: 'desk__variant' }, [
+      // The layout switch sets the request pile in one of two hands and touches
+      // nothing else, so it is only offered where there is a request pile.
+      tab !== 'letters' ? null : el('div', { class: 'desk__variant' }, [
         el('span', { class: 'eyebrow', text: 'Layout' }),
         el('div', { class: 'segments segments--flat' }, [
           el(
@@ -654,7 +656,7 @@ export function createDesk({
         },
         'List a space'
       ),
-    ]);
+    ].filter(Boolean));
   }
 
   function render() {

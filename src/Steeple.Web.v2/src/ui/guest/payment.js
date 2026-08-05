@@ -47,10 +47,29 @@ const REPLACE_WORDS = {
 
 export { GATE_WORDS, REPLACE_WORDS };
 
+// Steeple stores a brand the way the gateway names it — `visa`, `mastercard`,
+// `amex` — and those are wire tokens, not words to print at somebody. Anything
+// unknown is title-cased rather than dropped: the set of card brands grows
+// without asking this file.
+const BRAND_LABEL = {
+  visa: 'Visa',
+  mastercard: 'Mastercard',
+  amex: 'American Express',
+  'american express': 'American Express',
+  discover: 'Discover',
+  diners: 'Diners Club',
+  jcb: 'JCB',
+  unionpay: 'UnionPay',
+};
+
+export const brandLabel = (brand) =>
+  BRAND_LABEL[String(brand ?? '').toLowerCase()] ??
+  String(brand ?? '').replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
+
 /** "Visa ···· 4242" — the whole of what Steeple knows about a card. */
 export function cardLine(method) {
   if (!method?.brand || !method?.last4) return null;
-  return `${method.brand} ···· ${method.last4}`;
+  return `${brandLabel(method.brand)} ···· ${method.last4}`;
 }
 
 export function createCardStep({ announce, onSaved, onCancel, words = GATE_WORDS } = {}) {

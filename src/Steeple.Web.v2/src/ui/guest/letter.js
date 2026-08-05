@@ -86,6 +86,13 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
   // ── pieces ────────────────────────────────────────────────────────────────
 
   function letterhead(app, venue, room) {
+    // A room this browser has no listing for has no price either, and "Free" is
+    // what `priceParts` says about a price it was not given. Free listings were
+    // removed in July: a missing figure now means unknown, never free, so the
+    // head prints nothing rather than the one word that would be a lie about
+    // money. What this booking actually costs is on the held block below, from
+    // the booking's own snapshot.
+    const priced = room.pricePerHour !== null && room.pricePerHour !== undefined;
     const { amount, unit, free } = priceParts(room);
     return el('header', { class: 'opened__head', dataset: { tone: statusTone(app.status) } }, [
       el('div', { class: 'opened__heading' }, [
@@ -95,7 +102,10 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
           '← Inbox'
         ),
         el('h1', { class: 'opened__title', text: room.name }),
-        el('p', { class: 'opened__from', text: `${venue.name} · ${venue.suburb}` }),
+        el('p', {
+          class: 'opened__from',
+          text: [venue.name, venue.suburb].filter(Boolean).join(' · '),
+        }),
       ]),
       el('div', { class: 'opened__stamp' }, [
         el('p', { class: 'opened__status' }, [
@@ -103,11 +113,13 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
           statusLabel(app.status),
         ]),
         el('p', { class: 'opened__sent', text: `Sent ${timeAgo(app.createdAt)}` }),
-        el('p', { class: `price price--sm${free ? ' price--free' : ''}` }, [
-          el('span', { class: 'price__amount', text: amount }),
-          unit && el('span', { class: 'price__unit', text: unit }),
-        ]),
-      ]),
+        priced
+          ? el('p', { class: `price price--sm${free ? ' price--free' : ''}` }, [
+              el('span', { class: 'price__amount', text: amount }),
+              unit && el('span', { class: 'price__unit', text: unit }),
+            ])
+          : null,
+      ].filter(Boolean)),
     ]);
   }
 

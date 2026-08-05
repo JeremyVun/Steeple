@@ -1590,15 +1590,17 @@
   padding: 0;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 2px 18px;
 }
 
+/* Date, hours, and — when steeple has charged for it — what happened to the
+   money, on a line of its own beneath rather than squeezed between them. */
 .held__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 0 10px;
   padding: 5px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--sage) 22%, transparent);
   font-size: 12.5px;
@@ -1687,6 +1689,8 @@
 }
 
 .held__charge {
+  grid-column: 1 / -1;
+  margin-top: 1px;
   font-size: 9.5px;
   font-weight: 650;
   letter-spacing: 0.1em;
