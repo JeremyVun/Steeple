@@ -900,6 +900,8 @@ public class ManageServiceTests
 
         public List<VenueVerificationRequest> VerificationRequests { get; } = [];
 
+        public List<IdempotencyRecord> IdempotencyRecords { get; } = [];
+
         public bool HasFutureConfirmedOccurrences { get; set; }
 
         public bool HasFutureConfirmedVenueOccurrences { get; set; }
@@ -927,10 +929,16 @@ public class ManageServiceTests
             return Task.FromResult(room);
         }
 
-        public Task AddVenueWithManagerAsync(Venue venue, Guid managerUserId, CancellationToken ct = default)
+        public Task<bool> AddVenueWithManagerAsync(
+            Venue venue, Guid managerUserId, IdempotencyRecord? idempotency = null, CancellationToken ct = default)
         {
+            if (!TrySpendKey(idempotency))
+            {
+                return Task.FromResult(false);
+            }
+
             Venues.Add(venue);
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task AddVenueVerificationRequestAsync(VenueVerificationRequest request, CancellationToken ct = default)
@@ -939,10 +947,37 @@ public class ManageServiceTests
             return Task.CompletedTask;
         }
 
-        public Task AddRoomAsync(Room room, CancellationToken ct = default)
+        public Task<bool> AddRoomAsync(Room room, IdempotencyRecord? idempotency = null, CancellationToken ct = default)
         {
+            if (!TrySpendKey(idempotency))
+            {
+                return Task.FromResult(false);
+            }
+
             Rooms.Add(room);
-            return Task.CompletedTask;
+            return Task.FromResult(true);
+        }
+
+        public Task<Guid?> FindIdempotentResourceIdAsync(Guid userId, string scope, Guid key, CancellationToken ct = default) =>
+            Task.FromResult(IdempotencyRecords
+                .FirstOrDefault(r => r.UserId == userId && r.Scope == scope && r.Key == key)?.ResourceId);
+
+        /// <summary>Stands in for the ledger's primary key: a key can only be spent once.</summary>
+        private bool TrySpendKey(IdempotencyRecord? idempotency)
+        {
+            if (idempotency is null)
+            {
+                return true;
+            }
+
+            if (IdempotencyRecords.Any(r =>
+                    r.UserId == idempotency.UserId && r.Scope == idempotency.Scope && r.Key == idempotency.Key))
+            {
+                return false;
+            }
+
+            IdempotencyRecords.Add(idempotency);
+            return true;
         }
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;

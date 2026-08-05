@@ -101,11 +101,11 @@ public class ManageServiceIntegrationTests
 
             var venueResult = await service.CreateVenueAsync(provider.Id, NewSaveVenueRequest());
             Assert.Null(venueResult.Error);
-            venueId = venueResult.Value!.Id;
+            venueId = venueResult.Value!.Resource.Id;
 
             var roomResult = await service.CreateRoomAsync(provider.Id, venueId, NewSaveRoomRequest());
             Assert.Null(roomResult.Error);
-            roomId = roomResult.Value!.Id;
+            roomId = roomResult.Value!.Resource.Id;
 
             // Publishing requires at least one photo — the gate is its own unit test; give this
             // flow a photo so it exercises the happy path.
@@ -154,7 +154,7 @@ public class ManageServiceIntegrationTests
             await seedDb.SaveChangesAsync();
 
             var result = await CreateService(seedDb).CreateVenueAsync(provider.Id, NewSaveVenueRequest());
-            venueId = result.Value!.Id;
+            venueId = result.Value!.Resource.Id;
         }
 
         var stranger = Guid.NewGuid();
@@ -189,7 +189,7 @@ public class ManageServiceIntegrationTests
         {
             var service = CreateService(db);
             var venueResult = await service.CreateVenueAsync(provider.Id, NewSaveVenueRequest("Verification Test Venue"));
-            venueId = venueResult.Value!.Id;
+            venueId = venueResult.Value!.Resource.Id;
 
             var result = await service.SubmitVenueVerificationAsync(provider.Id, venueId, NewVerificationRequest());
 

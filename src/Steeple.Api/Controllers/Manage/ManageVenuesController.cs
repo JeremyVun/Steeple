@@ -40,15 +40,24 @@ public sealed class ManageVenuesController : ControllerBase
         return result.Error is null ? Ok(result.Value) : this.ToManageProblem(result.Error);
     }
 
-    /// <summary>Creates a venue (geocoded + geofenced); the caller becomes its first manager.</summary>
+    /// <summary>
+    /// Creates a venue (geocoded + geofenced); the caller becomes its first manager. Replays with
+    /// the same <c>Idempotency-Key</c> return the original venue as <c>200</c>.
+    /// </summary>
     [HttpPost]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedVenueDetailDto>> Create([FromBody] SaveVenueRequest request, CancellationToken ct)
     {
-        var result = await _manage.CreateVenueAsync(User.GetUserId(), request, ct);
-        return result.Error is null
-            ? CreatedAtAction(nameof(GetDetail), new { id = result.Value!.Id }, result.Value)
-            : this.ToManageProblem(result.Error);
+        var result = await _manage.CreateVenueAsync(User.GetUserId(), request, Request.ReadIdempotencyKey(), ct);
+        if (result.Error is not null)
+        {
+            return this.ToManageProblem(result.Error);
+        }
+
+        var outcome = result.Value!;
+        return outcome.Created
+            ? CreatedAtAction(nameof(GetDetail), new { id = outcome.Resource.Id }, outcome.Resource)
+            : Ok(outcome.Resource);
     }
 
     /// <summary>Applies non-null fields; address changes re-geocode (geofenced).</summary>
@@ -70,18 +79,27 @@ public sealed class ManageVenuesController : ControllerBase
         return result.Error is null ? Ok(result.Value) : this.ToManageProblem(result.Error);
     }
 
-    /// <summary>Creates a room in Draft under a managed venue.</summary>
+    /// <summary>
+    /// Creates a room in Draft under a managed venue. Replays with the same
+    /// <c>Idempotency-Key</c> return the original room as <c>200</c>.
+    /// </summary>
     [HttpPost("{id:guid}/rooms")]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedRoomDto>> CreateRoom(Guid id, [FromBody] SaveRoomRequest request, CancellationToken ct)
     {
-        var result = await _manage.CreateRoomAsync(User.GetUserId(), id, request, ct);
-        return result.Error is null
+        var result = await _manage.CreateRoomAsync(User.GetUserId(), id, request, Request.ReadIdempotencyKey(), ct);
+        if (result.Error is not null)
+        {
+            return this.ToManageProblem(result.Error);
+        }
+
+        var outcome = result.Value!;
+        return outcome.Created
             ? CreatedAtAction(
                 nameof(ManageRoomsController.GetRoom),
                 "ManageRooms",
-                new { id = result.Value!.Id },
-                result.Value)
-            : this.ToManageProblem(result.Error);
+                new { id = outcome.Resource.Id },
+                outcome.Resource)
+            : Ok(outcome.Resource);
     }
 }

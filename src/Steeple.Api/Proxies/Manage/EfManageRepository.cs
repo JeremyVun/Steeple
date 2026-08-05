@@ -1,10 +1,18 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Steeple.Persistence.Queries;
 
 namespace Steeple.Api.Proxies.Manage;
-/// <summary>EF adapter for <see cref="IManageRepository"/>.</summary>
+/// <summary>
+/// EF adapter for <see cref="IManageRepository"/>. The one Postgres-specific translation lives
+/// here: the idempotency ledger's primary-key violation (SQLSTATE 23505) becomes a <c>false</c>
+/// return from the create methods, so a concurrent replay reads the original instead of erroring.
+/// </summary>
 public sealed class EfManageRepository : IManageRepository
 {
+    /// <summary>The idempotency ledger's composite primary key (016-idempotency.sql).</summary>
+    private const string IdempotencyPrimaryKey = "PK_idempotency_records";
+
     private readonly SteepleDbContext _db;
 
     /// <summary>Creates the repository over the scoped DbContext.</summary>
@@ -26,19 +34,23 @@ public sealed class EfManageRepository : IManageRepository
             .FirstOrDefaultAsync(r => r.Id == roomId, ct);
 
     /// <inheritdoc />
-    public async Task AddVenueWithManagerAsync(Venue venue, Guid managerUserId, CancellationToken ct = default)
+    public async Task<bool> AddVenueWithManagerAsync(
+        Venue venue, Guid managerUserId, IdempotencyRecord? idempotency = null, CancellationToken ct = default)
     {
-        _db.Venues.Add(venue);
-        _db.VenueManagers.Add(new VenueManager
+        var manager = new VenueManager
         {
             Id = Guid.NewGuid(),
             VenueId = venue.Id,
             UserId = managerUserId,
             CreatedAtUtc = venue.CreatedAtUtc,
-        });
+        };
 
-        // One SaveChanges = one transaction: a venue never exists without its first manager.
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        _db.Venues.Add(venue);
+        _db.VenueManagers.Add(manager);
+
+        // One SaveChanges = one transaction: a venue never exists without its first manager,
+        // and never without the idempotency key that bought it.
+        return await TrySaveWithIdempotencyAsync(idempotency, ct, venue, manager).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -49,10 +61,61 @@ public sealed class EfManageRepository : IManageRepository
     }
 
     /// <inheritdoc />
-    public async Task AddRoomAsync(Room room, CancellationToken ct = default)
+    public async Task<bool> AddRoomAsync(Room room, IdempotencyRecord? idempotency = null, CancellationToken ct = default)
     {
         _db.Rooms.Add(room);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return await TrySaveWithIdempotencyAsync(idempotency, ct, room).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid?> FindIdempotentResourceIdAsync(
+        Guid userId, string scope, Guid key, CancellationToken ct = default)
+    {
+        var record = await _db.IdempotencyRecords
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.Scope == scope && r.Key == key, ct)
+            .ConfigureAwait(false);
+
+        return record?.ResourceId;
+    }
+
+    /// <summary>
+    /// Commits the already-tracked <paramref name="added"/> entities together with the key that
+    /// bought them. Returns false — having written nothing — when the key was spent concurrently.
+    /// </summary>
+    private async Task<bool> TrySaveWithIdempotencyAsync(
+        IdempotencyRecord? idempotency, CancellationToken ct, params object[] added)
+    {
+        if (idempotency is not null)
+        {
+            _db.IdempotencyRecords.Add(idempotency);
+        }
+
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        // Named constraint, not just the SQLSTATE: a slug collision is also a 23505 and must
+        // keep surfacing as the error it is rather than masquerading as a replay.
+        catch (DbUpdateException ex) when (idempotency is not null
+            && ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: IdempotencyPrimaryKey,
+            })
+        {
+            // A concurrent request with the same key committed first, so this whole transaction
+            // rolled back. Detach the stillborn entities so nothing retries the insert later in
+            // the request scope; the caller resolves the winner's resource instead.
+            foreach (var entity in added)
+            {
+                _db.Entry(entity).State = EntityState.Detached;
+            }
+
+            _db.Entry(idempotency!).State = EntityState.Detached;
+            return false;
+        }
     }
 
     /// <inheritdoc />

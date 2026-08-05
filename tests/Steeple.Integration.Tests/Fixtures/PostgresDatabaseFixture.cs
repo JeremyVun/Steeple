@@ -43,7 +43,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
                      "007-venue-verification.sql", "008-ratings.sql", "009-availability.sql",
                      "010-require-price.sql", "011-applicant-identity.sql",
                      "012-room-photo-curation.sql", "013-booking-modes.sql", "014-payments.sql",
-                     "015-reminders.sql",
+                     "015-reminders.sql", "016-idempotency.sql",
                  })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(changelogDir, file));

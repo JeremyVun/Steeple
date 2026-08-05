@@ -104,7 +104,7 @@ public class SingleGateModerationIntegrationTests
         {
             var service = CreateService(db);
             var created = await service.CreateRoomAsync(host.Id, venueId, NewSaveRoomRequest("Quiet Room"));
-            secondRoomId = created.Value!.Id;
+            secondRoomId = created.Value!.Resource.Id;
             await AddPhotoAsync(db, secondRoomId);
 
             var published = await service.UpdateRoomAsync(host.Id, secondRoomId, NewSaveRoomRequest("Quiet Room", status: "published"));
@@ -136,8 +136,8 @@ public class SingleGateModerationIntegrationTests
         await using (var db = CreateContext())
         {
             var service = CreateService(db);
-            secondVenueId = (await service.CreateVenueAsync(host.Id, NewSaveVenueRequest("Cedar Lane Annex"))).Value!.Id;
-            roomId = (await service.CreateRoomAsync(host.Id, secondVenueId, NewSaveRoomRequest("Annex Room"))).Value!.Id;
+            secondVenueId = (await service.CreateVenueAsync(host.Id, NewSaveVenueRequest("Cedar Lane Annex"))).Value!.Resource.Id;
+            roomId = (await service.CreateRoomAsync(host.Id, secondVenueId, NewSaveRoomRequest("Annex Room"))).Value!.Resource.Id;
             await AddPhotoAsync(db, roomId);
             Assert.Null((await service.UpdateRoomAsync(host.Id, roomId, NewSaveRoomRequest("Annex Room", status: "published"))).Error);
         }
@@ -292,13 +292,13 @@ public class SingleGateModerationIntegrationTests
 
         var venue = await service.CreateVenueAsync(hostId, NewSaveVenueRequest(venueName));
         Assert.Null(venue.Error);
-        var room = await service.CreateRoomAsync(hostId, venue.Value!.Id, NewSaveRoomRequest(roomName));
+        var room = await service.CreateRoomAsync(hostId, venue.Value!.Resource.Id, NewSaveRoomRequest(roomName));
         Assert.Null(room.Error);
-        await AddPhotoAsync(db, room.Value!.Id);
+        await AddPhotoAsync(db, room.Value!.Resource.Id);
 
-        var published = await service.UpdateRoomAsync(hostId, room.Value.Id, NewSaveRoomRequest(roomName, status: "published"));
+        var published = await service.UpdateRoomAsync(hostId, room.Value.Resource.Id, NewSaveRoomRequest(roomName, status: "published"));
         Assert.Null(published.Error);
-        return (venue.Value.Id, room.Value.Id);
+        return (venue.Value.Resource.Id, room.Value.Resource.Id);
     }
 
     private static async Task AddPhotoAsync(SteepleDbContext db, Guid roomId)

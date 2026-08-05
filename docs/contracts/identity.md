@@ -44,4 +44,5 @@ verified email already belongs to an account on the other provider — no auto-l
 
 > Deviation note: `Idempotency-Key` (`conventions.md` §2) is not yet honored on
 > `auth/sessions` — a replayed sign-in just issues another session, which is harmless. It is
-> real on `applications`, where replays would create duplicate rows.
+> real on `applications` and on the two manage creates (`manage.md`), where replays would
+> create duplicate rows.
