@@ -15,9 +15,8 @@ Agents: start with [`CLAUDE.md`](CLAUDE.md).
 
 ## Stack
 
-.NET 10 (ASP.NET Core MVC) · HTMX + Leaflet (no SPA) · PostgreSQL 18 (schema owned by
-Liquibase) · EF Core (database-first) · Flutter mobile app planned (`/mobile`) ·
-self-hosted, no lock-in.
+.NET 10 API · Vite + vanilla JS + Leaflet SPA · HTMX admin · PostgreSQL 18 (schema
+owned by Liquibase) · EF Core (database-first) · Flutter mobile · self-hosted, no lock-in.
 
 ## Prerequisites
 
@@ -35,7 +34,7 @@ docker compose up -d --build
 # Or the local dev loop (hot reload):
 docker compose up -d postgres migrate      # provision + seed the DB
 dotnet run --project src/Steeple.Api     # http://localhost:5200
-dotnet run --project src/Steeple.Web.v1     # http://localhost:5187 (calls the API via Api:BaseUrl)
+npm run dev --prefix src/Steeple.Web.v2  # http://localhost:5173 (proxies /api to :5200)
 dotnet run --project src/Steeple.Admin   # http://localhost:5198
 ```
 
@@ -45,22 +44,22 @@ Postgres binds to `127.0.0.1:5433` for the local dev loop. Compose containers ru
 
 | Service | Host URL | Notes |
 |---|---|---|
-| Web | http://localhost:8080 | funnel (compose) / :5187 (`dotnet run`) |
+| Web | http://localhost:8080 | SPA (compose) / :5173 (Vite) |
 | Admin | http://localhost:8082/admin | operator console (authelia-gated in deployed env) |
 | API | _internal_ `http://api:8080` | :5200 via `dotnet run` |
 | Postgres | 127.0.0.1:5433 | container port 5432 |
 
 ### What you get
 
-The current slice is the **read-only discovery funnel**: geo-fenced map search + filters +
-shareable listing pages, seeded with 5 Northern-Virginia churches / 10 rooms around Vienna.
+The web app is a map-first discovery and booking surface, seeded with Northern Virginia
+venues and connected to the API for catalog, identity, applications, and host management.
 
 | URL | What |
 |---|---|
 | `/` | Map + filterable listing grid |
-| `/space/{venue}/{room}` | Shareable listing detail page |
-| `/listings/{id}` | 301 → canonical slug URL |
-| `/robots.txt`, `/sitemap.xml` | SEO |
+| `#/venue/{venueId}` | Venue panel |
+| `#/room/{venueId}/{roomId}` | Room detail |
+| `#/apply/{venueId}/{roomId}` | Application flow |
 
 ## Database — Liquibase owns the schema
 
@@ -73,7 +72,8 @@ entity configurations are kept in sync with the SQL by hand.
   **and** update the matching EF config — see the recipe in [`CLAUDE.md`](CLAUDE.md).
 - Connection string key **`ConnectionStrings:SteepleDb`** — dev in each app's
   `appsettings.Development.json` (localhost:5433); Docker via env
-  `ConnectionStrings__SteepleDb`. Web has **no DB** — it gets `Api:BaseUrl` instead.
+  `ConnectionStrings__SteepleDb`. Web has **no DB**; its nginx/Vite host proxies
+  same-origin `/api` requests to the API.
 - Reset local data: `docker compose down -v && docker compose up -d`
 
 ## Project structure
@@ -83,7 +83,8 @@ docs/                      product + design docs (PRD, system design, roadmap, m
 db/changelog/              Liquibase changelog — owns schema + seed
 src/Steeple.Persistence  domain entities, value objects, enums, DbContext, EF configs
 src/Steeple.Api          the one JSON API (web + mobile): Contracts/Controllers/Services/Proxies
-src/Steeple.Web.v1          MVC + HTMX + Leaflet funnel — no DB, no shared server assembly
+src/Steeple.Web.v2        Vite + vanilla JS + Leaflet SPA; nginx host in containers
+src/Steeple.Web.v1        deprecated MVC + HTMX implementation; excluded from active builds
 src/Steeple.Admin        HTMX operator dashboard — reads Postgres via Persistence
 tests/                     xUnit unit tests + Testcontainers integration tests
 mobile/                    Flutter app (planned — docs/MOBILE_DESIGN.md)
@@ -102,7 +103,7 @@ dotnet test          # unit + integration (integration tests spin Postgres via T
 ## Notes
 
 - EF stack pinned to **10.0.4** (Npgsql provider constraint) — don't bump EF above it.
-- Views hot-reload in Development; C# changes need rebuild/restart.
+- Vite hot-reloads the web app in development; server-side C# changes need restart.
 - What's next (ratings & reputation, launch hardening, payments) lives in
   [`docs/backlog/`](docs/backlog/); as-built state is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - Feature flags, admin edge-auth (authelia), and the Loki/Grafana telemetry stack are

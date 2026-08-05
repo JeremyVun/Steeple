@@ -7,7 +7,8 @@
 
 | Doc | Owns |
 |---|---|
-| `phase-6-reputation-and-launch.md` | Ratings & reviews, provider responsiveness, one-tap rebook, expiry tuning, SEO completion, beachhead swap + the full launch/ops checklist. **Exit = public launch** |
+| `v2_migration/` | **ACTIVE — this is the current build priority.** Web v2 prototype → production: `design.md` holds the adopted decisions **D1–D9** (2026-08-05), `build_plan.md` the six execution phases. Covers production SSO/Turnstile/agreements, correspondence onto the real API, the single-gate moderation model + Admin reduction, manage-create idempotency, and SPA hardening/SEO honesty |
+| `phase-6-reputation-and-launch.md` | Ratings & reviews, provider responsiveness, one-tap rebook, expiry tuning, SEO completion, beachhead swap + the full launch/ops checklist. **Exit = public launch.** Still the launch gate — but its *web* items (production SSO, moving web v2 off its demo store, SEO on a client-rendered surface) are **superseded in mechanism** by `v2_migration/`, which owns them; phase 6 just checks they're done |
 | `phase-7-growth-seams.md` | Trigger-gated growth items: verified badges (delegated identity verification), vouching, Area #2, phone OTP step-up, insurance/safeguarding research — plus the small-deferred-items index |
 | `payments.md` | The standalone payments design: Stripe Connect (inbound + outbound), per-occurrence charging for recurring bookings, refund & cancellation policy. Build gated on the Phase 7 paid-bookings trigger |
 

@@ -2,6 +2,9 @@
 **/bin/
 **/obj/
 **/out/
+**/node_modules/
+**/dist/
+**/dist-flat/
 
 # VCS & editor/tooling
 .git/

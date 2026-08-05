@@ -22,9 +22,9 @@ rebooking). Nothing authenticated is app-exclusive by design — only by phasing
 
 | Surface | Tech | Role |
 |---|---|---|
-| **Steeple.Web** | ASP.NET MVC + HTMX + Leaflet | Discovery + SEO + share links; organizer apply/inbox; provider manage area (web-first) |
+| **Steeple.Web.v2** | Vite + vanilla JS + Leaflet SPA (Three.js splash), served by nginx (same-origin `/api` proxy) | Discovery + share links; organizer apply/inbox; provider manage area (web-first). Replaced the `Web.v1` ASP.NET MVC + HTMX cookie-BFF, now deprecated and reference-only (2026-08-05) |
 | **Mobile app** (`/mobile`) | Flutter (iOS first, Android close behind) | Recurring-user home: browse, apply, inbox, push, rebook |
-| **Steeple.Admin** | ASP.NET MVC + HTMX | Operator console: concierge onboarding, moderation, analytics |
+| **Steeple.Admin** | ASP.NET MVC + HTMX | Operator console. Target shape: first-listing review queue, venue-manager linking, rating hide/unhide — nothing else (users/analytics/flags panels and the fake login/MFA screens are deleted; adopted 2026-08-05 — build: `docs/backlog/v2_migration/`) |
 | **Steeple.Api** | ASP.NET Core, JSON | The one backend all clients speak to |
 
 ## 2. Design principles
@@ -56,9 +56,10 @@ rebooking). Nothing authenticated is app-exclusive by design — only by phasing
         ┌───────────┬─────┴────────┬──────────────┬───────────────┐
         ▼           ▼              ▼              ▼               ▼
    Steeple.Web  Steeple.Api   Steeple.Admin   flags svc      Grafana/Loki
-   (BFF for     (one JSON     (operator       (deployed      (deployed infra,
-    browser;     API, /api/v1) console)        infra, SSE)     reads app stdout
-    no DB)          │              │              ▲               via Promtail)
+   (v2 SPA on   (one JSON     (operator       (deployed      (deployed infra,
+    nginx; /api  API, /api/v1) console)        infra, SSE)     reads app stdout
+    proxied;        │              │              ▲               via Promtail)
+    no DB)          │              │              │
         │           │              │              │ SDK (SSE + local eval)
         └─ HTTP ────┤              │              │
                     ▼              ▼              │
@@ -121,9 +122,17 @@ addition in this reputation area: response-rate stats (full design:
 ## 6. Identity & auth
 
 Built (see ARCHITECTURE): server-side ID-token verification (Google/Apple JWKS), the
-API's own access+refresh tokens with rotating families, the Web BFF encrypted-cookie
-pattern, Turnstile + rate limits, account deletion. One `users` table for organizers and
-providers — no role wall. Target-state points that remain:
+API's own access+refresh tokens with rotating families, Turnstile + rate limits, account
+deletion. One `users` table for organizers and providers — no role wall.
+
+**Web holds the token pair directly.** The encrypted-cookie BFF was `Web.v1`'s pattern and
+retired with it; `Web.v2` is a static SPA that keeps the access+refresh pair in
+localStorage behind `src/data/session.js` (single-flight rotation, 401-retry-once) and
+calls the API same-origin through nginx. The trade is explicit: no server-side session to
+hide tokens in, so a **real CSP** (plus `X-Frame-Options`/`Referrer-Policy`) is what makes
+localStorage storage acceptable — specced in `docs/backlog/v2_migration/` (D9), not yet
+shipped. Refresh-token rotation with family-wide reuse revocation is unchanged and remains
+the containment for a stolen token. Target-state points that remain:
 
 - **Mobile (Phase 4):** native Google/Apple sign-in → ID token (with nonce) →
   `POST /api/v1/auth/sessions` → tokens in Keychain/Keystore; a dio interceptor refreshes
@@ -133,7 +142,9 @@ providers — no role wall. Target-state points that remain:
 - **Abuse step-ups** (phone OTP via `ISmsOtpSender`) only when abuse metrics demand (§16).
 - **Admin:** stays a separate surface behind **authelia at the edge**; in-app it trusts
   the forwarded `Remote-User` header for audit attribution and never gets consumer SSO.
-  Defense-in-depth (local ASP.NET Identity + TOTP) stays on the backlog.
+  Defence-in-depth via local ASP.NET Identity + TOTP is **dropped** (2026-08-05, §17):
+  authelia *is* the auth story, and the non-functional login/MFA screens are being deleted
+  rather than finished.
 
 ## 7. Applications & bookings flow
 
@@ -180,12 +191,15 @@ Consume the deployed flags service through `Steeple.FlagsSdk`: SSE subscribe to
 config-backed `IFeatureFlags` with the same key names (§17). Naming
 `<surface|domain>.<feature>` (e.g. `web.apply_from_browser`, `trust.phone_otp_stepup`).
 Every risky new surface ships behind a flag; mobile evaluates via the `GET /api/v1/flags`
-proxy (the app never talks to the flags service directly). Admin's flag screen becomes a
-client of the flags service (replacing the in-memory mock).
+proxy (the app never talks to the flags service directly). Flags have no Admin screen —
+the mock panel is deleted (2026-08-05, §17); the flags service owns its own console.
 
 ## 12. Analytics & observability
 
-Built pipeline: client batchers (web JS still server-side via `IWebAnalytics`, Flutter directly)
+Built pipeline: client batchers (Flutter directly; **web is currently a gap** — the
+server-side `IWebAnalytics` emitter belonged to the retired `Web.v1` BFF and web v2 posts
+no events at all today, so the web funnel is un-instrumented against the PRD commitment
+until a client batcher lands — see `phase-7-growth-seams.md` deferred items)
 → `POST /api/v1/events` ✅ (rate-limited per IP; abuse defense is a client-sourced-event
 allowlist + payload-size drops, not Turnstile — CONTRACTS §7) → structured JSON to stdout →
 Promtail → **Loki → Grafana** (deployed infra). Server-authoritative events (search outcomes,
@@ -204,10 +218,12 @@ area landing pages, CWV). Architecture hooks it needs:
   page-per-area lever.
 - **Universal/app links:** Web serves `/.well-known/apple-app-site-association` +
   `assetlinks.json` so shared listing URLs open the app when installed (share loop ↔
-  mobile bridge).
+  mobile bridge). *Status: `Web.v1` served these; web v2 does not yet — the endpoints
+  move with the rest of the v1 retirement.*
 - **UTM/referral capture** into the analytics envelope (which church shared the link that
   converted — supply-side attribution for the founder's GTM).
-- Brandable via `BrandOptions` already; keep marketing copy in views, not code.
+- Brand/marketing copy stays in the surface's own templates, not in code (`BrandOptions`
+  was a `Web.v1` construct and retired with it; v2 has no equivalent yet).
 
 ## 14. Legal & regulatory seams (US / Virginia first)
 
@@ -220,9 +236,9 @@ Design-for now, build when triggered:
 | Safeguarding / children | v1 Option A: "Identity-verified (SSO)" only, explicit *no vetting* disclaimer; churches surface their own requirements | Listing field for church-stated requirements |
 | Privacy (VA CDPA etc.) | Under thresholds, but build the plumbing: data minimization, PII inventory, export + delete | `DELETE /api/v1/me` (anonymize, built); PII confined to `users`/`user_logins`/`applications` text |
 | PII custody | Never hold gov IDs, cards, phone numbers (until OTP step-up — then verify-only via Twilio/Plivo) | Delegation ports: `IIdTokenVerifier`, later `ISmsOtpSender`, Stripe |
-| UGC / DMCA | Provider self-service photo uploads are live (Phase 5); takedown path exists today as Admin unlist + the moderation feed (§17) | Registering a DMCA agent with the Copyright Office is the remaining ops carry-over (backlog phase-6 launch checklist) — not code |
+| UGC / DMCA | Provider self-service photo uploads are live (Phase 5); takedown path exists today as Admin unlist + the moderation feed (§17). **Watch:** the 2026-08-05 Admin reduction deletes both of those levers (bulk listing-status write, provider-edit feed) — the surviving path must be named when that lands (host unlist via `/manage`, or an operator DB runbook) | Registering a DMCA agent with the Copyright Office is the remaining ops carry-over (backlog phase-6 launch checklist) — not code |
 | Email/SMS law | Transactional email only (CAN-SPAM exempt); no marketing sends without consent + unsubscribe; TCPA applies if SMS ever ships | Consent columns before any marketing channel |
-| Accessibility | WCAG 2.2 AA target for Web (ADA exposure is real for public accommodations); accessibility filters already first-class | Semantic HTML/HTMX already; audit in launch phase |
+| Accessibility | WCAG 2.2 AA target for Web (ADA exposure is real for public accommodations); accessibility filters already first-class | Was inherited free from v1's server-rendered semantic HTML; web v2 is a JS-driven SPA (canvas splash, hash routes), so the launch-phase audit is now a real piece of work, not a formality |
 | Tax / payments | Nothing until payments; then Stripe Connect handles KYC + 1099-K | §15 |
 
 ## 15. Payments seam (deferred, designed-for)
@@ -272,7 +288,7 @@ Every seam, what opens it, and what it costs when opened:
 | 2026-07-04 | **Application expiry is a lazy sweep on read**, not a background worker | Solo-scale: no scheduler to operate; an expired Pending can never be *seen* stale, which is the actual invariant. A worker (or pg_cron) slots in behind the same status if Phase 6 tuning needs push-based expiry nudges |
 | 2026-07-04 | **NeedsInfo is driven by the thread**: a provider message on Pending → NeedsInfo; the organizer's reply → Pending. No separate "request info" endpoint | One less endpoint and the state always matches the conversation; approve/decline stay the only explicit decisions |
 | 2026-07-04 | **Transactional email = Resend** behind `IEmailGateway` (plain-text, fire-and-forget after the inbox row is written; log-only without a key) | Free tier fits the cost ceiling; one HTTP adapter to swap (SES/Postmark are drop-in behind the port) |
-| 2026-07-04 | **Web BFF emits `application_started`/`sso_started` server-side** (`IWebAnalytics`, same stdout log shape as the API sink) | The Ingest module (`POST /events` + client batchers) isn't built; the funnel must be measurable from day one (PRD). Moves client-side with Ingest |
+| 2026-07-04 | **Web BFF emits `application_started`/`sso_started` server-side** (`IWebAnalytics`, same stdout log shape as the API sink) | The Ingest module (`POST /events` + client batchers) isn't built; the funnel must be measurable from day one (PRD). Moves client-side with Ingest. **Superseded 2026-08-05:** Ingest exists and the BFF retired with `Web.v1`, so this emitter is gone and web v2 emits nothing — the client batcher is now outstanding work, not a migration of a working path (§12) |
 | 2026-07-04 | Unknown and unpublished rooms answer application submits identically (`404 room_not_bookable`) | Same no-existence-leak stance as the listing visibility gate |
 | 2026-07-04 | **Exclusion constraint is an expression** — `EXCLUDE USING gist (RoomId WITH =, tstzrange(StartUtc, EndUtc) WITH &&) WHERE (Status <> Cancelled)` over two `timestamptz` columns, not a stored `During tstzrange` column | Persistence stays provider-agnostic (no `NpgsqlRange` types in entities); the partial predicate makes "cancellation frees slots" a pure status flip; the SQL changelog owns the constraint outright |
 | 2026-07-04 | **Approval atomicity = one `SaveChanges`**: the Applications service flips status (owning its data), the Bookings service saves booking + occurrences, and the shared scoped DbContext commits all of it in one implicit transaction; `EfBookingRepository` translates SQLSTATE 23P01 → slot-taken | No explicit transaction plumbing or cross-module repository access; the module-ownership rule holds (each module mutates only its own rows) while the DB still guarantees all-or-nothing |
@@ -292,3 +308,8 @@ Every seam, what opens it, and what it costs when opened:
 | 2026-07-05 | **Time-first search refines after the SQL prefilter and paginates after refinement.** Open-hours/blackout EXISTS clauses prefilter in SQL; real free-window math (confirmed occurrences subtracted) runs in-process over the candidate set; pages are cut from the refined list | Correct pages beat clever pages: refining after pagination would under-fill pages and break counts. The candidate set is geofence-bounded (beachhead scale), so the in-process pass is cheap. If supply outgrows this, the seam is a materialized per-day free-window table — noted here so the optimization lands behind the same `AvailabilityFilter` without a wire change |
 | 2026-07-07 | **Free listings removed from the product.** `pricePerHour` is required and positive (DB `NOT NULL` + `CHECK > 0` in 010, mirrored in ManageService validation); `isFree` and the `freeOnly` search filter left the wire contract; every Free badge/filter/pin affordance stripped from web + mobile; the availability-sense "Free 6–9 PM" matched-window copy became "Open 6–9 PM" so nothing reads as a price signal | Founder decision superseding the PRD's free-first positioning: free venues aren't going to be a thing. Pre-launch, so the §1 breaking-change rule (all clients update in one commit) is satisfiable cheaply now |
 | 2026-07-05 | **Counter-offers keep the organizer's original ask on the application; accepting books the counter schedule via a `ScheduleSpec` override on the booking transaction.** At most one counter is `open` (partial unique index); posting again supersedes; decline returns the application to `pending`; approve is blocked while `counterOffered` | The ask/offer history must stay honest for the thread (and any later dispute) — mutating the application's schedule would erase what the organizer actually requested. The spec override keeps approval and counter-accept on the identical single-SaveChanges booking path, so the exclusion-constraint race handling (`slot_taken` + auto-decline) is one code path, not two |
+| 2026-08-05 | **One human gate for moderation (D2).** A new host's first listing goes "under review"; **one operator decision verifies the venue *and* publishes the listing**. "Trusted host" is *derived* — any manager of a room with `FirstPublishedAtUtc` set — so a trusted host's further rooms and venues **auto-publish** (stamping `IsIdentityVerified` if unset). New invariant: **published ⇒ venue verified**. The standalone venue-verification decision is retired; evidence submission survives as review *input*, not a precondition. The whole rule moves into `ManageService` (single enforcement point); Admin only records the operator's decision. **Supersedes the two-step model recorded 2026-07-04** (separate venue verification + per-room first-publish approval); that date's *storage* decision (moderation as nullable timestamps) still stands, and no schema change is needed. **Adopted, not built** — build: `docs/backlog/v2_migration/` (design D2, build plan Phase 3) | The two-step gate cost the founder two decisions and a state to keep in sync for one real judgement ("is this host and this listing legitimate?"), and it had already drifted (Admin's bulk listing-status write published rooms bypassing verification entirely). PRD's fraud-prevention commitment is satisfied by the human review itself, and after the first approval every host is self-serve forever |
+| 2026-08-05 | **Steeple.Admin shrinks to the review queue (D3).** Kept: first-listing review queue, venue-manager linking, rating hide/unhide. Deleted: users panel (in-memory mock), analytics panel (reads a table nothing writes — Loki superseded it), feature-flags panel (mutates a disconnected mock), login/MFA/trusted-device screens, application force-status repair, bulk listing-status changes, the `ProviderEditedAtUtc` review-feed screen (column + stamping stay as the dormant abuse seam). **Authelia-only auth is the settled stance**, superseding the backlogged "defence-in-depth local ASP.NET Identity + TOTP" item (phase-7 deferred-items table). **Adopted, not built** — build: v2_migration Phase 3 | Every deleted screen was either theatre (the login/MFA screens never authenticated anything — authelia already gates the hostname), a mock, or an invariant-bypassing write. Finishing them would cost real work to duplicate a control the edge proxy already provides |
+| 2026-08-05 | **Web v2 (Vite + vanilla JS SPA) is the web surface; the MVC + HTMX cookie BFF (`Web.v1`) is deprecated** and retained as reference only, excluded from the solution and deploy builds. The SPA holds the API access+refresh pair in localStorage with single-flight rotation and calls `/api` same-origin via nginx (no CORS by design); dev SSO provider stays Development-only, Google/Apple wiring is client-side work in v2_migration Phase 4 | The animated-web prototype won on product terms (map-first, one continuous surface), and keeping two web front-ends was not affordable solo. Cost of the change: the BFF's "no token in JS-reachable storage" property is gone, so CSP hardening moves onto the critical path (§6, D9) |
+| 2026-08-05 | **Wire contracts split into `docs/contracts/` — one small file per seam** (README, conventions, discovery, identity, applications, manage, analytics, infra, api-ports, persistence, web, mobile), with `CONTRACTS.md` kept as a thin §-number-preserving index | Every "§n" citation in code comments and docs keeps resolving, while an agent (or human) answering one interface question loads one small file instead of the whole contract book |
+| 2026-08-05 | **The remaining web-v2 migration decisions live in `docs/backlog/v2_migration/design.md`, not here** — SSO-only identity (D1), server-is-truth correspondence (D4), honest-offline / no silent local filing (D5), always-present account surface (D6), production auth hygiene incl. Turnstile + agreements (D7), `Idempotency-Key` on manage creates (D8), SPA hardening + SEO honesty (D9) | They are one coherent, in-flight plan with its own build phases; duplicating them here would fork the source of truth. Each lands in this log only if it *deviates* on the way in |

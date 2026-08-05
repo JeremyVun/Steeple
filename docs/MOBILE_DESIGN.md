@@ -1,6 +1,10 @@
 # Steeple Mobile — Flutter Technical Design
 
-> **Status:** Adopted 2026-07-03; app not yet started (lands in `/mobile`, ROADMAP Phase 4).
+> **Status:** Adopted 2026-07-03; the app is **built** in `/mobile` (ROADMAP Phase 4 code
+> complete — as-built detail in `ARCHITECTURE.md`; release/ops carried into the phase-6 launch
+> checklist). Unaffected by the 2026-08-05 web-v2 migration decisions: mobile talks to the same
+> `/api/v1`, and the moderation change (one operator review of a host's first listing) touches
+> only the provider-side `manage` fast-follow, never the organizer flows below.
 > Companion to `docs/SYSTEM_DESIGN.md` (backend/auth/notifications), `CONTRACTS.md`
 > (every wire shape the app consumes), `docs/MOBILE_CONTRACTS.md` (in-app interfaces,
 > routes, providers — the scaffolding), and `docs/DESIGN_SYSTEM.md` (canonical tokens &
@@ -111,7 +115,8 @@ Rules that keep the budgets:
    size so decode cost matches pixels on screen. `cached_network_image` everywhere.
 3. **Map marker hygiene.** Diff markers on new results instead of clearing/re-adding;
    use the plugin's built-in **ClusterManager** past ~50 pins; one pre-rasterized
-   `BitmapDescriptor` per pin state (free/paid/selected), never per-marker widget renders.
+   `BitmapDescriptor` per pin state (default/selected — the old free/paid split went with
+   free listings, 2026-07-07), never per-marker widget renders.
 4. **Parse off the UI thread.** Search/inbox payloads decode via `compute()` once they
    exceed ~50 KB; keep DTOs flat (they already are).
 5. **Network discipline.** Debounce filter changes (350 ms); cancel in-flight search on
@@ -130,8 +135,9 @@ Rules that keep the budgets:
   Registration only after first sign-in (`POST /me/devices`); token rotation handled;
   deletion on sign-out. iOS: request permission **in context** (after first application
   submitted — "want to know when the church replies?"), not at launch.
-- **Deep links:** universal links for `https://<host>/space/{venue}/{room}` (web serves
-  the `.well-known` files — Web change, tracked in ROADMAP Phase 4); unknown/out-of-area
+- **Deep links:** universal links for `https://<host>/space/{venue}/{room}` (the web surface
+  must serve the `.well-known` files — **`Web.v1` did; web v2 does not yet**, so universal
+  links are dark until it does — ARCHITECTURE "Current state"); unknown/out-of-area
   links fall back to in-app browse. `steeple://` only for auth callbacks.
 - **Offline:** honest-but-thin — banner on connectivity loss, cached last search/photos
   still render, mutations (apply, cancel) require connectivity and fail with retry

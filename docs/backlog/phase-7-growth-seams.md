@@ -36,9 +36,15 @@ Steeple never sees, stores, or transmits a government ID.
 - **Organizers** — the hard side of trust (PRD: supplier trust is largely solved). Badge
   surfaces in `organizer.ratingSummary`/application view: the provider sees
   "Identity verified" next to the stated intent.
-- **Venues** — today `venue.isIdentityVerified` means *concierge/SSO-grade* verification.
-  That field's meaning **must not silently change**: keep its existing semantics and add
-  a distinct `verifiedBadge` (additive) for provider-side badges.
+- **Venues** — `venue.isIdentityVerified` means *operator-reviewed*, not document-grade.
+  Under the single-gate model (2026-08-05, SYSTEM_DESIGN §17) it is set by the one human
+  decision that publishes a host's first listing, and thereafter by that trusted host's
+  auto-publishes — so **published ⇒ venue verified**, and the badge reads "belongs to a
+  vetted host". The ownership/lease **evidence-submission flow survives as an input** to
+  that review (it just no longer has its own approve/decline), which is what keeps a real
+  document trail available when a listing warrants one. That meaning **must not silently
+  change again**: keep these semantics and add a distinct `verifiedBadge` (additive) for
+  the paid, provider-verified tier — the two must never be rendered as the same claim.
 - **Wording discipline (PRD Option A):** the badge says *identity verified* — never
   "vetted", "safe", or anything safeguarding-adjacent. The no-vetting disclaimer stays.
 
@@ -143,11 +149,11 @@ Option A) — that's a founder/legal decision, not an engineering one.
 | Item | Owning doc / note |
 |---|---|
 | WebP variants + `<picture>` negotiation | SYSTEM_DESIGN §17 (2026-07-04) — deferred until serving side can negotiate |
-| Search day/time availability filters | CONTRACTS §3 planned addition |
-| Web client-side analytics migration (BFF events → `POST /events`) | CONTRACTS §7 footnote ¹ |
+| Web client-side analytics (a v2 batcher → `POST /events`) | CONTRACTS §7 footnote ¹. **Escalated 2026-08-05:** this stopped being a migration and became a *gap* — the emitter lived in the retired v1 BFF, so web v2 emits nothing at all. The PRD's "nothing user-visible ships un-instrumented" commitment is currently unmet on the web surface |
+| Search day/time availability filters | **Built** (2026-07-05 availability work — `AvailabilityFilter` + `WhenFilterBinder` in the API). Row kept only to retire the stale "planned" claim |
 | Mobile client-side Turnstile | ARCHITECTURE "not built yet" — only enforced where a secret is configured |
-| `Idempotency-Key` on `auth/sessions` | CONTRACTS §4 deviation note — harmless replay today |
-| Admin defense-in-depth auth (local Identity + TOTP behind authelia) | SYSTEM_DESIGN §6 |
+| `Idempotency-Key` on `auth/sessions` | CONTRACTS §4 deviation note — harmless replay today. **Note:** the *manage* creates (`POST /manage/venues`, `…/rooms`) are no longer deferred — idempotency there is adopted work (D8, `v2_migration` Phase 5), because a timed-out create retried by the user double-creates a venue |
+| ~~Admin defence-in-depth auth (local Identity + TOTP behind authelia)~~ | **Dropped 2026-08-05** (SYSTEM_DESIGN §17, D3): authelia at the edge is the auth story; the non-functional login/MFA screens are being deleted rather than finished. Not deferred — decided against |
 | Cross-provider account linking | SYSTEM_DESIGN §6 — `409 use_original_provider` stands |
 | Reciprocity / free-supply credits | PRD hypothesis — untested "prosumer" population; needs founder appetite + data |
 | Infra scaling seams (API edge split/BFFs, outbox worker, managed Postgres, PostGIS) | SYSTEM_DESIGN §16 owns the full trigger table — open only when the specific force appears |

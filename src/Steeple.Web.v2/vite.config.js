@@ -16,6 +16,9 @@ const proxy = {
 };
 
 export default defineConfig({
+  // Relative build assets keep the SPA deployable at either / or a stripped
+  // reverse-proxy prefix such as /steeple/.
+  base: './',
   server: { proxy },
   // A built bundle has to be walked through against the real API too — the flat
   // build (`npm run build:flat`) is verified by serving it, not by reading it.

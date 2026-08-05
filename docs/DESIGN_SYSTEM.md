@@ -2,12 +2,13 @@
 
 > **Status:** Adopted 2026-07-04. The **single source of truth for Steeple's visual and
 > interaction language across all surfaces** (Web funnel, Flutter app; Admin may adopt
-> pragmatically). `src/Steeple.Web.v1/wwwroot/css/site.css` is the as-built **web binding**
-> of these tokens; the Flutter theme (`/mobile/lib/app/theme/`) must be a 1:1 binding of
+> pragmatically). `src/Steeple.Web.v1/wwwroot/css/site.css` is the deprecated v1 binding;
+> active web v2's styles still need a token audit. The Flutter theme (`/mobile/lib/app/theme/`)
+> must be a 1:1 binding of
 > the same tokens. **No component ships styled with raw values — everything derives from
 > a token in this doc.**
 >
-> Change rule: a token change is one PR touching **this doc + `site.css` + mobile
+> Change rule: a token change is one PR touching **this doc + the active web styles + mobile
 > `tokens.dart`** (once each exists). If a surface disagrees with this doc, the surface is
 > wrong. Additive tokens (new semantic role, new status) are free; changing an existing
 > token's value or meaning needs a line in the decision log at the bottom.

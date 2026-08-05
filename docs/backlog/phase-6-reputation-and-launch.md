@@ -19,6 +19,13 @@ the day real users arrive: renewal loop closed, SEO finished, production config 
 > **Completed 2026-07-05:** star ratings, optional review comments, double-blind reveal,
 > rating aggregates, booking/application/listing/mobile surfaces, public review pagination,
 > Admin comment moderation, and `rating_submitted` are built.
+>
+> **Caveat (2026-08-05):** the *web* half of those surfaces was built on `Web.v1`, now
+> retired. Web v2 carries the `rating` field in `src/data/api.js` typedefs and renders no
+> rating UI at all — no rate form, no reviews block, no summary chip. The API, mobile, and
+> Admin hide/unhide sides are unaffected; rebuilding the three web surfaces on v2 is
+> outstanding launch work (not owned by `v2_migration/`, which is scoped to the migration
+> itself — see its design §5 "out of scope").
 
 The centerpiece. Seams already reserved: `IRatingRepository` module slot (SYSTEM_DESIGN
 §4), `bookings 1─* ratings` (§5), `POST /api/v1/bookings/{id}/ratings` ✅ (CONTRACTS §5),
@@ -122,8 +129,10 @@ The PRD's unresponsive-admin failure mode, made visible (the analytics side —
   else omitted (a new venue must not launch with a scary blank stat).
 - Implementation: one aggregate query per venue behind a short in-memory cache (~1h);
   no new tables, no denormalization.
-- Admin: same stats as a column on the listings panel — the concierge follow-up signal
-  ("this church needs a phone call").
+- Admin: **needs a new home** — the listings panel this assumed is deleted by the
+  2026-08-05 Admin reduction (D3: queue + manager linking + rating hide/unhide only).
+  Either surface the signal in the review queue's venue context or accept it as a Grafana
+  query; do not reinstate a listings panel for it.
 
 ## Slice 3 — Renewal nudge → one-tap rebook
 
@@ -161,6 +170,13 @@ lazy-sweep entry).
 
 ## Slice 5 — SEO completion (`SEO.md` owns the checklist)
 
+> **Re-scoped 2026-08-05:** SEO.md's ✅ marks were earned by `Web.v1`'s server-rendered
+> pages and are **not true of web v2** (client-rendered: no per-listing meta, OG, JSON-LD,
+> canonicals, robots.txt or sitemap route today). The **crawler-rendering decision and the
+> re-implementation are owned by `docs/backlog/v2_migration/` (D9, build plan Phase 5)** —
+> this slice consumes that outcome. What stays phase-6's own: the area landing page, the
+> `lastmod` reconciliation, and the operational submissions below.
+
 - **Area landing page** — `/halls/{area-slug}` (SEO.md item 7) backed by
   `GET /api/v1/areas/{slug}` (CONTRACTS §3 planned addition): area name, copy, listing
   grid. Implemented off the single `Geofence` config section — the `areas` *table*
@@ -169,7 +185,8 @@ lazy-sweep entry).
   `UpdatedAtUtc` is actually threaded into `SitemapEntry` (ARCHITECTURE says built,
   SEO.md's caveat predates it; reconcile and tick).
 - **Search Console + Bing** verification and sitemap submission (item 9); re-validate
-  JSON-LD on a free and a paid listing; CWV field pass against the deployed environment.
+  JSON-LD on a couple of real listings (the "free vs paid" pair predates the 2026-07-07
+  removal of free listings); CWV field pass against the deployed environment.
 
 ## Slice 6 — Launch: beachhead swap + production checklist
 
@@ -183,9 +200,9 @@ PRD: a dense cluster before any demand push) → purge demo seed data from produ
 | Carry-over (origin) | What must happen |
 |---|---|
 | Flags SDK wiring (Phase 0) | SDK source lives outside this repo; wire Api/Web/Admin to it when it lands here. Config-backed `IFeatureFlags` (same key names) meanwhile |
-| Production SSO (Phase 1) | Create Google OAuth client + Apple Services ID; set them + Turnstile keys + production `AUTH_JWT_SIGNING_KEY` + `WEB_SIGN_IN_ENABLED=true`; verify both providers end-to-end in production; confirm sessions survive a deploy (DataProtection volume `steeple_web_keys`) |
-| Real-hands demo (Phases 2–3) | Set `Email__ApiKey`/`Email__From`; flip `web.apply_from_browser`; link concierge venue managers in Admin; drive apply → church emailed → approve → organizer notified with a real church + organizer; confirm `application_decided.timeToDecisionHours` visible in Grafana |
-| Production provider self-service (Phase 5) | Set `GEOCODING_GOOGLE_API_KEY` (real geocoding replaces the stub) + `MEDIA_*` Spaces credentials (uploads land on Spaces/CDN, closes the dev loopback-port deviation); flip `WEB_MANAGE_ENABLED=true` (+ `MOBILE_MANAGE_ENABLED=true` once the mobile build ships); register the DMCA agent with the Copyright Office (takedown path itself already exists) |
+| Production SSO (Phase 1) | **Client wiring is `v2_migration` Phase 4 (D1/D7)** — Google Identity Services + Sign in with Apple JS, Turnstile widget, agreements prompt. Ops-side leftovers stay here: create the Google OAuth client + Apple Services ID, set `Auth__Google__ClientIds` / `Auth__Apple__ClientIds` / `Turnstile__SecretKey` / production `AUTH_JWT_SIGNING_KEY`, and verify token refresh survives a frontend redeploy. (No DataProtection key ring to provision — that was a v1-BFF concern; v2 keeps tokens client-side) |
+| Real-hands demo (Phases 2–3) | Moving web v2's inbox/request decisions off the demo store is **`v2_migration` Phase 2 (D4/D5)**. Ops-side leftovers: set `Email__ApiKey`/`Email__From`; link concierge venue managers in Admin; drive apply → church emailed → approve → organizer notified with a real church + organizer; confirm `application_decided.timeToDecisionHours` visible in Grafana |
+| Production provider self-service (Phase 5) | Set `GEOCODING_GOOGLE_API_KEY` (real geocoding replaces the stub) + `MEDIA_*` Spaces credentials (uploads land on Spaces/CDN, closes the dev loopback-port deviation); enable mobile management once its build ships; register the DMCA agent with the Copyright Office (takedown path itself already exists) |
 | Mobile release (Phase 4) | Firebase project + config files; Google Maps + SSO client ids; Xcode signing/entitlements; official Google sign-in brand asset; TestFlight (founder + first organizers) → App Store; Android closed testing (founder's testers); profile against MOBILE_DESIGN §4 budgets on real devices |
 
 **Launch-day hygiene:** uptime monitor → phone confirmed firing; one restore drill from a
@@ -196,7 +213,9 @@ sanity pass; ToS/Privacy versions final.
 ## Exit criteria
 
 - Public launch live in the chosen suburb: real churches published, real organizers
-  applying, zero founder involvement in the loop beyond Admin publish-approve.
+  applying, and **the founder's only standing task is reviewing each new host's first
+  listing** — one decision that verifies the venue and publishes it (2026-08-05 single-gate
+  model). Returning hosts publish with no operator involvement at all.
 - Ratings loop functioning end-to-end (first real two-way ratings recorded and revealed);
   response stats rendering for seasoned venues.
 - Renewal continuation measurable (`renewalDue` → rebook funnel flowing).

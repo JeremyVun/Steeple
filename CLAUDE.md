@@ -3,10 +3,11 @@
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
 organizers. Request→approve booking (not instant-book), required host-set hourly pricing
 (free listings removed 2026-07-07), one NoVA beachhead.
-.NET 10 API + web (v1 HTMX funnel, being replaced by the v2 Vite frontend — see the
-Steeple.Web.v2 section) + HTMX admin + PostgreSQL + Flutter mobile (`/mobile`, Phase 4).
-Shipped (Phases 0–3): the full web loop — discovery → SSO → apply → approve →
-booking with DB-enforced integrity. Solo-operated; lean (~$100 AUD/mo ceiling).
+.NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL + Flutter mobile
+(`/mobile`, Phase 4). The v1 HTMX web funnel is deprecated and retained only as reference.
+The API/mobile and v1 reference implement the full discovery → SSO → apply → approve →
+booking loop; v2's real-API integration is still incomplete. Solo-operated; lean
+(~$100 AUD/mo ceiling).
 
 ## Read this first — document map
 
@@ -18,8 +19,9 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/PRD.md` | Product scope & why | What's in/out of v1, trust model, constraints |
 | `docs/SYSTEM_DESIGN.md` | **Target** architecture + decision log (§17) | Where anything new should go; seams; unbuilt designs (media, payments, flags) |
 | `docs/ARCHITECTURE.md` | **As-built** state | What exists today: modules, domain model + invariants, ports, deployment |
-| `docs/CONTRACTS.md` | Every wire contract + change rules | DTO shapes, conventions, endpoint specs, event taxonomy |
-| `docs/backlog/` | Implementation plans for what's next (README = index + phase history) | What to build next and what's deliberately deferred |
+| `docs/contracts/` | Seam index: every wire contract, port, and client seam, one small file each | **START HERE for any interface question** — load only the file you need |
+| `docs/CONTRACTS.md` | The §-number index into `docs/contracts/` (change rules + where each § now lives) | Resolving a "CONTRACTS §n" citation to its seam file |
+| `docs/backlog/` | Implementation plans for what's next (README = index + phase history) | What to build next and what's deliberately deferred. **`backlog/v2_migration/` is the active plan** (web v2 → production; decisions D1–D9) |
 | `docs/MOBILE_DESIGN.md` | Flutter app design | Anything under `/mobile` |
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
@@ -41,15 +43,15 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   `Controllers/`, `Services/` (use-cases + **port** interfaces), `Proxies/` (adapters),
   `Configuration/ Extensions/ Utils/` — each grown by **module subfolder**
   (e.g. `Services/Applications/`) — see SYSTEM_DESIGN §4.
-- `/src/Steeple.Web.v1` — MVC + HTMX + Leaflet BFF (renamed from `Steeple.Web`
-  2026-08-05; csproj/assembly/namespaces still `Steeple.Web`). **No DB, no shared server
-  assembly.** Mirrors API JSON in `Models/ApiModels.cs` by convention (CONTRACTS.md
-  governs). The shipped v1 funnel — kept running as reference until v2 reaches parity.
-- `/src/Steeple.Web.v2` — the replacement web frontend (Vite + vanilla JS + Leaflet;
-  Three.js splash only), consolidated 2026-08-05 from `~/projects/animated-web`.
-  Same BFF rule: talks to the API over HTTP only. See the Steeple.Web.v2 section below.
+- `/src/Steeple.Web.v1` — deprecated MVC + HTMX + Leaflet implementation, retained as
+  reference and excluded from the solution and deployment builds.
+- `/src/Steeple.Web.v2` — the active web frontend (Vite + vanilla JS + Leaflet; Three.js
+  splash only), served by nginx in containers. nginx/Vite proxy same-origin `/api` requests
+  to the API; the frontend has no DB or shared server assembly. See its section below.
 - `/src/Steeple.Admin` — operator dashboard; reads Postgres via Persistence. No in-app
   auth **by design** — authelia gates it at the edge proxy in the deployed environment.
+  (Reduction to review-queue + venue-manager linking + rating hide/unhide adopted
+  2026-08-05 — `docs/backlog/v2_migration/` D3.)
 - `/db/changelog` — Liquibase formatted SQL (`001…005-*.sql` + master manifest).
   **Owns the schema; no application ever migrates.**
 - `/tests` — `Steeple.Api.Tests` (xUnit unit: geofence, geo math, listing visibility,
@@ -82,14 +84,13 @@ docker compose up -d --build      # full stack: postgres → migrate → api/adm
                                   # Web http://localhost:8080 · Admin http://localhost:8082/admin
 docker compose up -d postgres migrate   # DB only, then:
 dotnet run --project src/Steeple.Api    # http://localhost:5200
-dotnet run --project src/Steeple.Web.v1 # http://localhost:5187 (needs Api:BaseUrl)
 npm run dev --prefix src/Steeple.Web.v2 # http://localhost:5173 (vite; proxies /api → :5200)
 dotnet run --project src/Steeple.Admin
 docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
 ```
 
 - Razor views hot-reload in Development; C# changes need restart.
-- Verify a change by driving the real flow (search on `:5187`, hit the API endpoint, check
+- Verify a change by driving the real flow (search on `:5173`, hit the API endpoint, check
   the admin screen) — not just by compiling.
 - `dotnet test` is part of done (unit tests are instant; integration tests need Docker for
   Testcontainers). Anything touching bookings/approval **must** keep
@@ -105,7 +106,7 @@ by hand → `docker compose up -d migrate` (or full reset) → keep SQL and EF i
 column-for-column. Indexes/constraints live in SQL first.
 
 **New/changed endpoint:** CONTRACTS.md §1 checklist is binding — update
-`Api/Contracts` + controller/service/proxy → Web `ApiModels.cs` + views → mobile models
+`Api/Contracts` + controller/service/proxy → Web v2 `src/data/api.js` and its consumer → mobile models
 (`mobile/lib/core/models/` + the matching `test/fixtures/*.json`) → CONTRACTS.md itself,
 all in one commit. Additive is free;
 breaking inside `/api/v1` only if all clients update in the same commit. New public
@@ -120,16 +121,16 @@ evaluation is local/in-memory — never a blocking network call on the request p
 clean up stable flags.
 
 **Config:** connection string `ConnectionStrings:SteepleDb` (dev: `appsettings.Development.json`,
-localhost:5433; Docker: `ConnectionStrings__SteepleDb` env). Web has **no** DB — it gets
-`Api:BaseUrl` / `Api__BaseUrl`. Geofence bounds = `Geofence` section in Api appsettings.
+localhost:5433; Docker: `ConnectionStrings__SteepleDb` env). Web has **no** DB; Vite in
+development and nginx in containers proxy same-origin `/api`. Geofence bounds = `Geofence`
+section in Api appsettings.
 
 ## Gotchas that bite
 
 - **EF pinned to 10.0.4** (Npgsql provider constraint) — do not bump EF packages above it.
-- **Sub-path hosting:** Web + Admin live behind `X-Forwarded-Prefix` (e.g. `/steeple`).
-  Never hardcode root-relative URLs: `~/…` for `href`/`action`/`src`,
-  `@Url.Content("~/…")` for HTMX `hx-get`/`hx-post` and server-built paths, route-based
-  redirects. Details: ARCHITECTURE.md → "Deployment".
+- **Sub-path hosting:** Web + Admin can live behind a stripped prefix (e.g. `/steeple`).
+  Web v2's build assets and API base must stay document-relative; Admin uses
+  `X-Forwarded-Prefix`/`PathBase` and `~/…` URLs. Details: ARCHITECTURE.md → "Deployment".
 - **Enums on the wire:** flags enums (`ActivityType`, `Amenity`, `AccessibilityFeature`)
   persist as int bitmasks; query binding re-reads repeated query params manually
   (see `ListingsApiController.ReadFlags`). `/api/v1` emits **stable camelCase tokens**
@@ -143,13 +144,12 @@ localhost:5433; Docker: `ConnectionStrings__SteepleDb` env). Web has **no** DB �
   one deliberate Draft room to prove it (`renovation-annex`).
 - **Geofence rejects, silently by design:** out-of-area search input clamps to the
   beachhead (empty results, not errors); detail lookups 404.
-- **Web sign-in state:** the API token pair lives in the encrypted `steeple.auth` cookie;
-  DataProtection keys must persist (compose volume `steeple_web_keys`) or every deploy
-  signs everyone out.
-- Compose runs containers in **Production** (HSTS, secure cookies); the dotnet-run loop is
-  Development. Only web/admin publish host ports; api is compose-internal.
+- **Web sign-in state:** v2's `src/data/session.js` owns the API token pair in localStorage
+  with single-flight refresh rotation. Do not reintroduce the v1 cookie/BFF assumptions.
+- Compose runs server containers in **Production** and serves web v2 from nginx. Only
+  web/admin publish general host ports; api is compose-internal apart from dev media loopback.
 
-## Steeple.Web.v2 — the new frontend (integration in progress)
+## Steeple.Web.v2 — the active frontend (integration in progress)
 
 Built 2026-08-03→05 as the `animated-web` experiment ("Steeple — The Village"); the
 direction succeeded and it was consolidated here 2026-08-05. Map-first product surface
@@ -158,10 +158,6 @@ scroll-scrubbed "roll" (`state.roll` 0→1; the engine fully pauses at roll=1 �
 does zero work in-product). Its own `README.md` and `docs/CONTRACT2–6.md` (the historical
 wave briefs) live inside the project; code comments citing "CONTRACT4 §5" etc. mean those
 files, while "CONTRACTS §n" means this repo's `docs/CONTRACTS.md`.
-
-**Git:** v2 still carries its own embedded `.git` (full 7-wave history, no remote) —
-steeple's git sees it as one untracked directory. Decide at commit time: `git subtree add`
-to keep the history in steeple's graph, or delete `src/Steeple.Web.v2/.git` to flatten.
 
 **Run/verify:** `npm run dev` (vite :5173, proxies `/api` → API :5200 — the API serves no
 CORS by design, the proxy is the missing BFF); `npm run build:flat` = no-Three build

@@ -16,7 +16,9 @@
 // is not the catalog's business. The seam is the same either way: one function,
 // one request, steeple's own names.
 
-const BASE = '/api/v1';
+// Relative to the document so the same bundle works at / and behind a stripped
+// reverse-proxy prefix such as /steeple/.
+const BASE = 'api/v1';
 
 // Long enough for a local API to answer, short enough that a dead one does not
 // hold the surface waiting: the catalog falls back to the bundled seed instead.

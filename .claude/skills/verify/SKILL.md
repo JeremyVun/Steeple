@@ -11,9 +11,7 @@ description: Drive Steeple's real flows (API/Web/Admin) to verify a change at ru
 docker compose up -d postgres migrate          # DB on localhost:5433 + changelog applied
 ASPNETCORE_ENVIRONMENT=Development /usr/local/share/dotnet/dotnet run \
   --project src/Steeple.Api  --no-launch-profile --urls http://localhost:5200 &
-ASPNETCORE_ENVIRONMENT=Development Api__BaseUrl=http://localhost:5200 \
-  /usr/local/share/dotnet/dotnet run \
-  --project src/Steeple.Web  --no-launch-profile --urls http://localhost:5187 &
+npm run dev --prefix src/Steeple.Web.v2 &             # http://localhost:5173
 # Admin (no auth by design): dotnet run --project src/Steeple.Admin --urls http://localhost:5299
 ```
 
@@ -21,16 +19,15 @@ Wait for readiness with `curl -s http://localhost:5200/api/v1/geofence` (anonymo
 
 ## Authenticated calls without SSO — dev sign-in (preferred)
 
-Development registers a **dev identity provider** (`Auth:DevLoginEnabled`, both apps'
+Development registers a **dev identity provider** (`Auth:DevLoginEnabled` in the API's
 `appsettings.Development.json`; absent from base config so it never ships):
 
 - **API:** `POST /api/v1/auth/sessions` with `{"provider":"dev","idToken":"email|Name",
   "turnstileToken":"x","device":{"platform":"web","label":"dev"}}` → full token pair.
   Repeat sign-ins with the same email land on the same account.
-- **Web:** `/login` renders a "Dev sign-in" email form (POST `/auth/dev/callback`, antiforgery
-  applies) that issues the real `steeple.auth` cookie — so **web submit flows ARE drivable
-  headlessly/by browser automation now**: fetch `/login`, lift `__RequestVerificationToken`,
-  POST email + token with a cookie jar.
+- **Web:** v2 offers the dev identity step inside apply and host-listing flows. It calls the
+  API session endpoint through Vite's same-origin `/api` proxy and stores the returned token
+  pair in localStorage.
 - A brand-new dev user has no venues; insert a `venue_managers` row (below) to make one a host.
 
 ## Authenticated API calls without SSO — minting JWTs directly (fallback)
@@ -52,15 +49,12 @@ Seeded room handy for flows: Fellowship Hall `10000000-0000-0000-0000-0000000000
 (venue `11111111-1111-1111-1111-111111111111`, slug `grace-community-vienna/fellowship-hall`,
 tz America/New_York). Draft room `renovation-annex` must stay 404 publicly.
 
-The `steeple.auth` cookie is DataProtection-encrypted and unforgeable — never synthesize it;
-obtain it through the dev sign-in form above.
-
 ## Gotchas
 
 - `cd` into the repo can strip PATH (local env hook) — use absolute paths
   (`/usr/local/share/dotnet/dotnet`) and `git -C` / `--project`, avoid `cd`.
 - The compose api/web/admin images are only as new as the last `--build`; a 200 from the
-  compose stack does NOT clear the working tree. Runtime-verify via dotnet run, or
+  compose stack does NOT clear the working tree. Runtime-verify via dotnet run + Vite, or
   `docker compose up -d --build` first. Check image age with `docker image inspect`.
 - Apply-endpoint rate limiting (per-account `apply` policy) bites after a handful of
   probe submits — space probes or expect 429s.

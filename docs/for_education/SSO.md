@@ -4,6 +4,19 @@
 > `docs/CONTRACTS.md`; this file explains the *why* behind what's in the code, with pointers
 > to the real files. If this drifts from the code, the code wins.
 
+> **Status (2026-08-05) — read the halves differently.** Everything about the **API side** is
+> current: ID-token verification (JWKS, `aud`/`iss`/nonce, fail-closed), find-or-create by
+> `(provider, sub)`, the `use_original_provider` rule, and Steeple's own access + rotating
+> refresh-token families. Everything about the **BFF and its cookie** — "Why a BFF?", Flow 1,
+> Flow 2, and "The cookie session, silent refresh, and sign-out" — describes the **retired
+> `Steeple.Web.v1`** and the `src/Steeple.Web.v1/…` files it cites. **Web v2 is an SPA that
+> holds the API token pair itself** (localStorage, single-flight rotation in
+> `src/data/session.js`), so the BFF's "no bearer token in the browser" property no longer
+> applies and a CSP is what replaces it. The v1 flows are still worth reading — the provider
+> mechanics (GIS credential, Apple `response_type=code id_token` + nonce, the state-cookie/CSRF
+> reasoning) are exactly what v2's client must reproduce; **the v2 wiring is specced in
+> `docs/backlog/v2_migration/` (D1, build plan Phase 4)**, and only `signIn()` changes.
+
 ## The one-paragraph version
 
 Steeple never sees or stores passwords. Google or Apple authenticates the person and hands

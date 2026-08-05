@@ -34,7 +34,9 @@ npm run dev        # http://localhost:5173
 ```
 
 No build step is needed to look at it; `npm run build` produces the static
-bundle. Three.js is the only runtime dependency.
+bundle. The project Dockerfile builds that bundle and serves it from nginx on
+port 8080; nginx also proxies same-origin `/api` requests to `api:8080` on the
+Compose network. The runtime image contains only nginx and the static files.
 
 ```bash
 npm run build:flat # → dist-flat/, the product with no village in it

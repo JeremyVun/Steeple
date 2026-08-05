@@ -1,21 +1,23 @@
 # Steeple — Architecture (as-built)
 
 > The **as-built** state of the system, updated as slices land. Target-state design +
-> decision log: `SYSTEM_DESIGN.md`. Wire contracts: `CONTRACTS.md`. What's next:
+> decision log: `SYSTEM_DESIGN.md`. Wire contracts: `CONTRACTS.md` (the §-number index)
+> over `docs/contracts/` (one file per seam — load only the seam you need). What's next:
 > `docs/backlog/`. Flutter app design: `MOBILE_DESIGN.md`.
 
-## Current state — ROADMAP Phases 0–4 complete; Phase 5 code slice landed (2026-07-04)
+## Current state — ROADMAP Phases 0–5 complete (code); ratings + availability landed 2026-07-05; web v2 became the active web surface 2026-08-05
 
-The full two-sided loop runs on web and mobile: geo-fenced **discovery** (search/filter/map/
-detail, shareable URLs) → **SSO sign-in** (Google/Apple) → **apply** with intent + venue-local
-schedule → provider **approve / ask / decline** → **booking** with DB-enforced
-no-double-booking, notifications (inbox + email + push), cancellation and no-show handling.
-Providers can now self-serve: create a venue, add rooms, upload photos, and request publish,
-with Admin moderating only the first publish per room.
+The API, mobile app, and deprecated web v1 reference implement the full two-sided loop:
+geo-fenced discovery → SSO → apply → provider decision → booking with DB-enforced
+no-double-booking, notifications, cancellation, and no-show handling. Active web v2 uses
+the real API for catalog, application submit, and provider listing creation, but its inbox,
+request decisions, and production SSO are still integration work. Admin moderates the first
+publish per room.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
-screen, FCM push, the analytics/flags client proxies, Web's `/.well-known` deep-link files.
-Remaining Phase 4 work is release/ops, not code (Firebase project, store setup).
+screen, FCM push, and the analytics/flags client proxies. The deprecated web v1 source still
+contains the `/.well-known` deep-link endpoints; web v2 does not yet serve replacements.
+Remaining Phase 4 work includes that move plus release/ops (Firebase project, store setup).
 
 **Phase 5 (code) as of 2026-07-04:** provider self-service — the **Manage** module (venue/room
 CRUD, host ownership/lease-authority verification requests, real Google geocoding,
@@ -24,10 +26,13 @@ local disk) are both built; see their sections below and `CONTRACTS.md` §6 for 
 Admin gained a moderation panel.
 
 **Not built yet:** WebP image variants (deferred — SYSTEM_DESIGN §17), flags SDK
-wiring (config-backed `IFeatureFlags` interim, in Web/Api/Admin), search day/time availability
-filters, mobile client-side Turnstile (apply sends an empty token; only enforced where a secret
-is configured), mobile `manage` screens (data layer + contracts exist; screens are the
-in-progress fast-follow — ROADMAP Phase 5).
+wiring (config-backed `IFeatureFlags` interim, in Api/Admin), mobile client-side Turnstile
+(apply sends an empty token; only enforced where a secret is configured), mobile `manage`
+screens (data layer + contracts exist; screens are the in-progress fast-follow — ROADMAP
+Phase 5), **web analytics** (the `IWebAnalytics` server-side emitter belonged to v1; web v2
+posts no events to `/api/v1/events` at all), and the `/.well-known` deep-link files on v2.
+*(Search day/time availability filters are built — `AvailabilityFilter` +
+`WhenFilterBinder`; the old "not built" note predated the 2026-07-05 availability work.)*
 
 ## Solution layout
 
@@ -37,7 +42,8 @@ Steeple.slnx
 ├─ src/Steeple.Persistence — entities, value objects, enums, SteepleDbContext, EF Configurations/
 ├─ src/Steeple.Api         — the one JSON API. Module subfolders inside each of:
 │    Contracts/ Controllers/ Services/ (ports) Proxies/ (adapters) Configuration/ Extensions/ Utils/
-├─ src/Steeple.Web         — MVC + HTMX + Leaflet BFF. No DB, no shared server assembly; own view models.
+├─ src/Steeple.Web.v2      — active Vite + vanilla JS + Leaflet SPA; nginx container proxies /api.
+├─ src/Steeple.Web.v1      — deprecated MVC + HTMX implementation, retained as reference only.
 ├─ src/Steeple.Admin       — HTMX operator dashboard; reads Postgres directly via Persistence.
 ├─ mobile/                 — Flutter app (HTTP → Api only). Feature-first; seams in MOBILE_CONTRACTS.md.
 └─ tests/                  — Steeple.Api.Tests (unit) + Steeple.Integration.Tests (Testcontainers Postgres)
@@ -66,14 +72,13 @@ rate limiting → JwtBearer auth (`MapInboundClaims=false`) → ProblemDetails e
 | `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; `Auth:Jwt:SigningKey` required at startup) |
 | `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
-| `IVenueManagerRepository` | `EfVenueManagerRepository` (read-only; Admin writes the links) |
 | `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM data-message push per recipient) |
 | `IEmailGateway` | `ResendEmailGateway` (HTTP API; log-only without `Email:ApiKey`) |
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) / `LoggingPushGateway` when unconfigured |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save) |
-| `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
+| `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only — Admin writes the venue↔manager links) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (decode-as-validation, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 content-addressed keys; pinned to ImageSharp 3.1.x — SYSTEM_DESIGN §17) |
 | `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) / `LocalDiskMediaStore` (dev fallback, served at `/media`) — chosen at startup by whether `Media:ServiceUrl` etc. are configured |
 
@@ -186,22 +191,15 @@ Deployment). `RoomPhotoDto` carries `id`/`thumbUrl`/`cardUrl` alongside the lega
 edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/min/account) —
 10 MB cap enforced by Kestrel before the pipeline runs.
 
-**Web BFF** — sign-in: **Google Identity Services button** (its JS callback POSTs the
-credential same-origin, so the standard antiforgery token applies) and **Apple redirect +
-cross-site `form_post`** (guarded by a DataProtection-signed state+nonce cookie; Apple's
-one-time `user` name JSON forwarded as the `displayName` hint). The BFF exchanges the ID
-token at the API and keeps the token pair inside the encrypted `steeple.auth` cookie —
-the browser never sees a token; `SteepleCookieEvents` rotates the pair transparently near
-expiry and signs the browser out when the family is dead. **DataProtection keys persist**
-to compose volume `steeple_web_keys` (or every deploy logs everyone out). Global
-`AutoValidateAntiforgeryToken` on POSTs. Surfaces: `/login` (flag `web.sign_in_enabled`),
-`/account`, versioned ToS/Privacy (`LegalDocuments`; acceptance recorded at sign-in),
-apply flow `/space/{v}/{r}/apply` (fillable anonymously — SSO gate at submit; the drafted
-form is stashed in session and restored, its idempotency key surviving the round-trip),
-organizer `/inbox` + thread, provider `/manage/applications`, `/bookings` +
-`/manage/bookings` + booking detail (occurrence timeline, cancel-with-reason, quiet
-no-show marking, renewal nudge card); provider listings editor `/manage/venues/{new,id}` +
-room/photo forms (flag `web.manage_enabled`, 404 when off) calling the Manage/Media endpoints.
+**Web SPA** — `Steeple.Web.v2` is the deployed web surface. Vite produces static assets and
+the nginx host serves them while proxying same-origin `/api` requests to the API container;
+the API still emits no CORS headers. Hash routes own navigation. `src/data/api.js` is the
+wire seam and `src/data/session.js` stores the API token pair in localStorage with
+single-flight refresh and one 401 retry. Catalog reads, application submit, and the host
+venue/room/photo/publish chain use the real API. Sign-in is still the Development-only dev
+provider; guest inbox/letters and host request decisions still use the local demo store.
+The deprecated v1 BFF remains in source for reference but is excluded from the solution,
+Compose, and Bake builds.
 
 **Mobile** (`/mobile`, Flutter) — the organizer's home. Feature-first
 (`presentation → application → data`), Riverpod 3 (no codegen), go_router 4-tab shell
@@ -305,10 +303,8 @@ out-of-area detail lookups. Launch-suburb swap = one config change.
 
 ## Routes
 
-Web: `/` (map + filterable grid), `/search` (HTMX partial), `/space/{venueSlug}/{roomSlug}`
-(+ `/apply`), `/listings/{id}` (canonical redirect), `/login`, `/account`, `/inbox`,
-`/manage/applications`, `/bookings`, `/manage/bookings`,
-`/manage/venues/{new,id}` (+ room/photo forms, flag `web.manage_enabled`).
+Web: `/` plus hash routes for map browsing, venue/room panels, apply, guest correspondence,
+account, and host management (see `src/Steeple.Web.v2/README.md`).
 Admin: `/admin/moderation` (publish-request decisions, venue verification, provider-edit review
 feed, review-comment hide/unhide).
 
@@ -317,27 +313,26 @@ Notifications / Bookings §5, Manage §6.
 
 ## Deployment — reverse proxy & sub-path hosting
 
-Web + Admin are **path-base aware** so the stack can sit under a sub-path (e.g.
-`jeremyvun.com/steeple`) or a domain root:
+Web + Admin can sit under a sub-path (e.g. `jeremyvun.com/steeple`) or a domain root:
 
-- The edge proxy (caddy) sends `X-Forwarded-Prefix: /steeple`; both `Program.cs` map it
-  into `Request.PathBase` via `ForwardedHeaders.XForwardedPrefix`.
-- Every emitted link derives from `PathBase`: views use `~/…` for `href`/`action`/`src`
-  and `@Url.Content("~/…")` for HTMX `hx-get`/`hx-post` and server-built paths;
-  controllers use route-based redirects; `SteepleControllerBase.BaseUrl` appends
-  `PathBase` so SEO (canonical/OG/sitemap/robots) carries the prefix.
+- Web's Vite assets and API base are document-relative. Caddy's `handle_path /steeple/*`
+  strips the prefix before forwarding, so `/steeple/api/v1/...` reaches nginx as
+  `/api/v1/...` and is proxied to `api:8080`.
+- Admin maps `X-Forwarded-Prefix` into `Request.PathBase`; its emitted links derive from
+  `PathBase` with `~/…` helpers and route-based redirects.
 - With no `X-Forwarded-Prefix` (local runs) everything resolves at `/` — the prefix
   lives only in the proxy config.
 - Proxy rules (admin first — more specific): Web `handle_path /steeple/*` (strips the
   whole prefix); Admin `handle /steeple/admin*` + `uri strip_prefix /steeple` (keeps the
-  app's own `/admin` segment). Both add `header_up X-Forwarded-Prefix /steeple`.
+  app's own `/admin` segment). Admin receives `X-Forwarded-Prefix: /steeple`.
 
-> **Trust note:** both apps clear `KnownProxies`/`KnownIPNetworks`, so forwarded headers
+> **Trust note:** the ASP.NET apps clear `KnownProxies`/`KnownIPNetworks`, so forwarded headers
 > are trusted from any source. Keep the containers reachable **only via caddy** (don't
 > publish dev host ports publicly) so the prefix can't be spoofed.
 
-Compose runs containers in **Production** (HSTS, secure cookies); only web/admin publish
-host ports — the api is compose-internal, **except** a `127.0.0.1`-bound loopback port
+Compose runs the ASP.NET containers in **Production** and serves web from nginx; only
+web/admin publish general host ports. nginx proxies `/api` over the private Compose network.
+The api is compose-internal, **except** a `127.0.0.1`-bound loopback port
 (`API_PORT`, default 8081) that exists purely so browsers can fetch photo URLs when the dev
 stack has no Spaces credentials configured and falls back to `LocalDiskMediaStore` (which the
 API serves itself at `/media`). It's dev-only, not reachable off the host, and unnecessary once

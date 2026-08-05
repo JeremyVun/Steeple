@@ -15,7 +15,7 @@ group "default" {
 
 target "steeple-web" {
   context = "."
-  dockerfile = "src/Steeple.Web.v1/Dockerfile"
+  dockerfile = "src/Steeple.Web.v2/Dockerfile"
   platforms = ["linux/amd64"]
   tags = [
     "registry.jeremyvun.com/steeple-web:${STEEPLE_WEB_VERSION}",

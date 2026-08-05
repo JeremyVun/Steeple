@@ -1,4 +1,8 @@
-# Playtest suites — Steeple's UX regression net + discovery instrument
+# Playtest suites — deprecated web v1 coverage
+
+These suites still specify the deprecated MVC/HTMX web v1 routes and are not the regression
+gate for the deployed v2 SPA. Keep them as v1 reference coverage until equivalent v2 stories
+are authored; v2 currently has its own event-driven harnesses under `src/Steeple.Web.v2/tools/`.
 
 Two suites, one shared world:
 
@@ -16,14 +20,14 @@ they share the dev Postgres; do not parallelize without giving each worker its o
 
 ## Environment (dev loop — NOT the compose containers)
 
-Playtest drives the `dotnet run` dev loop, because Development registers the
+These legacy suites drive the v1 `dotnet run` dev loop, because Development registers the
 **dev sign-in** (`Auth:DevLoginEnabled` — a "Dev sign-in" form on `/login`; see
 CONTRACTS §4). The compose web/api images run in Production and will 404 it.
 
 ```bash
 docker compose up -d postgres migrate
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/Steeple.Api --no-launch-profile --urls http://localhost:5200 &
-ASPNETCORE_ENVIRONMENT=Development Api__BaseUrl=http://localhost:5200 dotnet run --project src/Steeple.Web --no-launch-profile --urls http://localhost:5187 &
+ASPNETCORE_ENVIRONMENT=Development Api__BaseUrl=http://localhost:5200 dotnet run --project src/Steeple.Web.v1 --no-launch-profile --urls http://localhost:5187 &
 curl -s http://localhost:5200/api/v1/geofence   # readiness
 ```
 
@@ -41,7 +45,7 @@ for real, not bypassed.
 
 ## Reading results
 
-- **Journeys** are the red/green gate for any UI change. Close the loop with the
+- **Journeys** are the red/green gate for v1 reference changes only. Close the loop with the
   `playtest-ci` skill: triage each failure as app bug / app changed (accept heal) /
   agent flake / environment flake. Anything touching apply/approve must also keep
   `dotnet test` green (BookingIntegrityTests).

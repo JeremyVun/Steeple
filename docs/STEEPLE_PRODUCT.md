@@ -30,18 +30,18 @@ Steeple is a few connected pieces, used by three kinds of people:
    └─────────────────┘            └─────────────────┘
 
                          ┌───────────────────┐
-   OPERATOR (founder) ──▶│  ADMIN DASHBOARD  │  manage venues & bookings, moderate
+   OPERATOR (founder) ──▶│  ADMIN DASHBOARD  │  review a new host's first listing
                          └───────────────────┘
 ```
 
-*Website and mobile app are two equal front doors — an organizer or a venue provider can use either. The MVP goal is self-service: venue providers list and manage their own venues, and organizers find and hire them directly. Early on the operator seeds venues by hand so the map is never empty; the admin dashboard is for management and moderation.*
+*Website and mobile app are two equal front doors — an organizer or a venue provider can use either. The MVP goal is self-service: venue providers list and manage their own venues, and organizers find and hire them directly. Early on the operator also seeds venues by hand so the map is never empty. The operator's one standing job is a **single check on a new host's first listing** — a person looks at the space and the venue before it goes live, and that same decision both confirms the venue is genuine and publishes the listing. After that the host is trusted: their later listings go live immediately, and everything else — edits, unlisting, approving bookings — is theirs to run. (Single-gate model adopted 2026-08-05; build in progress — `docs/backlog/v2_migration/`.)*
 
 **A booking, start to finish** — the common case, a free recurring slot:
 
 1. Maria, who runs a weekly toddler playgroup, browses nearby halls on the **website** — no sign-up, no download.
 2. She filters to what she needs — Tuesday mornings, ~15 people, toddler-friendly, free or low-cost — and a few church halls appear within range.
 3. She opens one: photos, capacity, what's included, the house rules.
-4. She **opens the app to apply**, describes her group and that it repeats weekly, and signs in with Google or Apple (one tap — her first and only friction).
+4. She **applies right there on the website** — no download — describing her group and that it repeats weekly, and signs in with Google or Apple (one tap — her first and only friction). The app would have done exactly the same job; either front door completes the booking.
 5. The **church is notified**, sees who's asking and why, and **approves**.
 6. The booking is confirmed for the term; both sides are notified.
 7. The playgroup meets, week after week. Maria can leave a rating that builds her standing for next time.
