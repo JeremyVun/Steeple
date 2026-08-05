@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
-organizers. Request→approve booking (not instant-book), required host-set hourly pricing
+organizers. Instant-book by default with per-venue manual-approve opt-in (2026-08-05,
+`docs/backlog/booking-modes.md`; was request→approve), required host-set hourly pricing
 (free listings removed 2026-07-07), one NoVA beachhead.
 .NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL + Flutter mobile
 (`/mobile`, Phase 4). The v1 HTMX web funnel is deprecated and retained only as reference.

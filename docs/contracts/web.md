@@ -145,3 +145,13 @@ D8 (idempotency + longer write timeouts), D9 (CSP, `window.__steeple` gated to d
 > Naming note: code comments citing "CONTRACT4 §5" mean this project's own
 > `src/Steeple.Web.v2/docs/CONTRACT2–6.md` wave briefs; "CONTRACTS §n" means the repo's
 > `docs/contracts/` seam files.
+
+## Deep links from email/push into the SPA (spine contract, 2026-08-05)
+
+- Notification payloads carry `deepLink` paths (existing grammar: `/bookings/{id}`,
+  `/inbox/applications/{id}`).
+- Email CTAs build `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` — a query param, not
+  a path, because the SPA ships no server-side routes and nginx soft-404s unknown paths.
+- The SPA reads `goto` once at boot: if it names a resource the current session can see,
+  open that letter/booking view directly (if signed out, run sign-in first and preserve
+  `goto` through it); otherwise fall back to the village with a quiet notice.

@@ -11,6 +11,7 @@
 | `phase-6-reputation-and-launch.md` | Ratings & reviews, provider responsiveness, one-tap rebook, expiry tuning, SEO completion, beachhead swap + the full launch/ops checklist. **Exit = public launch.** Still the launch gate — but its *web* items (production SSO, moving web v2 off its demo store, SEO on a client-rendered surface) are **superseded in mechanism** by `v2_migration/`, which owns them; phase 6 just checks they're done |
 | `phase-7-growth-seams.md` | Trigger-gated growth items: verified badges (delegated identity verification), vouching, Area #2, phone OTP step-up, insurance/safeguarding research — plus the small-deferred-items index |
 | `payments.md` | The standalone payments design: Stripe Connect (inbound + outbound), per-occurrence charging for recurring bookings, refund & cancellation policy. Build gated on the Phase 7 paid-bookings trigger |
+| `booking-modes.md` | Instant book (default) vs manual approval per venue, rescind semantics, charge timing; **deferred:** chronic-rescinder nudge to manual, per-user booking caps (adopted 2026-08-05, partially supersedes `payments.md` §5) |
 
 ## Phase history (decoder for "Phase N" stamps in code and docs)
 
