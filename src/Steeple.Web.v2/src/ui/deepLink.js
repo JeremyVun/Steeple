@@ -47,7 +47,18 @@ const parts = (path) => path.replace(/^\/+/, '').split('/').filter(Boolean);
 /**
  * Follow one deep link. Returns false when it could not be honoured, which is
  * the caller's cue to say so quietly.
+ *
+ * Exported because an email is not the only thing that carries one: every
+ * notification steeple writes carries the same `deepLink` in its payload, and
+ * the ambient surface that shows those (`ui/notifications.js`) must land in
+ * exactly the same place a CTA for the same event would. One grammar, one
+ * follower — two would drift apart the first time the grammar grew.
  */
+export async function followDeepLink(path) {
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) return false;
+  return follow(path);
+}
+
 async function follow(path) {
   const [head, ...rest] = parts(path);
 

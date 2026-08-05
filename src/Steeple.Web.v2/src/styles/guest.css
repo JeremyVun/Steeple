@@ -1618,6 +1618,48 @@
   color: inherit;
 }
 
+/* ── what steeple wrote while you were away ─────────────────────────────────
+   Three lines at the head of the inbox, in the same hand as the slip that says
+   them in the corner. Not a badge, not a second inbox — ambience. */
+
+.jnotes {
+  margin: 0 0 18px;
+  padding: 0 0 16px;
+  border-bottom: 1px solid var(--rule, var(--line));
+}
+
+.jnotes__list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.jnotes__item {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.jnotes__dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--sage);
+}
+
+.jnotes__item[data-kind='paymentFailed'] .jnotes__dot {
+  background: var(--terracotta);
+}
+
+.jnotes__item[data-kind='paymentFailed'] .jnotes__line {
+  color: var(--terracotta-deep);
+}
+
 /* ── what has happened to the money ─────────────────────────────────────────
    The price snapshot a booking was confirmed at, when the next charge falls,
    and what has already been taken — printed above the dates it applies to,

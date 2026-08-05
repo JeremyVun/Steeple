@@ -11,6 +11,7 @@ import {
 } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { el, replaceChildren } from '../dom.js';
+import { lineFor } from '../notifications.js';
 import { verifiedChip } from './sso.js';
 import {
   isYourMove,
@@ -29,7 +30,7 @@ const GROUPS = [
   { key: 'closed', title: 'Closed', note: null },
 ];
 
-export function createJournal({ announce, onOpen, onBrowse }) {
+export function createJournal({ announce, onOpen, onBrowse, ambientRows }) {
   const head = el('header', { class: 'journal__head' });
   const body = el('div', { class: 'journal__body' });
   const element = el('div', { class: 'guest__surface guest__surface--journal' }, [
@@ -77,6 +78,33 @@ export function createJournal({ announce, onOpen, onBrowse }) {
     ]);
   }
 
+  /**
+   * What steeple wrote while this person was away, at the head of the inbox.
+   *
+   * Not a second inbox and not a badge: three lines at most, the newest first,
+   * read from the ambient surface's own cache (`ui/notifications.js`). A
+   * reminder is worth seeing here whether or not its slip was caught in the
+   * corner, so nothing is hidden on the strength of having been read.
+   */
+  function comingUp() {
+    const rows = (ambientRows?.() ?? []).slice(0, 3);
+    const lines = rows.map((row) => ({ row, text: lineFor(row) })).filter((one) => one.text);
+    if (!lines.length) return null;
+    return el('section', { class: 'jnotes' }, [
+      el('h2', { class: 'eyebrow', text: 'Lately' }),
+      el(
+        'ul',
+        { class: 'jnotes__list' },
+        lines.map(({ row, text }) =>
+          el('li', { class: 'jnotes__item', dataset: { kind: row.type } }, [
+            el('span', { class: 'jnotes__dot', 'aria-hidden': 'true' }),
+            el('span', { class: 'jnotes__line', text }),
+          ])
+        )
+      ),
+    ]);
+  }
+
   function bucket(app) {
     if (isYourMove(app.status)) return 'yours';
     if (app.status === 'pending') return 'waiting';
@@ -118,13 +146,14 @@ export function createJournal({ announce, onOpen, onBrowse }) {
 
     if (!apps.length) {
       replaceChildren(body, [
+        comingUp(),
         el('p', { class: 'prose journal__empty', text: 'Nothing here yet. Find a space that suits your group and send your first request.' }),
         el('button', { type: 'button', class: 'pill', onclick: () => onBrowse?.() }, 'Find a space'),
       ]);
       return;
     }
 
-    const sections = [];
+    const sections = [comingUp()].filter(Boolean);
     for (const group of GROUPS) {
       const items = apps.filter((a) => bucket(a) === group.key);
       if (!items.length) continue;
