@@ -79,9 +79,27 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 
 ---
 
-## Phase 2 — Correspondence onto the wire (web) `[x]` *(landed 2026-08-05)*
+## Phase 2 — Correspondence onto the wire (web) `[~]` *(code landed 2026-08-05; verification debt below)*
 
-> **Landed as specified**, against an API that grew payments and instant book the same day.
+> **Code landed as specified** (agent stopped at its token budget before finishing
+> verification), against an API that grew payments and instant book the same day.
+> **Outstanding — owned by the P2 continuation:**
+> 1. Guest letter actions (withdraw / counter accept+decline / thread messages) are coded
+>    through `correspondence.js` but **not yet driven end-to-end** — `correspondence-test.mjs`
+>    §3 stalls at the guest `#letter-reply` step (isolated probes of the same path pass;
+>    suspect suite timing/ordering, not `letter.js`). §4–§6 (email CTA out of the dev
+>    mailbox, instant-book loop, cross-account isolation) were never reached.
+> 2. The honest-offline path (D5: API down ⇒ draft preserved + retry, idempotency key kept
+>    on timeout) is coded but not driven.
+> 3. Suites stale vs this phase and not re-run: `guest-test.mjs`, `wave2-test.mjs` (both
+>    drive the old demo-store apply path and need re-baselining), `host-*.mjs`,
+>    `input-test.mjs`, `surface-test.mjs`; `account-test.mjs`/`world-test.mjs` were edited
+>    onto `mirrorApplication` but not re-run.
+> Suite environment: API `:5210` (`--urls`; launchSettings pins 5200), vite `:5273` via the
+> new `STEEPLE_API_ORIGIN` env in `vite.config.js`; `correspondence-test.mjs` needs
+> `STEEPLE_API` + `STEEPLE_PSQL` (psql stands in for the operator's first-listing approve),
+> and launches **one browser per person** — two same-origin pages in one renderer starve
+> each other's `waitForFunction` (hang, no error). Never revert to tabs.
 > Notes for whoever reads this next:
 > (a) the wire for everything after a request is written is one new seam,
 > `src/data/correspondence.js`, and `store.js` is now strictly its mirror — one way in per
