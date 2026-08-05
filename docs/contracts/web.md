@@ -192,7 +192,22 @@ it is contained by construction: its letters are written under the seed's own id
   `402 payment_method_required` opens a minimal mock-card step (`ui/guest/payment.js`) and
   the send picks up by itself; instant venues answer the submit with the booking and the copy
   says so (`Book this space`, "Booked."). `?goto=` deep links from email CTAs are followed at
-  boot (`ui/deepLink.js`).
+  boot (`ui/deepLink.js`). **Driven end to end** by `tools/correspondence-test.mjs` §§0–7 —
+  two people, two browsers, real rows, localStorage cleared twice mid-flow.
+- **Three seams the driving corrected (2026-08-05), worth knowing before touching them:**
+  - a **counter-offer rides the detail read only**. The API omits `counterOffer` from list
+    reads by design (like the thread — `ApplicationMappings.ToDto`), so `mirrorApplication`
+    replaces it only when passed `{thread:true}` and `mirrorApplications` never touches it.
+    Reading it off a list read means reading `null` and forgetting a live counter under a
+    letter somebody is standing in front of.
+  - the **host desk re-reads on arrival**, not once per page load. `readDesk({again})` is
+    passed the desk-entry transition; anything else would make the answer's own mirror
+    trigger the next read and the board would poll itself.
+  - **"never arrived" is 0, 502 and 503**, not just 0 (`correspondence.js:neverArrived`).
+    The app is always behind a proxy, and a proxy whose upstream is down answers 502 — the
+    page never sees a network error, so the plainest outage got the vaguest sentence.
+    **504 is excluded on purpose:** a gateway timeout may well have landed, so it must not
+    be promised away; the idempotency key is what makes retrying it safe.
 - **Demo:** dev provider only, `turnstileToken` hardcoded `null` (D7); `organizationName` is
   sent as `null` — the group beside a name is whatever came back on a request, and the input
   that would set it belongs to Phase 4; the card step is deliberately plain and the mock
@@ -205,8 +220,11 @@ gated to dev).
 
 ## Known hazards (unfixed)
 
-- The 4s abort timeout on writes can **double-create venues**: a timed-out create retried by the
-  user creates twice — manage creates have no `Idempotency-Key` API-side (D8).
+- The 4s abort timeout on writes can **double-create venues**: a timed-out create retried by
+  the user creates twice. The API *does* honour `Idempotency-Key` on manage creates now
+  (`ManageIdempotencyIntegrationTests`); the missing half is the client, which does not send
+  one (D8). The guest's submit does, and is proven to keep it across a failed send
+  (`correspondence-test.mjs` §7).
 - `draft.roomId` is always `'main-space'` in the listing flow — a second room per venue collides.
 - Dev geocoding is `StubGeocodingGateway`: every address resolves to the village centre, so
   geofence-rejection paths are locally unreachable.

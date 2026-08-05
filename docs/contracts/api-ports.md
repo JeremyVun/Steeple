@@ -15,8 +15,14 @@ controller (thin HTTP edge) → service (use-case logic + port interfaces) → p
 `Services/` own use-case logic and **define** the port interface for anything external;
 `Proxies/` implement them. `AddSteepleApi` (`Extensions/ServiceCollectionExtensions.cs`) is the
 composition root and the only place adapters are chosen. Cross-cutting pipeline: forwarded
-headers (real client IPs + `X-Forwarded-Prefix` behind caddy) → rate limiting → JwtBearer auth
-(`MapInboundClaims=false`, so `sub`/`sid` survive) → ProblemDetails errors.
+headers (real client IPs + `X-Forwarded-Prefix` behind caddy) → JwtBearer auth
+(`MapInboundClaims=false`, so `sub`/`sid` survive) → rate limiting → ProblemDetails errors.
+
+**The limiter runs *after* authentication, and the order is load-bearing.** The per-account
+policies partition on the `sub` claim; before authentication `context.User` is still
+anonymous, so every one of them silently fell back to per-IP and everyone behind one NAT
+shared a single bucket — which is exactly what those policies exist to avoid. Corrected
+2026-08-05 (`Program.cs`), found by driving the guest loop, invisible to the test suite.
 
 Every one of `Contracts/ Controllers/ Services/ Proxies/ Configuration/ Extensions/ Utils/`
 grows by **module subfolder** (e.g. `Services/Applications/`). Folder-matched namespaces are
@@ -83,9 +89,16 @@ processor, media store, flags) are **singletons**.
 ## Rate-limit policies (`Extensions/RateLimitingExtensions.cs`)
 
 Fixed 1-minute windows: `auth` 10/min per IP · `apply` 5/min per account, per-IP fallback
-(submits, thread messages, counter-offers, ratings) · `manage` 30/min per account ·
-`media` 12/min per account · `availability` 30/min per IP · `events` 60/min per IP.
+(submits, thread messages, counter-offers, ratings) · `payments` 10/min per account (putting
+a card on file) · `manage` 30/min per account · `media` 12/min per account ·
+`availability` 30/min per IP · `events` 60/min per IP.
 All answer `429` + `Retry-After` with ProblemDetails `code: rate_limited`.
+
+`payments` was split out of `apply` on 2026-08-05: card setup is a two-call handshake in the
+*middle* of an ordinary first request (submit → `402` → setup → mock-confirm → submit), so on
+the shared budget a guest had spent four of five permits before they could answer the host's
+first question. Anything added here should ask the same question — is this endpoint part of
+somebody's single journey, or is it the journey's repetition that needs limiting?
 
 ## Module rules (hard)
 
