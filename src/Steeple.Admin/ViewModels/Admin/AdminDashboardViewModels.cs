@@ -1,95 +1,52 @@
 namespace Steeple.Admin.ViewModels.Admin;
 
-public sealed record AdminShellViewModel(
-    string ActiveSection,
-    IReadOnlyList<AdminMetric> Metrics,
-    IReadOnlyList<AdminActivity> Activity);
+public sealed record AdminShellViewModel(IReadOnlyList<AdminMetric> Metrics);
 
 public sealed record AdminMetric(string Label, string Value, string Detail, string Tone);
 
-public sealed record AdminActivity(DateTimeOffset At, string Actor, string Event, string Detail);
-
-public sealed record AdminUserRow(
-    Guid Id,
-    string Name,
-    string Email,
-    string Role,
-    string TrustLevel,
-    string Status,
-    int Bookings,
-    DateTimeOffset LastSeenAt);
-
+/// <summary>A room, for the takedown surface — the operator's only listing-status lever.</summary>
 public sealed record AdminListingRow(
     Guid Id,
     string Venue,
     string Room,
     string Suburb,
-    int Capacity,
     string Status,
     string Price,
     int PendingApplications,
     int ActiveBookings);
 
-public sealed record AdminBookingRow(
-    Guid Id,
-    string Listing,
-    string Organizer,
-    string When,
-    string Status,
-    string Intent);
-
-public sealed record AdminApplicationRow(
-    Guid Id,
-    string Venue,
-    string Room,
-    string Organizer,
-    string Activity,
-    int GroupSize,
-    string When,
-    string Status,
-    int Messages,
-    DateTimeOffset CreatedAt);
-
-/// <summary>A room awaiting the founder's publish decision (Phase 5 moderation gate).</summary>
+/// <summary>
+/// A room awaiting the one human gate: a host's first listing (`v2_migration/design.md` D2).
+/// Carries everything the decision needs — listing preview, venue, and any evidence the host
+/// submitted — because approve/decline is a single decision with no separate verification step.
+/// </summary>
 public sealed record AdminPublishRequestRow(
     Guid RoomId,
     string Venue,
     string Room,
     string Suburb,
+    string AddressLine,
     int Capacity,
     string Price,
     int PhotoCount,
     DateTimeOffset RequestedAt,
-    string VenueVerificationStatus,
     string Description,
-    IReadOnlyList<string> PhotoThumbUrls);
+    IReadOnlyList<string> PhotoThumbUrls,
+    IReadOnlyList<string> HostNames,
+    AdminVenueEvidence? Evidence);
 
-/// <summary>A host's ownership / lease-authority verification request awaiting review.</summary>
-public sealed record AdminVenueVerificationRequestRow(
-    Guid RequestId,
-    Guid VenueId,
-    string Venue,
-    string Suburb,
-    string RequestedByName,
-    string RequestedByEmail,
+/// <summary>Ownership / lease-authority evidence a host attached, shown inside its queue item.</summary>
+public sealed record AdminVenueEvidence(
     string ContactName,
     string? ContactEmail,
     string EvidenceSummary,
-    DateTimeOffset RequestedAt,
-    IReadOnlyList<AdminVenueVerificationDocumentRow> Documents);
+    DateTimeOffset SubmittedAt,
+    IReadOnlyList<AdminVenueEvidenceDocument> Documents);
 
-/// <summary>One document link inside an Admin venue-verification request.</summary>
-public sealed record AdminVenueVerificationDocumentRow(string Label, string ExternalUrl);
+/// <summary>One externally hosted proof document link (the API stores links, never contents).</summary>
+public sealed record AdminVenueEvidenceDocument(string Label, string ExternalUrl);
 
-/// <summary>A live listing (room) or venue edited by its provider since the last operator review.</summary>
-public sealed record AdminEditedListingRow(
-    Guid Id,
-    bool IsVenue,
-    string Venue,
-    string? Room,
-    DateTimeOffset EditedAt);
-
-/// <summary>A submitted review comment visible to Admin moderation.</summary>
+/// <summary>A submitted review comment, for the hide/unhide lever.</summary>
 public sealed record AdminRatingCommentRow(
     Guid Id,
     string Venue,
@@ -101,10 +58,8 @@ public sealed record AdminRatingCommentRow(
     DateTimeOffset CreatedAt,
     DateTimeOffset? HiddenAt);
 
-public sealed record AdminModerationViewModel(
+public sealed record AdminReviewQueueViewModel(
     IReadOnlyList<AdminPublishRequestRow> PublishRequests,
-    IReadOnlyList<AdminVenueVerificationRequestRow> VerificationRequests,
-    IReadOnlyList<AdminEditedListingRow> EditedListings,
     IReadOnlyList<AdminRatingCommentRow> RatingComments);
 
 public sealed record AdminVenueManagerRow(
@@ -116,45 +71,9 @@ public sealed record AdminVenueManagerRow(
 
 public sealed record AdminVenueOption(Guid Id, string Name);
 
-public sealed record AdminAnalyticsRow(
-    DateTimeOffset At,
-    string Event,
-    string Surface,
-    string Subject,
-    string Properties);
-
-public sealed record AdminFeatureFlagRow(
-    string Key,
-    string Description,
-    bool Enabled,
-    bool IsPublic,
-    string Audience,
-    DateTimeOffset UpdatedAt);
-
-public sealed record AdminAccountViewModel(
-    string Username,
-    bool MfaEnabled,
-    IReadOnlyList<AdminTrustedDeviceRow> TrustedDevices,
-    IReadOnlyList<AdminActivity> RecentActivity);
-
-public sealed record AdminTrustedDeviceRow(
-    Guid Id,
-    string Browser,
-    string SourceIp,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset LastSeenAt,
-    DateTimeOffset ExpiresAt,
-    bool IsCurrent);
-
 public sealed record AdminWorkspaceViewModel(
     AdminShellViewModel Shell,
-    IReadOnlyList<AdminUserRow> Users,
+    AdminReviewQueueViewModel ReviewQueue,
     IReadOnlyList<AdminListingRow> Listings,
-    IReadOnlyList<AdminBookingRow> Bookings,
-    IReadOnlyList<AdminApplicationRow> Applications,
-    AdminModerationViewModel Moderation,
     IReadOnlyList<AdminVenueManagerRow> VenueManagers,
-    IReadOnlyList<AdminVenueOption> VenueOptions,
-    IReadOnlyList<AdminAnalyticsRow> Analytics,
-    IReadOnlyList<AdminFeatureFlagRow> FeatureFlags,
-    AdminAccountViewModel Account);
+    IReadOnlyList<AdminVenueOption> VenueOptions);

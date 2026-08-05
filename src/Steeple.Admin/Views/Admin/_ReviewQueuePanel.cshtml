@@ -1,0 +1,158 @@
+@model Steeple.Admin.ViewModels.Admin.AdminWorkspaceViewModel
+@{
+    var reviewError = ViewData["ReviewError"] as string;
+    var queue = Model.ReviewQueue;
+}
+
+@* One human gate, one decision (design.md D2): approving a host's first listing publishes it,
+   verifies the venue, and makes that host trusted for everything they list afterwards. *@
+<div id="admin-review-panel" class="admin-stack">
+    @if (reviewError is not null)
+    {
+        <p class="admin-error" role="alert">@reviewError</p>
+    }
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-first-listings-heading">
+        <h3 id="admin-first-listings-heading">First listings</h3>
+        <p class="admin-hint">
+            A host's first listing is the only one you decide. Approve publishes it, marks the venue
+            verified, and lets that host publish and unlist on their own from then on. Decline sends
+            the note to their inbox so they can fix it and ask again.
+        </p>
+        @if (queue.PublishRequests.Count == 0)
+        {
+            <p class="admin-empty">No listings are waiting for a decision.</p>
+        }
+        else
+        {
+            <ul class="admin-review-list">
+            @foreach (var request in queue.PublishRequests)
+            {
+                <li class="admin-review-item">
+                    <div class="admin-review-head">
+                        <div>
+                            <strong>@request.Venue — @request.Room</strong>
+                            <span>@request.AddressLine, @request.Suburb · @request.Capacity people · @request.Price</span>
+                            <span>Requested @request.RequestedAt.ToString("MMM d, HH:mm")</span>
+                        </div>
+                        <div class="admin-review-hosts">
+                            <span class="admin-eyebrow">Host</span>
+                            @foreach (var host in request.HostNames)
+                            {
+                                <span>@host</span>
+                            }
+                        </div>
+                    </div>
+
+                    @if (request.PhotoThumbUrls.Count > 0)
+                    {
+                        <div class="admin-preview-photos">
+                            @foreach (var thumb in request.PhotoThumbUrls)
+                            {
+                                <img src="@thumb" alt="" loading="lazy" />
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="admin-error">No photos — this shouldn't be possible; the API blocks it.</p>
+                    }
+
+                    <p class="admin-preview-description">@request.Description</p>
+
+                    @if (request.Evidence is { } evidence)
+                    {
+                        <details class="admin-preview" open>
+                            <summary>Ownership / lease evidence (submitted @evidence.SubmittedAt.ToString("MMM d"))</summary>
+                            <p><strong>@evidence.ContactName</strong> @(evidence.ContactEmail is null ? "" : $"· {evidence.ContactEmail}")</p>
+                            <p class="admin-preview-description">@evidence.EvidenceSummary</p>
+                            <ul class="admin-document-list">
+                                @foreach (var document in evidence.Documents)
+                                {
+                                    <li><a href="@document.ExternalUrl" target="_blank" rel="noopener noreferrer">@document.Label</a></li>
+                                }
+                            </ul>
+                        </details>
+                    }
+                    else
+                    {
+                        <p class="admin-hint">No evidence submitted — verify out of band (a call, a visit, someone you know) before approving.</p>
+                    }
+
+                    <form class="admin-inline-form"
+                          hx-post="@Url.Content($"~/admin/review/{request.RoomId}/decide")"
+                          hx-target="#admin-review-panel" hx-swap="outerHTML">
+                        <input type="text" name="note" placeholder="Note to the host (optional)"
+                               aria-label="Note to the host for @request.Venue @request.Room" />
+                        <button type="submit" name="decision" value="approve">Approve &amp; publish</button>
+                        <button type="submit" name="decision" value="decline" class="admin-link-danger">Decline</button>
+                    </form>
+                </li>
+            }
+            </ul>
+        }
+    </section>
+
+    <section class="admin-subpanel-wide" aria-labelledby="admin-rating-comments-heading">
+        <h3 id="admin-rating-comments-heading">Review comments</h3>
+        <p class="admin-hint">Hiding a comment removes its whole rating from public reviews and aggregates; restoring makes it eligible again under the double-blind reveal rule.</p>
+        @if (queue.RatingComments.Count == 0)
+        {
+            <p class="admin-empty">No review comments have been submitted yet.</p>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Review</th>
+                            <th>Listing</th>
+                            <th>Submitted</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var rating in queue.RatingComments)
+                    {
+                        var isHidden = rating.HiddenAt is not null;
+                        <tr class="@(isHidden ? "admin-muted-row" : "")">
+                            <td>
+                                <strong>@(new string('★', Math.Clamp(rating.Stars, 1, 5)))</strong>
+                                <span>@rating.RaterName &rarr; @rating.RatedSide</span>
+                                <p class="admin-review-comment">@rating.Comment</p>
+                            </td>
+                            <td>
+                                <strong>@rating.Venue</strong>
+                                <span>@rating.Room</span>
+                            </td>
+                            <td>@rating.CreatedAt.ToString("MMM d, HH:mm")</td>
+                            <td>
+                                @if (isHidden)
+                                {
+                                    <span class="admin-status admin-status-muted">Hidden</span>
+                                }
+                                else
+                                {
+                                    <span class="admin-status">Visible</span>
+                                }
+                            </td>
+                            <td>
+                                <form class="admin-inline-form"
+                                      hx-post="@Url.Content($"~/admin/review/ratings/{rating.Id}/visibility")"
+                                      hx-target="#admin-review-panel" hx-swap="outerHTML">
+                                    <input type="hidden" name="hidden" value="@(isHidden ? "false" : "true")" />
+                                    <button type="submit" class="@(isHidden ? "" : "admin-link-danger")">
+                                        @(isHidden ? "Restore" : "Hide")
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

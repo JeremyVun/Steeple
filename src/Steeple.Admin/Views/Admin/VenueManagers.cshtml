@@ -7,14 +7,13 @@
 <section class="admin-page wrap">
     @await Html.PartialAsync("_AdminNav", Model)
 
-    <section class="admin-panel" id="admin-users" aria-labelledby="admin-users-heading">
+    <section class="admin-panel" id="admin-venue-managers" aria-labelledby="admin-venue-managers-heading">
         <div class="admin-panel-header">
             <div>
-                <p class="admin-eyebrow">People</p>
-                <h2 id="admin-users-heading">Users</h2>
+                <p class="admin-eyebrow">Concierge</p>
+                <h2 id="admin-venue-managers-heading">Venue managers</h2>
             </div>
-            <a class="admin-link-button" href="~/admin/account">Account</a>
         </div>
-        @await Html.PartialAsync("_UsersTable", Model)
+        @await Html.PartialAsync("_VenueManagersPanel", Model)
     </section>
 </section>
