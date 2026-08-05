@@ -7,6 +7,9 @@ namespace Steeple.Api.Services.Notifications;
 /// </summary>
 public interface IEmailGateway
 {
-    /// <summary>Sends one plain-text transactional email, best-effort.</summary>
-    Task SendAsync(string toEmail, string subject, string textBody, CancellationToken ct = default);
+    /// <summary>
+    /// Sends one transactional email, best-effort. The content arrives fully composed (CTA line
+    /// included) — a gateway is transport only and never edits a body.
+    /// </summary>
+    Task SendAsync(string toEmail, EmailContent content, CancellationToken ct = default);
 }

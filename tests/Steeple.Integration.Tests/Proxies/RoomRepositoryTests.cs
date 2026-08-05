@@ -198,12 +198,10 @@ public class RoomRepositoryTests
         var orderedPhotos = room.Photos.OrderBy(p => p.SortOrder).ToList();
         Assert.Equal(3, orderedPhotos.Count);
         Assert.Equal(new[] { 0, 1, 2 }, orderedPhotos.Select(p => p.SortOrder));
-        Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-1/1200/800", orderedPhotos[0].Url);
-        Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-2/1200/800", orderedPhotos[1].Url);
-        Assert.Equal(
-            "https://picsum.photos/seed/fellowship-hall-3/1200/800", orderedPhotos[2].Url);
+        // The photographs themselves are seed curation (012 re-shot every room), so this pins the
+        // shape the repository owns — three distinct, non-empty URLs in sort order — not the CDN.
+        Assert.All(orderedPhotos, p => Assert.False(string.IsNullOrWhiteSpace(p.Url)));
+        Assert.Equal(3, orderedPhotos.Select(p => p.Url).Distinct().Count());
         Assert.Single(room.Photos, p => p.IsPrimary);
         Assert.True(orderedPhotos[0].IsPrimary);
     }

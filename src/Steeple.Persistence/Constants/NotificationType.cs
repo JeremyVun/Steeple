@@ -41,4 +41,11 @@ public enum NotificationType
 
     /// <summary>The organizer declined the host's counter-offer (application back to pending).</summary>
     CounterOfferDeclined = 11,
+
+    /// <summary>
+    /// An upcoming booking occurrence is close (the reminder worker's "coming up" / "tomorrow"
+    /// nudges; the payload's <c>reminderKind</c> says which). Deliberately numbered well clear of
+    /// the run of values above so parallel additions can land in that run without renumbering.
+    /// </summary>
+    BookingReminder = 21,
 }

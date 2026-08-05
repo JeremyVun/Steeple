@@ -66,6 +66,9 @@ public class SteepleDbContext : DbContext
     /// <summary>Materialized UTC occurrences protected by the exclusion constraint.</summary>
     public DbSet<BookingOccurrence> BookingOccurrences => Set<BookingOccurrence>();
 
+    /// <summary>Sent-ledger for upcoming-booking reminders (one row per occurrence + kind).</summary>
+    public DbSet<BookingReminder> BookingReminders => Set<BookingReminder>();
+
     /// <summary>Immutable two-way booking ratings.</summary>
     public DbSet<Rating> Ratings => Set<Rating>();
 

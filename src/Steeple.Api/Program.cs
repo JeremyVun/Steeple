@@ -57,6 +57,13 @@ app.UseAuthorization();
 // Liveness/readiness probe for the container healthcheck.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
+// Dev mailbox: local sends are otherwise only a log line, and a log line's CTA can't be clicked.
+// The routes exist only where Email:DevMailboxEnabled is set (appsettings.Development.json).
+if (app.Configuration.GetValue<bool>($"{Steeple.Api.Configuration.EmailOptions.SectionName}:DevMailboxEnabled"))
+{
+    app.MapDevMailbox();
+}
+
 app.MapControllers();
 
 app.Run();

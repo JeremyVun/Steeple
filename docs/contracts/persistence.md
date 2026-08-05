@@ -52,6 +52,8 @@ applications 1─0..1 bookings (created only by approval; unique ApplicationId; 
   bookings 1─* booking_occurrences (denormalized RoomId; UTC StartUtc/EndUtc; venue-local LocalDate)
     EXCLUDE USING gist ("RoomId" WITH =, tstzrange("StartUtc","EndUtc") WITH &&)
       WHERE ("Status" <> 3)      ← cancelled rows leave the constraint = cancellation frees slots
+    booking_occurrences 1─* booking_reminders (sent-ledger; unique (OccurrenceId, Kind);
+      Kind 0 = comingUp (T−7d, first upcoming occurrence), 1 = tomorrow (T−1d, every one))
   bookings 1─* ratings (unique (BookingId, RateeType); Stars 1..5; Comment ≤1000; HiddenAtUtc?;
     VenueId/OrganizerId denormalized)
 
@@ -72,6 +74,9 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
 - **Priced listings only:** `rooms."PricePerHour"` NOT NULL + `CHECK (> 0)` (010 — free
   listings were removed from the product).
 - **One rating per direction:** unique `(BookingId, RateeType)`, `Stars` CHECK 1..5.
+- **One reminder per occurrence per kind:** unique `booking_reminders (OccurrenceId, Kind)` —
+  the sweep claims the row (`INSERT … ON CONFLICT DO NOTHING`) *before* dispatching, so a
+  double run, a restart mid-sweep or a second replica cannot double-send (015).
 - **Slug uniqueness:** unique `venues.Slug`, unique `rooms (VenueId, Slug)`; slugs are derived
   once from the name and never change.
 - **Identity:** unique `user_logins (Provider, Subject)`; refresh tokens stored only as SHA-256

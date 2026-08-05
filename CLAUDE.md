@@ -27,6 +27,7 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
 | `docs/SEO.md` | SEO checklist | SEO to-dos |
+| `docs/runbooks/` | Operational procedures (email/Resend today) | Setting up or debugging a third-party service in production |
 
 Target-state docs describe things that **don't exist yet** — don't assume an endpoint or
 table exists because SYSTEM_DESIGN/CONTRACTS mentions it; ARCHITECTURE.md and the code are
@@ -90,6 +91,8 @@ dotnet run --project src/Steeple.Admin
 docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
 ```
 
+- Emails sent locally are captured at http://localhost:5200/dev/mailbox (`.json` for
+  harnesses) — Development only, and their CTAs are real links into the SPA.
 - Razor views hot-reload in Development; C# changes need restart.
 - Verify a change by driving the real flow (search on `:5173`, hit the API endpoint, check
   the admin screen) — not just by compiling.

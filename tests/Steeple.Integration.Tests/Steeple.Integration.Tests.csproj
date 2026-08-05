@@ -38,6 +38,7 @@
     <Using Include="Steeple.Api.Services.Ratings" />
     <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Services.Manage" />
+    <Using Include="Steeple.Api.Services.Reminders" />
     <Using Include="Steeple.Api.Contracts" />
     <Using Include="Steeple.Api.Contracts.Availability" />
     <Using Include="Steeple.Api.Contracts.Applications" />
@@ -50,6 +51,7 @@
     <Using Include="Steeple.Api.Proxies.Notifications" />
     <Using Include="Steeple.Api.Proxies.Availability" />
     <Using Include="Steeple.Api.Proxies.Manage" />
+    <Using Include="Steeple.Api.Proxies.Reminders" />
     <Using Include="Steeple.Api.Extensions" />
     <Using Include="Steeple.Api.Utils" />
   </ItemGroup>

@@ -32,6 +32,7 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Bookings | approval-as-transaction, occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
 | Notifications | inbox rows (= truth), cursor paging, email/push fan-out (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
+| Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller — the API's one `BackgroundService`) | `IBookingReminderService`, `IBookingReminderRepository` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
 | Availability | open hours + blackouts; free-window computation for guests, hosts, and the publish gate | `IAvailabilityService`, `IAvailabilityRepository`, `AvailabilityCalculator` (pure) |
 | Media | photo upload pipeline + storage | `IMediaService`, `IMediaRepository`, `IImageProcessor`, `IMediaStore` |
@@ -61,7 +62,9 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IRatingRepository` | `EfRatingRepository` |
 | `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM push per recipient) |
-| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; log-only without `Email:ApiKey`) |
+| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; log-only without `Email:ApiKey`); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` (Development only) |
+| `IDevMailbox` | `FileDevMailbox` (JSON-lines under the content root, capped ring; registered **only** with `Email:DevMailboxEnabled`) |
+| `IBookingReminderRepository` | `EfBookingReminderRepository` (read-only over bookings/occurrences; claims via `INSERT … ON CONFLICT DO NOTHING`) |
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) when a service account is configured, else `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (decode-as-validation, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 content-addressed keys; ImageSharp pinned to 3.1.x — SYSTEM_DESIGN §17) |

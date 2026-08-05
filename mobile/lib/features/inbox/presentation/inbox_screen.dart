@@ -184,6 +184,7 @@ class _NotificationTile extends StatelessWidget {
         NotificationType.bookingCancelled => (Icons.event_busy_rounded, colors.danger),
         NotificationType.renewalDue => (Icons.refresh_rounded, colors.info),
         NotificationType.ratingReceived => (Icons.star_rounded, colors.neutral),
+        NotificationType.bookingReminder => (Icons.event_available_rounded, colors.info),
         NotificationType.unknown => (Icons.notifications_none_rounded, colors.neutral),
       };
 
@@ -198,6 +199,8 @@ class _NotificationTile extends StatelessWidget {
       NotificationType.bookingCancelled => 'Your booking at ${venue ?? 'the venue'} was cancelled',
       NotificationType.renewalDue => 'Your booking at ${venue ?? 'the venue'} is ending soon',
       NotificationType.ratingReceived => '${venue ?? 'Someone'} left you a rating',
+      NotificationType.bookingReminder =>
+        '${n.payload.roomName ?? 'Your booking'} at ${venue ?? 'the venue'} is coming up',
       NotificationType.unknown => wireTokenLabel(n.type),
     };
   }

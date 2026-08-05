@@ -124,12 +124,15 @@ no background worker.
 `after` is the opaque `nextCursor` from the previous page (unreadable cursors read from the top).
 `type` ∈ `applicationReceived | applicationMessage | applicationApproved |
 applicationDeclined | bookingCancelled | renewalDue | ratingReceived | listingApproved |
-listingDeclined` (additive).
+listingDeclined | bookingReminder` (additive).
 `payload` for the application types: `{applicationId, roomId, roomName, venueName, venueSlug,
 roomSlug, organizerName, status, deepLink}` (deepLink = the canonical path registry in
 `infra.md`); for `bookingCancelled`/`renewalDue`: the same display fields with `bookingId` and
 `deepLink: "/bookings/{id}"`; for `ratingReceived`: the same booking display fields with
-`bookingId` and `deepLink: "/bookings/{id}"` but no stars/comment; for
+`bookingId` and `deepLink: "/bookings/{id}"` but no stars/comment; for `bookingReminder` (the T−7d / T−1d
+sweep, `api-ports.md`): the booking display fields plus `{bookingId, occurrenceId,
+reminderKind: "comingUp" | "tomorrow", startsAtUtc, localDate, deepLink: "/bookings/{id}"}` —
+one row per party per occurrence, deduped by the `booking_reminders` ledger; for
 `listingApproved`/`listingDeclined` (written by Admin on a
 moderation decision, `manage.md`): `{roomId, roomName, venueName, venueSlug, roomSlug,
 status: "published" | "declined", note?, deepLink}` (`note` is the operator's optional
@@ -140,3 +143,6 @@ carry `{notificationId, type, deepLink}` only — the inbox row is the payload o
 Email fan-out (Resend adapter behind `IEmailGateway`) and push fan-out (FCM adapter behind
 `IPushGateway` ✅, built 2026-07-04) are both fire-and-forget on the same events; without a
 configured `Email:ApiKey` / `Push:ServiceAccountJson[Path]` the API logs sends instead (dev).
+Every email ends with one CTA line the **dispatcher** composes from the payload's own `deepLink`
+— `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` (`web.md`), or nothing at all where no web
+origin is configured. Composition sites never build URLs; gateways never edit bodies.

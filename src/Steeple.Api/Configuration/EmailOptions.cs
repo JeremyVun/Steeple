@@ -21,4 +21,11 @@ public sealed class EmailOptions
     /// e.g. <c>https://example.com/steeple</c>. Empty = emails carry no links.
     /// </summary>
     public string WebBaseUrl { get; set; } = "";
+
+    /// <summary>
+    /// Captures every send into a browsable dev mailbox at <c>/dev/mailbox</c> (the local loop has
+    /// no real inbox to click a CTA in). Development-only by construction: base appsettings omits
+    /// it, so deployed environments neither capture nor expose anything.
+    /// </summary>
+    public bool DevMailboxEnabled { get; set; }
 }
