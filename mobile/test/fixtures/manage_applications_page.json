@@ -23,7 +23,9 @@
         "frequency": "recurringWeekly",
         "startDate": "2026-09-01",
         "endDate": "2026-12-15",
-        "daysOfWeek": ["tuesday"],
+        "daysOfWeek": [
+          "tuesday"
+        ],
         "startTime": "09:00",
         "endTime": "11:30"
       },
@@ -34,7 +36,8 @@
       "expiresAtUtc": "2026-07-15T13:05:00Z",
       "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "messageCount": 2,
-      "messages": []
+      "messages": [],
+      "organizationName": "Vienna Toddler Playgroup"
     },
     {
       "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -69,8 +72,14 @@
       "conflicts": {
         "totalOccurrences": 4,
         "conflicts": [
-          { "date": "2026-07-18", "reason": "booked" },
-          { "date": "2026-08-01", "reason": "blackout" }
+          {
+            "date": "2026-07-18",
+            "reason": "booked"
+          },
+          {
+            "date": "2026-08-01",
+            "reason": "blackout"
+          }
         ],
         "pendingOverlaps": [
           {
@@ -84,7 +93,8 @@
             "overlappingDateCount": 1
           }
         ]
-      }
+      },
+      "organizationName": "Vienna Toddler Playgroup"
     }
   ],
   "totalCount": 2,

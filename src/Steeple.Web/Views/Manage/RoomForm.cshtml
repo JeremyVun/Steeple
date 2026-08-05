@@ -3,6 +3,10 @@
 <section class="wrap manage-form-page">
     <header class="manage-form-head">
         <p class="content-eyebrow">@Model.VenueName</p>
+        @if (Model.RoomId is null)
+        {
+            <partial name="_HostSetupSteps" model="2" />
+        }
         <h1>Add a room</h1>
         <p class="content-lead">
             The room is what organizers find and book. It starts as a draft — add photos next,

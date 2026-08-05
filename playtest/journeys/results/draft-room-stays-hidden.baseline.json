@@ -1,0 +1,37 @@
+{
+  "accepted_at": "2026-07-08T03:41:56.384Z",
+  "run_id": "2026-07-08T0332-e765",
+  "run_dir": "/Users/jeremy/projects/steeple/runs/2026-07-08T0332-e765/draft-room-stays-hidden",
+  "healed_from_run_id": "2026-07-07T2309-a34a",
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v7",
+    "step_schema_version": 6,
+    "snapshot_format": "a11y-text-v5",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "driver": "web",
+    "actor_model": "sonnet",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8898",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "c3c75978d1e057fd",
+  "base_url": "http://localhost:5187",
+  "verdicts": [
+    {
+      "spec": "assert: The draft room's details were never shown — the page said the space wasn't found or available, and offered a way back to browsing, which worked.",
+      "pass": true,
+      "detail": "The captured not-found page for the Renovation Annex showed no room details, said “We couldn't find that space,” provided a “Browse community spaces” link, and the final snapshot shows that link returned to the browsing page."
+    }
+  ]
+}

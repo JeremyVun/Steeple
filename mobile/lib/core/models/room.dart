@@ -91,6 +91,9 @@ abstract class RoomSummary with _$RoomSummary {
 
     /// Present only on searches with a When filter (additive).
     MatchedWindow? matchedWindow,
+
+    /// Amenity tokens for card-level cues (additive, 2026-07).
+    @Default(<String>[]) List<String> amenities,
   }) = _RoomSummary;
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) =>

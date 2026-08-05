@@ -21,6 +21,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="Rating">Venue-level visible star-rating aggregate, if any ratings are revealed.</param>
 /// <param name="MatchedWindow">The free window that satisfied a time-first ("When") search; present
 /// only on searches with a When filter (CONTRACTS §3), null otherwise.</param>
+/// <param name="Amenities">Amenities as string tokens (additive 2026-07; powers card-level cues).</param>
 public record RoomSummaryDto(
     Guid RoomId,
     Guid VenueId,
@@ -39,4 +40,9 @@ public record RoomSummaryDto(
     IReadOnlyList<string> Accessibility,
     double? DistanceMeters,
     RatingSummaryDto? Rating,
-    MatchedWindowDto? MatchedWindow = null);
+    MatchedWindowDto? MatchedWindow = null,
+    IReadOnlyList<string>? Amenities = null)
+{
+    /// <summary>Amenity tokens, never null on the wire (defaults to empty).</summary>
+    public IReadOnlyList<string> Amenities { get; init; } = Amenities ?? [];
+}

@@ -42,6 +42,11 @@ public sealed class InboxController : SteepleControllerBase
             var result = await _api.GetMyApplicationsAsync(accessToken, status, page, ct);
             var managed = await _api.GetManagedVenuesAsync(accessToken, ct);
 
+            // Hosts get a waiting-work badge on the cross-link; one extra call, providers only.
+            var hostPending = managed.Count > 0
+                ? (await _api.GetManageApplicationsAsync(accessToken, "pending", 1, ct)).TotalCount
+                : 0;
+
             ViewData["Title"] = "Your requests";
             ViewData["Robots"] = "noindex,nofollow";
             return View(new InboxViewModel
@@ -49,6 +54,7 @@ public sealed class InboxController : SteepleControllerBase
                 Result = result,
                 StatusFilter = string.IsNullOrEmpty(status) ? null : status,
                 IsProvider = managed.Count > 0,
+                HostPendingCount = hostPending,
             });
         }
         catch (HttpRequestException ex)

@@ -16,6 +16,7 @@ namespace Steeple.Api.Contracts;
 /// <param name="When">Optional time-first ("When") filter. When set, the repository applies a cheap
 /// open-hours/blackout SQL prefilter; the service refines survivors against real free windows
 /// (open hours − blackouts − confirmed bookings) and paginates afterwards.</param>
+/// <param name="Amenities">Amenities to filter by (AND semantics); <see cref="Amenity.None"/> means no filter.</param>
 public record RoomSearchCriteria(
     BoundingBox Bounds,
     int? MinCapacity,
@@ -25,4 +26,5 @@ public record RoomSearchCriteria(
     int Skip,
     int Take,
     GeoPoint? Center = null,
-    AvailabilityFilter? When = null);
+    AvailabilityFilter? When = null,
+    Amenity Amenities = Amenity.None);

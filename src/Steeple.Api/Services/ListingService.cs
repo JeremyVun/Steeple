@@ -59,7 +59,8 @@ public sealed class ListingService : IListingService
             Skip: skip,
             Take: pageSize,
             Center: searchCenter,
-            When: when);
+            When: when,
+            Amenities: query.Amenities);
 
         // Rooms to project + the true total. A When filter refines the cheap SQL prefilter against
         // real free windows, so we fetch every prefiltered candidate, drop non-matchers, count and
@@ -128,6 +129,8 @@ public sealed class ListingService : IListingService
                 suburb = string.IsNullOrWhiteSpace(query.Suburb) ? null : query.Suburb.Trim(),
                 activities = query.Activities.ToNameList(),
                 accessibility = query.Accessibility.ToNameList(),
+                // Additive amenities-filter instrumentation (CONTRACTS §7).
+                amenities = query.Amenities.ToNameList(),
                 bounds,
                 resultCount = totalCount,
                 zeroResult = totalCount == 0,

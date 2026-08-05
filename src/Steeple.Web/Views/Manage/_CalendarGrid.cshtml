@@ -8,9 +8,10 @@
 
 @if (Model.Venues.Count == 0)
 {
-    <div class="empty-state">
-        <h2>Your calendar lives here</h2>
-        <p>Once you list a venue and it takes bookings, this is where you'll see confirmed
+    <div class="empty-state" role="status">
+        <p class="empty-emoji" aria-hidden="true">🗓️</p>
+        <h2 class="empty-title">Your calendar lives here</h2>
+        <p class="empty-body">Once you list a venue and it takes bookings, this is where you'll see confirmed
            sessions and pending requests laid out by week or month.</p>
         <a class="btn btn-primary" href="~/manage/venues/new">List your venue</a>
     </div>

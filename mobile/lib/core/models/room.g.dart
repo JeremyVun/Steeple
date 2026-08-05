@@ -98,6 +98,9 @@ _RoomSummary _$RoomSummaryFromJson(Map<String, dynamic> json) => _RoomSummary(
   matchedWindow: json['matchedWindow'] == null
       ? null
       : MatchedWindow.fromJson(json['matchedWindow'] as Map<String, dynamic>),
+  amenities:
+      (json['amenities'] as List<dynamic>?)?.map((e) => e as String).toList() ??
+      const <String>[],
 );
 
 Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
@@ -120,6 +123,7 @@ Map<String, dynamic> _$RoomSummaryToJson(_RoomSummary instance) =>
       'distanceMeters': instance.distanceMeters,
       'rating': instance.rating,
       'matchedWindow': instance.matchedWindow,
+      'amenities': instance.amenities,
     };
 
 _RoomPhoto _$RoomPhotoFromJson(Map<String, dynamic> json) => _RoomPhoto(

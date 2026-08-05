@@ -1,0 +1,48 @@
+{
+  "accepted_at": "2026-07-08T04:01:49.974Z",
+  "run_id": "2026-07-08T0359-8f4e",
+  "run_dir": "/Users/jeremy/projects/steeple/runs/2026-07-08T0359-8f4e/organizer-withdraw",
+  "healed_from_run_id": "2026-07-07T2309-a34a",
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v7",
+    "step_schema_version": 6,
+    "snapshot_format": "a11y-text-v5",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "driver": "web",
+    "actor_model": "sonnet",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8898",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "e2232cf458290013",
+  "base_url": "http://localhost:5187",
+  "verdicts": [
+    {
+      "spec": "console_errors: 0",
+      "pass": true,
+      "detail": "0 console error(s)"
+    },
+    {
+      "spec": "api_called: POST /inbox/applications/*/withdraw",
+      "pass": true,
+      "detail": "1 matching request(s), e.g. POST http://localhost:5187/inbox/applications/c310a8a8-3d68-4662-b382-763243c7dfb9/withdraw"
+    },
+    {
+      "spec": "assert: The application's status now reads as withdrawn.",
+      "pass": true,
+      "detail": "The final page snapshot shows a status message \"Request withdrawn.\" and the request status text \"Withdrawn.\""
+    }
+  ],
+  "candidate": true
+}

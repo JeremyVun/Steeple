@@ -104,6 +104,17 @@
             <div class="request-card">
                 <p class="request-card-heading">The request</p>
                 <dl class="request-facts">
+                    @if (!Model.ViewerIsOrganizer)
+                    {
+                        @* "Who's asking" leads the host's read — a request identified only by a
+                           first name was the study's sole approval blocker. *@
+                        <div>
+                            <dt>Who's asking</dt>
+                            <dd>
+                                @app.Organizer.DisplayName@(string.IsNullOrWhiteSpace(app.OrganizationName) ? "" : $" · {app.OrganizationName}")
+                            </dd>
+                        </div>
+                    }
                     <div>
                         <dt>Activity</dt>
                         <dd>@DiscoveryViewModel.Humanize(app.ActivityType) · @app.GroupSize people</dd>
@@ -216,8 +227,13 @@
             {
                 <div class="decision-card">
                     <p class="decision-heading">Your decision</p>
+                    @* All three moves get named up front — the cautious two were invisible in the
+                       2026-07 study ("Suggest another time" went entirely unnoticed). The time is
+                       only locked by approval; saying so removes the protective-host ambiguity. *@
                     <p class="decision-note">
-                        @app.Organizer.DisplayName gets notified either way. A question first is always fine.
+                        Approve it, suggest a different time, or ask a question first —
+                        @app.Organizer.DisplayName gets notified either way. The time isn't held
+                        until you approve.
                     </p>
                     @if (Model.IsCounterOffered)
                     {
@@ -238,10 +254,20 @@
                             <button type="submit" class="btn btn-danger" name="decision" value="decline">Decline</button>
                         </div>
                     </form>
-                    @if (Model.ProviderCanCounter)
-                    {
-                        <partial name="_CounterOffer" model="Model" />
-                    }
+                    <div class="decision-alt">
+                        <p class="decision-alt-label">Not ready to decide?</p>
+                        @if (Model.ProviderCanCounter)
+                        {
+                            @* Full path: this view renders under both /inbox (Inbox controller) and /manage
+   (Manage controller); name-only resolution searches the active controller's folder
+   and misses Views/Inbox from the manage route. *@
+<partial name="~/Views/Inbox/_CounterOffer.cshtml" model="Model" />
+                        }
+                        @if (Model.AcceptsMessages)
+                        {
+                            <a class="btn btn-ghost decision-ask-link" href="#thread-reply-body">Ask a question first</a>
+                        }
+                    </div>
                 </div>
             }
 
@@ -249,11 +275,13 @@
             {
                 <div class="withdraw-card">
                     <details class="account-confirm">
-                        <summary>Withdraw this request</summary>
+                        @* Opener ends in an ellipsis, confirmer reads as an answer — the two must never
+                           be near-identical labels (2026-07 journey: four failed attempts telling them apart). *@
+                        <summary>Withdraw this request…</summary>
                         <p class="decision-note">@app.VenueName will simply see it disappear from their pending list.</p>
                         <form method="post" action="@Url.Content($"~/inbox/applications/{app.Id}/withdraw")">
                             @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-danger">Withdraw request</button>
+                            <button type="submit" class="btn btn-danger">Yes, withdraw it</button>
                         </form>
                     </details>
                 </div>

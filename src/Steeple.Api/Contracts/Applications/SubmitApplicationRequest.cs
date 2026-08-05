@@ -9,9 +9,13 @@ namespace Steeple.Api.Contracts.Applications;
 /// <param name="Schedule">Proposed venue-local schedule.</param>
 /// <param name="IntentText">The organizer's own words — the application's heart (≤2000 chars).</param>
 /// <param name="TurnstileToken">Cloudflare Turnstile response token (required where enabled).</param>
+/// <param name="OrganizationName">The organizer's group/organization (≤200 chars). Optional,
+/// additive 2026-07-08 — shown to the host as "Who's asking" (a bare "our nonprofit" was the
+/// sole approval blocker in the discovery study).</param>
 public record SubmitApplicationRequest(
     string ActivityType,
     int GroupSize,
     ScheduleDto Schedule,
     string IntentText,
-    string? TurnstileToken);
+    string? TurnstileToken,
+    string? OrganizationName = null);

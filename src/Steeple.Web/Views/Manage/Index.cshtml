@@ -13,9 +13,10 @@
 
     @if (Model.Venues.Count == 0)
     {
-        <div class="empty-state">
-            <h2>Open your hall to the neighborhood</h2>
-            <p>
+        <div class="empty-state" role="status">
+            <p class="empty-emoji" aria-hidden="true">⛪</p>
+            <h2 class="empty-title">Open your hall to the neighborhood</h2>
+            <p class="empty-body">
                 List your venue and its rooms here. New listings get a quick personal review
                 before they go live, and you decide who uses the space — every booking starts
                 as a request you approve.

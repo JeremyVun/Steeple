@@ -15,9 +15,11 @@
     }
 
     // With JS running, the calendar + windows drive the schedule; the native frequency/date/day
-    // fields collapse to the no-JS fallback (§8.9). The submit guard below re-reveals them if a
-    // value is missing, so browser validation never targets a hidden field.
+    // fields collapse to the no-JS fallback (§8.9). Native constraint validation would run
+    // BEFORE the submit event and try to focus those hidden fields (silently blocking the
+    // submit), so the picker takes over validation: noValidate + the submit guard below.
     form.classList.add("is-picker-active");
+    form.noValidate = true;
 
     var picker = form.querySelector("[data-apply-picker]");
     var startDate = form.querySelector("[data-start-date]");
@@ -29,6 +31,7 @@
     var untilBlock = form.querySelector("[data-until-block]");
     var untilInput = form.querySelector("[data-until-date]");
     var summaryEl = form.querySelector("[data-schedule-summary]");
+    var scheduleError = form.querySelector("[data-schedule-error]");
     var DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
     var DAY_LABELS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 
@@ -48,6 +51,22 @@
     function toDate(s) { return new Date(s + "T00:00:00"); }
     function wireDate(d) { var m = d.getMonth() + 1, day = d.getDate(); return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day; }
     function fmtShort(s) { return toDate(s).toLocaleDateString(undefined, { day: "numeric", month: "short" }); }
+
+    // Schedule-level validation message (§8.9 error anatomy), anchored by the calendar so the
+    // fix is next to the words. Submit errors scroll it into view; passive ones just appear.
+    function showScheduleError(msg, scroll) {
+        if (!scheduleError) { return; }
+        scheduleError.textContent = msg;
+        scheduleError.hidden = false;
+        if (scroll) { scheduleError.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    }
+
+    function clearScheduleError() {
+        if (scheduleError && !scheduleError.hidden) {
+            scheduleError.hidden = true;
+            scheduleError.textContent = "";
+        }
+    }
 
     function repeatOn() { return repeatToggle && repeatToggle.checked && selectedDates.length === 1; }
     function isWeekly() { return selectedDates.length > 1 || repeatOn(); }
@@ -109,6 +128,17 @@
             if (selectedDates.length !== 1 && repeatToggle) { repeatToggle.checked = false; }
         }
         if (untilBlock) { untilBlock.hidden = !repeatOn(); }
+
+        // A weekly series must never sit on a blank end date (2026-07 study: easy to miss,
+        // "I still don't know whether it is defaulting to 8 weeks or something else").
+        // Seed the 8-weeks preset whenever repeat arms without one — however it was armed.
+        if (repeatOn() && untilInput && !untilInput.value && selectedDates.length === 1) {
+            var seed = toDate(selectedDates[0]);
+            seed.setDate(seed.getDate() + 56);
+            untilInput.value = wireDate(seed);
+            var seedPreset = form.querySelector('[data-until="56"]');
+            if (seedPreset) { selectOne(seedPreset, "[data-until]", seedPreset.closest("[role=group]")); }
+        }
 
         var weekly = isWeekly();
         setFrequency(weekly);
@@ -195,6 +225,28 @@
         var lo = toMin(activeWindow.start), hi = toMin(activeWindow.end);
         form.querySelectorAll("[data-range-start] option").forEach(function (o) { o.disabled = toMin(o.value) < lo || toMin(o.value) >= hi; });
         form.querySelectorAll("[data-range-end] option").forEach(function (o) { o.disabled = toMin(o.value) <= lo || toMin(o.value) > hi; });
+        syncEndBounds();
+    }
+
+    // The end select must never offer a time at/before the chosen start — a stale earlier "To"
+    // after a later "From" pick is how "6:00 PM–10:00 AM · -8 hours" happened.
+    function syncEndBounds() {
+        if (!activeWindow) { return; }
+        var startSel = form.querySelector("[data-range-start]");
+        if (!startSel || !startSel.value) { return; }
+        var s = toMin(startSel.value), hi = toMin(activeWindow.end);
+        form.querySelectorAll("[data-range-end] option").forEach(function (o) {
+            var v = toMin(o.value);
+            o.disabled = v <= s || v > hi;
+        });
+    }
+
+    // Keep the duration pills honest: highlight the pill matching the actual span, else "Custom".
+    function syncDurationPills() {
+        if (!startTime.value || !endTime.value) { return; }
+        var mins = toMin(endTime.value) - toMin(startTime.value);
+        var match = form.querySelector('[data-duration="' + mins + '"]') || form.querySelector('[data-duration="0"]');
+        if (match) { selectOne(match, "[data-duration]", match.closest("[role=group]")); }
     }
 
     function applyDuration(mins) {
@@ -215,6 +267,11 @@
         var windows = form.querySelector("[data-day-windows]");
         if (!readout || !startTime.value || !endTime.value) { return; }
         var mins = toMin(endTime.value) - toMin(startTime.value);
+        if (mins <= 0) {
+            // Unreachable with the end-select bounds above; belt for any other writer.
+            readout.textContent = "The end time needs to be after the start.";
+            return;
+        }
         var hours = mins / 60;
         var dur = (hours === 1 ? "1 hour" : (Number.isInteger(hours) ? hours + " hours" : hours.toFixed(1) + " hours"));
         var label = windows ? windows.getAttribute("data-date") : "";
@@ -241,6 +298,7 @@
                 }
             }
             deriveSchedule();
+            clearScheduleError();
             return;
         }
 
@@ -252,6 +310,7 @@
             if (range) { range.hidden = false; }
             constrainSelects();
             applyDuration(currentDuration());
+            clearScheduleError();
             return;
         }
 
@@ -273,9 +332,19 @@
     });
 
     form.addEventListener("change", function (e) {
-        if (e.target.matches("[data-range-start]")) { setNative(startTime, e.target.value); updateReadout(); }
-        else if (e.target.matches("[data-range-end]")) { setNative(endTime, e.target.value); updateReadout(); }
-        else if (untilInput && e.target === untilInput) { deriveSchedule(); }
+        if (e.target.matches("[data-range-start]")) {
+            // A new "From" keeps the chosen duration and re-derives "To" — never leave a stale
+            // earlier end time behind (the negative-duration trap).
+            var prevDur = startTime.value && endTime.value ? toMin(endTime.value) - toMin(startTime.value) : 0;
+            setNative(startTime, e.target.value);
+            var pill = form.querySelector("[data-duration].is-selected");
+            var pillMins = pill ? parseInt(pill.getAttribute("data-duration"), 10) : 0;
+            applyDuration(pillMins > 0 ? pillMins : (prevDur > 0 ? prevDur : 120));
+            syncEndBounds();
+            clearScheduleError();
+        }
+        else if (e.target.matches("[data-range-end]")) { setNative(endTime, e.target.value); syncDurationPills(); updateReadout(); clearScheduleError(); }
+        else if (untilInput && e.target === untilInput) { deriveSchedule(); clearScheduleError(); }
     });
 
     if (repeatToggle) {
@@ -293,18 +362,72 @@
     }
 
     // Month nav swaps in a fresh grid with no selection state — repaint from JS state.
+    // The day-windows swap also completes a restored draft: re-select the stashed time window
+    // so "your request is still here" is visibly true, not just true in hidden inputs.
     form.addEventListener("htmx:afterSwap", function (e) {
         if (e.target.closest && (e.target.closest("[data-apply-picker]") || e.target.matches("[data-apply-picker]"))) {
             paintCalendar();
         }
+        if (e.target.id === "apply-day-windows" && pendingRestore) {
+            restoreTimeWindow(pendingRestore);
+            pendingRestore = null;
+        }
     });
 
-    // ----- Submit guard: incomplete schedule → reveal the native fields and let validation run -----
+    // Restored stash / prefill: find the free window covering the saved times and re-arm the
+    // range UI from it. If availability moved and no window fits any more, say so plainly and
+    // clear the stale times rather than silently submitting a doomed request.
+    var pendingRestore = null; // {start, end} wire HH:mm, set by init() from restored inputs
+
+    function restoreTimeWindow(saved) {
+        var target = null;
+        form.querySelectorAll("#apply-day-windows [data-window]").forEach(function (w) {
+            if (!target
+                && toMin(w.getAttribute("data-start")) <= toMin(saved.start)
+                && toMin(saved.end) <= toMin(w.getAttribute("data-end"))) {
+                target = w;
+            }
+        });
+        if (!target) {
+            setNative(startTime, "");
+            setNative(endTime, "");
+            showScheduleError("The time you'd picked (" + fmt12(saved.start) + "–" + fmt12(saved.end)
+                + ") no longer looks open — tap an open window below.", false);
+            return;
+        }
+        activeWindow = { start: target.getAttribute("data-start"), end: target.getAttribute("data-end") };
+        selectOne(target, "[data-window]", target.closest("[data-day-windows]"));
+        var range = form.querySelector("[data-range]");
+        if (range) { range.hidden = false; }
+        constrainSelects();
+        var startSel = form.querySelector("[data-range-start]"), endSel = form.querySelector("[data-range-end]");
+        if (startSel) { startSel.value = saved.start; }
+        if (endSel) { endSel.value = saved.end; }
+        syncEndBounds();
+        syncDurationPills();
+        updateReadout();
+    }
+
+    // ----- Submit guard: incomplete schedule → inline error at the calendar (§8.9), never a
+    // silent no-op. The form is noValidate while the picker runs, so this always gets to speak;
+    // other fields still get native validation via reportValidity below.
     form.addEventListener("submit", function (e) {
-        var incomplete = [startDate, startTime, endTime].some(function (f) { return f && !f.value; })
-            || (isWeekly() && endDate && !endDate.value);
-        if (incomplete) {
-            form.classList.remove("is-picker-active");
+        var msg = null;
+        if (!startDate || !startDate.value) {
+            msg = "Pick a date on the calendar before sending.";
+        } else if (!startTime.value || !endTime.value) {
+            msg = "Choose a time — tap an open window under the calendar.";
+        } else if (toMin(endTime.value) <= toMin(startTime.value)) {
+            msg = "The end time needs to be after the start — check the From and To times.";
+        } else if (isWeekly() && endDate && !endDate.value) {
+            msg = "Choose how long the weekly booking runs — 8 weeks, 3 months, or a custom end date.";
+        }
+        if (msg) {
+            e.preventDefault();
+            showScheduleError(msg, true);
+            return;
+        }
+        if (!form.checkValidity()) {
             e.preventDefault();
             form.reportValidity();
         }
@@ -341,9 +464,19 @@
             repeatToggle.checked = true;
             if (untilInput && endDate && endDate.value) { untilInput.value = endDate.value; }
         }
+        // Carried/restored times apply to the first day-windows load — even when only weekdays
+        // were carried (no start date yet), so a "Tuesday evenings" search survives the first
+        // date tap instead of being overwritten by the window's default.
+        if (startTime && startTime.value && endTime && endTime.value) {
+            pendingRestore = { start: startTime.value, end: endTime.value };
+        }
         if (startDate && startDate.value) {
             selectedDates = [startDate.value];
             deriveSchedule();
+            // Load the picked date's windows so a restored draft never sits over the stale
+            // "Pick a date on the calendar…" hint (that mismatch is what made people re-tap
+            // the date and accidentally deselect it).
+            loadDayWindows(startDate.value);
         }
     })();
 })();

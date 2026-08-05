@@ -43,6 +43,9 @@ public class Application
     /// <summary>The organizer's free-text ask.</summary>
     public string IntentText { get; set; } = "";
 
+    /// <summary>The organizer's group/organization, shown to the host ("Who's asking"). Optional.</summary>
+    public string? OrganizationName { get; set; }
+
     /// <summary>Current lifecycle state.</summary>
     public ApplicationStatus Status { get; set; }
 

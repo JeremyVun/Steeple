@@ -47,6 +47,9 @@ public class ListingSearchQuery
     /// <summary>Accessibility features to filter by (bitwise flags); <see cref="AccessibilityFeature.None"/> means no filter.</summary>
     public AccessibilityFeature Accessibility { get; set; } = AccessibilityFeature.None;
 
+    /// <summary>Amenities to filter by (bitwise flags, AND semantics); <see cref="Amenity.None"/> means no filter.</summary>
+    public Amenity Amenities { get; set; } = Amenity.None;
+
     /// <summary>1-based page number.</summary>
     public int Page { get; set; } = 1;
 

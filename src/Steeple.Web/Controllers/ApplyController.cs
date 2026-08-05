@@ -42,7 +42,7 @@ public sealed class ApplyController : SteepleControllerBase
     [HttpGet("space/{venueSlug}/{roomSlug}/apply")]
     public async Task<IActionResult> Index(
         string venueSlug, string roomSlug,
-        DateOnly? date, string? startTime, string? endTime, [FromQuery] string[]? daysOfWeek,
+        DateOnly? date, string? startTime, string? endTime, [FromQuery] string[]? daysOfWeek, int? people,
         CancellationToken ct)
     {
         if (!ApplyEnabled())
@@ -64,7 +64,7 @@ public sealed class ApplyController : SteepleControllerBase
         // form; a restored draft always wins). Bad weekday tokens are ignored leniently.
         if (stashed is null)
         {
-            PrefillFromWhen(form, date, startTime, endTime, daysOfWeek);
+            PrefillFromWhen(form, date, startTime, endTime, daysOfWeek, people);
         }
 
         if (form.ActivityType.Length == 0 && room.Activities.Count > 0)
@@ -140,7 +140,8 @@ public sealed class ApplyController : SteepleControllerBase
                 StartTime: form.StartTime,
                 EndTime: form.EndTime),
             IntentText: form.IntentText,
-            TurnstileToken: form.TurnstileToken);
+            TurnstileToken: form.TurnstileToken,
+            OrganizationName: form.OrganizationName);
 
         (ApplicationDto? application, string? errorCode, ScheduleCheckResultDto? conflict) = (null, null, null);
         try
@@ -176,7 +177,7 @@ public sealed class ApplyController : SteepleControllerBase
     /// start date). Malformed values are ignored — the person just finishes filling the form.
     /// </summary>
     private static void PrefillFromWhen(
-        ApplyFormModel form, DateOnly? date, string? startTime, string? endTime, string[]? daysOfWeek)
+        ApplyFormModel form, DateOnly? date, string? startTime, string? endTime, string[]? daysOfWeek, int? people)
     {
         var days = WhenCarry.ValidWeekdays(daysOfWeek);
         if (days.Count > 0)
@@ -198,6 +199,13 @@ public sealed class ApplyController : SteepleControllerBase
         if (IsWireTime(endTime))
         {
             form.EndTime = endTime!;
+        }
+
+        // The searched head-count carries through so "15 people" never silently resets to the
+        // form's default (2026-07 study: both find-space personas re-typed it and lost trust).
+        if (people is > 0 and <= 1000)
+        {
+            form.GroupSize = people.Value;
         }
     }
 

@@ -46,6 +46,7 @@ public sealed class ListingsApiController : ControllerBase
         // (e.g. ?Activities=Children&Activities=Music), mirroring the funnel's binding behaviour.
         query.Activities = ReadFlags("Activities", query.Activities);
         query.Accessibility = ReadFlags("Accessibility", query.Accessibility);
+        query.Amenities = ReadFlags("Amenities", query.Amenities);
 
         // Resolve the When filter from the raw query (repeatable daysOfWeek bound like the flags
         // params). Behind listing.availability: flag off → params ignored. Malformed → 400 invalid_when.

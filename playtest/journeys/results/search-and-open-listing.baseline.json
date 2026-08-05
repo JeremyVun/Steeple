@@ -1,0 +1,52 @@
+{
+  "accepted_at": "2026-07-08T03:54:45.037Z",
+  "run_id": "2026-07-08T0332-e765",
+  "run_dir": "/Users/jeremy/projects/steeple/runs/2026-07-08T0332-e765/search-and-open-listing",
+  "healed_from_run_id": "2026-07-08T0322-475f",
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v7",
+    "step_schema_version": 6,
+    "snapshot_format": "a11y-text-v5",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "driver": "web",
+    "actor_model": "sonnet",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8898",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "1ac8ca8ff4ca1d16",
+  "base_url": "http://localhost:5187",
+  "verdicts": [
+    {
+      "spec": "console_errors: 0",
+      "pass": true,
+      "detail": "0 console error(s)"
+    },
+    {
+      "spec": "api_called: GET /search*",
+      "pass": true,
+      "detail": "2 matching request(s), e.g. GET http://localhost:5187/search?Suburb=&MinCapacity=&date=&Activities=Children"
+    },
+    {
+      "spec": "url_matches: /space/*",
+      "pass": true,
+      "detail": "final url http://localhost:5187/space/dunn-loring-umc/art-studio"
+    },
+    {
+      "spec": "assert: The final page is a single room's listing and it shows an hourly price (e.g. \"$45/hr\"), a capacity, and a clear way to ask to book or contact the venue.",
+      "pass": true,
+      "detail": "The final Art Studio listing shows an hourly price of $30/hr, capacity up to 24 people, and links to Ask to book or email the venue."
+    }
+  ]
+}

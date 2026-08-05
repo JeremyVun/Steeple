@@ -81,9 +81,17 @@
             if (typeof pin.lat !== "number" || typeof pin.lng !== "number") {
                 return;
             }
-            L.marker([pin.lat, pin.lng], { icon: pinIcon() })
+            // A11y contract #4: pins expose room + venue + price (they render as focusable
+            // controls; without a name they read as `button ""` and the map is unusable for
+            // comparison by assistive tech — 2026-07 study finding).
+            var label = [pin.name, pin.venue, pin.price].filter(Boolean).join(", ");
+            var marker = L.marker([pin.lat, pin.lng], { icon: pinIcon(), alt: label, title: label })
                 .addTo(markerLayer)
                 .bindPopup(popupHtml(pin));
+            // Leaflet only writes `alt` onto <img> icons; div-icon pins need the name set
+            // on the marker element directly.
+            var el = marker.getElement();
+            if (el) { el.setAttribute("aria-label", label); }
         });
 
         // A single pin (detail page) — center on it rather than fitting bounds.

@@ -13,6 +13,7 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
         builder.HasKey(a => a.Id);
 
         builder.Property(a => a.IntentText).IsRequired().HasMaxLength(2000);
+        builder.Property(a => a.OrganizationName).HasMaxLength(200);
 
         // Single-value and status enums persist as their underlying int (repo convention).
         builder.Property(a => a.ActivityType).HasConversion<int>();

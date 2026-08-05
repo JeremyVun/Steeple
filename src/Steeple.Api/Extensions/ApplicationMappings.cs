@@ -47,7 +47,8 @@ public static class ApplicationMappings
             Conflicts: conflicts,
             // The latest non-superseded counter rides the detail read for both parties (lists omit it,
             // matching the thread/conflicts). Superseded rows stay only as history.
-            CounterOffer: includeThread ? application.LatestCounterOfferDto() : null);
+            CounterOffer: includeThread ? application.LatestCounterOfferDto() : null,
+            OrganizationName: application.OrganizationName);
     }
 
     /// <summary>

@@ -14,6 +14,11 @@
 
     <p class="manage-breadcrumb"><a href="~/manage/venues/@room.VenueId">← @room.VenueName</a></p>
 
+    @if (!everPublished && !isLive)
+    {
+        <partial name="_HostSetupSteps" model="3" />
+    }
+
     @if (Model.Flash is not null)
     {
         <p class="thread-flash" role="status">@Model.Flash</p>
@@ -53,13 +58,24 @@
                             Only you can see this room.</p>
                         @if (room.Photos.Count == 0)
                         {
-                            <p class="field-help">Add at least one photo before publishing — listings with photos get far more requests.</p>
+                            @* The blocker, its reason, and the way past it all live at the button —
+                               an active button that silently 302s was the 2026-07 study's host-side
+                               "soft wall" (both the onboarding run and the cohesion audit hit it). *@
+                            <p class="field-help">
+                                Add at least one photo before publishing — listings with photos get far
+                                more requests. <a href="#room-photos-heading">Add a photo below ↓</a>
+                            </p>
+                            <button class="btn btn-primary" type="button" disabled aria-disabled="true"
+                                    title="Add a photo first">@(everPublished ? "Publish again" : "Request publish")</button>
                         }
-                        <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/status")">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="status" value="published" />
-                            <button class="btn btn-primary" type="submit">@(everPublished ? "Publish again" : "Request publish")</button>
-                        </form>
+                        else
+                        {
+                            <form method="post" action="@Url.Content($"~/manage/rooms/{room.Id}/status")">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="status" value="published" />
+                                <button class="btn btn-primary" type="submit">@(everPublished ? "Publish again" : "Request publish")</button>
+                            </form>
+                        }
                         @if (!everPublished)
                         {
                             <p class="field-help">First-time listings get a quick personal review before going live.</p>

@@ -44,6 +44,24 @@ public enum AccessibilityFeature
     LiftAccess = 16,
 }
 
+/// <summary>Amenities a room offers / the funnel filters by (bitwise flags; values mirror the API).</summary>
+[Flags]
+public enum Amenity
+{
+    None = 0,
+    Parking = 1,
+    Kitchen = 2,
+    Restrooms = 4,
+    Wifi = 8,
+    AudioVisual = 16,
+    Tables = 32,
+    Chairs = 64,
+    Heating = 128,
+    AirConditioning = 256,
+    Stage = 512,
+    Piano = 1024,
+}
+
 /// <summary>A room photo as rendered on a card / detail page.</summary>
 public record RoomPhotoDto(Guid Id, string Url, string? ThumbUrl, string? CardUrl, string? Caption, bool IsPrimary, int SortOrder);
 
@@ -88,7 +106,13 @@ public record RoomSummaryDto(
     RatingSummaryDto? Rating,
     // Additive (availability plan commit 6): the free window that matched the active When filter,
     // present only on searches with one — null otherwise so pre-When clients/searches degrade.
-    MatchedWindowDto? MatchedWindow = null);
+    MatchedWindowDto? MatchedWindow = null,
+    // Additive (2026-07 study): amenity tokens for card-level cues (parking et al).
+    IReadOnlyList<string>? Amenities = null)
+{
+    /// <summary>Amenity tokens, never null (older API payloads deserialize to empty).</summary>
+    public IReadOnlyList<string> Amenities { get; init; } = Amenities ?? [];
+}
 
 /// <summary>A venue projected for listing/detail presentation.</summary>
 public record VenueSummaryDto(
@@ -218,7 +242,9 @@ public record SubmitApplicationRequest(
     int GroupSize,
     ScheduleDto Schedule,
     string IntentText,
-    string? TurnstileToken);
+    string? TurnstileToken,
+    // Additive 2026-07-08: the organizer's group/organization ("Who's asking"), optional.
+    string? OrganizationName = null);
 
 /// <summary>The applying organizer as shown to the provider.</summary>
 public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);
@@ -263,7 +289,9 @@ public record ApplicationDto(
     ApplicationConflictsDto? Conflicts = null,
     // Additive (availability plan commit 8, CONTRACTS §5): the latest non-superseded counter-offer
     // (behind the API's booking.counter_offers flag) — null when none exists on the thread.
-    CounterOfferDto? CounterOffer = null);
+    CounterOfferDto? CounterOffer = null,
+    // Additive 2026-07-08: the organizer's group/organization ("Who's asking"), if given.
+    string? OrganizationName = null);
 
 /// <summary>
 /// The latest non-superseded counter-offer on an application (CONTRACTS §5). A venue manager
@@ -587,6 +615,7 @@ public class ListingSearchQuery
     public int? MinCapacity { get; set; }
     public ActivityType Activities { get; set; } = ActivityType.None;
     public AccessibilityFeature Accessibility { get; set; } = AccessibilityFeature.None;
+    public Amenity Amenities { get; set; } = Amenity.None;
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 24;
 
@@ -628,15 +657,25 @@ public class ListingSearchQuery
 }
 
 /// <summary>
-/// Builds the "carry-through" query string that threads the active When selection from a search
-/// result → the room detail page → the apply form, so a person who searched "Tuesday evenings"
-/// lands on a pre-filled request. Only the concrete pieces travel (date/startTime/endTime and
-/// repeatable daysOfWeek) — never the band token, which the matched window has already resolved.
+/// Builds the "carry-through" query string that threads the active search intent from a result
+/// → the room detail page → the apply form, so a person who searched "Tuesday evenings, 15
+/// people" lands on a pre-filled request. Only concrete pieces travel (date/startTime/endTime,
+/// repeatable daysOfWeek, people) — never the band token, which
+/// <see cref="ResolveCarryTimes"/> resolves against the matched window first.
 /// </summary>
 public static class WhenCarry
 {
     private static readonly HashSet<string> Weekdays = new(StringComparer.OrdinalIgnoreCase)
     { "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
+
+    // Band tokens → venue-local ranges. Mirrors the API's WhenFilterBinder (CONTRACTS §3);
+    // keep the two in sync if bands ever change.
+    private static readonly Dictionary<string, (TimeOnly Start, TimeOnly End)> Bands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["morning"] = (new TimeOnly(8, 0), new TimeOnly(12, 0)),
+        ["afternoon"] = (new TimeOnly(12, 0), new TimeOnly(17, 0)),
+        ["evening"] = (new TimeOnly(17, 0), new TimeOnly(22, 0)),
+    };
 
     /// <summary>Keeps only valid weekday tokens (lenient: bad values are dropped), lowercased and de-duped.</summary>
     public static IReadOnlyList<string> ValidWeekdays(IEnumerable<string>? tokens) =>
@@ -647,11 +686,59 @@ public static class WhenCarry
             .ToList();
 
     /// <summary>
-    /// A <c>?date=…&amp;startTime=…&amp;endTime=…&amp;daysOfWeek=…</c> suffix (or "" when nothing is
-    /// carried). Weekly wins: when any weekday is present the one-off <paramref name="date"/> is
-    /// dropped (the two are mutually exclusive on the wire).
+    /// The concrete times a result card should carry to apply. An explicit searched range wins
+    /// (the person typed it). Otherwise the carry is booking-shaped — the searched duration
+    /// starting where the matched window and any band overlap — never the room's entire open
+    /// window (searching "evening" then landing on an 8:00 AM–10:00 PM prefill was the single
+    /// most-cited friction in the 2026-07 discovery study). No window and no time searched
+    /// carries nothing: the apply calendar is the right place to start from scratch.
     /// </summary>
-    public static string ToQueryString(DateOnly? date, string? startTime, string? endTime, IEnumerable<string>? daysOfWeek)
+    public static (string? StartTime, string? EndTime) ResolveCarryTimes(
+        MatchedWindowDto? window, ListingSearchQuery? query)
+    {
+        if (query is { HasCustomTime: true })
+        {
+            return (query.StartTime, query.EndTime);
+        }
+
+        var hasBand = query?.TimeOfDay is { } token && Bands.TryGetValue(token.Trim(), out var band)
+            ? (ValueTuple<TimeOnly, TimeOnly>?)band
+            : null;
+        var winStart = TryTime(window?.StartTime);
+        var winEnd = TryTime(window?.EndTime);
+        if (hasBand is null && winStart is null)
+        {
+            return (null, null);
+        }
+
+        var start = MaxTime(winStart, hasBand?.Item1);
+        var limit = MinTime(winEnd, hasBand?.Item2);
+        if (start is not { } s || limit is not { } lim || lim <= s)
+        {
+            return (window?.StartTime, window?.EndTime);
+        }
+
+        var duration = TimeSpan.FromMinutes(query?.DurationMinutes is > 0 ? query.DurationMinutes.Value : 120);
+        var end = s.Add(duration) is var e && e <= lim && e > s ? e : lim;
+        return (s.ToString("HH:mm"), end.ToString("HH:mm"));
+    }
+
+    private static TimeOnly? MaxTime(TimeOnly? a, TimeOnly? b) =>
+        a is null ? b : b is null ? a : (a > b ? a : b);
+
+    private static TimeOnly? MinTime(TimeOnly? a, TimeOnly? b) =>
+        a is null ? b : b is null ? a : (a < b ? a : b);
+
+    private static TimeOnly? TryTime(string? s) =>
+        TimeOnly.TryParseExact(s, "HH:mm", out var t) ? t : null;
+
+    /// <summary>
+    /// A <c>?date=…&amp;startTime=…&amp;endTime=…&amp;daysOfWeek=…&amp;people=…</c> suffix (or ""
+    /// when nothing is carried). Weekly wins: when any weekday is present the one-off
+    /// <paramref name="date"/> is dropped (the two are mutually exclusive on the wire).
+    /// </summary>
+    public static string ToQueryString(
+        DateOnly? date, string? startTime, string? endTime, IEnumerable<string>? daysOfWeek, int? people = null)
     {
         var days = ValidWeekdays(daysOfWeek);
         var parts = new List<string>();
@@ -673,6 +760,11 @@ public static class WhenCarry
         if (!string.IsNullOrEmpty(endTime))
         {
             parts.Add($"endTime={Uri.EscapeDataString(endTime)}");
+        }
+
+        if (people is > 0)
+        {
+            parts.Add($"people={people.Value}");
         }
 
         return parts.Count == 0 ? "" : "?" + string.Join("&", parts);

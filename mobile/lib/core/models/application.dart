@@ -201,6 +201,10 @@ abstract class Application with _$Application {
     /// unless a manager has suggested another time. Only ever `open` for one
     /// counter; the application's own [status] is `counterOffered` while it is.
     CounterOffer? counterOffer,
+
+    /// The organizer's group/organization ("Who's asking") — additive
+    /// 2026-07-08, null when not given.
+    String? organizationName,
   }) = _Application;
 
   factory Application.fromJson(Map<String, dynamic> json) =>
@@ -221,6 +225,9 @@ abstract class ApplicationDraft with _$ApplicationDraft {
     @Default(0) int groupSize,
     ProposedSchedule? schedule,
     @Default('') String intentText,
+
+    /// Optional "Who's asking" group/organization (additive 2026-07-08).
+    String? organizationName,
   }) = _ApplicationDraft;
 
   factory ApplicationDraft.fromJson(Map<String, dynamic> json) =>

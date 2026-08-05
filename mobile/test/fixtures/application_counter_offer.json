@@ -21,7 +21,9 @@
     "frequency": "recurringWeekly",
     "startDate": "2026-09-01",
     "endDate": "2026-12-15",
-    "daysOfWeek": ["tuesday"],
+    "daysOfWeek": [
+      "tuesday"
+    ],
     "startTime": "09:00",
     "endTime": "11:30"
   },
@@ -34,7 +36,7 @@
     {
       "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       "senderId": "88888888-8888-4888-8888-888888888888",
-      "body": "We'd love to host you — Tuesdays are taken by our own group, but Thursday mornings are wide open. Would that work?",
+      "body": "We'd love to host you \u2014 Tuesdays are taken by our own group, but Thursday mornings are wide open. Would that work?",
       "sentAtUtc": "2026-07-02T09:22:00Z"
     }
   ],
@@ -44,12 +46,15 @@
       "frequency": "recurringWeekly",
       "startDate": "2026-09-03",
       "endDate": "2026-12-17",
-      "daysOfWeek": ["thursday"],
+      "daysOfWeek": [
+        "thursday"
+      ],
       "startTime": "09:30",
       "endTime": "12:00"
     },
     "message": "Thursday mornings, half an hour later so it clears our early service.",
     "status": "open",
     "createdAtUtc": "2026-07-02T09:22:00Z"
-  }
+  },
+  "organizationName": "Vienna Toddler Playgroup"
 }

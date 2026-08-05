@@ -67,6 +67,15 @@
                     <p class="field-help">@room.RoomName seats up to @room.Capacity.</p>
                 </div>
 
+                <div class="form-field">
+                    <label class="field-label" for="apply-organization">
+                        Your group or organization <span class="field-optional">optional</span>
+                    </label>
+                    <input class="form-input" id="apply-organization" name="OrganizationName" maxlength="200"
+                           value="@form.OrganizationName" placeholder="E.g. Vienna Toddler Playgroup" />
+                    <p class="field-help">Hosts decide faster when they know who's asking.</p>
+                </div>
+
                 @if (Model.PickerEnabled)
                 {
                     var calMonth = Model.InitialMonth.ToString("yyyy-MM");
@@ -104,6 +113,8 @@
                         <div id="apply-day-windows" class="apply-day-windows">
                             <p class="apply-day-hint">Pick a date on the calendar to see its open times.</p>
                         </div>
+
+                        <p class="apply-schedule-error" data-schedule-error role="alert" hidden></p>
                     </div>
                 }
 

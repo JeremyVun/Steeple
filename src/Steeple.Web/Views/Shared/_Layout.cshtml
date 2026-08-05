@@ -114,8 +114,12 @@
                 else
                 {
                     <a class="btn btn-ghost btn-sm" href="~/login">Log in</a>
+                    @* Signed-out only: once signed in, "Your spaces" is the hosting door and a
+                       persistent primary CTA just competes with real work (2026-07 cohesion
+                       audit: "still competes for attention even though I am already in host
+                       management"). The footer link remains for everyone. *@
+                    <a class="btn btn-primary btn-sm" href="~/host">Become a host</a>
                 }
-                <a class="btn btn-primary btn-sm" href="~/host">Become a host</a>
             </nav>
         </div>
     </header>

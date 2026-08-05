@@ -512,12 +512,25 @@
         summarize();
     }
 
+    // Destructive confirm disclosures (withdraw/cancel/delete) live near the bottom of long
+    // pages; opening one must bring the revealed confirm button into view or it reads as a
+    // dead control (2026-07 journey: four failed attempts on an off-screen confirm).
+    function initConfirmReveal() {
+        document.addEventListener("toggle", function (e) {
+            var d = e.target;
+            if (d instanceof HTMLDetailsElement && d.open && d.classList.contains("account-confirm")) {
+                d.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }, true); // toggle doesn't bubble — listen in capture
+    }
+
     function init() {
         initToggle();
         initCopyLink();
         initGallery();
         initWhenControl();
         initMoreControl();
+        initConfirmReveal();
         syncFilterBarHeight();
         initStickyFilter();
     }

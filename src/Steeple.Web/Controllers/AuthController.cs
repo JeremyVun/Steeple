@@ -277,6 +277,25 @@ public sealed class AuthController : SteepleControllerBase
             _logger.LogWarning(ex, "Recording agreement acceptance failed.");
         }
 
+        // A host signing in without a destination almost always wants their waiting work —
+        // land venue managers on the requests queue, not the renter search home (2026-07
+        // study: both host-review runs flagged the renter landing). Best-effort: home on
+        // any miss, and an explicit returnUrl always wins.
+        if (safeReturnUrl == Url.Content("~/"))
+        {
+            try
+            {
+                if ((await _api.GetManagedVenuesAsync(session.AccessToken, ct)).Count > 0)
+                {
+                    return Redirect(Url.Content("~/manage/applications"));
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogWarning(ex, "Managed-venue lookup for post-sign-in landing failed.");
+            }
+        }
+
         return Redirect(safeReturnUrl);
     }
 

@@ -5,7 +5,14 @@
         <h1>Your requests</h1>
         @if (Model.IsProvider)
         {
-            <a class="head-crosslink" href="~/manage/applications">Requests for your spaces →</a>
+            <a class="head-crosslink" href="~/manage/applications">
+                Requests for your spaces
+                @if (Model.HostPendingCount > 0)
+                {
+                    <span class="head-crosslink-count">@Model.HostPendingCount waiting</span>
+                }
+                →
+            </a>
         }
     </header>
 

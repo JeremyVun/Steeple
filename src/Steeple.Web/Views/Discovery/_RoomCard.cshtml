@@ -1,14 +1,15 @@
 @model RoomSummaryDto
 @{
-    // Carry the active When selection through to apply. Prefer the matched window's concrete times
-    // (a band/any-window search resolves to a real slot per room); weekly searches carry weekdays.
+    // Carry the active search intent through to apply: a booking-shaped slot (band ∩ matched
+    // window, searched duration long — never the room's whole open window), weekdays for weekly
+    // searches, and the searched head-count.
     var whenQuery = ViewData["WhenQuery"] as ListingSearchQuery;
     var win = Model.MatchedWindow;
     var weekly = whenQuery?.IsWeekly == true;
     var carryDate = weekly ? (DateOnly?)null : (win?.Date ?? whenQuery?.Date);
-    var carryStart = win?.StartTime ?? whenQuery?.StartTime;
-    var carryEnd = win?.EndTime ?? whenQuery?.EndTime;
-    var whenSuffix = WhenCarry.ToQueryString(carryDate, carryStart, carryEnd, weekly ? whenQuery?.DaysOfWeek : null);
+    var (carryStart, carryEnd) = WhenCarry.ResolveCarryTimes(win, whenQuery);
+    var whenSuffix = WhenCarry.ToQueryString(
+        carryDate, carryStart, carryEnd, weekly ? whenQuery?.DaysOfWeek : null, whenQuery?.MinCapacity);
     var url = Url.Content($"~/space/{Model.VenueSlug}/{Model.RoomSlug}") + whenSuffix;
     string? distanceLabel = null;
     if (Model.DistanceMeters is double m)
@@ -51,6 +52,16 @@
             @if (distanceLabel is not null)
             {
                 <span class="card-distance">· @distanceLabel</span>
+            }
+            @* Decision-critical practical facts, visible without opening the room (2026-07 study:
+               both find-space personas opened detail pages solely to check parking). *@
+            @if (Model.Amenities.Contains("parking"))
+            {
+                <span class="card-keyfact">· Parking</span>
+            }
+            @if (Model.Accessibility.Contains("stepFreeAccess"))
+            {
+                <span class="card-keyfact">· Step-free</span>
             }
         </p>
 

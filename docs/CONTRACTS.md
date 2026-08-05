@@ -69,8 +69,9 @@ their shapes in §5.
 
 ### `GET /api/v1/listings/search` ✅
 Query: `centerLat, centerLng, radiusMeters` **or** `minLat/maxLat/minLng/maxLng`;
-`suburb, minCapacity, page, pageSize`; repeatable `activities` &
-`accessibility` params. **Matching semantics:** repeated values combine into one bitmask
+`suburb, minCapacity, page, pageSize`; repeatable `activities`, `accessibility` &
+`amenities` params (`amenities` additive 2026-07-08 — §2.1 tokens, e.g.
+`amenities=parking`). **Matching semantics:** repeated values combine into one bitmask
 and a room matches only if it accepts/provides **all** requested values (AND — deliberate:
 "accepts children AND music", "has step-free access AND accessible restroom"). Geofence
 clamps all input to the beachhead (out-of-area → empty result, never an error).
@@ -88,8 +89,9 @@ Response `ListingSearchResult`:
 
 `RoomSummary`: `roomId, venueId, roomSlug, venueSlug, roomName, venueName, suburb,
 primaryPhotoUrl?, capacity, pricePerHour, currency, latitude, longitude,
-activities[], accessibility[], distanceMeters?, rating?{averageStars, count},
-matchedWindow?{date?, startTime, endTime}`. `pricePerHour` is always present and positive —
+activities[], accessibility[], amenities[], distanceMeters?, rating?{averageStars, count},
+matchedWindow?{date?, startTime, endTime}`. `amenities[]` is additive (2026-07-08; powers
+card-level cues like "Parking"). `pricePerHour` is always present and positive —
 free listings were removed from the product (SYSTEM_DESIGN §17). `rating` is the venue-level
 aggregate across all rooms and appears only when at least one rating is revealed.
 `matchedWindow` is additive *(availability plan commit 6)* and present only on searches with
@@ -178,7 +180,8 @@ verified email already belongs to an account on the other provider — no auto-l
   "schedule": { "frequency": "recurringWeekly" | "oneOff",
                 "startDate": "2026-09-01", "endDate": "2026-12-15",   // endDate mandatory when recurring
                 "daysOfWeek": ["tuesday", "thursday"], "startTime": "09:00", "endTime": "11:30" },
-  "intentText": "Toddler playgroup, ~15 people…", "turnstileToken": "…" }
+  "intentText": "Toddler playgroup, ~15 people…", "turnstileToken": "…",
+  "organizationName": "Vienna Toddler Playgroup" }  // optional ≤200 chars, additive 2026-07-08
 ```
 `schedule.daysOfWeek` *(replaced `dayOfWeek: string` 2026-07-05 — clean break, no released
 clients)*: array of §2.1 weekday tokens (`"sunday"`…`"saturday"`), **one or more, distinct,
@@ -197,7 +200,8 @@ no availability rules), `429 rate_limited` (per-account `apply` policy, shared w
 `Application` ✅: `{ id, roomId, roomName, venueName, venueSlug, roomSlug,
 organizer{id, displayName, ratingSummary?{averageStars, ratingCount, noShowCount,
 completedBookings}}, activityType, groupSize,
-schedule{…}, intentText, status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
+schedule{…}, intentText, organizationName? /* additive 2026-07-08: "Who's asking" */,
+status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
 bookingId? /* set once approved — the booking it created */, messageCount,
 messages: [{id, senderId, body, sentAtUtc}] }`
 `status`: `pending | needsInfo | counterOffered | approved | declined | withdrawn | expired`.
@@ -452,7 +456,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 
 | Event | Source | Key props |
 |---|---|---|
-| `search_performed` ✅ | server | filters, resultCount, zeroResult (+ additive: hasWhenFilter, whenMode `oneOff\|recurring\|none`, timeOfDay?, weekdayCount?) |
+| `search_performed` ✅ | server | filters, resultCount, zeroResult (+ additive: hasWhenFilter, whenMode `oneOff\|recurring\|none`, timeOfDay?, weekdayCount?, amenities[]) |
 | `listing_viewed` ✅ | server | roomId, venueId |
 | `map_interacted` ✅ | client | kind (pan/zoom/pin) |
 | `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |

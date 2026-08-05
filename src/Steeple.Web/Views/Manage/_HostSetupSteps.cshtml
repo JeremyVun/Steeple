@@ -1,0 +1,18 @@
+@model int
+@{
+    // The host-setup trail: where you are between "signed up" and "publicly visible".
+    // The 2026-07 study's cohesion audit called the depth of setup "unguessable at each
+    // step" — this names the three stops without pretending to be a wizard.
+    var steps = new[] { "Your venue", "Add a room", "Hours, photos & publish" };
+}
+<ol class="setup-steps" aria-label="Listing setup progress">
+    @for (var i = 0; i < steps.Length; i++)
+    {
+        var n = i + 1;
+        <li class="setup-step @(n == Model ? "is-current" : n < Model ? "is-done" : "")"
+            aria-current="@(n == Model ? "step" : null)">
+            <span class="setup-step-num" aria-hidden="true">@(n < Model ? "✓" : n.ToString())</span>
+            @steps[i]
+        </li>
+    }
+</ol>

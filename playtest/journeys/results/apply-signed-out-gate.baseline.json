@@ -1,0 +1,52 @@
+{
+  "accepted_at": "2026-07-08T03:39:22.945Z",
+  "run_id": "2026-07-08T0332-e765",
+  "run_dir": "/Users/jeremy/projects/steeple/runs/2026-07-08T0332-e765/apply-signed-out-gate",
+  "healed_from_run_id": "2026-07-08T0322-475f",
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v7",
+    "step_schema_version": 6,
+    "snapshot_format": "a11y-text-v5",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "driver": "web",
+    "actor_model": "sonnet",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8898",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "ab64bd046f9fca41",
+  "base_url": "http://localhost:5187",
+  "verdicts": [
+    {
+      "spec": "console_errors: 0",
+      "pass": true,
+      "detail": "0 console error(s)"
+    },
+    {
+      "spec": "api_called: POST /space/*/apply",
+      "pass": true,
+      "detail": "2 matching request(s), e.g. POST http://localhost:5187/space/grace-community-vienna/fellowship-hall/apply"
+    },
+    {
+      "spec": "url_matches: /inbox/applications/*",
+      "pass": true,
+      "detail": "final url http://localhost:5187/inbox/applications/b81aaa57-56c7-4060-9b0d-ffe2085cb508"
+    },
+    {
+      "spec": "assert: The application thread shows the request as pending, with the date and time that were picked, and makes clear the venue will respond.",
+      "pass": true,
+      "detail": "The final request thread shows the request as Pending, lists Wed, Jul 29, 2026 · 8:00 AM–10:00 AM, and states Grace Community Church of Vienna will reply here."
+    }
+  ]
+}

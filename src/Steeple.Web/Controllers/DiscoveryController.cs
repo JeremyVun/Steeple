@@ -67,7 +67,7 @@ public sealed class DiscoveryController : SteepleControllerBase
     public async Task<IActionResult> Detail(
         string venueSlug, string roomSlug, [FromQuery] int reviewsPage = 1,
         DateOnly? date = null, string? startTime = null, string? endTime = null,
-        [FromQuery] string[]? daysOfWeek = null, CancellationToken ct = default)
+        [FromQuery] string[]? daysOfWeek = null, int? people = null, CancellationToken ct = default)
     {
         EnsureSessionId();
         var dto = await _api.GetBySlugAsync(venueSlug, roomSlug, ct);
@@ -77,9 +77,9 @@ public sealed class DiscoveryController : SteepleControllerBase
             return View("NotFound");
         }
 
-        // Thread any When selection carried in from a search result onto the apply CTA, so the
-        // slot the person picked survives the hop into the request form.
-        ViewData["ApplyWhenQuery"] = WhenCarry.ToQueryString(date, startTime, endTime, daysOfWeek);
+        // Thread any search intent carried in from a result onto the apply CTA, so the slot and
+        // group size the person searched for survive the hop into the request form.
+        ViewData["ApplyWhenQuery"] = WhenCarry.ToQueryString(date, startTime, endTime, daysOfWeek, people);
         ViewData["Canonical"] = AbsoluteUrl($"/space/{dto.Venue.Slug}/{dto.RoomSlug}");
         ViewData["Description"] = BuildListingDescription(dto);
         // The in-product apply flow supersedes the mailto CTA when its flag is on (ROADMAP Phase 2).
@@ -160,9 +160,10 @@ public sealed class DiscoveryController : SteepleControllerBase
     {
         query.Activities = ReadFlags<ActivityType>("Activities", query.Activities);
         query.Accessibility = ReadFlags<AccessibilityFeature>("Accessibility", query.Accessibility);
+        query.Amenities = ReadFlags<Amenity>("Amenities", query.Amenities);
 
         // Forward the funnel's raw query string so the API applies exactly the same filters.
-        var result = await _api.SearchAsync(Request.QueryString.Value, ct);
+        var result = await _api.SearchAsync(ForwardableQuery(), ct);
         var geofence = await _api.GetGeofenceAsync(ct);
 
         // Preconnect to the card photos' origin(s) — harmless to set even for HTMX partial swaps
@@ -183,6 +184,29 @@ public sealed class DiscoveryController : SteepleControllerBase
             Beachhead = geofence.Beachhead,
             SuburbOptions = suburbs,
         };
+    }
+
+    /// <summary>
+    /// The raw query string, minus any time-of-day/time-range params when no date or weekday
+    /// accompanies them. Mid-selection the When popover legitimately has a time band and no day
+    /// yet; the API's When binder rejects that pairing (<c>invalid_when</c>), so treat it as
+    /// "any time until a day is picked" rather than turning a half-built filter into an error.
+    /// </summary>
+    private string? ForwardableQuery()
+    {
+        var timeOnly = (Request.Query.ContainsKey("timeOfDay")
+                || Request.Query.ContainsKey("startTime") || Request.Query.ContainsKey("endTime"))
+            && !Request.Query.ContainsKey("date") && !Request.Query.ContainsKey("daysOfWeek");
+        if (!timeOnly)
+        {
+            return Request.QueryString.Value;
+        }
+
+        string[] drop = ["timeOfDay", "startTime", "endTime", "durationMinutes"];
+        return QueryString.Create(
+            Request.Query
+                .Where(kv => !drop.Contains(kv.Key, StringComparer.OrdinalIgnoreCase))
+                .SelectMany(kv => kv.Value, (kv, v) => KeyValuePair.Create(kv.Key, v))).Value;
     }
 
     /// <summary>

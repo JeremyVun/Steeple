@@ -50,7 +50,7 @@ else
                         <p class="inbox-row-title">
                             @if (Model.IsProviderView)
                             {
-                                <strong>@app.Organizer.DisplayName</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @app.RoomName
+                                <strong>@app.Organizer.DisplayName@(string.IsNullOrWhiteSpace(app.OrganizationName) ? "" : $", {app.OrganizationName}")</strong> <span class="inbox-row-arrow" aria-hidden="true">·</span> @app.RoomName
                             }
                             else
                             {

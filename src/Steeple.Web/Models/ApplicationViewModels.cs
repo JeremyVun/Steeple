@@ -131,6 +131,9 @@ public sealed class ApplyFormModel
     public string ActivityType { get; set; } = "";
     public int GroupSize { get; set; } = 10;
 
+    /// <summary>The organizer's group/organization, shown to the host as "Who's asking". Optional.</summary>
+    public string? OrganizationName { get; set; }
+
     /// <summary>"oneOff" | "recurringWeekly".</summary>
     public string Frequency { get; set; } = "oneOff";
     public DateOnly? StartDate { get; set; }
@@ -220,6 +223,12 @@ public sealed class InboxViewModel
 
     /// <summary>True when the signed-in user manages at least one venue (shows the hosting tab).</summary>
     public bool IsProvider { get; init; }
+
+    /// <summary>
+    /// Pending requests waiting on the host side, badged on the cross-link so waiting work is
+    /// visible from the organizer inbox (2026-07 study: hosts had no cue anything was waiting).
+    /// </summary>
+    public int HostPendingCount { get; init; }
 
     /// <summary>Status-filter tabs offered above the list.</summary>
     public static IReadOnlyList<FilterOption> StatusOptions { get; } =

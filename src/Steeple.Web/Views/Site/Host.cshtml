@@ -17,22 +17,25 @@
             own terms.
         </p>
         <div class="host-cta-row">
+            @* One label for one action everywhere (2026-07 cohesion audit flagged three
+               variants); the sign-in gate explains itself when it appears. *@
             @if (manageEnabled && signedIn)
             {
                 <a class="btn btn-primary" href="~/manage/venues/new">List your space</a>
             }
             else if (manageEnabled)
             {
-                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Content("~/manage/venues/new") })">Sign in to list your space</a>
+                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Content("~/manage/venues/new") })">List your space</a>
             }
             else
             {
-                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Sign in to list your space</a>
+                <a class="btn btn-primary" href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">List your space</a>
             }
             <a class="btn btn-ghost" href="~/">Browse the listings</a>
         </div>
         <p class="host-cta-note">
-            We onboard new venues personally, so getting set up is quick and you'll have a hand to hold.
+            Setting up takes about ten minutes, and we review every new listing personally
+            before it goes live.
         </p>
     </div>
 </section>
@@ -67,6 +70,6 @@
     </ul>
     <p class="host-foot">
         @Brand.Name is starting local@(string.IsNullOrEmpty(area) ? "" : $", currently in {area}"), and we'd
-        love to add your space. <a href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">Get started →</a>
+        love to add your space. <a href="@Url.Action("Login", "Site", new { returnUrl = Url.Action("Host", "Site") })">List your space →</a>
     </p>
 </section>

@@ -39,6 +39,13 @@ public sealed class DiscoveryViewModel
     /// <summary>Selectable accessibility filter options (excludes <see cref="AccessibilityFeature.None"/>).</summary>
     public IReadOnlyList<FilterOption> AccessibilityOptions { get; } = BuildOptions<AccessibilityFeature>();
 
+    /// <summary>
+    /// Curated amenity filter chips — only decision-critical ones earn pill space (the 2026-07
+    /// study evidenced Parking; expand only with evidence — the API accepts every amenity token).
+    /// </summary>
+    public IReadOnlyList<FilterOption> AmenityOptions { get; } =
+        [new FilterOption(nameof(Amenity.Parking), "Parking")];
+
     /// <summary>True when the selected activity flag is set on the current query.</summary>
     public bool IsActivitySelected(string value) =>
         Enum.TryParse<ActivityType>(value, out var v) && (Query.Activities & v) == v && v != ActivityType.None;
@@ -46,6 +53,10 @@ public sealed class DiscoveryViewModel
     /// <summary>True when the selected accessibility flag is set on the current query.</summary>
     public bool IsAccessibilitySelected(string value) =>
         Enum.TryParse<AccessibilityFeature>(value, out var v) && (Query.Accessibility & v) == v && v != AccessibilityFeature.None;
+
+    /// <summary>True when the selected amenity flag is set on the current query.</summary>
+    public bool IsAmenitySelected(string value) =>
+        Enum.TryParse<Amenity>(value, out var v) && (Query.Amenities & v) == v && v != Amenity.None;
 
     /// <summary>Builds the option list for a flags enum, excluding the zero "None" member.</summary>
     private static IReadOnlyList<FilterOption> BuildOptions<TEnum>() where TEnum : struct, Enum

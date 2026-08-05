@@ -25,7 +25,9 @@ public record ApplicationDto(
     int MessageCount,
     IReadOnlyList<ApplicationMessageDto> Messages,
     ApplicationConflictsDto? Conflicts = null,
-    CounterOfferDto? CounterOffer = null);
+    CounterOfferDto? CounterOffer = null,
+    // Additive 2026-07-08: the organizer's group/organization ("Who's asking"), if given.
+    string? OrganizationName = null);
 
 /// <summary>The applying organizer as shown to the provider, including reputation once available.</summary>
 public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);

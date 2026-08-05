@@ -124,6 +124,7 @@ public sealed class ApplicationService : IApplicationService
             StartTime = schedule.StartTime,
             EndTime = schedule.EndTime,
             IntentText = request.IntentText.Trim(),
+            OrganizationName = string.IsNullOrWhiteSpace(request.OrganizationName) ? null : request.OrganizationName.Trim(),
             Status = ApplicationStatus.Pending,
             IdempotencyKey = idempotencyKey,
             CreatedAtUtc = now,
@@ -908,6 +909,11 @@ public sealed class ApplicationService : IApplicationService
         if (string.IsNullOrWhiteSpace(request.IntentText) || request.IntentText.Trim().Length > MaxTextLength)
         {
             return $"Tell the venue what you're planning (up to {MaxTextLength} characters).";
+        }
+
+        if (request.OrganizationName is { } org && org.Trim().Length > 200)
+        {
+            return "The group or organization name can be up to 200 characters.";
         }
 
         return ValidateSchedule(request.Schedule);

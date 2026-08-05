@@ -23,8 +23,10 @@
                 <h2 id="venue-rooms-heading">Rooms</h2>
                 @if (venue.Rooms.Count == 0)
                 {
-                    <div class="empty-state">
-                        <p>No rooms yet — the room is what organizers actually find and book.</p>
+                    <div class="empty-state" role="status">
+                        <p class="empty-emoji" aria-hidden="true">🚪</p>
+                        <h3 class="empty-title">No rooms yet</h3>
+                        <p class="empty-body">The room is what organizers actually find and book.</p>
                         <a class="btn btn-primary" href="~/manage/venues/@venue.Id/rooms/new">Add your first room</a>
                     </div>
                 }

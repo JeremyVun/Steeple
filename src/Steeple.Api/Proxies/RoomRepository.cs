@@ -152,6 +152,12 @@ public class RoomRepository : IRoomRepository
             query = query.Where(r => ((int)r.AccessibilityFeatures & accessibility) == accessibility);
         }
 
+        if (criteria.Amenities != Amenity.None)
+        {
+            var amenities = (int)criteria.Amenities;
+            query = query.Where(r => ((int)r.Amenities & amenities) == amenities);
+        }
+
         if (criteria.When is { } when)
         {
             query = ApplyWhenPrefilter(query, when);

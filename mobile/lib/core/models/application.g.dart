@@ -174,6 +174,7 @@ _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
   counterOffer: json['counterOffer'] == null
       ? null
       : CounterOffer.fromJson(json['counterOffer'] as Map<String, dynamic>),
+  organizationName: json['organizationName'] as String?,
 );
 
 Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
@@ -198,6 +199,7 @@ Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
       'messages': instance.messages,
       'conflicts': instance.conflicts,
       'counterOffer': instance.counterOffer,
+      'organizationName': instance.organizationName,
     };
 
 _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>
@@ -208,6 +210,7 @@ _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>
           ? null
           : ProposedSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
       intentText: json['intentText'] as String? ?? '',
+      organizationName: json['organizationName'] as String?,
     );
 
 Map<String, dynamic> _$ApplicationDraftToJson(_ApplicationDraft instance) =>
@@ -216,4 +219,5 @@ Map<String, dynamic> _$ApplicationDraftToJson(_ApplicationDraft instance) =>
       'groupSize': instance.groupSize,
       'schedule': instance.schedule,
       'intentText': instance.intentText,
+      'organizationName': instance.organizationName,
     };

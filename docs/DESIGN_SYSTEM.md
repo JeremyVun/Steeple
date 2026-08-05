@@ -271,7 +271,11 @@ circle, paper `title` count. One pre-rasterized bitmap per state (MOBILE_DESIGN 
 
 - **EmptyState:** dashed `borderStrong` border, `radiusMd`, centered icon (not emoji on
   mobile), `headlineSerif` title, `bodySm` textSecondary body, optional secondary button.
-  Always says what to *do* ("Widen your search area").
+  Always says what to *do* ("Widen your search area"). Web anatomy is
+  `empty-emoji`/`empty-title`/`empty-body` inside `.empty-state[role="status"]` — no
+  hand-rolled variants. The button may be **primary** when the empty state is the
+  screen's sole content and its CTA is the screen's one main action (§8.1 — e.g. an empty
+  Manage home's "List your venue"); otherwise secondary.
 - **ErrorView:** renders an `AppError` (MOBILE_CONTRACTS §4): icon + plain-language title
   + retry button when retryable. Never shows codes/stack traces; `danger` role for icon.
 - **Skeletons:** `surface`-colored blocks mirroring the real layout, subtle 1.2s shimmer
@@ -423,6 +427,23 @@ host review badges:
 The card is advisory language ("looks open right now"), never a promise — approval and the
 DB constraint decide. Debounce live checks (500ms web / mobile alike); never re-derive
 availability client-side; the card always renders exactly what the server returned.
+
+### 8.13a Schedule completeness & intent carry-through (2026-07 study fixes)
+
+- **Send never no-ops.** An incomplete schedule (no date, no time, weekly with no end)
+  blocks submit with an **inline danger message anchored by the calendar** (§8.9 error
+  anatomy: danger pair + ⚠ icon, never color alone), scrolled into view. Native browser
+  validation must never target a hidden input — the picker owns validation while active.
+- **Search intent survives every hand-off.** Card → detail → apply carries a
+  **booking-shaped slot**: an explicitly typed range wins verbatim; a band search carries
+  band ∩ matched-window at the searched duration (default 120 min) — never the room's
+  whole open window. The searched head-count carries too (`people=`). No time searched →
+  nothing carried; the calendar starts clean.
+- **Restores are visibly true.** A restored draft (or carried prefill) re-arms the picker
+  UI — day windows load, the saved window re-selects, duration pills reflect the actual
+  span. If the saved time no longer fits any open window, say so in the same error slot
+  and clear it — never leave a "your request is still here" banner over silently missing
+  state.
 
 ## 9. Accessibility contract (hard rules, all surfaces)
 

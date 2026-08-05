@@ -21,7 +21,9 @@
     "frequency": "recurringWeekly",
     "startDate": "2026-09-01",
     "endDate": "2026-12-15",
-    "daysOfWeek": ["tuesday"],
+    "daysOfWeek": [
+      "tuesday"
+    ],
     "startTime": "09:00",
     "endTime": "11:30"
   },
@@ -36,7 +38,7 @@
     {
       "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       "senderId": "88888888-8888-4888-8888-888888888888",
-      "body": "Thanks for applying! Quick question — will you need access to the annex's storage cupboard, or just floor space?",
+      "body": "Thanks for applying! Quick question \u2014 will you need access to the annex's storage cupboard, or just floor space?",
       "sentAtUtc": "2026-07-01T20:15:00Z"
     },
     {
@@ -45,5 +47,6 @@
       "body": "Just floor space is perfect, we bring everything with us each week.",
       "sentAtUtc": "2026-07-02T09:22:00Z"
     }
-  ]
+  ],
+  "organizationName": "Vienna Toddler Playgroup"
 }

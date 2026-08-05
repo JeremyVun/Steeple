@@ -1101,7 +1101,8 @@ as String,
 mixin _$RoomSummary {
 
  String get roomId; String get venueId; String get roomSlug; String get venueSlug; String get venueName; String get suburb; String get roomName; String? get primaryPhotoUrl; int get capacity; double get pricePerHour; String get currency; double get latitude; double get longitude; List<String> get activities; List<String> get accessibility; double? get distanceMeters; RatingSummary? get rating;/// Present only on searches with a When filter (additive).
- MatchedWindow? get matchedWindow;
+ MatchedWindow? get matchedWindow;/// Amenity tokens for card-level cues (additive, 2026-07).
+ List<String> get amenities;
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1114,16 +1115,16 @@ $RoomSummaryCopyWith<RoomSummary> get copyWith => _$RoomSummaryCopyWithImpl<Room
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.matchedWindow, matchedWindow) || other.matchedWindow == matchedWindow));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other.activities, activities)&&const DeepCollectionEquality().equals(other.accessibility, accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.matchedWindow, matchedWindow) || other.matchedWindow == matchedWindow)&&const DeepCollectionEquality().equals(other.amenities, amenities));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(accessibility),distanceMeters,rating,matchedWindow);
+int get hashCode => Object.hashAll([runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(activities),const DeepCollectionEquality().hash(accessibility),distanceMeters,rating,matchedWindow,const DeepCollectionEquality().hash(amenities)]);
 
 @override
 String toString() {
-  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating, matchedWindow: $matchedWindow)';
+  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating, matchedWindow: $matchedWindow, amenities: $amenities)';
 }
 
 
@@ -1134,7 +1135,7 @@ abstract mixin class $RoomSummaryCopyWith<$Res>  {
   factory $RoomSummaryCopyWith(RoomSummary value, $Res Function(RoomSummary) _then) = _$RoomSummaryCopyWithImpl;
 @useResult
 $Res call({
- String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, double pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating, MatchedWindow? matchedWindow
+ String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, double pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating, MatchedWindow? matchedWindow, List<String> amenities
 });
 
 
@@ -1151,7 +1152,7 @@ class _$RoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,Object? matchedWindow = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,Object? matchedWindow = freezed,Object? amenities = null,}) {
   return _then(_self.copyWith(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -1171,7 +1172,8 @@ as List<String>,accessibility: null == accessibility ? _self.accessibility : acc
 as List<String>,distanceMeters: freezed == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
 as double?,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
 as RatingSummary?,matchedWindow: freezed == matchedWindow ? _self.matchedWindow : matchedWindow // ignore: cast_nullable_to_non_nullable
-as MatchedWindow?,
+as MatchedWindow?,amenities: null == amenities ? _self.amenities : amenities // ignore: cast_nullable_to_non_nullable
+as List<String>,
   ));
 }
 /// Create a copy of RoomSummary
@@ -1280,10 +1282,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow,  List<String> amenities)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _RoomSummary() when $default != null:
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow,_that.amenities);case _:
   return orElse();
 
 }
@@ -1301,10 +1303,10 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow,  List<String> amenities)  $default,) {final _that = this;
 switch (_that) {
 case _RoomSummary():
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow,_that.amenities);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -1321,10 +1323,10 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String roomId,  String venueId,  String roomSlug,  String venueSlug,  String venueName,  String suburb,  String roomName,  String? primaryPhotoUrl,  int capacity,  double pricePerHour,  String currency,  double latitude,  double longitude,  List<String> activities,  List<String> accessibility,  double? distanceMeters,  RatingSummary? rating,  MatchedWindow? matchedWindow,  List<String> amenities)?  $default,) {final _that = this;
 switch (_that) {
 case _RoomSummary() when $default != null:
-return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow);case _:
+return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.venueName,_that.suburb,_that.roomName,_that.primaryPhotoUrl,_that.capacity,_that.pricePerHour,_that.currency,_that.latitude,_that.longitude,_that.activities,_that.accessibility,_that.distanceMeters,_that.rating,_that.matchedWindow,_that.amenities);case _:
   return null;
 
 }
@@ -1336,7 +1338,7 @@ return $default(_that.roomId,_that.venueId,_that.roomSlug,_that.venueSlug,_that.
 @JsonSerializable()
 
 class _RoomSummary implements RoomSummary {
-  const _RoomSummary({required this.roomId, required this.venueId, required this.roomSlug, required this.venueSlug, required this.venueName, required this.suburb, required this.roomName, this.primaryPhotoUrl, required this.capacity, required this.pricePerHour, required this.currency, required this.latitude, required this.longitude, final  List<String> activities = const <String>[], final  List<String> accessibility = const <String>[], this.distanceMeters, this.rating, this.matchedWindow}): _activities = activities,_accessibility = accessibility;
+  const _RoomSummary({required this.roomId, required this.venueId, required this.roomSlug, required this.venueSlug, required this.venueName, required this.suburb, required this.roomName, this.primaryPhotoUrl, required this.capacity, required this.pricePerHour, required this.currency, required this.latitude, required this.longitude, final  List<String> activities = const <String>[], final  List<String> accessibility = const <String>[], this.distanceMeters, this.rating, this.matchedWindow, final  List<String> amenities = const <String>[]}): _activities = activities,_accessibility = accessibility,_amenities = amenities;
   factory _RoomSummary.fromJson(Map<String, dynamic> json) => _$RoomSummaryFromJson(json);
 
 @override final  String roomId;
@@ -1370,6 +1372,15 @@ class _RoomSummary implements RoomSummary {
 @override final  RatingSummary? rating;
 /// Present only on searches with a When filter (additive).
 @override final  MatchedWindow? matchedWindow;
+/// Amenity tokens for card-level cues (additive, 2026-07).
+ final  List<String> _amenities;
+/// Amenity tokens for card-level cues (additive, 2026-07).
+@override@JsonKey() List<String> get amenities {
+  if (_amenities is EqualUnmodifiableListView) return _amenities;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_amenities);
+}
+
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
@@ -1384,16 +1395,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.matchedWindow, matchedWindow) || other.matchedWindow == matchedWindow));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _RoomSummary&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.venueId, venueId) || other.venueId == venueId)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.suburb, suburb) || other.suburb == suburb)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.primaryPhotoUrl, primaryPhotoUrl) || other.primaryPhotoUrl == primaryPhotoUrl)&&(identical(other.capacity, capacity) || other.capacity == capacity)&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.latitude, latitude) || other.latitude == latitude)&&(identical(other.longitude, longitude) || other.longitude == longitude)&&const DeepCollectionEquality().equals(other._activities, _activities)&&const DeepCollectionEquality().equals(other._accessibility, _accessibility)&&(identical(other.distanceMeters, distanceMeters) || other.distanceMeters == distanceMeters)&&(identical(other.rating, rating) || other.rating == rating)&&(identical(other.matchedWindow, matchedWindow) || other.matchedWindow == matchedWindow)&&const DeepCollectionEquality().equals(other._amenities, _amenities));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_accessibility),distanceMeters,rating,matchedWindow);
+int get hashCode => Object.hashAll([runtimeType,roomId,venueId,roomSlug,venueSlug,venueName,suburb,roomName,primaryPhotoUrl,capacity,pricePerHour,currency,latitude,longitude,const DeepCollectionEquality().hash(_activities),const DeepCollectionEquality().hash(_accessibility),distanceMeters,rating,matchedWindow,const DeepCollectionEquality().hash(_amenities)]);
 
 @override
 String toString() {
-  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating, matchedWindow: $matchedWindow)';
+  return 'RoomSummary(roomId: $roomId, venueId: $venueId, roomSlug: $roomSlug, venueSlug: $venueSlug, venueName: $venueName, suburb: $suburb, roomName: $roomName, primaryPhotoUrl: $primaryPhotoUrl, capacity: $capacity, pricePerHour: $pricePerHour, currency: $currency, latitude: $latitude, longitude: $longitude, activities: $activities, accessibility: $accessibility, distanceMeters: $distanceMeters, rating: $rating, matchedWindow: $matchedWindow, amenities: $amenities)';
 }
 
 
@@ -1404,7 +1415,7 @@ abstract mixin class _$RoomSummaryCopyWith<$Res> implements $RoomSummaryCopyWith
   factory _$RoomSummaryCopyWith(_RoomSummary value, $Res Function(_RoomSummary) _then) = __$RoomSummaryCopyWithImpl;
 @override @useResult
 $Res call({
- String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, double pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating, MatchedWindow? matchedWindow
+ String roomId, String venueId, String roomSlug, String venueSlug, String venueName, String suburb, String roomName, String? primaryPhotoUrl, int capacity, double pricePerHour, String currency, double latitude, double longitude, List<String> activities, List<String> accessibility, double? distanceMeters, RatingSummary? rating, MatchedWindow? matchedWindow, List<String> amenities
 });
 
 
@@ -1421,7 +1432,7 @@ class __$RoomSummaryCopyWithImpl<$Res>
 
 /// Create a copy of RoomSummary
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,Object? matchedWindow = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? roomId = null,Object? venueId = null,Object? roomSlug = null,Object? venueSlug = null,Object? venueName = null,Object? suburb = null,Object? roomName = null,Object? primaryPhotoUrl = freezed,Object? capacity = null,Object? pricePerHour = null,Object? currency = null,Object? latitude = null,Object? longitude = null,Object? activities = null,Object? accessibility = null,Object? distanceMeters = freezed,Object? rating = freezed,Object? matchedWindow = freezed,Object? amenities = null,}) {
   return _then(_RoomSummary(
 roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
 as String,venueId: null == venueId ? _self.venueId : venueId // ignore: cast_nullable_to_non_nullable
@@ -1441,7 +1452,8 @@ as List<String>,accessibility: null == accessibility ? _self._accessibility : ac
 as List<String>,distanceMeters: freezed == distanceMeters ? _self.distanceMeters : distanceMeters // ignore: cast_nullable_to_non_nullable
 as double?,rating: freezed == rating ? _self.rating : rating // ignore: cast_nullable_to_non_nullable
 as RatingSummary?,matchedWindow: freezed == matchedWindow ? _self.matchedWindow : matchedWindow // ignore: cast_nullable_to_non_nullable
-as MatchedWindow?,
+as MatchedWindow?,amenities: null == amenities ? _self._amenities : amenities // ignore: cast_nullable_to_non_nullable
+as List<String>,
   ));
 }
 

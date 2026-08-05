@@ -37,7 +37,8 @@ public static class ListingMappings
             Accessibility: room.AccessibilityFeatures.ToNameList(),
             DistanceMeters: distanceMeters,
             Rating: rating,
-            MatchedWindow: matchedWindow);
+            MatchedWindow: matchedWindow,
+            Amenities: room.Amenities.ToNameList());
     }
 
     /// <summary>

@@ -1,0 +1,47 @@
+{
+  "accepted_at": "2026-07-08T03:48:57.549Z",
+  "run_id": "2026-07-08T0332-e765",
+  "run_dir": "/Users/jeremy/projects/steeple/runs/2026-07-08T0332-e765/host-create-room",
+  "healed_from_run_id": "2026-07-07T2309-a34a",
+  "pins": {
+    "harness_version": "0.1.0",
+    "prompts_version": "prompts-v7",
+    "step_schema_version": 6,
+    "snapshot_format": "a11y-text-v5",
+    "settle": {
+      "name": "settle-v1",
+      "dom_quiet_ms": 500,
+      "net_quiet_ms": 500,
+      "max_ms": 10000
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "driver": "web",
+    "actor_model": "sonnet",
+    "grader_model": "gpt5_5",
+    "gateway": "http://127.0.0.1:8898",
+    "headed": false,
+    "vision": false
+  },
+  "story_hash": "569790a0658657dc",
+  "base_url": "http://localhost:5187",
+  "verdicts": [
+    {
+      "spec": "console_errors: 0",
+      "pass": true,
+      "detail": "0 console error(s)"
+    },
+    {
+      "spec": "url_matches: /manage/rooms/*",
+      "pass": true,
+      "detail": "final url http://localhost:5187/manage/rooms/7f1ea958-3202-4b57-9337-b998d87f2e9f"
+    },
+    {
+      "spec": "assert: A room called \"Choir Loft\" now exists showing $20/hr, and its status reads as a draft (not published or publicly listed).",
+      "pass": true,
+      "detail": "The final page shows the room headed “Choir Loft” with status “saved as a draft,” “Only you can see this room,” and “Draft,” and the creation flow entered 20 in the hourly price field before saving."
+    }
+  ]
+}
