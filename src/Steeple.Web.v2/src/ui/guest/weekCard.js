@@ -12,34 +12,44 @@
 //   · keyboard: arrows move the cursor, Enter paints or toggles, Shift+↑/↓
 //     trims or extends the end, PageUp/PageDown change week
 //
-// Open hours come from store.openHoursFor; anything outside them, in the past,
-// or already held by a live booking is inert and reads as quietly unavailable.
+// The week is steeple's, not this browser's. `setHours` carries the room's
+// weekly open hours (RoomDetail.openHours, through catalog.js) and
+// `setAvailability` carries what is actually free on each date —
+// `GET /listings/{id}/availability`: open hours minus blackouts minus the
+// bookings already confirmed. A slot the room keeps open but that is not free
+// is one somebody else is holding; anything outside the open hours, in the
+// past, or on a closed date is inert and reads as quietly unavailable.
+//
+// Paging to another week asks for that week (`onWeek`), because the feed is
+// dated rather than weekly and a calendar must never guess at a date it has not
+// been told about.
 
-import {
-  DAY_LABELS,
-  addDays,
-  blackoutsFor,
-  daysToMask,
-  maskToDays,
-  openHoursFor,
-  roomOccurrences,
-  todayIso,
-  weekdayOf,
-} from '../../data/store.js';
+import { DAY_LABELS, addDays, daysToMask, maskToDays, todayIso, weekdayOf } from '../../data/store.js';
 import { el, replaceChildren } from '../dom.js';
 import { formatDate, formatTime, formatTimeRange } from './copy.js';
 
 const SLOT_MINUTES = 30;
+
+// Three reasons a card has no grid to draw, and they are not the same reason.
+const LOADING = 'Reading this space’s open hours…';
+const NO_HOURS = 'This space has no open hours published yet.';
+const UNREACHABLE = 'Steeple could not be reached, so this week is not known yet.';
+
 const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
 const toTime = (m) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const weekStartOf = (isoDate) => addDays(isoDate, -weekdayOf(isoDate));
 
-export function createWeekCard({ announce, onChange }) {
+export function createWeekCard({ announce, onChange, onWeek }) {
   let venueId = null;
   let roomId = null;
   let schedule = null;
+  // The room's weekly open hours ({day, start, end}), and what steeple says is
+  // still free on each dated day. Both arrive from the wire; neither is guessed.
+  let openWindows = [];
+  let byDate = new Map();
+  let emptyLine = LOADING;
   let weekStart = weekStartOf(todayIso());
   let origin = 8 * 60;
   let slots = 28;
@@ -104,25 +114,35 @@ export function createWeekCard({ announce, onChange }) {
 
   // ── the room's week, as data ───────────────────────────────────────────────
 
-  const windowsFor = (day) => openHoursFor(venueId, roomId).filter((w) => w.day === day);
+  const windowsFor = (day) => openWindows.filter((w) => w.day === day);
   const dateOf = (day) => addDays(weekStart, day);
 
+  const fits = (windows, start) =>
+    windows.some((w) => toMin(w.start) <= start && start + SLOT_MINUTES <= toMin(w.end));
+
   function isOpen(day, slot) {
-    const start = origin + slot * SLOT_MINUTES;
-    return windowsFor(day).some((w) => toMin(w.start) <= start && start + SLOT_MINUTES <= toMin(w.end));
+    return fits(windowsFor(day), origin + slot * SLOT_MINUTES);
   }
 
-  function busyAt(day, slot) {
-    const date = dateOf(day);
+  /** What steeple last said about this date; null while it has not been asked. */
+  const dayOf = (day) => byDate.get(dateOf(day)) ?? null;
+
+  /**
+   * Open, but not free: somebody already holds it. Only a date steeple has
+   * answered for can say this — an unanswered one is left open rather than
+   * invented as busy.
+   */
+  function heldAt(day, slot) {
+    const known = dayOf(day);
+    if (!known) return false;
     const start = origin + slot * SLOT_MINUTES;
-    return roomOccurrences(venueId, roomId).find(
-      (o) => o.date === date && toMin(o.start) <= start && start < toMin(o.end)
-    );
+    if (!isOpen(day, slot)) return false;
+    return !fits(known.free, start);
   }
 
-  const blackoutOn = (day) => blackoutsFor(venueId, roomId).find((b) => b.date === dateOf(day));
+  const blackoutOn = (day) => (dayOf(day)?.isBlackout ? { date: dateOf(day) } : null);
   const isPast = (day) => dateOf(day) < todayIso();
-  const usable = (day, slot) => !isPast(day) && isOpen(day, slot) && !busyAt(day, slot);
+  const usable = (day, slot) => !isPast(day) && isOpen(day, slot) && !heldAt(day, slot);
 
   const bandSlots = () => {
     if (!schedule?.startTime || !schedule.endTime) return null;
@@ -236,6 +256,7 @@ export function createWeekCard({ announce, onChange }) {
   function setWeek(iso, spoken) {
     weekStart = iso;
     render();
+    onWeek?.(weekStart);
     announce?.(spoken ?? `Week of ${formatDate(weekStart)}.`);
   }
 
@@ -256,13 +277,14 @@ export function createWeekCard({ announce, onChange }) {
     const slot = Number(cell.dataset.slot);
     moveCursor(day, slot, false);
     if (!usable(day, slot)) {
-      const held = busyAt(day, slot);
       say(
         isPast(day)
           ? 'That day has passed.'
-          : held
-            ? `Held ${formatTimeRange(held.start, held.end)} that day.`
-            : 'The room is not open then.'
+          : blackoutOn(day)
+            ? 'The venue is closed that day.'
+            : heldAt(day, slot)
+              ? 'Another group already holds that hour.'
+              : 'The room is not open then.'
       );
       return;
     }
@@ -389,15 +411,16 @@ export function createWeekCard({ announce, onChange }) {
       }
       if (date < today) nodes.push(mark('past', day, 0, slots));
 
-      for (const held of roomOccurrences(venueId, roomId).filter((o) => o.date === date)) {
-        const from = clamp((toMin(held.start) - origin) / SLOT_MINUTES, 0, slots);
-        const to = clamp((toMin(held.end) - origin) / SLOT_MINUTES, 0, slots);
-        if (to > from) {
-          nodes.push(
-            mark('busy', day, from, to, [
-              el('span', { class: 'mark__label', text: 'Held' }),
-            ])
-          );
+      // Held hours are drawn from the difference steeple reported: open here,
+      // not free there. One run of slots, one bar — the same shape the old
+      // occurrence list drew, derived rather than remembered.
+      let busy = null;
+      for (let slot = 0; slot <= slots; slot += 1) {
+        const taken = slot < slots && heldAt(day, slot);
+        if (taken && busy === null) busy = slot;
+        if (!taken && busy !== null) {
+          nodes.push(mark('busy', day, busy, slot, [el('span', { class: 'mark__label', text: 'Held' })]));
+          busy = null;
         }
       }
     }
@@ -441,12 +464,10 @@ export function createWeekCard({ announce, onChange }) {
 
   function render() {
     if (!venueId || !roomId) return;
-    const windows = openHoursFor(venueId, roomId);
+    const windows = openWindows;
     if (!windows.length) {
       replaceChildren(heads, []);
-      replaceChildren(grid, [
-        el('p', { class: 'week__empty', text: 'This space has no open hours published yet.' }),
-      ]);
+      replaceChildren(grid, [el('p', { class: 'week__empty', text: emptyLine })]);
       replaceChildren(marks, []);
       return;
     }
@@ -496,7 +517,7 @@ export function createWeekCard({ announce, onChange }) {
     for (let slot = 0; slot < slots; slot += 1) {
       const cells = DAY_LABELS.map((name, day) => {
         const open = isOpen(day, slot);
-        const held = busyAt(day, slot);
+        const held = heldAt(day, slot);
         const past = isPast(day);
         const free = open && !held && !past;
         const time = toTime(origin + slot * SLOT_MINUTES);
@@ -525,10 +546,24 @@ export function createWeekCard({ announce, onChange }) {
       venueId = nextVenueId;
       roomId = nextRoomId;
       dayDates = new Map();
+      openWindows = [];
+      byDate = new Map();
+      emptyLine = LOADING;
       weekStart = weekStartOf(todayIso());
       cursor = { day: weekdayOf(todayIso()), slot: 0 };
       note.textContent = '';
     },
+    /** The room's weekly open hours, as steeple publishes them. */
+    setHours(windows) {
+      openWindows = windows ?? [];
+      emptyLine = windows ? NO_HOURS : UNREACHABLE;
+    },
+    /** What is still free, by date. Merged: paging back must not forget a week. */
+    setAvailability(days) {
+      for (const day of days ?? []) byDate.set(day.date, day);
+    },
+    /** The week currently on screen — what a caller should ask steeple about. */
+    weekStart: () => weekStart,
     setSchedule(next) {
       schedule = next;
       if (next?.startDate && !dayDates.size) {

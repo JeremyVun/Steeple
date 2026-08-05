@@ -143,12 +143,15 @@ export function createCorrespondence(kit) {
   // ── wiring ─────────────────────────────────────────────────────────────────
   bus.on('store:change', (event) => {
     switch (event.type) {
-      case 'submit':
-        sendLetter(event.venueId);
-        break;
-      case 'approve':
-      case 'counter-accepted':
-        sealAt(event.venueId);
+      // One request arrived from steeple, and what it means to the village is
+      // read off what changed about it: a request that was not here a moment
+      // ago is a letter in the air, and one that has just become approved is
+      // wax at the door (data/store.js `mirrorApplication`). A whole page of
+      // them ('mirror-list') is a reconciliation, not an event, and animates
+      // nothing — the village would otherwise post fifty letters on a refresh.
+      case 'mirror':
+        if (event.filed) sendLetter(event.venueId);
+        else if (event.settled) sealAt(event.venueId);
         break;
       case 'room-edit':
         if (event.published && event.venueId === 'oakton-baptist' && event.roomId === 'renovation-annex') {

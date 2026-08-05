@@ -40,11 +40,20 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
 
   let tab = 'letters';
   let venueId = null;
+  // Whether steeple is still being asked what this person looks after. "None
+  // yet" and "not asked yet" are different sentences and must read differently.
+  let reading = true;
   // The instrument the same truth is set in. `?desk=` opens on one of them;
   // after that it is a switch on the desk, and changing it costs one render.
   let variant = opening;
 
   // ── the requests ──────────────────────────────────────────────────────────
+
+  // The room a request names. steeple sends the room's name with the request,
+  // so a desk can print it before it has read its own venue back.
+  const roomOnRequest = (application) =>
+    venueOf(application.venueId, placedVenues())?.rooms?.find((r) => r.id === application.roomId) ??
+    (application.roomName ? { name: application.roomName } : null);
 
   function signalOf(application) {
     const read = readSchedule(application.venueId, application.roomId, scheduleOf(application));
@@ -54,9 +63,7 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
 
   function letterCard(application) {
     const organizer = organizerOf(application);
-    const room = venueOf(application.venueId, placedVenues())?.rooms.find(
-      (r) => r.id === application.roomId
-    );
+    const room = roomOnRequest(application);
     const signal = signalOf(application);
     const intent = application.intentText;
 
@@ -96,9 +103,7 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
 
   function ledgerRow(application) {
     const organizer = organizerOf(application);
-    const room = venueOf(application.venueId, placedVenues())?.rooms.find(
-      (r) => r.id === application.roomId
-    );
+    const room = roomOnRequest(application);
     const signal = signalOf(application);
     const ribbon = createRibbon({ compact: true });
     ribbon.update({
@@ -140,9 +145,7 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
 
   function recordRow(application) {
     const organizer = organizerOf(application);
-    const room = venueOf(application.venueId, placedVenues())?.rooms.find(
-      (r) => r.id === application.roomId
-    );
+    const room = roomOnRequest(application);
     return el(
       'li',
       { class: 'record__item' },
@@ -255,10 +258,13 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
           venue?.verified ? verifiedChip() : null,
         ]),
       ]),
-      el('div', { class: 'desk__switch' }, [
-        el('label', { class: 'eyebrow', for: 'desk-venue', text: 'Venue' }),
-        select,
-      ]),
+      // One venue needs no chooser: the desk is that venue's.
+      options.length > 1
+        ? el('div', { class: 'desk__switch' }, [
+            el('label', { class: 'eyebrow', for: 'desk-venue', text: 'Venue' }),
+            select,
+          ])
+        : null,
       el('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Requests and spaces' }, [
         el(
           'button',
@@ -331,6 +337,27 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
 
   function render() {
     const placed = placedVenues();
+
+    // A desk belongs to a venue steeple says this person looks after. With none
+    // there is no desk at all — no venue named, no chooser over other people's
+    // churches, no requests, no chip. The old desk opened onto a seeded church
+    // with its demo correspondence on the board, to anybody who pressed the
+    // switch, signed in or not (v2_migration D4). Nothing is printed here
+    // instead: whoever routed here is on their way to the listing flow.
+    if (!deskVenues(placed).length) {
+      replaceChildren(head, []);
+      replaceChildren(foot, []);
+      replaceChildren(body, [
+        el('p', {
+          class: 'prose',
+          text: reading
+            ? 'Reading the venues you look after…'
+            : 'You do not look after a venue on Steeple yet.',
+        }),
+      ]);
+      return;
+    }
+
     const venue = venueOf(venueId, placed);
     const letters = deskLetters(venueId);
     renderHead(venue, letters);
@@ -381,6 +408,10 @@ export function createDesk({ variant: opening, onOpenLetter, onListing, onVarian
     element,
     setVenue(id) {
       venueId = id;
+    },
+    /** Told once steeple has answered what this person looks after. */
+    setReading(next) {
+      reading = next;
     },
     setTab(next) {
       tab = next;

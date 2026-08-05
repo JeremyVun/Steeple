@@ -12,11 +12,20 @@
 // truth, same interactions, different instrument.
 
 import { bus, setDesk, setMode, setView, state } from '../../core/bus.js';
-import { currentOrganizerId, getApplication, hostVenueId } from '../../data/store.js';
+import { managedVenues, refreshManaged } from '../../data/correspondence.js';
+import * as session from '../../data/session.js';
+import {
+  currentOrganizerId,
+  getApplication,
+  hostVenueId,
+  mirrorManagedVenues,
+  placedVenues,
+} from '../../data/store.js';
 import { el } from '../dom.js';
 import { createDesk } from './desk.js';
 import { createLetterPage } from './letter.js';
 import { createListingFlow } from './listing.js';
+import { deskVenues } from './model.js';
 
 const HOST_VIEWS = new Set(['desk', 'letter']);
 
@@ -33,7 +42,7 @@ function setOpen(node, open) {
   node.setAttribute('aria-hidden', open ? 'false' : 'true');
 }
 
-export function createHostFlows({ announce, porch } = {}) {
+export function createHostFlows({ announce, porch, askToSignIn } = {}) {
   const desk = createDesk({
     variant: state.desk,
     onOpenLetter: (application) =>
@@ -49,7 +58,7 @@ export function createHostFlows({ announce, porch } = {}) {
 
   const letterPage = createLetterPage({
     announce,
-    onBackToDesk: () => setView('desk', { venueId: state.venueId ?? hostVenueId() }),
+    onBackToDesk: () => setView('desk', { venueId: state.venueId ?? deskVenue() }),
   });
 
   const listing = createListingFlow({
@@ -59,12 +68,15 @@ export function createHostFlows({ announce, porch } = {}) {
       setOpen(desk.element, state.view === 'desk' && state.mode === 'host');
       setOpen(letterPage.element, state.view === 'letter' && state.mode === 'host');
       // A host who has just listed a venue is keeping that venue's door now,
-      // so the desk they come back to is its own, not the one they left.
-      const listed = hostVenueId();
-      if (state.view === 'desk' && listed && listed !== state.venueId) {
-        setView('desk', { venueId: listed });
-      }
-      desk.render();
+      // so the desk they come back to is its own — and steeple is asked again,
+      // because a venue that did not exist a minute ago is one of theirs now.
+      readDesk({ again: true }).then(() => {
+        const listed = deskVenue();
+        if (state.view === 'desk' && listed && listed !== state.venueId) {
+          setView('desk', { venueId: listed });
+        }
+        desk.render();
+      });
       switchButton.focus?.();
     },
   });
@@ -74,6 +86,113 @@ export function createHostFlows({ announce, porch } = {}) {
     letterPage.element,
     listing.element,
   ]);
+
+  // ── whose doors these are ─────────────────────────────────────────────────
+  //
+  // A desk exists because steeple says this person manages a venue, and for no
+  // other reason (v2_migration D4). `GET /manage/venues` is asked once per
+  // session and again whenever the person changes; the requests waiting at
+  // those venues are `GET /manage/applications`, scoped to them.
+
+  let reading = null;
+  // Whether steeple has been asked yet, for whoever is signed in now.
+  let read = false;
+
+  /** The venue slugs this desk may show. Empty means there is no desk. */
+  const mine = () => deskVenues(placedVenues()).map((v) => v.id);
+
+  async function readVenues() {
+    if (!session.isSignedIn()) {
+      desk.setReading(false);
+      return [];
+    }
+    desk.setReading(true);
+    const answer = await managedVenues();
+    desk.setReading(false);
+    if (answer.ok) mirrorManagedVenues(answer.value);
+    const slugs = mine();
+    if (slugs.length) await refreshManaged(slugs);
+    return slugs;
+  }
+
+  /** Ask steeple, once, unless `again` insists (a listing just landed). */
+  function readDesk({ again = false } = {}) {
+    if (read && !again && !reading) return Promise.resolve(mine());
+    read = true;
+    reading ??= readVenues().finally(() => {
+      reading = null;
+    });
+    return reading;
+  }
+
+  // A different person keeps different doors. Asked again on every change of
+  // session, and the desk leaves with whoever was signed in (D6).
+  session.onSessionChange((held) => {
+    read = false;
+    if (!held) {
+      desk.setReading(false);
+      wanted = false;
+      // Hosting belongs to whoever was signed in. Signing out leaves it, and
+      // leaves it empty — a desk must never outlive the session that earned it.
+      if (state.mode === 'host') {
+        setMode('guest');
+        setView('village');
+      }
+      return;
+    }
+    if (wanted) {
+      enterHosting();
+      return;
+    }
+    if (state.mode === 'host') readDesk().then(render);
+  });
+
+  /** The venue the desk opens on: the one it was left on, or the first held. */
+  function deskVenue() {
+    const slugs = mine();
+    if (!slugs.length) return null;
+    const held = hostVenueId();
+    return slugs.includes(held) ? held : slugs[0];
+  }
+
+  /**
+   * "I have space to share", answered honestly.
+   *
+   * There are exactly three ways this can end, and a desk is only one of them:
+   *
+   *   · nobody is signed in       — the way in is signing in, and the link is
+   *                                 held so pressing it once is enough;
+   *   · signed in, no venue       — the listing flow, which is the thing that
+   *                                 would give them one;
+   *   · signed in, ≥1 real venue  — the desk, scoped to those venues.
+   *
+   * A stranger must never be shown a desk. The seeded churches are the village's
+   * scenery, not anybody's business, and the old switch opened straight onto one
+   * of them with its demo correspondence on the board (v2_migration D4).
+   */
+  function enterHosting() {
+    desk.setTab('letters');
+    if (!session.isSignedIn()) {
+      wanted = true;
+      announce?.('Sign in to list a space.');
+      askToSignIn?.();
+      return;
+    }
+    wanted = false;
+    readDesk().then(() => {
+      if (!session.isSignedIn()) return;
+      const venueId = deskVenue();
+      if (!venueId) {
+        setMode('host');
+        openListing({ step: 'place' });
+        return;
+      }
+      setView('desk', { venueId });
+    });
+  }
+
+  /** Somebody pressed the switch while signed out; carry them on afterwards. */
+  let wanted = false;
 
   // Switching instrument redraws the desk and nothing else on the page.
   bus.on('desk:change', ({ desk: next }) => {
@@ -91,10 +210,9 @@ export function createHostFlows({ announce, porch } = {}) {
       if (state.mode === 'host') {
         setMode('guest');
         setView('village');
-      } else {
-        desk.setTab('letters');
-        setView('desk', { venueId: hostVenueId() });
+        return;
       }
+      enterHosting();
     },
   });
   porch?.append(switchButton);
@@ -118,6 +236,9 @@ export function createHostFlows({ announce, porch } = {}) {
   // ── routing ───────────────────────────────────────────────────────────────
 
   let announced = '';
+  // Which request the letter page is set for, so opening one asks steeple for
+  // its thread and a redraw after a decision does not ask again.
+  let shown = null;
 
   function render() {
     const host = state.mode === 'host';
@@ -127,9 +248,37 @@ export function createHostFlows({ announce, porch } = {}) {
 
     if (!isDesk && !isLetter && listing.isOpen()) listing.close();
 
+    // A cold link to `#/desk` or a request while signed out is not a desk
+    // either: hosting is somebody's, and this browser is nobody at the moment.
+    // Left until the next microtask so the address bar is corrected with the
+    // view (core/bus.js will not write a hash back while it is reading one).
+    if ((isDesk || isLetter) && !session.isSignedIn()) {
+      queueMicrotask(() => {
+        if (session.isSignedIn() || !HOST_VIEWS.has(state.view)) return;
+        setMode('guest');
+        setView('village');
+      });
+      setOpen(desk.element, false);
+      setOpen(letterPage.element, false);
+      return;
+    }
+
     if (isDesk) {
-      const venueId = state.venueId ?? hostVenueId();
-      if (!state.venueId) {
+      // The first read decides whether there is a desk here at all, so the view
+      // is settled again once it lands rather than left on an empty one — and a
+      // signed-in person who keeps no venue is taken to the flow that would
+      // give them one rather than left on an empty board.
+      readDesk().then(() => {
+        if (state.mode !== 'host' || state.view !== 'desk') return;
+        const settled = deskVenue();
+        if (!settled) {
+          if (!listing.isOpen()) openListing({ step: 'place' });
+          return;
+        }
+        if (!state.venueId) render();
+      });
+      const venueId = state.venueId ?? deskVenue();
+      if (!state.venueId && venueId) {
         setView('desk', { venueId });
         return;
       }
@@ -140,7 +289,7 @@ export function createHostFlows({ announce, porch } = {}) {
     if (isLetter) {
       const application = getApplication(state.applicationId);
       if (!application) {
-        setView('desk', { venueId: hostVenueId() });
+        setView('desk', { venueId: deskVenue() });
         return;
       }
       if (state.venueId !== application.venueId) {
@@ -151,8 +300,14 @@ export function createHostFlows({ announce, porch } = {}) {
         });
         return;
       }
-      letterPage.show(application.id);
+      if (shown !== application.id) {
+        shown = application.id;
+        letterPage.show(application.id, { refresh: true });
+      } else {
+        letterPage.show(application.id);
+      }
     }
+    if (!isLetter) shown = null;
 
     setOpen(desk.element, isDesk && !listing.isOpen());
     setOpen(letterPage.element, isLetter && !listing.isOpen());
@@ -186,7 +341,7 @@ export function createHostFlows({ announce, porch } = {}) {
     // Entering host mode leads to the desk, whichever way it was entered.
     queueMicrotask(() => {
       if (state.mode === 'host' && !HOST_VIEWS.has(state.view)) {
-        setView('desk', { venueId: hostVenueId() });
+        setView('desk', { venueId: deskVenue() });
       } else {
         render();
       }
@@ -201,7 +356,7 @@ export function createHostFlows({ announce, porch } = {}) {
       state.mode === 'host' &&
       type === 'reset'
     ) {
-      setView('desk', { venueId: hostVenueId() });
+      setView('desk', { venueId: deskVenue() });
     }
   });
 

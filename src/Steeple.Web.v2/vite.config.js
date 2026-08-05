@@ -8,11 +8,16 @@
 
 import { defineConfig } from 'vite';
 
+// The API normally listens on :5200. `STEEPLE_API_ORIGIN` moves the target for
+// the cases where it cannot — a second API beside a running one, or a container
+// mapped elsewhere — without editing this file.
+const target = process.env.STEEPLE_API_ORIGIN ?? 'http://localhost:5200';
+
 const proxy = {
-  '/api': {
-    target: 'http://localhost:5200',
-    changeOrigin: true,
-  },
+  '/api': { target, changeOrigin: true },
+  // Photographs are served by the API itself in local-disk media mode, so they
+  // travel the same proxy as the wire does.
+  '/media': { target, changeOrigin: true },
 };
 
 export default defineConfig({

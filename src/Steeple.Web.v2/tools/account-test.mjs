@@ -219,23 +219,44 @@ check('the trust chip is earned now', await visible('.journal__aside .verified')
 await page.screenshot({ path: '/tmp/steeple-webp1-signed-in.png' });
 
 // Something of this person's own, so the next account has something to not see.
+//
+// Filed through the mirror rather than invented locally: since v2_migration
+// Phase 2 the store holds steeple's own documents and nothing else, so what
+// stands in for a person's correspondence here is an ApplicationDto shaped
+// exactly as the wire sends one.
 const FIRST_MARK = `only ${FIRST.name} wrote this`;
 await page.evaluate(
   (body) => {
     const store = window.__steeple.store;
-    const own = store.guestApplications();
-    if (own.length) return;
-    // A request filed here stands in for the whole of a person's correspondence.
-    store.submitApplication({
-      venueId: 'grace-community-vienna',
-      roomId: 'fellowship-hall',
-      activityType: 'Community',
+    if (store.guestApplications().length) return;
+    const me = window.__steeple.session.currentUser();
+    const startDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    store.mirrorApplication({
+      id: '0a0a0a0a-0000-4000-8000-00000000a001',
+      roomId: '0b0b0b0b-0000-4000-8000-00000000b001',
+      roomName: 'Fellowship Hall',
+      venueName: 'Grace Community Church of Vienna',
+      venueSlug: 'grace-community-vienna',
+      roomSlug: 'fellowship-hall',
+      organizer: { id: me.id, displayName: me.displayName, ratingSummary: null },
+      activityType: 'community',
       groupSize: 12,
-      frequency: 'oneOff',
-      startDate: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
-      startTime: '10:00',
-      endTime: '12:00',
+      schedule: {
+        frequency: 'oneOff',
+        startDate,
+        endDate: startDate,
+        daysOfWeek: null,
+        startTime: '10:00:00',
+        endTime: '12:00:00',
+      },
       intentText: body,
+      status: 'pending',
+      createdAtUtc: new Date().toISOString(),
+      decidedAtUtc: null,
+      expiresAtUtc: new Date(Date.now() + 14 * 86400000).toISOString(),
+      bookingId: null,
+      messageCount: 0,
+      messages: [],
     });
   },
   FIRST_MARK

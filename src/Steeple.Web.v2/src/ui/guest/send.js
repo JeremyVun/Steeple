@@ -6,18 +6,24 @@
 // nowhere else, next to the send that needs it — the same discipline catalog.js
 // keeps for everything the funnel reads.
 //
-// Two ways this can end well:
-//   · the API answered — the request is filed there, and the store mirrors what
-//     came back so the inbox and the opened letter read from one place;
-//   · the API is not there — the store files it alone, exactly as it always
-//     has. That is a working state, not a failure, and nothing in the wording
-//     the guest sees calls it a demo.
-// Anything else is the service saying no, and the guest is told what it said.
+// There is exactly one way this ends well: steeple filed the request. The
+// browser used to file it locally when the API was unreachable while the page
+// still said "your request is on its way" — honest in a demo, a lie in
+// production, and gone (v2_migration D5). A service that cannot be reached
+// leaves a draft, says so, and the draft is still there to send.
+//
+// Two answers are not failures and are not ordinary successes either:
+//   · 402 payment_method_required — steeple needs a card on file before any
+//     request can be sent (docs/contracts/payments.md). The sheet asks for one
+//     and sends again; nothing about the draft is lost.
+//   · 201 with status 'approved' — the venue books instantly, so the request
+//     *was* the booking. That is rendered as what it is, not as a request
+//     waiting for an answer.
 
 import * as api from '../../data/api.js';
+import { problemText, toWireSchedule } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
-import { maskToDays, submitApplication } from '../../data/store.js';
-import { organizationFor } from './sso.js';
+import { mirrorApplication, mirrorBooking } from '../../data/store.js';
 
 const ACTIVITY_TOKENS = {
   Children: 'children',
@@ -29,96 +35,95 @@ const ACTIVITY_TOKENS = {
   Music: 'music',
 };
 
-const DAY_TOKENS = [
-  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
-];
-
 /** The draft as SubmitApplicationRequest — steeple's names, steeple's tokens. */
 export function toSubmitRequest(draft, { organizationName = null } = {}) {
-  const weekly = draft.frequency === 'weekly';
   return {
     activityType: ACTIVITY_TOKENS[draft.activityType] ?? String(draft.activityType ?? '').toLowerCase(),
     groupSize: Number(draft.groupSize),
-    schedule: {
-      frequency: weekly ? 'recurringWeekly' : 'oneOff',
-      startDate: draft.startDate,
-      // A one-off carries a single date; the service echoes it back on both.
-      endDate: weekly ? draft.endDate : null,
-      daysOfWeek: weekly ? maskToDays(draft.daysOfWeekMask ?? 0).map((day) => DAY_TOKENS[day]) : null,
-      startTime: draft.startTime,
-      endTime: draft.endTime,
-    },
+    schedule: toWireSchedule(draft),
     intentText: String(draft.intentText ?? '').trim(),
     turnstileToken: null,
     organizationName,
   };
 }
 
-/** Nothing answered at all — as against the service answering "no". */
-const unreachable = (error) => error instanceof api.ApiError && error.status === 0;
-
-/**
- * What to tell the guest when the service refuses. steeple's problem documents
- * already read like sentences a person wrote, so they are shown as they came
- * (CONTRACTS §2: `code` is the contract, `detail` is for people). Only the
- * codes with no useful prose get words of our own.
- */
-export function problemText(error) {
-  if (error?.detail) return error.detail;
-  if (error?.status === 401) return 'That sign-in is no longer good. Confirm who you are again.';
-  if (error?.status === 403) return 'Steeple could not confirm this browser. Reload the page and try again.';
-  if (error?.status === 404) return 'This space is not taking requests at the moment.';
-  if (error?.status === 429) return 'That is a few requests in quick succession. Try again in a minute.';
-  return 'This request could not be sent just now. Try again in a moment.';
-}
+export { problemText };
 
 /**
  * Send one request.
  *
+ * `draft.idempotencyKey` is held across every retry and deleted only once
+ * steeple has answered. A send that timed out may well have been filed; the key
+ * is what makes trying again return that same request instead of filing a
+ * second one, so losing it on a timeout was the one thing this must not do.
+ *
  * @returns {Promise<
- *   {ok:true, application:object, live:boolean} |
- *   {ok:false, problem:string, signedOut?:boolean}
+ *   {ok:true, application:object, instant:boolean} |
+ *   {ok:false, problem:string, signedOut?:boolean, needsCard?:boolean, offline?:boolean, retake?:boolean}
  * >}
  */
 export async function sendRequest(draft) {
-  // Held across retries: if an answer is lost on the way back, the replay
-  // returns the application that was already filed rather than filing a second.
   draft.idempotencyKey ??= newKey();
 
+  let roomId = draft.remoteRoomId ?? null;
   try {
-    const listing = await api.getListingBySlug(draft.venueId, draft.roomId);
-    // A room this service has never heard of is the bundled-seed case, not a
-    // refusal: file it here and say nothing about it.
-    if (!listing?.roomId) return locally(draft);
+    if (!roomId) {
+      const listing = await api.getListingBySlug(draft.venueId, draft.roomId);
+      roomId = listing?.roomId ?? null;
+      if (roomId) draft.remoteRoomId = roomId;
+    }
+  } catch (error) {
+    return { ok: false, problem: problemText(error), offline: error?.status === 0 };
+  }
+  if (!roomId) {
+    return {
+      ok: false,
+      problem: 'Steeple is not taking requests for this space at the moment.',
+    };
+  }
 
+  try {
     const dto = await session.withAccess((accessToken) =>
-      api.submitApplication(
-        listing.roomId,
-        toSubmitRequest(draft, {
-          organizationName: organizationFor(session.currentUser()?.email),
-        }),
-        { accessToken, idempotencyKey: draft.idempotencyKey }
-      )
+      api.submitApplication(roomId, toSubmitRequest(draft), {
+        accessToken,
+        idempotencyKey: draft.idempotencyKey,
+      })
     );
 
-    const filed = submitApplication(draft, dto);
+    const application = mirrorApplication(dto);
+    if (dto.bookingId) {
+      // Instant book: the submit was the booking transaction, so the dates are
+      // already held and the letter should say so on the first render.
+      await session
+        .withAccess((token) => api.getBooking(dto.bookingId, token))
+        .then((booking) => mirrorBooking(booking))
+        .catch(() => null);
+    }
     delete draft.idempotencyKey;
-    return { ok: true, application: filed.application, live: true };
+    return { ok: true, application, instant: dto.status === 'approved' };
   } catch (error) {
-    if (unreachable(error)) return locally(draft);
+    // The key survives everything below on purpose — every one of these is a
+    // state where the request may or may not exist at steeple.
+    if (error?.status === 402 || error?.code === 'payment_method_required') {
+      return { ok: false, needsCard: true, problem: problemText(error) };
+    }
+    if (error?.code === 'slot_taken') {
+      // Nothing persisted: the slot went to another group between the sheet
+      // opening and the send. There is no request to open, only another time to
+      // pick.
+      return {
+        ok: false,
+        retake: true,
+        problem: 'That time was just taken by another group. Nothing was sent — choose another time.',
+      };
+    }
     return {
       ok: false,
       problem: problemText(error),
       signedOut: error?.status === 401,
+      offline: error?.status === 0,
     };
   }
-}
-
-function locally(draft) {
-  const filed = submitApplication(draft);
-  if (!filed.ok) return { ok: false, problem: Object.values(filed.errors)[0] };
-  delete draft.idempotencyKey;
-  return { ok: true, application: filed.application, live: false };
 }
 
 const newKey = () =>

@@ -128,12 +128,25 @@ for (const style of styles) {
     // Any seeded date will do. Read it from the parish's own post rather than
     // from "your requests": nobody is signed in here, and an inbox belongs to
     // somebody (D6) — signed out there is none to read.
+    //
+    // The store holds steeple's own documents and nothing else since
+    // v2_migration Phase 2, so a letter arrives here the way a real one does:
+    // as an ApplicationDto handed to the mirror. The village animates what
+    // changed about it, not what a local mutator was called (flows/world).
     const today = __steeple.store.venueApplications('grace-community-vienna')[0].startDate;
-    __steeple.store.submitApplication({
-      venueId: 'vienna-presbyterian', roomId: 'music-room', activityType: 'Music',
-      groupSize: 12, frequency: 'oneOff', startDate: today,
-      startTime: '10:00', endTime: '12:00',
+    __steeple.store.mirrorApplication({
+      id: '0c0c0c0c-0000-4000-8000-00000000c001',
+      roomId: '0d0d0d0d-0000-4000-8000-00000000d001',
+      roomName: 'Music Room', venueName: 'Vienna Presbyterian Church',
+      venueSlug: 'vienna-presbyterian', roomSlug: 'music-room',
+      organizer: { id: 'world-test-organizer', displayName: 'Chamber Group', ratingSummary: null },
+      activityType: 'music', groupSize: 12,
+      schedule: { frequency: 'oneOff', startDate: today, endDate: today,
+                  daysOfWeek: null, startTime: '10:00:00', endTime: '12:00:00' },
       intentText: 'A rehearsal for our small chamber group.',
+      status: 'pending', createdAtUtc: new Date().toISOString(),
+      decidedAtUtc: null, expiresAtUtc: new Date(Date.now() + 12096e5).toISOString(),
+      bookingId: null, messageCount: 0, messages: [],
     });
   `);
   await wait(900);
@@ -146,9 +159,31 @@ for (const style of styles) {
 
   // 8. An answer: wax at the door (and a bell, silent here — no gesture in
   //    this page yet is impossible, we clicked, so it may ring quietly).
-  await page.evaluate(`__steeple.setView('desk',{venueId:'grace-community-vienna'})`);
-  await wait(2800);
-  await page.evaluate("__steeple.store.approve('app-sparrows-mornings')");
+  // Not by standing on the desk: since v2_migration Phase 2 a desk belongs to a
+  // signed-in manager and nobody is signed in here (D4). The wax at the door is
+  // the world's answer to the answer arriving, wherever the visitor is standing.
+  await wait(1200);
+  await page.evaluate((id) => {
+      // Approving is steeple's, and the village animates the answer arriving:
+      // the same request, mirrored back with the status it now has.
+      const app = window.__steeple.store.getApplication(id);
+      window.__steeple.store.mirrorApplication({
+        id: app.id,
+        roomId: '0e0e0e0e-0000-4000-8000-00000000e001',
+        roomName: app.roomId, venueName: app.venueId,
+        venueSlug: app.venueId, roomSlug: app.roomId,
+        organizer: { id: app.organizerId, displayName: app.organizerName ?? 'An organizer', ratingSummary: null },
+        activityType: String(app.activityType).toLowerCase(), groupSize: app.groupSize,
+        schedule: {
+          frequency: app.frequency === 'weekly' ? 'recurringWeekly' : 'oneOff',
+          startDate: app.startDate, endDate: app.endDate ?? app.startDate,
+          daysOfWeek: null, startTime: app.startTime + ':00', endTime: app.endTime + ':00',
+        },
+        intentText: app.intentText, status: 'approved',
+        createdAtUtc: app.createdAt, decidedAtUtc: new Date().toISOString(),
+        expiresAtUtc: app.expiresAt, bookingId: null, messageCount: 0, messages: [],
+      });
+    }, 'app-sparrows-mornings');
   await wait(1400);
   await page.screenshot({ path: `/tmp/wld-test-${style}-seal.png` });
   const settled = await debug("lantern('grace-community-vienna')");
@@ -237,7 +272,9 @@ for (const style of styles) {
     if (m.type() === 'error') errors.push(m.text());
   });
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-  await page.goto(`${base}/?style=diorama&q=low#/desk/grace-community-vienna`, {
+  // `#/desk/...` would land in the village now — hosting is somebody's, and
+  // this page is nobody (D4). The village is where this half of the story is.
+  await page.goto(`${base}/?style=diorama&q=low#/village`, {
     waitUntil: 'networkidle0',
   });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
@@ -249,7 +286,27 @@ for (const style of styles) {
     'the bell stays silent',
     (await page.evaluate('__steeple.world.correspondence.debug.bellArmed')) === false
   );
-  await page.evaluate("__steeple.store.approve('app-chess-club')");
+  await page.evaluate((id) => {
+      // Approving is steeple's, and the village animates the answer arriving:
+      // the same request, mirrored back with the status it now has.
+      const app = window.__steeple.store.getApplication(id);
+      window.__steeple.store.mirrorApplication({
+        id: app.id,
+        roomId: '0e0e0e0e-0000-4000-8000-00000000e001',
+        roomName: app.roomId, venueName: app.venueId,
+        venueSlug: app.venueId, roomSlug: app.roomId,
+        organizer: { id: app.organizerId, displayName: app.organizerName ?? 'An organizer', ratingSummary: null },
+        activityType: String(app.activityType).toLowerCase(), groupSize: app.groupSize,
+        schedule: {
+          frequency: app.frequency === 'weekly' ? 'recurringWeekly' : 'oneOff',
+          startDate: app.startDate, endDate: app.endDate ?? app.startDate,
+          daysOfWeek: null, startTime: app.startTime + ':00', endTime: app.endTime + ':00',
+        },
+        intentText: app.intentText, status: 'approved',
+        createdAtUtc: app.createdAt, decidedAtUtc: new Date().toISOString(),
+        expiresAtUtc: app.expiresAt, bookingId: null, messageCount: 0, messages: [],
+      });
+    }, 'app-chess-club');
   await wait(1500);
   await page.screenshot({ path: '/tmp/wld-test-reduced-seal.png' });
   const settled = await page.evaluate(
