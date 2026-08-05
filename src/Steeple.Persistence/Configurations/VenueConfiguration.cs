@@ -25,6 +25,8 @@ public class VenueConfiguration : IEntityTypeConfiguration<Venue>
         builder.Property(v => v.TransitInfo).HasMaxLength(1000).HasDefaultValue("");
         // Mirror 005-bookings.sql's DEFAULT (existing rows inherited it the same way).
         builder.Property(v => v.Timezone).IsRequired().HasMaxLength(64).HasDefaultValue("America/New_York");
+        // Mirror 013-booking-modes.sql's DEFAULT 0 (Instant) — existing venues became instant-book.
+        builder.Property(v => v.BookingMode).HasConversion<int>().HasDefaultValue(BookingMode.Instant);
 
         // Composite index supporting the bounding-box discovery query. A B-tree only ranges on
         // the leading column (Latitude); true 2-D pruning awaits a GiST/PostGIS index in the

@@ -18,6 +18,21 @@ public class User
     /// </summary>
     public string? Email { get; set; }
 
+    /// <summary>
+    /// The payment provider's customer id (mock: <c>cus_mock_…</c>; Stripe later). Payment
+    /// methods live with the provider on this customer — never here.
+    /// </summary>
+    public string? PaymentCustomerId { get; set; }
+
+    /// <summary>Display cache of the saved default method's brand (e.g. "visa"). Never a PAN.</summary>
+    public string? PaymentMethodBrand { get; set; }
+
+    /// <summary>Display cache of the saved default method's last four digits. Never a PAN.</summary>
+    public string? PaymentMethodLast4 { get; set; }
+
+    /// <summary>When the current payment method was saved; null = no method on file.</summary>
+    public DateTimeOffset? PaymentMethodSetAtUtc { get; set; }
+
     /// <summary>Creation timestamp (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 

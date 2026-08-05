@@ -16,6 +16,9 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(b => b.Status).HasConversion<int>();
         builder.Property(b => b.DaysOfWeek).HasColumnName("DaysOfWeekMask").HasConversion<int?>();
         builder.Property(b => b.CancelReason).HasMaxLength(500);
+        // Price snapshot at confirmation (014-payments.sql); both null = legacy/offline booking.
+        builder.Property(b => b.PricePerOccurrence).HasPrecision(12, 2);
+        builder.Property(b => b.Currency).HasMaxLength(3);
 
         // One booking per application, ever.
         builder.HasIndex(b => b.ApplicationId).IsUnique();

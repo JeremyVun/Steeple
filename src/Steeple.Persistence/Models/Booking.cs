@@ -52,6 +52,15 @@ public class Booking
     /// <summary>When the renewal-due nudge was sent; null until then (lazy sweep on read).</summary>
     public DateTimeOffset? RenewalNudgeSentAtUtc { get; set; }
 
+    /// <summary>
+    /// Price snapshot per occurrence, frozen at confirmation (room pricePerHour × schedule
+    /// duration). Null together with <see cref="Currency"/> = legacy/offline booking — nothing charges.
+    /// </summary>
+    public decimal? PricePerOccurrence { get; set; }
+
+    /// <summary>ISO currency code of the snapshot; null on legacy/offline bookings.</summary>
+    public string? Currency { get; set; }
+
     /// <summary>Creation (= approval) timestamp (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }
 
