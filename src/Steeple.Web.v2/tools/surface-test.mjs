@@ -16,15 +16,12 @@
 // stands; §2.5 fakes an origin that answers 404 on the listing endpoints, which
 // is what a static host or an unwired proxy does.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5331/';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 await browser
   .defaultBrowserContext()
   .overridePermissions(new URL(url).origin, ['clipboard-read', 'clipboard-write', 'clipboard-sanitized-write']);
@@ -34,6 +31,17 @@ const check = (label, ok, detail = '') => {
   if (!ok) failures += 1;
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`);
 };
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browser it opened goes with it. (The pipe
+// transport covers the ungraceful deaths; this covers the throw.)
+async function lastWords(error) {
+  await closeBrowsers();
+  console.log(`\nthe run stopped: ${error?.message ?? error}`);
+  process.exit(1);
+}
+process.on('uncaughtException', lastWords);
+process.on('unhandledRejection', lastWords);
 
 /** A page on the browse surface, landed past the roll, with nobody signed in. */
 async function surface({ width, height, block = null } = {}) {
@@ -85,11 +93,18 @@ const shownIn = (page, sel) =>
 const stackAt = (page, x, y) =>
   page.evaluate((a, b) => document.elementsFromPoint(a, b).slice(0, 4).map((n) => `${n.tagName}.${String(n.className).slice(0, 36)}`), x, y);
 
+// A missing affordance is a failing check, not an exception: this suite has
+// seven independent sections and one absent button used to end the run before
+// the phone half of it was ever driven.
 async function press(page, sel, { touch = false } = {}) {
   const r = await rectOf(page, sel);
-  if (!r) throw new Error(`no ${sel}`);
+  if (!r) {
+    check(`there is a ${sel} to press`, false);
+    return false;
+  }
   if (touch) await page.touchscreen.tap(r.cx, r.cy);
   else await page.mouse.click(r.cx, r.cy);
+  return true;
 }
 
 // ═══ 1. desktop: pins, the head, the standing line, the search bar ══════════
@@ -252,10 +267,18 @@ async function press(page, sel, { touch = false } = {}) {
   await page.evaluate('__steeple.setView("journal")');
   await wait(1000);
   await press(page, '.account');
-  await wait(400);
-  const outBox = await rectOf(page, '.account__out');
-  const outStack = await stackAt(page, outBox.cx, outBox.cy);
-  check('the card stands over an open inbox, not under it', /account__out/.test(outStack[0]), outStack.join(' < '));
+  // Wait for the card's own way out to be there, rather than for 400ms and a
+  // hope: the inbox behind it is a real fetch, and on a busy machine the card
+  // opens later than it does on a quiet one. Reading `.cx` off a null rect is
+  // what used to end this run here with a TypeError and leave §6 and §7 unrun.
+  const opened = await page
+    .waitForSelector('.account__out', { visible: true, timeout: 10000 })
+    .then(() => true)
+    .catch(() => false);
+  check('the card offers the way out', opened);
+  const outBox = opened ? await rectOf(page, '.account__out') : null;
+  const outStack = outBox ? await stackAt(page, outBox.cx, outBox.cy) : [];
+  check('the card stands over an open inbox, not under it', /account__out/.test(outStack[0] ?? ''), outStack.join(' < '));
   await press(page, '.account__out');
   await wait(800);
   check('signing out clears the session', (await page.evaluate(async () => (await import('/src/data/session.js')).isSignedIn())) === false);
@@ -342,7 +365,13 @@ async function press(page, sel, { touch = false } = {}) {
   check('...and not at the foot of a scroll', !(await page.$('.sheet--venue .sheet__foot')));
   check('the sheet wears a handle', (await rectOf(page, '.sheet--venue .sheet__grab')) !== null);
 
-  // the next church without going back at all
+  // The next church without going back at all. Which pin a finger lands on is
+  // not the pin whose box was measured: the dev geocoder puts every address a
+  // host types on the village centre, so locally-listed venues stack, and the
+  // topmost one at that point is whichever the map drew last. That is not the
+  // bug this guards — going back to the map first, or opening nothing, is. So
+  // the tap is aimed and then asked what was actually under it (the same
+  // discipline §1 uses on the price tags).
   const other = await page.evaluate((skip) => {
     const top = document.querySelector('.sheet--venue').getBoundingClientRect().top;
     const n = [...document.querySelectorAll('.dm-pin')].find(
@@ -350,13 +379,20 @@ async function press(page, sel, { touch = false } = {}) {
     );
     if (!n) return null;
     const b = n.getBoundingClientRect();
-    return { v: n.dataset.venue, x: b.x + b.width / 2, y: b.y + b.height * 0.8 };
+    const at = { x: b.x + b.width / 2, y: b.y + b.height * 0.8 };
+    const under = document
+      .elementsFromPoint(at.x, at.y)
+      .map((e) => e.closest?.('.dm-pin'))
+      .find(Boolean);
+    return { v: n.dataset.venue, aimed: under?.dataset.venue ?? null, ...at };
   }, first);
-  check('another church is standing in the band', other !== null, JSON.stringify(other));
-  if (other) {
+  check('another church is standing in the band', other !== null && other.aimed !== null, JSON.stringify(other));
+  if (other?.aimed) {
     await page.touchscreen.tap(other.x, other.y);
     await wait(1300);
-    check('...and tapping it swaps the sheet without going back first', (await page.evaluate('__steeple.state.venueId')) === other.v, `${first} → ${await page.evaluate('__steeple.state.venueId')}`);
+    const opened = await page.evaluate('__steeple.state.venueId');
+    check('...and tapping it swaps the sheet without going back first', opened === other.aimed, `aimed ${other.aimed}, opened ${opened} (from ${first})`);
+    check('...for another church, not the one already open', opened !== first, `${first} → ${opened}`);
   }
 
   // room → venue → map, one level at a time
@@ -392,6 +428,6 @@ async function press(page, sel, { touch = false } = {}) {
   await page.close();
 }
 
-await browser.close();
+await closeBrowsers();
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
 process.exit(failures ? 1 : 0);
