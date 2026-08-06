@@ -183,6 +183,14 @@ E2E suites mint real accounts/venues/applications on the local API each run:
 guest with a card, a weekly ask, the wire from node, per-IP sign-in pacing, and the one
 `launch()` that puts every headless browser on a pipe). `STEEPLE_API`/`STEEPLE_PSQL`/
 `STEEPLE_DB` configure it; psql stands in only for the operator's first-listing approve.
+`STEEPLE_API` and the vite proxy's target **must be the same API instance** — a mismatch
+spends two rate-limit budgets and the 429s read as hangs. A **cold hash is a flat boot**
+since P3.5 (no engine, no `__steeple.world`), so a suite whose subject is the village
+loads bare and *then* sets the hash (`input-test`, `wave2-test` both do). And a transient
+the product takes away on a timer (the ambient slip's 12s linger) must be asserted from a
+**record the page keeps**, never a live sample: a loaded machine stretches a 220ms fade
+five-fold and more, and a poll landing either side of the readable window reports a
+defect that never happened (`payments-ui-test` §6).
 
 **Seams (frozen — the day an upstream name changes, one file moves):**
 - `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
