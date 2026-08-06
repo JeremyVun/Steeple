@@ -136,10 +136,14 @@ async function signIn(email, name) {
 }
 
 const iso = (d) => d.toISOString().slice(0, 10);
-const addDays = (date, n) => new Date(date.getTime() + n * 86400000);
+// Calendar arithmetic, not 86_400_000ms: on the day a zone falls back, a fixed-ms
+// step lands on the same local date twice and a "walk to the next weekday" loop
+// can spin forever.
+const addDays = (date, n) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + n));
 function nextWeekday(dow, least = 7) {
   let d = addDays(new Date(), least);
-  while (d.getDay() !== dow) d = addDays(d, 1);
+  while (d.getUTCDay() !== dow) d = addDays(d, 1);
   return iso(d);
 }
 

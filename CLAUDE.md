@@ -148,8 +148,12 @@ section in Api appsettings.
   one deliberate Draft room to prove it (`renovation-annex`).
 - **Geofence rejects, silently by design:** out-of-area search input clamps to the
   beachhead (empty results, not errors); detail lookups 404.
-- **Web sign-in state:** v2's `src/data/session.js` owns the API token pair in localStorage
-  with single-flight refresh rotation. Do not reintroduce the v1 cookie/BFF assumptions.
+- **Web sign-in state (rewritten 2026-08-06):** v2's `src/data/session.js` owns identity.
+  The refresh token is an **httpOnly cookie the API sets** (`refreshTransport:'cookie'` —
+  not the v1 BFF), the access token lives in module memory only, and localStorage holds
+  just `{user, reason, stamp}` for cross-tab `storage`-event sync. Refresh is single-flight
+  per tab; concurrent tabs survive by the API's rotation reuse-grace
+  (`docs/contracts/identity.md`). Never write a token to storage.
 - Compose runs server containers in **Production** and serves web v2 from nginx. Only
   web/admin publish general host ports; api is compose-internal apart from dev media loopback.
 
@@ -165,7 +169,8 @@ files, while "CONTRACTS §n" means this repo's `docs/CONTRACTS.md`.
 
 **Run/verify:** `npm run dev` (vite :5173, proxies `/api` → API :5200 — the API serves no
 CORS by design, the proxy is the missing BFF); `npm run build:flat` = no-Three build
-(~310kB vs ~988kB) for A/B. Harnesses in `tools/*.mjs` drive real browser events; each
+(~373kB vs ~1.05MB raw; 116kB vs 301kB gzipped) for A/B; `build:debug`/`build:flat:debug`
+keep `window.__steeple` for suites that drive a built bundle (production builds drop it). Harnesses in `tools/*.mjs` drive real browser events; each
 documents its own flags/env in its header (some are world-ON, some world-OFF —
 **inverting a suite's documented flags produces convincing, meaningless failures**).
 Headless GL runs app-time ~6× slow: tests wait on state, never wall-clock. Known-stale
@@ -176,10 +181,11 @@ E2E suites mint real accounts/venues/applications on the local API each run.
 - `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
 - `src/data/catalog.js` — product vocabulary over the wire, with `bundledCatalog.js`
   fallback when the API is down (seed slugs match the bundled ids 1:1).
-- `src/data/session.js` — token pair (single-flight refresh rotation, `withAccess()`
-  401-retry-once, localStorage). Sign-in = dev SSO (`POST /auth/sessions
-  {provider:"dev", idToken:"email|Name"}`, DevLoginEnabled — Development only);
-  Google/Apple later swap only `signIn()`.
+- `src/data/session.js` — identity (httpOnly-cookie refresh token, in-memory access token,
+  `withAccess()` 401-retry-once, cross-tab `storage` sync; harnesses read a bearer via
+  `withAccess((t) => Promise.resolve(t))`, never storage). Sign-in = dev SSO
+  (`POST /auth/sessions {provider:"dev", idToken:"email|Name", refreshTransport:"cookie"}`,
+  DevLoginEnabled — Development only); Google/Apple later swap only `signIn()`.
 - `src/data/correspondence.js` — the wire for everything after a request is written (inbox,
   thread, withdraw, counter response, host decisions, the payments method-on-file). Calls
   `api.js`, mirrors steeple's answer into `store.js`, returns a verdict whose `reach` is
@@ -225,19 +231,21 @@ header state (**done**) → inbox onto `/me/applications` (**done**) → real pr
 **Hazards found in the waves (unfixed):** the desk's Spaces tab reads open hours from the
 **local** store, so a room whose hours only exist at steeple reads "No open hours set" in red;
 `.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —
-host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason);
+host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason;
+`.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own);
 `host-offline-test.mjs` is **not re-baselinable**: hosting requires a session, so writing a
 listing while steeple is away is no longer a promise the product makes (owner call 2026-08-05);
 room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
-orphans every photo already written (and, locally, rows from other agents' API ports 404);
-the 4s-abort retry can double-create venues — the
-API now honours `Idempotency-Key` on manage creates but the client does not send one yet
-(D8's client half); `draft.roomId` is always `'main-space'` (second room per venue collides);
-dev geocoding = `StubGeocodingGateway` (every address → village centre, so
-geofence-rejection paths are locally unreachable); the venue/room **property sheets** are
-still built from `venues.js` scenery, so a host-listed venue has no detail sheet and no
-clickable way into its apply flow (the composer itself is catalog-backed and works from
-`#/apply/<venueSlug>/<roomSlug>`). API gaps compiled for steeple: v2 `docs/CONTRACT4.md` §5
+orphans every photo already written (and, locally, rows from other agents' API ports 404 —
+also add any new media origin to nginx.conf's CSP `img-src` or photos silently stop loading);
+`draft.roomId` is always `'main-space'` (second room per venue collides);
+dev geocoding = `StubGeocodingGateway` (every address → village centre, so geofence-rejection
+paths are locally unreachable, and every locally host-listed venue stacks on one map point —
+harnesses drive pins by keyboard or assert "aimed === opened", never a pointer at a named pin);
+search reads one page of 100, so a venue beyond it has no pin or row until a narrower search
+reaches it (its sheet works by slug either way; paging the map is unbuilt);
+`surface-test.mjs` §5 crashes on the account monogram (`outBox.cx` null) and truncates its run.
+API gaps compiled for steeple: v2 `docs/CONTRACT4.md` §5
 (CORS, venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint…).
 
 **Design taste (Jeremy):** calm, sophisticated, professional — never childish or tacky;
