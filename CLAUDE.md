@@ -27,7 +27,7 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
 | `docs/SEO.md` | SEO checklist | SEO to-dos |
-| `docs/runbooks/` | Operational procedures (email/Resend today) | Setting up or debugging a third-party service in production |
+| `docs/runbooks/` | Operational procedures (email/Resend; SSO providers + Turnstile) | Setting up or debugging a third-party service in production |
 
 Target-state docs describe things that **don't exist yet** — don't assume an endpoint or
 table exists because SYSTEM_DESIGN/CONTRACTS mentions it; ARCHITECTURE.md and the code are
