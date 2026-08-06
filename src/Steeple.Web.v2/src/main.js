@@ -15,6 +15,12 @@
 // wordmark still takes you back up to the title page, and the page still comes
 // back down. What it loses is the canvas that used to carry the gesture, so the
 // flat boot puts the wheel and the down-arrow on the page instead.
+//
+// The second way in is also the safety net. A visitor whose browser refuses a
+// WebGL context — an old machine, a hardened profile, a blocklisted driver — or
+// whose three.js chunk never arrives, is not owed a blank page: the village is
+// the overture, and the product underneath it is whole without one. Any failure
+// raising the world is one calm line in the console and then `bootFlat`.
 
 import { createRoll } from './journey/roll.js';
 import { createUI } from './ui/index.js';
@@ -36,8 +42,24 @@ import * as session from './data/session.js';
 /** Compile-time, not run-time: this is what lets the flat build drop three.js. */
 const BUILT_FLAT = import.meta.env.VITE_WORLD === 'off';
 
-/** The debug/verification API — used by tools/*.mjs. Do not remove. */
+/**
+ * The debug/verification API — used by tools/*.mjs. Do not remove.
+ *
+ * It is a key to the whole product's insides — the session, the store, the bus
+ * — so a production bundle does not carry it. The dev server always has it;
+ * a build has it only when asked for one: `VITE_DEBUG=on vite build`, which is
+ * what `npm run build:debug` and `build:flat:debug` are for. The suites drive
+ * the dev server, apart from world-off-test.mjs's second invocation against a
+ * served flat build — that one wants `build:flat:debug`.
+ *
+ * `window.__steepleReady` is not part of this: it is the boot signal core/
+ * engine.js itself reads to know whether the loop may be put down, so it is set
+ * in every build.
+ */
+const DEBUG_API = import.meta.env.DEV || import.meta.env.VITE_DEBUG === 'on';
+
 function publish(extra) {
+  if (!DEBUG_API) return;
   window.__steeple = {
     bus,
     state,
@@ -59,37 +81,78 @@ async function boot() {
   const canvas = document.getElementById('scene');
   if (BUILT_FLAT || state.world === 'off') return bootFlat(canvas);
 
+  try {
+    await bootVillage(canvas);
+  } catch (failure) {
+    console.warn('[steeple] The village could not be raised — opening the product without it.', failure);
+    bootFlat(canvas);
+  }
+}
+
+/** The product with the village behind it. Throws rather than half-boots. */
+async function bootVillage(canvas) {
   const { createEngine } = await import('./core/engine.js');
   const { buildWorld } = await import('./world/index.js');
   const { createJourney } = await import('./journey/index.js');
 
   const engine = createEngine(canvas);
-  const world = await buildWorld(engine);
-  const journey = createJourney(engine, world);
-  createUI(engine, world);
+  try {
+    // A refused context is usually a throw out of the renderer's constructor,
+    // but not always: a driver can hand back a context that is already lost, or
+    // lose it between creation and the first frame. Either way there is nothing
+    // to render into, and the page is better off flat than black.
+    const gl = engine.renderer.getContext();
+    if (!gl || gl.isContextLost?.()) throw new Error('WebGL context lost before the first frame');
 
-  engine.onUpdate((dt, elapsed) => {
-    world.update(dt, elapsed);
-    journey.update?.(dt, elapsed);
-  });
+    const world = await buildWorld(engine);
+    const journey = createJourney(engine, world);
+    createUI(engine, world);
 
-  publish({
-    engine,
-    world,
-    // The roll, set instantly: the screenshot harness photographs frames of it.
-    roll: journey.roll,
-  });
+    engine.onUpdate((dt, elapsed) => {
+      world.update(dt, elapsed);
+      journey.update?.(dt, elapsed);
+    });
 
-  window.addEventListener('hashchange', applyHash);
-  applyHash();
+    publish({
+      engine,
+      world,
+      // The roll, set instantly: the screenshot harness photographs frames of it.
+      roll: journey.roll,
+    });
 
-  engine.start();
+    window.addEventListener('hashchange', applyHash);
+    applyHash();
+
+    engine.start();
+  } catch (failure) {
+    // Hand the context back before the fallback takes the canvas away: a live
+    // renderer nobody can see is a GPU allocation nobody can free.
+    release(engine);
+    throw failure;
+  }
 }
 
-/** The product with nothing behind it. */
+function release(engine) {
+  try {
+    engine.stop();
+    engine.renderer.dispose();
+    engine.renderer.forceContextLoss?.();
+  } catch {
+    // A context that cannot be given back is the case we are already in.
+  }
+}
+
+/**
+ * The product with nothing behind it.
+ *
+ * Also the landing place when raising the village fails, so nothing here may
+ * assume a clean page: the canvas may already be gone, and #ui may hold a
+ * half-built interface — `createUI` empties it before it builds, which is what
+ * makes calling this after a partial village boot safe.
+ */
 function bootFlat(canvas) {
   // An aria-hidden black rectangle under the paper helps nobody.
-  canvas.remove();
+  canvas?.remove();
   document.documentElement.dataset.world = 'off';
 
   // The roll needs a renderer only to put it down at the top and pick it up

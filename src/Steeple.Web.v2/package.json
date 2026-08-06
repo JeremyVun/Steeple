@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:flat": "VITE_WORLD=off vite build --outDir dist-flat",
+    "build:debug": "VITE_DEBUG=on vite build --outDir dist-debug",
+    "build:flat:debug": "VITE_WORLD=off VITE_DEBUG=on vite build --outDir dist-flat-debug",
     "preview": "vite preview",
     "shot": "node tools/shot.mjs"
   },
