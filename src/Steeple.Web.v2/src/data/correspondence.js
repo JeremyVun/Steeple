@@ -28,6 +28,7 @@ import {
   mirrorApplication,
   mirrorApplications,
   mirrorBooking,
+  mirrorRoomAvailability,
   forgetApplication,
 } from './store.js';
 
@@ -346,6 +347,30 @@ export async function managedVenues() {
     ok: true,
     value: summaries.map((summary, at) => (details[at].ok ? details[at].value : { ...summary, rooms: [] })),
   };
+}
+
+/**
+ * When each of a venue's rooms is open, as steeple holds it.
+ *
+ * The desk printed hours out of this browser's own record, which is only ever
+ * the hours somebody set *here*: a room whose hours live at steeple — set on
+ * another device, or by a host whose storage has since been cleared — read
+ * "No open hours set" in red about a room that keeps them perfectly well.
+ * Rooms without steeple's id are skipped: they are the village's scenery, and
+ * there is nothing to ask about them.
+ */
+export async function refreshRoomHours(rooms = []) {
+  const mine = rooms.filter((room) => room.remoteId);
+  const answers = await together(mine, (room) =>
+    attempt((token) => api.getRoomAvailabilityRules(room.remoteId, token))
+  );
+  let read = 0;
+  for (const [at, answer] of answers.entries()) {
+    if (!answer.ok) return answer;
+    mirrorRoomAvailability(mine[at].venueId, mine[at].id, answer.value);
+    read += 1;
+  }
+  return { ok: true, value: read };
 }
 
 // ── the guest's three moves ──────────────────────────────────────────────────

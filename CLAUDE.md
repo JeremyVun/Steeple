@@ -246,8 +246,7 @@ Driven by `tools/payments-ui-test.mjs` (65/65). Demo — dev provider only, no T
 are the mock gateway's own stand-ins. Accounts-consolidation order agreed 2026-08-05: signed-out
 header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.
 
-**Hazards found in the waves (unfixed):** the desk's Spaces tab reads open hours from the
-**local** store, so a room whose hours only exist at steeple reads "No open hours set" in red;
+**Hazards found in the waves (unfixed):**
 `.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —
 host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason;
 `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own);
@@ -274,6 +273,9 @@ only a manual venue can produce one and no seeded venue is manual.
 Retired 2026-08-06 (Phase 3.6): `host-offline-test.mjs` (rewritten signed-in-then-offline),
 `surface-test.mjs` §5's `outBox.cx` crash, and `draft.roomId === 'main-space'` — a room has
 taken steeple's own minted slug since 366fc83, proven by `host-publish-test.mjs` §7–§8.
+Retired 2026-08-07 (Phase 4/5): the Spaces tab's **local** open hours — the desk now reads
+`GET /manage/rooms/{id}/availability` per room and mirrors it (`store.mirrorRoomAvailability`),
+so a room whose hours only ever existed at steeple prints them instead of "No open hours set".
 API gaps compiled for steeple: v2 `docs/CONTRACT4.md` §5
 (CORS, venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint…).
 
