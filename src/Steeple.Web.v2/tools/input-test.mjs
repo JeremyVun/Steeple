@@ -104,9 +104,18 @@ async function ready(target) {
   // A goto that only changes the hash is not a navigation: the page keeps
   // everything it was holding — the roll, the tab a desk was left on — and the
   // checks after it quietly read the previous section's state. Go away first.
+  // And a cold *hash* is a product-first flat boot now (build_plan P3.5): no
+  // engine, no world, nothing to ask about a camera. This suite is the world's
+  // suite, so it loads bare and arrives at the route the way a visitor does.
+  const [base, route] = target.split('#');
   await page.goto('about:blank');
-  await page.goto(target, { waitUntil: 'networkidle0' });
+  await page.goto(base, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
+  if (route) {
+    await page.evaluate((r) => { window.location.hash = r; }, `#${route}`);
+    await page.evaluate('__steeple.roll.set(1)');
+    await wait(400);
+  }
   await page.evaluate('__steeple.store.setHomePin(null)');
   await wait(2500);
 }
