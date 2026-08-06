@@ -275,7 +275,14 @@ it is contained by construction: its letters are written under the seed's own id
   stand-in for hosted KYC.
 
 ⚠ Still unbuilt: D7 (Turnstile, agreements, real providers), D8's longer-write-timeouts half
-(the idempotency-key half is done — see below), D9 (CSP, `window.__steeple` gated to dev).
+(the idempotency-key half is done — see below).
+
+D9 landed 2026-08-06: the CSP (and gzip, nosniff, Referrer-Policy) live in
+`src/Steeple.Web.v2/nginx.conf` — ARCHITECTURE.md → Deployment owns the policy and the one
+coupling it carries — and `window.__steeple` is published only when `import.meta.env.DEV`
+or the build was made with `VITE_DEBUG=on`. Boot gained its missing failure path in the same
+change: any failure raising the village (a refused WebGL context, a 3D chunk that never
+arrives) is one `console.warn` and then `bootFlat` — the flat product, interactive.
 
 ## Known hazards (unfixed)
 
@@ -331,6 +338,11 @@ it is contained by construction: its letters are written under the seed's own id
   `window.__steepleReady` is the boot gate they await. Suites drive affordances with input and
   use `__steeple` only for reset, reads, and — since correspondence needs an owner — signing a
   real person in against the local API (`__steeple.session.signIn`).
+  It is **not in a production bundle** (2026-08-06): the dev server always publishes it, a
+  build only with `VITE_DEBUG=on` — `npm run build:debug`, or `build:flat:debug` for the one
+  suite that drives a built bundle (`world-off-test.mjs`'s second invocation). Every other
+  suite drives `npm run dev` and is unaffected. `__steepleReady` is ungated: `core/engine.js`
+  reads it itself to know whether the loop may be put down.
 - A fade is not proof: headless app-time runs ~6× slow, so a panel's opening transition takes
   a second or more. `checkVisibility()` calls an element at opacity 0 visible — wait on the
   computed opacity (and on a transform settling) before clicking, or a click lands on whatever

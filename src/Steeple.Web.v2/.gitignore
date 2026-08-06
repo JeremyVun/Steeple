@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-flat/
+dist-debug/
+dist-flat-debug/
 .DS_Store
 *.log
 .claude/
