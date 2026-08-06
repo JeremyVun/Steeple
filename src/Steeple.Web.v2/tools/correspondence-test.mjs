@@ -24,6 +24,15 @@
 // same idempotency key — a second key is a second booking request for a send
 // the guest made once.
 //
+// §8 and §9 hold the seam to the two things a correct read is also obliged to
+// be. §8: opening a desk reads each of its bookings **once** — the applications
+// page and the bookings page name the same bookings, and reading both twice was
+// fifty-odd serial round trips before a host saw anything. §9: a page of a
+// hundred is not a list, and `mirrorApplications({scope})` deletes what a page
+// did not carry — so the walk goes to its end, and when the cap cuts it short it
+// upserts and deletes nothing. §9 answers for steeple with a fabricated page,
+// because the shape of a page is the contract and a thousand real rows are not.
+//
 // Needs: the API (STEEPLE_API, default http://localhost:5200/api/v1) with
 // Auth:DevLoginEnabled and payments.enabled, this app on the given origin with
 // its proxy pointed at that same API, and `psql` reachable at the dev database.
@@ -912,6 +921,174 @@ check(
   keysOffered.length === 3 && new Set(keysOffered).size === 1,
   `offered ${JSON.stringify(keysOffered)}`
 );
+
+// ── 8. one desk opening, one read of each booking ────────────────────────────
+//
+// A desk opens by reading two lists that overlap: the applications page names
+// the bookings its approvals made, and the bookings page names those same
+// bookings. Read one at a time, each of them twice, that was fifty-odd round
+// trips before a host saw anything. The rule this section holds the seam to is
+// simply: within one opening, no booking's detail is asked for twice.
+//
+// The instant venue is the fixture because an instant request *is* a booking:
+// two of them give the desk two applications and two bookings, so a double read
+// is four requests and an honest one is two.
+
+console.log('\n8 · one desk opening, one read of each booking');
+
+const second = await call('POST', `/listings/${instant.roomId}/applications`, {
+  token: instantToken,
+  key: `second-${stamp}`,
+  body: {
+    activityType: 'community',
+    groupSize: 8,
+    schedule: {
+      frequency: 'oneOff',
+      startDate: nextWeekday(3, 21),
+      endDate: null,
+      daysOfWeek: null,
+      startTime: '13:00',
+      endTime: '14:00',
+    },
+    intentText: 'A second rehearsal, so the desk has more than one booking to open on.',
+    turnstileToken: null,
+  },
+});
+check(
+  'fixture: the instant room takes a second booking',
+  second.status === 200 || second.status === 201,
+  `status ${second.status} ${JSON.stringify(second.body)}`
+);
+
+const deskPage = await openPage('desk');
+// Every booking detail this desk asks steeple for, in order. The detail read is
+// `GET /bookings/{id}` and nothing else on that path is one.
+const bookingReads = [];
+deskPage.on('response', (response) => {
+  const path = new URL(response.url()).pathname;
+  if (response.request().method() === 'GET' && /^\/api\/v1\/bookings\/[^/]+$/.test(path)) {
+    bookingReads.push(path);
+  }
+});
+
+await boot(deskPage);
+await signInPage(deskPage, `host-instant-${stamp}@example.org`, 'Owen Marsh');
+await deskPage.evaluate(() => window.__steeple.setMode('host'));
+await until(
+  deskPage,
+  (slug) => {
+    const held = window.__steeple.store.venueBookings(slug);
+    return held.length >= 2 && held.every((b) => window.__steeple.store.occurrencesFor(b.id).length > 0);
+  },
+  instant.venueSlug,
+  40000,
+  'the desk read both of its bookings in full'
+);
+// Anything still in flight has a moment to land before the count is read.
+await settle(deskPage);
+await settle(deskPage);
+
+check(
+  'the desk read every booking it shows, in full',
+  new Set(bookingReads).size === 2,
+  `read ${JSON.stringify(bookingReads)}`
+);
+check(
+  'and asked for none of them twice',
+  bookingReads.length === new Set(bookingReads).size,
+  `${bookingReads.length} requests for ${new Set(bookingReads).size} bookings`
+);
+
+// ── 9. a page is not a list ──────────────────────────────────────────────────
+//
+// `mirrorApplications({scope})` deletes every held row the answer did not carry
+// — that is what makes an inbox drop a request withdrawn on another device. It
+// is also why reading one page of a hundred and calling it the list was a quiet
+// way to erase somebody's hundred-and-first request. The walk goes to the end;
+// when it cannot, it upserts and deletes nothing.
+//
+// Steeple is answered for here rather than filled with a thousand rows: the
+// shape of a page is the contract, and the fabricated one is a real page of the
+// guest's own application, cloned, with a count that says there are far more
+// pages than the walk will ever ask for.
+
+console.log('\n9 · a page is not a list');
+
+const real = (await call('GET', '/me/applications', { token: guestToken })).body?.items?.[0];
+check('fixture: the guest still has their one real request', Boolean(real), JSON.stringify(real ?? null));
+
+// A hundred rows that are not the real one, all naming the same booking — so
+// this is a count of the walk's booking reads as well as of its deletions.
+const crowd = Array.from({ length: 100 }, (_, at) => ({
+  ...real,
+  id: `00000000-0000-4000-8000-${String(at).padStart(12, '0')}`,
+}));
+
+let inboxAnswer = { items: crowd, totalCount: 2500, page: 1, pageSize: 100 };
+const guestBookingReads = [];
+guestPage.on('response', (response) => {
+  const path = new URL(response.url()).pathname;
+  if (response.request().method() === 'GET' && /^\/api\/v1\/bookings\/[^/]+$/.test(path)) {
+    guestBookingReads.push(path);
+  }
+});
+await guestPage.setRequestInterception(true);
+guestPage.on('request', (request) => {
+  if (/\/api\/v1\/me\/applications(\?|$)/.test(request.url()) && request.method() === 'GET') {
+    request
+      .respond({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(inboxAnswer),
+      })
+      .catch(() => {});
+    return;
+  }
+  request.continue().catch(() => {});
+});
+
+// 2500 rows is 25 pages and the walk stops at 10, so this list never ended —
+// and a list that never ended has no standing to say what does not exist.
+await guestPage.evaluate(() => window.__steeple.setView('village'));
+await guestPage.evaluate(() => window.__steeple.setView('journal'));
+await until(
+  guestPage,
+  () => window.__steeple.store.guestApplications().length > 100,
+  null,
+  40000,
+  'the truncated walk mirrored what it did read'
+);
+// The booking behind those rows is read after they are mirrored; give it its
+// moment before counting, or a zero would look like a pass.
+for (let at = 0; at < 40 && guestBookingReads.length === 0; at += 1) await settle(guestPage);
+// And then a while longer, so that "one read" is a fact and not a sample taken
+// before the ninety-nine others had a chance to arrive.
+for (let at = 0; at < 5; at += 1) await settle(guestPage);
+
+const survived = await guestPage.evaluate(
+  (id) => window.__steeple.store.guestApplications().some((a) => a.id === id),
+  real.id
+);
+eq('a walk the cap cut short deletes nothing it did not see', survived, true);
+check(
+  'and a hundred rows naming one booking read it once',
+  guestBookingReads.length === 1,
+  `${guestBookingReads.length} booking reads: ${JSON.stringify([...new Set(guestBookingReads)])}`
+);
+
+// And when the list really does end, the page is authoritative again: steeple
+// says this person has nothing, so nothing is what they have.
+inboxAnswer = { items: [], totalCount: 0, page: 1, pageSize: 100 };
+await guestPage.evaluate(() => window.__steeple.setView('village'));
+await guestPage.evaluate(() => window.__steeple.setView('journal'));
+await until(
+  guestPage,
+  () => window.__steeple.store.guestApplications().length === 0,
+  null,
+  40000,
+  'a whole list is still the whole truth'
+);
+check('a list that really ended still clears what steeple no longer holds', true);
 
 // ── done ─────────────────────────────────────────────────────────────────────
 
