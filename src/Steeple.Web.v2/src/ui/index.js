@@ -12,6 +12,7 @@
 // `porch` is the shared top-right shelf their entry affordances mount into.
 
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
+import { outstanding as outstandingAgreements } from '../data/agreements.js';
 import { heldVenue, readVenue } from '../data/catalog.js';
 import * as session from '../data/session.js';
 import { el } from './dom.js';
@@ -101,6 +102,31 @@ export function createUI(_engine, _world) {
       onPick: () => signIn.open(),
     });
   });
+
+  // The two documents, asked for wherever the session came from.
+  //
+  // The identity panel asks whoever signs in through it, but a session can
+  // appear without it: a remembered one on the next visit, one restored by a
+  // deep link. Somebody who has never accepted the current terms must still be
+  // asked, so the question is put here — at the session, not at one door onto
+  // it (v2_migration D7). A panel already on screen owns its own prompt and is
+  // left to it; otherwise the shelf's panel is opened to carry it.
+  async function askAboutAgreements() {
+    if (!session.isSignedIn()) return;
+    const owed = await outstandingAgreements();
+    if (!owed.length || !session.isSignedIn()) return;
+    const asking = [...document.querySelectorAll('#ui .identity')].some((node) =>
+      node.checkVisibility ? node.checkVisibility() : !node.hidden
+    );
+    if (asking) return;
+    signIn.open(null, { trigger: 'agreements' });
+  }
+
+  session.onSessionChange((held, reason) => {
+    if (held && reason === session.REASON.signedIn) askAboutAgreements();
+  });
+  // And on the way in, for a session this browser was already holding.
+  if (session.isSignedIn()) session.fetchCurrentUser().then(() => askAboutAgreements());
 
   // What steeple wrote while this person was away — ambient, not a tab. It
   // borrows the same slip the session notice uses, because it is the same kind

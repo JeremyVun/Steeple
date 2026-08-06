@@ -436,6 +436,15 @@ export function getMe(accessToken) {
 }
 
 /**
+ * `POST /me/agreements` — record acceptance of one legal document at one
+ * version. Idempotent per (user, docType, version); `400 unknown_doc_type` for
+ * anything but `tos` and `privacy`.
+ */
+export function acceptAgreement(docType, version, { accessToken } = {}) {
+  return send('POST', '/me/agreements', { docType, version }, { accessToken });
+}
+
+/**
  * @typedef {object} WireSchedule  venue-local wall clock, CONTRACTS §2
  * @property {'oneOff'|'recurringWeekly'} frequency
  * @property {string} startDate            yyyy-MM-dd
