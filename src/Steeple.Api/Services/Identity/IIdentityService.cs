@@ -16,6 +16,14 @@ public interface IIdentityService
     /// <summary>Revokes the session (refresh-token family) identified by the access token's <c>sid</c>.</summary>
     Task RevokeSessionAsync(Guid sessionId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Revokes the session a refresh token belongs to, without needing a live access token. This is
+    /// how a browser signs out once its 15-minute access token has already expired — the cookie is
+    /// the only credential left, and a sign-out that quietly fails to revoke anything is the worst
+    /// possible outcome. Returns the owning user, or null when the token was never issued.
+    /// </summary>
+    Task<Guid?> RevokeSessionByRefreshTokenAsync(string refreshToken, CancellationToken ct = default);
+
     /// <summary>Revokes every session the user holds ("sign out everywhere").</summary>
     Task RevokeAllSessionsAsync(Guid userId, CancellationToken ct = default);
 

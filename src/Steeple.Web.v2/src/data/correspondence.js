@@ -21,7 +21,6 @@
 import * as api from './api.js';
 import * as session from './session.js';
 import {
-  DAY_LABELS,
   maskToDays,
   mirrorApplication,
   mirrorApplications,
@@ -362,6 +361,3 @@ export async function saveMockCard({ clientSecret, brand, last4 }) {
     api.confirmMockPaymentSetup({ clientSecret, brand, last4 }, { accessToken: token })
   );
 }
-
-/** Weekday names for a counter-offer's spoken form — one vocabulary, one place. */
-export const dayNamesOf = (mask) => maskToDays(mask ?? 0).map((day) => DAY_LABELS[day]);

@@ -13,6 +13,7 @@ public sealed class IdentityService : IIdentityService
     private readonly IEnumerable<IIdTokenVerifier> _verifiers;
     private readonly IAccessTokenIssuer _accessTokens;
     private readonly ITurnstileVerifier _turnstile;
+    private readonly IRefreshRotationGrace _grace;
     private readonly IAnalyticsSink _analytics;
     private readonly AuthOptions _options;
     private readonly TimeProvider _clock;
@@ -23,6 +24,7 @@ public sealed class IdentityService : IIdentityService
         IEnumerable<IIdTokenVerifier> verifiers,
         IAccessTokenIssuer accessTokens,
         ITurnstileVerifier turnstile,
+        IRefreshRotationGrace grace,
         IAnalyticsSink analytics,
         IOptions<AuthOptions> options,
         TimeProvider clock)
@@ -31,6 +33,7 @@ public sealed class IdentityService : IIdentityService
         _verifiers = verifiers;
         _accessTokens = accessTokens;
         _turnstile = turnstile;
+        _grace = grace;
         _analytics = analytics;
         _options = options.Value;
         _clock = clock;
@@ -139,9 +142,8 @@ public sealed class IdentityService : IIdentityService
     /// <inheritdoc />
     public async Task<IdentityResult<RefreshResponse>> RefreshAsync(string refreshToken, CancellationToken ct = default)
     {
-        var presented = await _repository
-            .FindRefreshTokenAsync(RefreshTokenCrypto.HashToken(refreshToken), ct)
-            .ConfigureAwait(false);
+        var presentedHash = RefreshTokenCrypto.HashToken(refreshToken);
+        var presented = await _repository.FindRefreshTokenAsync(presentedHash, ct).ConfigureAwait(false);
 
         if (presented is null)
         {
@@ -153,9 +155,17 @@ public sealed class IdentityService : IIdentityService
 
         if (presented.RevokedAtUtc is not null)
         {
-            // A rotated (or signed-out) token came back: someone is replaying it. Kill every
-            // descendant so a stolen token can't keep a session alive.
+            // A rotated token came back. Within the grace window that is a second browser tab
+            // catching up, not a thief: hand it the pair its sibling already got. Outside the
+            // window — or for a token rotated away long ago — it is replay, and every descendant
+            // dies so a stolen token can't keep a session alive.
+            if (_grace.Recall(presentedHash) is { } alreadyRotated)
+            {
+                return IdentityResult<RefreshResponse>.Ok(alreadyRotated);
+            }
+
             await _repository.RevokeFamilyAsync(presented.FamilyId, ct).ConfigureAwait(false);
+            _grace.ForgetFamily(presented.FamilyId);
             return IdentityResult<RefreshResponse>.Fail(
                 IdentityErrorCodes.TokenReuse, "Refresh token reuse detected; the session has been revoked.");
         }
@@ -167,6 +177,18 @@ public sealed class IdentityService : IIdentityService
         }
 
         var nextToken = RefreshTokenCrypto.GenerateToken();
+        var candidate = new RefreshResponse(
+            _accessTokens.IssueAccessToken(presented.User, presented.FamilyId), nextToken);
+
+        // Claim the rotation before writing it. Simultaneous callers agree here on whose pair the
+        // session continues with — the raw successor exists only in this process, so the loser
+        // could not otherwise be told what the winner was handed.
+        var claimed = _grace.Claim(presentedHash, presented.UserId, presented.FamilyId, candidate);
+        if (!ReferenceEquals(claimed, candidate))
+        {
+            return IdentityResult<RefreshResponse>.Ok(claimed);
+        }
+
         var next = new RefreshToken
         {
             Id = Guid.NewGuid(),
@@ -178,20 +200,51 @@ public sealed class IdentityService : IIdentityService
             CreatedAtUtc = now,
             ExpiresAtUtc = now.AddDays(_options.RefreshTokenDays),
         };
-        presented.RevokedAtUtc = now;
-        await _repository.ReplaceRefreshTokenAsync(presented, next, ct).ConfigureAwait(false);
 
-        var accessToken = _accessTokens.IssueAccessToken(presented.User, presented.FamilyId);
-        return IdentityResult<RefreshResponse>.Ok(new RefreshResponse(accessToken, nextToken));
+        if (!await _repository.TryReplaceRefreshTokenAsync(presented, next, now, ct).ConfigureAwait(false))
+        {
+            // The row was revoked between the read and the write — a sign-out, a family
+            // revocation, or a rotation by another process. Nothing was written, so the claim must
+            // not stand: it would hand a pair to callers that no row backs.
+            _grace.Release(presentedHash);
+            return IdentityResult<RefreshResponse>.Fail(
+                IdentityErrorCodes.InvalidRefreshToken, "The refresh token is no longer usable.");
+        }
+
+        return IdentityResult<RefreshResponse>.Ok(candidate);
     }
 
     /// <inheritdoc />
-    public Task RevokeSessionAsync(Guid sessionId, CancellationToken ct = default) =>
-        _repository.RevokeFamilyAsync(sessionId, ct);
+    public async Task RevokeSessionAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        await _repository.RevokeFamilyAsync(sessionId, ct).ConfigureAwait(false);
+        _grace.ForgetFamily(sessionId);
+    }
 
     /// <inheritdoc />
-    public Task RevokeAllSessionsAsync(Guid userId, CancellationToken ct = default) =>
-        _repository.RevokeAllForUserAsync(userId, ct);
+    public async Task<Guid?> RevokeSessionByRefreshTokenAsync(string refreshToken, CancellationToken ct = default)
+    {
+        var presented = await _repository
+            .FindRefreshTokenAsync(RefreshTokenCrypto.HashToken(refreshToken), ct)
+            .ConfigureAwait(false);
+        if (presented is null)
+        {
+            return null;
+        }
+
+        // Revoking on an already-revoked token is deliberate: signing out twice is not theft, and
+        // the family is the thing being ended either way.
+        await _repository.RevokeFamilyAsync(presented.FamilyId, ct).ConfigureAwait(false);
+        _grace.ForgetFamily(presented.FamilyId);
+        return presented.UserId;
+    }
+
+    /// <inheritdoc />
+    public async Task RevokeAllSessionsAsync(Guid userId, CancellationToken ct = default)
+    {
+        await _repository.RevokeAllForUserAsync(userId, ct).ConfigureAwait(false);
+        _grace.ForgetUser(userId);
+    }
 
     /// <inheritdoc />
     public async Task<MeResponse?> GetMeAsync(Guid userId, CancellationToken ct = default)
@@ -227,8 +280,11 @@ public sealed class IdentityService : IIdentityService
     }
 
     /// <inheritdoc />
-    public Task DeleteMeAsync(Guid userId, CancellationToken ct = default) =>
-        _repository.AnonymizeUserAsync(userId, ct);
+    public async Task DeleteMeAsync(Guid userId, CancellationToken ct = default)
+    {
+        await _repository.AnonymizeUserAsync(userId, ct).ConfigureAwait(false);
+        _grace.ForgetUser(userId);
+    }
 
     /// <summary>Creates a fresh refresh-token family for a sign-in and issues the paired access token.</summary>
     private async Task<(string RefreshToken, string AccessToken, Guid FamilyId)> IssueTokenPairAsync(

@@ -12,9 +12,10 @@
 // request
 { "provider": "google" | "apple", "idToken": "<provider JWT>", "nonce": "…?",
   "turnstileToken": "…?", "displayName": "…?",
-  "device": { "platform": "ios|android|web", "label": "iPhone 15" } }
+  "device": { "platform": "ios|android|web", "label": "iPhone 15" },
+  "refreshTransport": "body" | "cookie" }   // optional, default "body"
 // 200
-{ "accessToken": "<jwt ~15min>", "refreshToken": "<opaque>",
+{ "accessToken": "<jwt ~15min>", "refreshToken": "<opaque>",   // omitted on cookie transport
   "user": { "id": "…", "displayName": "…", "email": "…?", "createdAtUtc": "…" },
   "isNewUser": true }
 ```
@@ -34,8 +35,47 @@ Errors: `401 invalid_id_token`, `403 turnstile_failed`, `409 use_original_provid
 verified email already belongs to an account on the other provider — no auto-linking),
 `429 rate_limited`.
 
-### `POST /api/v1/auth/refresh` ✅ — `{refreshToken}` → rotated `{accessToken, refreshToken}`. `401 invalid_refresh_token` (unknown/expired); reuse of a rotated token → `401 token_reuse` (whole family revoked).
-### `DELETE /api/v1/auth/sessions` ✅ — revoke current session (logout; session = the access token's `sid`).
+### `POST /api/v1/auth/refresh` ✅ — `{refreshToken?, refreshTransport?}` → rotated `{accessToken, refreshToken}`. `401 invalid_refresh_token` (unknown/expired/none presented); reuse of a rotated token → `401 token_reuse` (whole family revoked, subject to the grace window below). Both body fields are optional and the body itself may be absent: with no `refreshToken` the cookie is read instead. Rate limited per IP on its own `refresh` policy (60/min), **not** the shared `auth` one — every reload of a signed-in browser spends one, and starving sign-in behind a NAT for that would be absurd.
+### `DELETE /api/v1/auth/sessions` ✅ — revoke current session (logout; session = the access token's `sid`). Accepts **either** a bearer token **or** the refresh cookie: the access token lives fifteen minutes and the cookie ninety days, so most sign-outs arrive with a stale bearer, and one that revoked nothing was the worst of both worlds. `401` only when neither credential is present. The response expires the cookie.
+
+## Refresh transport ✅ *(built 2026-08-06)*
+
+`refreshTransport` decides where the rotating token lives. **`body`** (default) puts it in the
+JSON — native clients hold it in the OS keychain, and mobile is unaffected by any of this.
+**`cookie`** omits it from the JSON entirely and sets:
+
+| attribute | value | why |
+|---|---|---|
+| name | `steeple_refresh` (`Auth:RefreshCookieName`) | |
+| `HttpOnly` | always | a ninety-day credential in `localStorage` is in reach of anything that gets onto the page |
+| `SameSite` | `Strict` | it is only ever needed on requests the SPA makes from its own origin; the one cross-site entry (an email CTA) is a top-level navigation whose *document* then makes same-site calls |
+| `Path` | `/` | web can live behind a stripped reverse-proxy prefix — a path scoped to the un-stripped route would never be sent |
+| `Max-Age` | `Auth:RefreshTokenDays` (90d); `0` on revoke | |
+| `Secure` | when the request is https | read from `Request.IsHttps` **or** `X-Forwarded-Proto: https` — the deployed edge terminates TLS and forwards plain http, and nginx passes the edge's header through rather than its own `$scheme` |
+
+**Whichever way a token arrived is the way its successor leaves.** A body token sent with
+`refreshTransport: "cookie"` is the one exception: that is a client migrating itself onto the
+cookie in a single rotation, which is how web moved off its old `localStorage` pair.
+
+## Rotation grace ✅ *(built 2026-08-06)*
+
+Rotation with reuse detection assumes one client per family. A browser breaks that: two tabs share
+one session, and when the access token expires both 401 and both present the same refresh token
+within milliseconds. Presenting an **already-rotated** token within `Auth:RefreshReuseGraceSeconds`
+(default 30) of its rotation is therefore answered with the successor pair the winner received —
+not `token_reuse`, and the family is **not** revoked. Outside that window, or for an older
+ancestor, reuse still revokes the whole family.
+
+Two things enforce it together. The database decides who actually rotated: the revoke is
+conditional on the row still being unrevoked, so of two simultaneous callers exactly one writes a
+successor and one family can never fork into two live branches. The in-memory grace map decides
+what the loser is *told*: raw tokens are stored hashed, so the successor's raw value exists only in
+the process that minted it, and it is remembered there for the grace window and no longer. Sign-out,
+family revocation, sign-out-everywhere and account deletion all drop the matching entries at once,
+so a grace entry can never hand out a pair for a session that has just been killed.
+
+A restart mid-race, or a second API instance, degrades to the old behaviour — the losing tab is
+signed out — never to a security hole, because the conditional update is still the arbiter.
 ### `GET /api/v1/me` ✅ — profile + `agreements: [{docType, version, acceptedAtUtc}]`.
 ### `DELETE /api/v1/me` ✅ — account deletion (anonymize + revoke all sessions; Apple 5.1.1(v) requirement).
 ### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere").

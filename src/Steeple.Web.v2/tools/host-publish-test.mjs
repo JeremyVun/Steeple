@@ -138,8 +138,10 @@ async function type(selector, value, { clear = false } = {}) {
   await wait(120);
 }
 
-const bearer = () =>
-  page.evaluate('JSON.parse(localStorage.getItem("steeple-village-session")).accessToken');
+// The access token lives in the session module's memory and the refresh token in
+// an httpOnly cookie — neither is in localStorage any more. `withAccess` is the
+// public way to be handed one, which is what the app itself uses.
+const bearer = () => page.evaluate('__steeple.session.withAccess((token) => Promise.resolve(token))');
 
 async function api(path, token) {
   const response = await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${token}` } });
@@ -202,9 +204,9 @@ console.log('\n2. Verify — steeple’s own sign-in, not a checkbox');
 check('the identity panel is the step, not a floating card', await visible('.listing .identity'));
 check('it is in the sheet’s own flow', await page.$eval('.listing .identity', (n) => getComputedStyle(n).position === 'static'));
 check('a signed-in host is not asked to sign in again', (await page.$('#identity-email')) === null);
-const session = JSON.parse(await page.evaluate('localStorage.getItem("steeple-village-session")'));
-check('a real session exists', Boolean(session?.accessToken), session?.user?.displayName);
-check('the API agrees who that is', (await api('/me', session.accessToken)).email === hostEmail);
+const signedIn = await page.evaluate('__steeple.session.currentUser()');
+check('a real session exists', Boolean(signedIn?.id), signedIn?.displayName);
+check('the API agrees who that is', (await api('/me', await bearer())).email === hostEmail);
 check('the brand words are exact', /Identity verified \(SSO\)/.test((await text('.listing .verified')) ?? ''));
 await shot('02-verify');
 await clickText('.listing .identity__actions .pill--primary', /^Continue as/, 'Continue as Ruth');

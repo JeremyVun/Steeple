@@ -46,9 +46,11 @@ const NADIA = {
   createdAtUtc: '2025-09-01T00:00:00Z',
 };
 
+// The session record is the non-secret half only — who is signed in, and why
+// that last changed. Tokens are memory and an httpOnly cookie (data/session.js).
 localStorage.setItem(
   'steeple-village-session',
-  JSON.stringify({ accessToken: 'test-access', refreshToken: 'test-refresh', user: NADIA })
+  JSON.stringify({ user: NADIA, reason: 'signedIn', stamp: Date.now() })
 );
 
 const {

@@ -28,7 +28,8 @@ public class IdentityServiceTests
         Assert.Equal("Alex Person", result.Value.User.DisplayName);
         Assert.Equal("person@example.com", result.Value.User.Email);
         Assert.NotEmpty(result.Value.AccessToken);
-        Assert.NotEmpty(result.Value.RefreshToken);
+        // Body transport by default: the token is in the JSON, which is what mobile needs.
+        Assert.NotEmpty(result.Value.RefreshToken!);
         Assert.Single(repo.Users);
         Assert.Single(repo.Logins);
     }
@@ -168,11 +169,11 @@ public class IdentityServiceTests
         var service = CreateService(repo, out _, out _,
             resolve: _ => new VerifiedIdentity("google-sub-6", "person@example.com", "Alex"));
         var session = await service.CreateSessionAsync(Request(), remoteIp: null);
-        var token1 = session.Value!.RefreshToken;
+        var token1 = session.Value!.RefreshToken!;
 
         var refreshed1 = await service.RefreshAsync(token1);
         Assert.Null(refreshed1.Error);
-        var token2 = refreshed1.Value!.RefreshToken;
+        var token2 = refreshed1.Value!.RefreshToken!;
         Assert.NotEqual(token1, token2);
 
         var refreshed2 = await service.RefreshAsync(token2);
@@ -195,17 +196,18 @@ public class IdentityServiceTests
     }
 
     [Fact]
-    public async Task RefreshAsync_ReplayOfRotatedToken_ReturnsTokenReuseAndRevokesWholeFamily()
+    public async Task RefreshAsync_ReplayOfRotatedTokenAfterGrace_ReturnsTokenReuseAndRevokesWholeFamily()
     {
         var repo = new FakeIdentityRepository(FixedNow);
-        var service = CreateService(repo, out _, out _,
+        var service = CreateService(repo, out _, out _, out var clock,
             resolve: _ => new VerifiedIdentity("google-sub-7", "person@example.com", "Alex"));
         var session = await service.CreateSessionAsync(Request(), remoteIp: null);
-        var token1 = session.Value!.RefreshToken;
+        var token1 = session.Value!.RefreshToken!;
         var rotated = await service.RefreshAsync(token1);
-        var token2 = rotated.Value!.RefreshToken;
+        var token2 = rotated.Value!.RefreshToken!;
 
-        // Replaying the already-rotated token1 is theft evidence.
+        // Past the grace window, replaying the already-rotated token1 is theft evidence.
+        clock.Advance(TimeSpan.FromMinutes(1));
         var reuse = await service.RefreshAsync(token1);
 
         Assert.Null(reuse.Value);
@@ -216,6 +218,96 @@ public class IdentityServiceTests
         Assert.Null(afterReuse.Value);
         Assert.NotNull(afterReuse.Error);
     }
+
+    [Fact]
+    public async Task RefreshAsync_ReplayInsideGrace_AnswersWithTheSuccessorAndKeepsTheFamily()
+    {
+        // The two-tab race: both tabs 401 on the same expired access token and both present the
+        // same refresh token. The second one is not a thief.
+        var repo = new FakeIdentityRepository(FixedNow);
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-8", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+        var token1 = session.Value!.RefreshToken!;
+
+        var first = await service.RefreshAsync(token1);
+        var second = await service.RefreshAsync(token1);
+
+        Assert.Null(second.Error);
+        Assert.Equal(first.Value!.RefreshToken, second.Value!.RefreshToken);
+        Assert.Equal(first.Value.AccessToken, second.Value.AccessToken);
+
+        // And the pair both tabs now hold still rotates — nothing was revoked.
+        var third = await service.RefreshAsync(second.Value.RefreshToken!);
+        Assert.Null(third.Error);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_SimultaneousCallers_BothGetTheSamePairAndOnlyOneSuccessorIsWritten()
+    {
+        var repo = new FakeIdentityRepository(FixedNow);
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-9", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+        var token1 = session.Value!.RefreshToken!;
+        var issued = repo.RefreshTokens.Count;
+
+        var results = await Task.WhenAll(service.RefreshAsync(token1), service.RefreshAsync(token1));
+
+        Assert.All(results, r => Assert.Null(r.Error));
+        Assert.Equal(results[0].Value!.RefreshToken, results[1].Value!.RefreshToken);
+        // One rotation, one new row: the family never forks into two live branches.
+        Assert.Equal(issued + 1, repo.RefreshTokens.Count);
+        Assert.Single(repo.RefreshTokens, t => t.RevokedAtUtc is null);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_GraceDisabled_ReplayRevokesImmediately()
+    {
+        var repo = new FakeIdentityRepository(FixedNow);
+        var clock = new SteppableTimeProvider(FixedNow);
+        var options = Options.Create(new AuthOptions { RefreshTokenDays = 90, RefreshReuseGraceSeconds = 0 });
+        var service = new IdentityService(
+            repo,
+            [new FakeIdTokenVerifier(AuthProvider.Google, _ => new VerifiedIdentity("google-sub-10", "p@x.com", "Alex"))],
+            new FakeAccessTokenIssuer(),
+            new FakeTurnstileVerifier(),
+            new MemoryRefreshRotationGrace(options, clock),
+            new NullAnalyticsSink(),
+            options,
+            clock);
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+        var token1 = session.Value!.RefreshToken!;
+        await service.RefreshAsync(token1);
+
+        var reuse = await service.RefreshAsync(token1);
+
+        Assert.Equal(IdentityErrorCodes.TokenReuse, reuse.Error!.Code);
+    }
+
+    [Fact]
+    public async Task RevokeSessionByRefreshTokenAsync_RevokesTheFamilyWithoutAnAccessToken()
+    {
+        // Sign-out with a stale access token: the cookie is the only credential left.
+        var repo = new FakeIdentityRepository(FixedNow);
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-11", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+        var token = session.Value!.RefreshToken!;
+
+        var userId = await service.RevokeSessionByRefreshTokenAsync(token);
+
+        Assert.Equal(session.Value.User.Id, userId);
+        Assert.All(repo.RefreshTokens, t => Assert.NotNull(t.RevokedAtUtc));
+        // And the revoked token cannot be talked back to life through the grace window.
+        var after = await service.RefreshAsync(token);
+        Assert.NotNull(after.Error);
+    }
+
+    [Fact]
+    public async Task RevokeSessionByRefreshTokenAsync_UnknownToken_ReturnsNull() =>
+        Assert.Null(await CreateService(new FakeIdentityRepository(FixedNow), out _, out _, resolve: _ => null)
+            .RevokeSessionByRefreshTokenAsync("never-issued-token"));
 
     [Fact]
     public async Task RefreshAsync_ExpiredToken_ReturnsInvalidRefreshToken()
@@ -328,29 +420,45 @@ public class IdentityServiceTests
         out FakeAccessTokenIssuer accessTokens,
         out FakeTurnstileVerifier turnstile,
         Func<string, VerifiedIdentity?> resolve,
+        AuthProvider provider = AuthProvider.Google) =>
+        CreateService(repo, out accessTokens, out turnstile, out _, resolve, provider);
+
+    private static IdentityService CreateService(
+        FakeIdentityRepository repo,
+        out FakeAccessTokenIssuer accessTokens,
+        out FakeTurnstileVerifier turnstile,
+        out SteppableTimeProvider clock,
+        Func<string, VerifiedIdentity?> resolve,
         AuthProvider provider = AuthProvider.Google)
     {
         accessTokens = new FakeAccessTokenIssuer();
         turnstile = new FakeTurnstileVerifier();
+        clock = new SteppableTimeProvider(FixedNow);
+        var options = Options.Create(new AuthOptions { RefreshTokenDays = 90, RefreshReuseGraceSeconds = 30 });
         var verifiers = new IIdTokenVerifier[] { new FakeIdTokenVerifier(provider, resolve) };
+        // The real grace adapter, not a fake: it is a pure in-memory map, and the rotation rules
+        // this class pins are the two halves working together.
         return new IdentityService(
             repo,
             verifiers,
             accessTokens,
             turnstile,
+            new MemoryRefreshRotationGrace(options, clock),
             new NullAnalyticsSink(),
-            Options.Create(new AuthOptions { RefreshTokenDays = 90 }),
-            new FixedTimeProvider(FixedNow));
+            options,
+            clock);
     }
 
-    /// <summary>A clock frozen at a fixed instant, so tests can pin exact expiry/creation math.</summary>
-    private sealed class FixedTimeProvider : TimeProvider
+    /// <summary>A clock that stands still until a test moves it, so grace windows are exact.</summary>
+    private sealed class SteppableTimeProvider : TimeProvider
     {
-        private readonly DateTimeOffset _now;
+        private DateTimeOffset _now;
 
-        public FixedTimeProvider(DateTimeOffset now) => _now = now;
+        public SteppableTimeProvider(DateTimeOffset now) => _now = now;
 
         public override DateTimeOffset GetUtcNow() => _now;
+
+        public void Advance(TimeSpan by) => _now = _now.Add(by);
     }
 
     private sealed class FakeIdTokenVerifier : IIdTokenVerifier
@@ -441,12 +549,19 @@ public class IdentityServiceTests
             return Task.FromResult(token);
         }
 
-        public Task ReplaceRefreshTokenAsync(RefreshToken current, RefreshToken next, CancellationToken ct = default)
+        public Task<bool> TryReplaceRefreshTokenAsync(
+            RefreshToken current, RefreshToken next, DateTimeOffset revokedAtUtc, CancellationToken ct = default)
         {
-            // `current` is the same tracked instance already in the list — its RevokedAtUtc
-            // mutation by the caller is already reflected; just append the successor.
+            // `current` is the same tracked instance already in the list, so the conditional revoke
+            // is a check on the object itself — the same "only if still unrevoked" the SQL does.
+            if (current.RevokedAtUtc is not null)
+            {
+                return Task.FromResult(false);
+            }
+
+            current.RevokedAtUtc = revokedAtUtc;
             RefreshTokens.Add(next);
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task RevokeFamilyAsync(Guid familyId, CancellationToken ct = default)

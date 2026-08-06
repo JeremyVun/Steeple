@@ -24,8 +24,14 @@ public interface IIdentityRepository
     /// <summary>Finds a refresh token by its SHA-256 hash, with its user loaded.</summary>
     Task<RefreshToken?> FindRefreshTokenAsync(string tokenHash, CancellationToken ct = default);
 
-    /// <summary>Atomically revokes <paramref name="current"/> and stores its successor (one rotation step).</summary>
-    Task ReplaceRefreshTokenAsync(RefreshToken current, RefreshToken next, CancellationToken ct = default);
+    /// <summary>
+    /// Atomically revokes <paramref name="current"/> and stores its successor (one rotation step),
+    /// but only while <paramref name="current"/> is still unrevoked. False means another caller
+    /// rotated the same token first and nothing was written — the row is the arbiter of who really
+    /// rotated, so two simultaneous refreshes can never fork one family into two live branches.
+    /// </summary>
+    Task<bool> TryReplaceRefreshTokenAsync(
+        RefreshToken current, RefreshToken next, DateTimeOffset revokedAtUtc, CancellationToken ct = default);
 
     /// <summary>Revokes every unrevoked token in a family (sign-out, or reuse detected).</summary>
     Task RevokeFamilyAsync(Guid familyId, CancellationToken ct = default);

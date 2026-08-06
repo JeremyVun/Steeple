@@ -1,9 +1,14 @@
+using System.Text.Json.Serialization;
 
 namespace Steeple.Api.Contracts.Identity;
-/// <summary>A freshly issued session: the API's own token pair plus the resolved user.</summary>
+/// <summary>
+/// A freshly issued session: the API's own token pair plus the resolved user.
+/// <see cref="RefreshToken"/> is absent when the client asked for cookie transport — the token is
+/// then in the <c>Set-Cookie</c> header, httpOnly, where no script can reach it.
+/// </summary>
 public record SessionResponse(
     string AccessToken,
-    string RefreshToken,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? RefreshToken,
     SessionUserDto User,
     bool IsNewUser);
 

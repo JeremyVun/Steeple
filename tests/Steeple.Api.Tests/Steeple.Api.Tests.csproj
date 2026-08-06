@@ -52,6 +52,7 @@
     <Using Include="Steeple.Api.Contracts.Manage" />
     <Using Include="Steeple.Api.Tests.Support" />
     <Using Include="Steeple.Api.Proxies" />
+    <Using Include="Steeple.Api.Proxies.Identity" />
     <Using Include="Steeple.Api.Proxies.Media" />
     <Using Include="Steeple.Api.Extensions" />
     <Using Include="Steeple.Api.Utils" />

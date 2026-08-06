@@ -280,6 +280,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<IIdentityRepository, EfIdentityRepository>();
 
+        // Singleton on purpose: the grace window's whole job is to outlive the request scope that
+        // wrote it, so a sibling browser tab's refresh a few milliseconds later finds it.
+        services.AddSingleton<IRefreshRotationGrace, MemoryRefreshRotationGrace>();
+
         // Verifiers hold a JWKS cache (ConfigurationManager) -> singletons, one HttpClient each.
         services.AddHttpClient<GoogleIdTokenVerifier>();
         services.AddHttpClient<AppleIdTokenVerifier>();

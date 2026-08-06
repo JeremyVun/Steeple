@@ -49,16 +49,41 @@ public sealed class EfIdentityRepository : IIdentityRepository
     /// <inheritdoc />
     public Task<RefreshToken?> FindRefreshTokenAsync(string tokenHash, CancellationToken ct = default) =>
         _db.RefreshTokens
+            .AsNoTracking()
+            // Untracked on purpose: rotation is decided by the row, not by this instance. A tracked
+            // read would be served from the identity map on a second look inside one request and
+            // could report a token as still live after another caller had already rotated it —
+            // which is precisely the fork this method's caller exists to prevent.
             .Include(t => t.User)
             .SingleOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
 
     /// <inheritdoc />
-    public async Task ReplaceRefreshTokenAsync(RefreshToken current, RefreshToken next, CancellationToken ct = default)
+    public async Task<bool> TryReplaceRefreshTokenAsync(
+        RefreshToken current, RefreshToken next, DateTimeOffset revokedAtUtc, CancellationToken ct = default)
     {
-        // One SaveChanges = one transaction: the rotation either fully happens or not at all.
-        _db.RefreshTokens.Update(current);
+        // One transaction: the rotation either fully happens or not at all. The revoke is
+        // conditional on the row still being unrevoked, so of two callers presenting the same token
+        // at the same instant exactly one writes a successor and the other is told it lost.
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        var rotated = await _db.RefreshTokens
+            .Where(t => t.Id == current.Id && t.RevokedAtUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAtUtc, revokedAtUtc), ct)
+            .ConfigureAwait(false);
+        if (rotated == 0)
+        {
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
+            return false;
+        }
+
         _db.RefreshTokens.Add(next);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+
+        // The caller's instance is untracked (see FindRefreshTokenAsync) — bring it in step with
+        // the row it just wrote, for callers that keep reading it.
+        current.RevokedAtUtc = revokedAtUtc;
+        return true;
     }
 
     /// <inheritdoc />

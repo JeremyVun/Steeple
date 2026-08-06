@@ -149,8 +149,10 @@ async function put(selector, said) {
   await wait(150);
 }
 
-const bearer = () =>
-  page.evaluate('JSON.parse(localStorage.getItem("steeple-village-session")).accessToken');
+// The access token lives in the session module's memory and the refresh token in
+// an httpOnly cookie — neither is in localStorage any more. `withAccess` is the
+// public way to be handed one, which is what the app itself uses.
+const bearer = () => page.evaluate('__steeple.session.withAccess((token) => Promise.resolve(token))');
 
 async function api(path, token) {
   const response = await fetch(`${API}${path}`, { headers: { authorization: `Bearer ${token}` } });

@@ -48,30 +48,48 @@ A request whose body is `undefined` carries no body and declares no content type
 revocations below are the only such calls; `null` still means the empty JSON document that
 every other write sends.
 
-## `src/data/session.js` — the token pair
+## `src/data/session.js` — who is signed in, and the proof (rewritten 2026-08-06)
 
-Owns the API token pair and **nothing else reads a token**. localStorage key
-`steeple-village-session` (in-memory fallback when storage throws), holding
-`{accessToken, refreshToken, user}`.
+Owns identity and **nothing else reads a token**. The two halves live in two places on purpose:
+
+| what | where | why |
+|---|---|---|
+| refresh token (90d) | httpOnly cookie `steeple_refresh`, set by the API (`refreshTransport:'cookie'`, `identity.md`) | no script can read it; the browser presents it on same-origin `/api` calls by itself |
+| access token (~15m) | this module's **memory**, nowhere else | a reload simply asks for another |
+| the person + why it last changed | localStorage `steeple-village-session` = `{user, reason, stamp}` (in-memory fallback when storage throws) | shows the right name before the network answers, and is the only channel the **other tabs** hear about a change on |
+
+**No token is ever written to storage again.** A signed-out browser leaves a tombstone
+(`{user: null, reason, stamp}`) rather than removing the key, so a sibling tab can relay
+`signedOut` vs `expired` rather than guessing.
 
 - `signIn({email, displayName})` → `POST /auth/sessions {provider:'dev', idToken:'email|Name',
-  device:{platform:'web'}}`. Dev provider only (`Auth:DevLoginEnabled`, Development-only) —
-  when Google/Apple arrive **only `signIn()` changes**.
-- `refresh()` is **single-flight** (one promise memoized; concurrent callers await it). A failed
-  refresh clears the session rather than leaving a dead one.
-- `withAccess(work)` runs one bearer-needing piece of work, retries **once** after a 401 with a
-  fresh token, and rethrows if the retry has none.
-- `fetchCurrentUser()` at boot revalidates a remembered session: 401 signs the browser out; an
-  unreachable API does **not** cost the guest their sign-in.
+  device:{platform:'web'}, refreshTransport:'cookie'}`. Dev provider only
+  (`Auth:DevLoginEnabled`, Development-only) — when Google/Apple arrive **only `signIn()` changes**.
+- `refresh()` is **single-flight per tab** (one promise memoized) and re-reads storage first, so a
+  tab whose sibling signed out does not go to the network at all. It presents nothing: the cookie
+  is the credential. It resolves to `null` when steeple *refused* (the session is dropped and
+  watchers are told `expired`) and **rejects** when nothing answered — an API that is not running
+  must not cost anyone their sign-in. Cross-tab collisions are safe by the server's rotation grace
+  (`identity.md`), not by this file.
+- `withAccess(work)` runs one bearer-needing piece of work. With no access token in memory — which
+  is **every reload of a signed-in browser** — it refreshes first; on a 401 it refreshes once and
+  retries; a second 401 is an answer.
+- `fetchCurrentUser()` at boot revalidates a remembered session: cookie refresh, then `GET /me`.
+  401 signs the browser out; an unreachable API does **not** cost the guest their sign-in.
 - `signOut({everywhere})` clears storage **first**, then calls `DELETE /auth/sessions`
-  (or `DELETE /me/sessions`) **best-effort**: a revocation that cannot be delivered must never
-  leave somebody signed in on a browser they asked to be signed out of. It returns a promise
-  that resolves once the attempt is over; callers do not have to await it.
-- `currentUser()`, `isSignedIn()`, `onSessionChange(fn)` are the read surface. Watchers are
-  called `(session, reason)` with `session.REASON` ∈ `signedIn · signedOut · expired ·
-  refreshed`; **`expired` is the only one the person did not ask for**, and `ui/notice.js`
-  turns it into a visible "You've been signed out." slip. This is the one channel a surface
-  learns about identity through — subscribe, never poll.
+  (or `DELETE /me/sessions`) **best-effort** — and no longer needs a live access token, because
+  the API accepts the refresh cookie for those two calls. The response expires the cookie.
+- **Migration:** a legacy record still holding `{accessToken, refreshToken}` is scrubbed on the
+  first `load()`, and its refresh token is spent once with `refreshTransport:'cookie'` to move the
+  browser onto the cookie in a single rotation.
+- `currentUser()`, `isSignedIn()`, `onSessionChange(fn)` are the read surface (signatures
+  unchanged). Watchers are called `(session, reason)` with `session.REASON` ∈ `signedIn ·
+  signedOut · expired · refreshed`; **`expired` is the only one the person did not ask for**, and
+  `ui/notice.js` turns it into a visible "You've been signed out." slip. A `storage` event from a
+  sibling tab fires the same channel with the same reasons — a surface never learns about identity
+  any other way. Note that a token rotation is **not** a session change and fires nothing.
+- Harnesses that need a bearer use `withAccess((t) => Promise.resolve(t))`; there is nothing in
+  storage to read. `tools/session-tabs-test.mjs` drives all of the above in two real tabs.
 
 ## `src/data/correspondence.js` — the wire for everything after a request is written
 
@@ -397,6 +415,15 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   the one case that cannot be faked in the browser: what the *proxy* answers for a dead API is
   the whole point (502, not a network error). §2–§5 fake the status with request interception,
   the way `surface-test.mjs` §2.5 does.
+- `tools/session-tabs-test.mjs` is the identity probe (2026-08-06, 35 checks): two pages of one
+  browser sharing one cookie jar. It proves the refresh token is an httpOnly cookie no script can
+  read, that a sibling tab adopts a sign-in and lets go of a sign-out through the `storage` event
+  with the right reason, and — the point — that **concurrent rotations of one cookie all succeed
+  and the family survives**. Its own trap, learned the hard way: a second tab that adopts a person
+  immediately does authed work and *re-mints the cookie*, so the section that stages a dead session
+  closes the other tab first, and it deletes the httpOnly cookie through CDP `Network.deleteCookies`
+  (puppeteer's `page.deleteCookie` round-trips through `setCookies` and silently fails on one whose
+  value it never read). World-OFF; `?world=off`.
 - **A slip is not "on screen" because it is not `hidden`.** It fades in, and headless GL runs
   app-time ~6× slow, so a check that only asks whether it exists passes on something nobody
   could have read. Wait on computed opacity.
