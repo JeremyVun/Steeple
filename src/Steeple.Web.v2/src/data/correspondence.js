@@ -101,12 +101,90 @@ async function attempt(work) {
   }
 }
 
+// ── reading many things at once, and reading each of them once ───────────────
+
+/**
+ * Run `work` over every item with at most `AT_ONCE` of them in flight, and
+ * answer in the items' own order.
+ *
+ * Opening a desk is dozens of reads that do not depend on one another — a venue
+ * detail per venue, a booking detail per approval. One at a time made that a
+ * visible wait for nothing (fifty round trips end to end); all at once is a
+ * burst the browser queues at six connections anyway and steeple sees as a
+ * stampede. A handful in flight is the whole of the difference.
+ */
+const AT_ONCE = 5;
+
+async function together(items, work) {
+  const answers = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(AT_ONCE, items.length) }, async () => {
+    for (let at = next++; at < items.length; at = next++) answers[at] = await work(items[at], at);
+  });
+  await Promise.all(runners);
+  return answers;
+}
+
+/**
+ * A **pass**: the window in which the several reads that open a surface count as
+ * one act.
+ *
+ * The applications page names the bookings its approvals made, and the bookings
+ * page names those same bookings — so a desk that reads both fetches every
+ * booking's detail twice. A pass holds, for its own lifetime only, the read
+ * already under way for each booking id, so the second asker gets the first
+ * asker's answer.
+ *
+ * It opens with the first refresh and closes a *timer tick* after the last one
+ * settles, which is exactly what makes `await refreshManaged(); await
+ * refreshManagedBookings();` one pass: a resumed `await` is a microtask, and
+ * every pending microtask drains before any timer runs, so the second refresh
+ * always re-opens the pass before it can close. Two refreshes separated by real
+ * work — a render, a click, another round trip — do not share one, which is the
+ * point: nothing here is a cache, and a mirror that serves yesterday's answer
+ * would be lying about a booking somebody has since cancelled.
+ */
+let pass = null;
+
+function openPass() {
+  if (pass) clearTimeout(pass.closing);
+  else pass = { reading: new Map(), depth: 0, closing: null };
+  pass.depth += 1;
+  return pass;
+}
+
+function closePass(open) {
+  open.depth -= 1;
+  if (open.depth > 0 || pass !== open) return;
+  open.closing = setTimeout(() => {
+    if (pass === open) pass = null;
+  }, 0);
+}
+
+/**
+ * One booking read in full and mirrored — at most once per pass.
+ *
+ * The mirroring lives inside the shared promise on purpose: two callers of the
+ * same read must produce one mirror write, not two identical ones racing.
+ * `open` is null for the reads that are somebody's deliberate act (opening a
+ * booking, or the booking behind a decision just made), which must always be
+ * fresh.
+ */
+function readBooking(open, bookingId) {
+  const held = open?.reading.get(bookingId);
+  if (held) return held;
+  const reading = attempt((token) => api.getBooking(bookingId, token)).then((answer) =>
+    answer.ok ? { ok: true, value: mirrorBooking(answer.value) } : answer
+  );
+  open?.reading.set(bookingId, reading);
+  return reading;
+}
+
 /** The booking an approved application made, held beside it. Best effort. */
-async function pullBooking(dto) {
+async function pullBooking(dto, open = null) {
   if (!dto?.bookingId) return null;
-  const answer = await attempt((token) => api.getBooking(dto.bookingId, token));
-  if (!answer.ok) return null;
-  return mirrorBooking(answer.value);
+  const answer = await readBooking(open, dto.bookingId);
+  return answer.ok ? answer.value : null;
 }
 
 /** Mirror one ApplicationDto and, when it names one, the booking behind it. */
@@ -114,6 +192,54 @@ async function hold(dto, { thread = false } = {}) {
   const application = mirrorApplication(dto, thread ? { thread: true } : {});
   await pullBooking(dto);
   return application;
+}
+
+// ── a list read is a *list*, not the first hundred of one ────────────────────
+
+const PAGE_SIZE = 100;
+/** No walk is unbounded: a person with more than a thousand open rows is a bug. */
+const PAGE_CAP = 10;
+
+/**
+ * Read a paged list to its end, and say whether that is really where it ended.
+ *
+ * Asking for one page of 100 and treating the answer as the whole list is the
+ * quiet kind of wrong: `mirrorApplications({scope})` deletes every held row the
+ * page did not carry, so the hundred-and-first request would simply vanish from
+ * somebody's inbox. So the walk goes on to the end — page one first, because it
+ * is page one that says how many there are, then the rest of them together.
+ *
+ * `whole` is false when the cap stopped the walk short or a later page never
+ * arrived. It is the caller's cue to *upsert only*: an incomplete list has no
+ * standing to say what does not exist, and a tidy mirror is worth nothing next
+ * to an honest one.
+ *
+ * @param {(accessToken:string, params:{page:number,pageSize:number}) => Promise<{items:object[],totalCount:number}>} read
+ * @returns {Promise<{ok:true,items:object[],whole:boolean}|{ok:false,reach:string,problem:string,status:number}>}
+ */
+async function readAllPages(read) {
+  const first = await attempt((token) => read(token, { page: 1, pageSize: PAGE_SIZE }));
+  if (!first.ok) return first;
+
+  const items = [...(first.value?.items ?? [])];
+  const total = Number(first.value?.totalCount);
+  // A page shorter than the one asked for is the end of the list, whatever a
+  // count claims; a count that is not a number leaves page one as all there is.
+  const pages = items.length < PAGE_SIZE || !Number.isFinite(total) ? 1 : Math.ceil(total / PAGE_SIZE);
+  if (pages <= 1) return { ok: true, items, whole: true };
+
+  const rest = [];
+  for (let page = 2; page <= Math.min(pages, PAGE_CAP); page += 1) rest.push(page);
+  let whole = pages <= PAGE_CAP;
+  const answers = await together(rest, (page) =>
+    attempt((token) => read(token, { page, pageSize: PAGE_SIZE }))
+  );
+  for (const answer of answers) {
+    if (answer.ok) items.push(...(answer.value?.items ?? []));
+    // A page that never arrived is a page whose rows are unaccounted for.
+    else whole = false;
+  }
+  return { ok: true, items, whole };
 }
 
 // ── reads ────────────────────────────────────────────────────────────────────
@@ -126,12 +252,20 @@ async function hold(dto, { thread = false } = {}) {
 export async function refreshMine() {
   const me = session.currentUser()?.id ?? null;
   if (!me) return { ok: false, reach: 'signedOut', problem: 'Sign in to see your requests.' };
-  const answer = await attempt((token) => api.getMyApplications(token, { pageSize: 100 }));
-  if (!answer.ok) return answer;
-  const items = answer.value.items ?? [];
-  mirrorApplications(items, { scope: (a) => a.organizerId === me });
-  for (const dto of items) await pullBooking(dto);
-  return { ok: true, value: items.length };
+  const open = openPass();
+  try {
+    const read = await readAllPages((token, params) => api.getMyApplications(token, params));
+    if (!read.ok) return read;
+    // Authoritative only when the whole list arrived. A truncated walk upserts
+    // and deletes nothing — the alternative is erasing rows that exist.
+    mirrorApplications(read.items, { scope: read.whole ? (a) => a.organizerId === me : null });
+    // Every list row is mirrored before the first detail read is even asked
+    // for, so no page can land on top of a detail answer within this pass.
+    await together(read.items, (dto) => pullBooking(dto, open));
+    return { ok: true, value: read.items.length };
+  } finally {
+    closePass(open);
+  }
 }
 
 /**
@@ -141,12 +275,18 @@ export async function refreshMine() {
  */
 export async function refreshManaged(venueSlugs = []) {
   const scoped = new Set(venueSlugs);
-  const answer = await attempt((token) => api.getManagedApplications(token, { pageSize: 100 }));
-  if (!answer.ok) return answer;
-  const items = answer.value.items ?? [];
-  mirrorApplications(items, { scope: scoped.size ? (a) => scoped.has(a.venueId) : null });
-  for (const dto of items) await pullBooking(dto);
-  return { ok: true, value: items.length };
+  const open = openPass();
+  try {
+    const read = await readAllPages((token, params) => api.getManagedApplications(token, params));
+    if (!read.ok) return read;
+    mirrorApplications(read.items, {
+      scope: scoped.size && read.whole ? (a) => scoped.has(a.venueId) : null,
+    });
+    await together(read.items, (dto) => pullBooking(dto, open));
+    return { ok: true, value: read.items.length };
+  } finally {
+    closePass(open);
+  }
 }
 
 /** One request in full — the thread included. This is what opens a letter. */
@@ -172,12 +312,16 @@ export async function managedVenues() {
   if (!session.isSignedIn()) return { ok: true, value: [] };
   const listed = await attempt((token) => api.getManagedVenues(token));
   if (!listed.ok) return listed;
-  const venues = [];
-  for (const summary of listed.value ?? []) {
-    const detail = await attempt((token) => api.getManagedVenue(summary.id, token));
-    venues.push(detail.ok ? detail.value : { ...summary, rooms: [] });
-  }
-  return { ok: true, value: venues };
+  const summaries = listed.value ?? [];
+  const details = await together(summaries, (summary) =>
+    attempt((token) => api.getManagedVenue(summary.id, token))
+  );
+  // A venue whose detail did not come back is still a venue this person keeps —
+  // it is shown with no rooms rather than dropped out from under them.
+  return {
+    ok: true,
+    value: summaries.map((summary, at) => (details[at].ok ? details[at].value : { ...summary, rooms: [] })),
+  };
 }
 
 // ── the guest's three moves ──────────────────────────────────────────────────
@@ -250,36 +394,52 @@ export async function counterOffer(applicationId, schedule, message) {
 // `mirrorBooking` will not replace an occurrence set from a page, and nothing
 // here should try to make it.
 
-/** One booking in full — every occurrence, with its charge state. */
+/**
+ * One booking in full — every occurrence, with its charge state.
+ *
+ * Deliberately outside any pass: this is somebody opening a booking, and the
+ * answer to that is always read fresh.
+ */
 export async function openBooking(bookingId) {
-  const answer = await attempt((token) => api.getBooking(bookingId, token));
-  if (!answer.ok) return answer;
-  return { ok: true, value: mirrorBooking(answer.value) };
+  return readBooking(null, bookingId);
 }
 
 /**
- * The bookings standing at the venues this person manages, each read in full.
+ * Mirror a whole list of bookings, then read each of the first `limit` in full.
  *
- * The page names them; the detail read is what the desk prints. `limit` bounds
- * the second read — a desk shows the coming weeks, not a lifetime of them.
+ * The order is the guarantee. Every page row is mirrored **synchronously**,
+ * before a single detail read is asked for, so within this pass no thinner page
+ * version of a booking can land on top of the detail answer for it.
+ * (`mirrorBooking` already refuses to replace an occurrence set from a page; a
+ * page and a detail otherwise carry the same fields from the same mapper —
+ * Api/Extensions/BookingMappings.cs — so a list mirror that crossed with another
+ * surface's pass would restate the truth, not overwrite it.)
+ *
+ * `limit` bounds the detail reads — a desk shows the coming weeks, not a
+ * lifetime of them — while the list itself is walked whole, because a page that
+ * stops at a hundred is a mirror that stops at a hundred.
  */
-export async function refreshManagedBookings({ limit = 25 } = {}) {
-  const listed = await attempt((token) => api.getManagedBookings(token, { pageSize: 100 }));
-  if (!listed.ok) return listed;
-  const items = listed.value.items ?? [];
-  for (const dto of items) mirrorBooking(dto);
-  for (const dto of items.slice(0, limit)) await openBooking(dto.id);
-  return { ok: true, value: items.length };
+async function refreshBookings(read, limit) {
+  const open = openPass();
+  try {
+    const listed = await readAllPages(read);
+    if (!listed.ok) return listed;
+    for (const dto of listed.items) mirrorBooking(dto);
+    await together(listed.items.slice(0, limit), (dto) => readBooking(open, dto.id));
+    return { ok: true, value: listed.items.length };
+  } finally {
+    closePass(open);
+  }
+}
+
+/** The bookings standing at the venues this person manages, each read in full. */
+export function refreshManagedBookings({ limit = 25 } = {}) {
+  return refreshBookings((token, params) => api.getManagedBookings(token, params), limit);
 }
 
 /** The signed-in guest's own bookings, each read in full. */
-export async function refreshMyBookings({ limit = 25 } = {}) {
-  const listed = await attempt((token) => api.getMyBookings(token, { pageSize: 100 }));
-  if (!listed.ok) return listed;
-  const items = listed.value.items ?? [];
-  for (const dto of items) mirrorBooking(dto);
-  for (const dto of items.slice(0, limit)) await openBooking(dto.id);
-  return { ok: true, value: items.length };
+export function refreshMyBookings({ limit = 25 } = {}) {
+  return refreshBookings((token, params) => api.getMyBookings(token, params), limit);
 }
 
 /**
