@@ -62,10 +62,15 @@ export function createRoomPanel({ onRequest }) {
       ]),
     ]);
 
-    getListing(venue.id, room.id).then((listing) => {
-      if (token !== showing) return;
-      hero.show({ url: listing?.primaryPhotoUrl ?? null, name: room.name });
-    });
+    // A refused read leaves the lettered plate standing: the photograph is the
+    // one thing on this sheet the catalog owns, and a room whose picture cannot
+    // be read is better set as its own initial than as somebody else's picture.
+    getListing(venue.id, room.id)
+      .catch(() => null)
+      .then((listing) => {
+        if (token !== showing) return;
+        hero.show({ url: listing?.primaryPhotoUrl ?? null, name: room.name });
+      });
 
     replaceChildren(body, [
       el('p', { class: 'prose', text: room.description }),

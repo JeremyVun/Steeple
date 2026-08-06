@@ -16,6 +16,10 @@
 //     labels back. Unknown tokens are humanized rather than dropped: steeple is
 //     allowed to add them without a version bump.
 //
+// The seed stands behind the wire for one case only — nothing served /api/v1 —
+// and never for a steeple that answered and said no; see `absent` below, and
+// `readFailure` for what a caller says when it did.
+//
 // The 3D village is deliberately NOT a consumer: it is scenery, staged from the
 // bundled seed. The map and list are the truth; the village is the brand.
 
@@ -30,12 +34,43 @@ const PAGE_SIZE = 100;
 // started after the page was opened is picked up without a reload.
 const RETRY_AFTER_MS = 30_000;
 
+// A read that failed means one of two things, and the whole honesty of this
+// surface is in telling them apart.
+//
+// ABSENT — nothing served /api/v1 at this origin. Either nothing answered at
+// all (status 0: a dead fetch, a timeout), or the thing standing in front of
+// the API answered for it: vite in development and nginx in a container both
+// say 502 with no upstream, and a static host with no API behind it says 404
+// to everything. This is the case the bundled seed was built for, and that
+// promise stays — the product is browsable with steeple away.
+//
+// ANSWERED — steeple itself, saying no: 400, 403, 429, 500. The service is
+// there and it did not give the rooms. Handing back the seed here was the bug
+// this replaced: the seed cannot answer a schedule term, so an API that
+// refused a Tuesday-evening search printed nine rooms as though every one of
+// them were free on Tuesday evening. False availability is the one thing this
+// surface must never invent, so an answered failure is thrown to the caller,
+// which says so in words.
+//
+// 404 sits with ABSENT deliberately. No read here has a not-found case of its
+// own — the only one that could, a listing by slug, is turned into `null` by
+// api.js before it can throw, and is vouched for by the sitemap below — so a
+// thrown 404 is an origin that does not serve steeple rather than steeple
+// saying "no such thing". `neverArrived` in data/correspondence.js is the
+// writing half of the same judgement, learned the same way and kept separate
+// on purpose: a write must never read a 404 as "steeple is away".
+const absent = (status) => status === 0 || status === 404 || status === 502 || status === 503;
+
 let quietUntil = 0;
+// Set → reads inside the quiet window fail the same way without asking again;
+// null → the seed is what the quiet window answers with.
+let quietFailure = null;
 let saidSo = false;
 let readingSeed = false;
 
 function fallBackToSeed(error) {
   quietUntil = Date.now() + RETRY_AFTER_MS;
+  quietFailure = null;
   readingSeed = true;
   if (saidSo) return;
   saidSo = true;
@@ -43,17 +78,57 @@ function fallBackToSeed(error) {
   console.info(`[catalog] steeple API unavailable (${error.message}) — reading the bundled seed.`);
 }
 
-/** Ask the API; answer from the seed if it cannot. */
+/** Ask the API; answer from the seed if nothing served it; throw if it said no. */
 async function live(fromApi, fromSeed) {
-  if (Date.now() < quietUntil) return fromSeed();
+  if (Date.now() < quietUntil) {
+    if (quietFailure) throw quietFailure;
+    return fromSeed();
+  }
   try {
     const answer = await fromApi();
     readingSeed = false;
     return answer;
   } catch (error) {
-    fallBackToSeed(error);
-    return fromSeed();
+    if (absent(error?.status ?? 0)) {
+      fallBackToSeed(error);
+      return fromSeed();
+    }
+    // A rate limit is the one answered failure that gets worse for being
+    // re-asked, so it — and only it — takes the quiet window with it, and every
+    // read inside that window says the same thing rather than adding to the
+    // pace. Any other refusal may be about the question rather than the
+    // service, so the next question is asked.
+    if (error?.status === 429) {
+      quietUntil = Date.now() + RETRY_AFTER_MS;
+      quietFailure = error;
+    }
+    throw error;
   }
+}
+
+/**
+ * What a failed read means, in the vocabulary the correspondence already
+ * speaks (data/correspondence.js): 'busy' when steeple asked to be asked again
+ * shortly, 'refused' when it answered no, 'absent' when nothing served it at
+ * all — which the reads below never throw, because that is the seed's case.
+ *
+ * The sentence is ours rather than steeple's `detail`: a read's problem
+ * document is written for whoever is holding the query, and nobody browsing a
+ * map is. Additive, and the only new export on this seam — every read still
+ * returns the shape it always has.
+ *
+ * @param {{status?:number}} error
+ * @returns {{reach:'busy'|'refused'|'absent', status:number, message:string}}
+ */
+export function readFailure(error) {
+  const status = error?.status ?? 0;
+  if (absent(status)) {
+    return { reach: 'absent', status, message: 'Steeple could not be reached just now. Try again in a moment.' };
+  }
+  if (status === 429) {
+    return { reach: 'busy', status, message: 'Steeple is answering a great many questions just now. Try again shortly.' };
+  }
+  return { reach: 'refused', status, message: 'Steeple could not answer just now. Try again in a moment.' };
 }
 
 // ─── vocabulary ──────────────────────────────────────────────────────────────
@@ -255,6 +330,10 @@ function listingFrom(detail) {
  * capacity, the three tag families, and the schedule terms (date, daysOfWeek,
  * timeOfDay, startTime/endTime, durationMinutes) which the live search answers
  * against real open hours and confirmed bookings.
+ *
+ * Throws the ApiError when steeple answered and refused — the seed cannot
+ * honour a schedule term, so standing in for a refused search would be a claim
+ * about free hours nobody made. `readFailure` turns it into a sentence.
  */
 export async function searchListings(query = {}) {
   return live(
@@ -288,7 +367,10 @@ export async function searchListings(query = {}) {
   );
 }
 
-/** One room, in full: the listing page's truth. Null when it is not published. */
+/**
+ * One room, in full: the listing page's truth. Null when it is not published;
+ * throws when steeple answered and refused (`readFailure`).
+ */
 export async function getListing(venueSlug, roomSlug) {
   return live(
     async () => {
@@ -376,7 +458,7 @@ export async function getRoomAvailability(roomId, { from, to } = {}) {
   }
 }
 
-/** The Where segment's vocabulary. */
+/** The Where segment's vocabulary. Throws on a refusal, like every read here. */
 export async function getSuburbs() {
   return live(
     () => api.getSuburbs(),
