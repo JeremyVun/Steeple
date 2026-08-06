@@ -51,6 +51,7 @@ import {
   releaseArrival,
   reportArrival,
   settledArrivals,
+  watchArrivals,
   whenArrival,
 } from './core/intent.js';
 import { createRoll } from './journey/roll.js';
@@ -117,6 +118,14 @@ function publish(extra) {
 // beside the village chunks rather than after them; built the moment it lands,
 // because createUI never needed the world (it only ever talked to core/bus.js).
 const interfaceReady = import('./ui/index.js').then(({ createUI }) => createUI(null, null));
+
+// How somebody got here, told to steeple once the batcher exists to tell it.
+// Loaded off the boot path on purpose — measurement never delays a first paint —
+// and `watchArrivals` replays what settled before it landed, which on a direct
+// entry is the arrival being measured (`arrival_settled`, CONTRACTS §7).
+import('./data/analytics.js').then(({ track }) => {
+  watchArrivals(({ destination, entry }) => track('arrival_settled', { destination, entry }));
+});
 
 /**
  * The product has the page. Set the moment an intent, a deep link or a failure

@@ -140,6 +140,15 @@ export function currentUser() {
 export const isSignedIn = () => Boolean(load());
 
 /**
+ * The access token as it stands — in memory, and null whenever this document
+ * has not asked for one yet. For the single caller that cannot use
+ * {@link withAccess}: a fire-and-forget post nobody waits on and nobody would
+ * retry (data/analytics.js), where a null simply means the batch arrives
+ * without a `userId`. Everything that matters goes through `withAccess`.
+ */
+export const accessToken = () => (load() ? access : null);
+
+/**
  * Told whenever the session appears, changes person, or goes — with the
  * {@link REASON} it changed for. This is the only channel: surfaces subscribe,
  * nothing polls. It fires for what another tab did, too.

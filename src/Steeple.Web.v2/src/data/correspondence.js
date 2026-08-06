@@ -21,6 +21,7 @@
 // A verdict is never `ok` on a guess. `ok` means steeple answered.
 
 import * as api from './api.js';
+import { track } from './analytics.js';
 import * as session from './session.js';
 import {
   maskToDays,
@@ -348,8 +349,15 @@ export async function managedVenues() {
 }
 
 // ── the guest's three moves ──────────────────────────────────────────────────
+//
+// Every move either party makes passes through this file, which is why the
+// `decision_pressed` event is emitted here rather than at seven buttons: the
+// press is what steeple never sees on its own — an approve that was refused, or
+// a counter-offer the flag had turned off, writes nothing server-side and would
+// otherwise be invisible (`docs/contracts/analytics.md`).
 
 export async function sendMessage(applicationId, body) {
+  track('decision_pressed', { decision: 'message', surface: 'letter' });
   const answer = await attempt((token) =>
     api.postApplicationMessage(applicationId, body, { accessToken: token })
   );
@@ -358,6 +366,7 @@ export async function sendMessage(applicationId, body) {
 }
 
 export async function withdraw(applicationId) {
+  track('decision_pressed', { decision: 'withdraw', surface: 'guestLetter' });
   const answer = await attempt((token) => api.postWithdraw(applicationId, { accessToken: token }));
   if (!answer.ok) return answer;
   return { ok: true, value: await hold(answer.value, { thread: true }) };
@@ -369,6 +378,10 @@ export async function withdraw(applicationId) {
  * meantime and the request was auto-declined — which the answer already says.
  */
 export async function respondToCounter(applicationId, accept) {
+  track('decision_pressed', {
+    decision: accept ? 'counterAccept' : 'counterDecline',
+    surface: 'guestLetter',
+  });
   const answer = await attempt((token) =>
     api.postCounterOfferResponse(applicationId, accept ? 'accept' : 'decline', { accessToken: token })
   );
@@ -380,6 +393,7 @@ export async function respondToCounter(applicationId, accept) {
 
 /** Approve or decline. Approving is the booking transaction. */
 export async function decide(applicationId, decision, message = null) {
+  track('decision_pressed', { decision, surface: 'desk' });
   const answer = await attempt((token) =>
     api.postDecision(applicationId, decision, message, { accessToken: token })
   );
@@ -396,6 +410,7 @@ export const ask = sendMessage;
  * something broken.
  */
 export async function counterOffer(applicationId, schedule, message) {
+  track('decision_pressed', { decision: 'counter', surface: 'desk' });
   const answer = await attempt((token) =>
     api.postCounterOffer(
       applicationId,

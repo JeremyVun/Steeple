@@ -16,6 +16,7 @@
 //
 //   createPayoutScreen({ announce, onDone }) -> { element, open, close, isOpen }
 
+import { track } from '../../data/analytics.js';
 import { finishMockPayouts, startPayouts, venuePayments } from '../../data/correspondence.js';
 import { el, replaceChildren } from '../dom.js';
 
@@ -159,6 +160,7 @@ export function createPayoutScreen({ announce, onDone } = {}) {
   }
 
   function open({ id, name } = {}, from = null) {
+    track('payout_step_opened', { state: 'prompt' });
     venueId = id;
     venueName = name ?? '';
     state = null;

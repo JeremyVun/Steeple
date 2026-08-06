@@ -20,6 +20,7 @@ import 'leaflet/dist/leaflet.css';
 
 import { setHover, setView, state } from '../../core/bus.js';
 import { afterBoot } from '../../core/idle.js';
+import { track } from '../../data/analytics.js';
 import { AREA_CENTER, knownVenues } from '../../data/catalog.js';
 import { placedVenues } from '../../data/store.js';
 import { priceBand, publishedRooms } from '../copy.js';
@@ -151,6 +152,16 @@ export function createAtlas() {
     if (performance.now() > framingUntil) ownPan = true;
   });
 
+  // What somebody did with the map, counted once per gesture rather than once
+  // per frame of it — and never for the map's own re-framing, which raises the
+  // same events a hand does (`analytics.md` — `map_interacted`).
+  map.on('dragend', () => {
+    if (performance.now() > framingUntil) track('map_interacted', { kind: 'pan' });
+  });
+  map.on('zoomend', () => {
+    if (performance.now() > framingUntil) track('map_interacted', { kind: 'zoom' });
+  });
+
   function frameChurches({ animate = false } = {}) {
     framingUntil = performance.now() + (animate ? 900 : 80);
     map.invalidateSize({ animate: false });
@@ -197,7 +208,10 @@ export function createAtlas() {
 
     marker.on('mouseover', () => warm(venue.id));
     marker.on('mouseout', () => cool(venue.id));
-    marker.on('click', () => setView('venue', { venueId: venue.id }));
+    marker.on('click', () => {
+      track('map_interacted', { kind: 'pin' });
+      setView('venue', { venueId: venue.id });
+    });
 
     markerFor.set(venue.id, marker);
     placeOf.set(venue.id, venue);

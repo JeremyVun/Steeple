@@ -9,6 +9,7 @@
 // It is a layer of its own over everything, because it can be opened from
 // anywhere: the village, an open letter, the desk.
 
+import { track } from '../data/analytics.js';
 import * as session from '../data/session.js';
 import { createIdentityStep } from './guest/sso.js';
 import { el } from './dom.js';
@@ -62,7 +63,7 @@ export function createSignInPanel({ announce } = {}) {
    *                 an acceptance. Reported, not rendered.
    */
   function open(from = null, { trigger = 'account' } = {}) {
-    void trigger;
+    track('sso_started', { surface: 'header', trigger });
     opener = from ?? document.activeElement;
     element.hidden = false;
     // A transition needs a frame to start from, and the layer has only just

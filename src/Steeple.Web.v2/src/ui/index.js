@@ -13,6 +13,7 @@
 
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
 import { outstanding as outstandingAgreements } from '../data/agreements.js';
+import { track } from '../data/analytics.js';
 import { heldVenue, readVenue } from '../data/catalog.js';
 import * as session from '../data/session.js';
 import { el } from './dom.js';
@@ -78,7 +79,7 @@ export function createUI(_engine, _world) {
   const host = createHostFlows({
     announce: announcer.say,
     porch,
-    askToSignIn: () => signIn.open(),
+    askToSignIn: () => signIn.open(null, { trigger: 'host' }),
   });
 
   // Last onto the shelf, so it sits at the end of the line where an account
@@ -250,9 +251,16 @@ export function createUI(_engine, _world) {
     document.documentElement.dataset.mode = state.mode;
   }
 
-  bus.on('view:change', () => {
+  bus.on('view:change', ({ view, previous }) => {
     render();
     announcer.view();
+    // Somebody coming to read their correspondence — the guest's inbox or the
+    // host's board. Arrival only: `view:change` does not fire for a redraw, and
+    // a deep link straight into a letter is not an inbox that was opened
+    // (`docs/contracts/analytics.md` `inbox_opened`).
+    if (view !== previous?.view && (view === 'journal' || view === 'desk')) {
+      track('inbox_opened', { surface: view === 'desk' ? 'host' : 'guest' });
+    }
   });
 
   bus.on('mode:change', () => render());

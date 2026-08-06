@@ -10,6 +10,7 @@
 // Same non-negotiable as the step it wraps: brand and last four digits only, and
 // no field anywhere here a card number could travel in.
 
+import { track } from '../data/analytics.js';
 import { createCardStep, REPLACE_WORDS } from './guest/payment.js';
 import { el } from './dom.js';
 
@@ -42,6 +43,7 @@ export function createCardPanel({ announce } = {}) {
   const element = el('div', { class: 'modal__layer cardpanel__layer', hidden: true }, [sheet]);
 
   function open(from = null) {
+    track('card_step_opened', { reason: 'account' });
     opener = from ?? document.activeElement;
     element.hidden = false;
     // A transition needs a frame to start from, and the layer has only just

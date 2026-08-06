@@ -13,6 +13,7 @@
 // first: you never lose a written request to a key you pressed to dismiss a
 // card.
 
+import { track } from '../../data/analytics.js';
 import { getRoomAvailability, getListing, heldVenue, readFailure } from '../../data/catalog.js';
 import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
 import { priceParts } from '../copy.js';
@@ -729,6 +730,9 @@ export function createComposer({ announce, onSent, onLeave }) {
   }
 
   function openIdentity() {
+    // The provider has not been chosen yet at this gate, so the event carries
+    // what brought somebody here instead (`analytics.md` — `sso_started`).
+    track('sso_started', { surface: 'apply', trigger: 'send' });
     identity.reset();
     identity.element.hidden = false;
     sheet.classList.add('is-signing');
@@ -746,6 +750,7 @@ export function createComposer({ announce, onSent, onLeave }) {
   }
 
   function openCard() {
+    track('card_step_opened', { reason: 'apply' });
     identity.element.hidden = true;
     card.reset();
     card.element.hidden = false;
@@ -857,6 +862,9 @@ export function createComposer({ announce, onSent, onLeave }) {
    */
   function open(venueId, roomId) {
     if (!venueId || !roomId) return false;
+    // The top of the apply funnel, and a moment no server ever sees: a sheet
+    // opened and left is still a person who wanted this room.
+    track('application_started', { roomId: `${venueId}/${roomId}` });
     opened = `${venueId}/${roomId}`;
     venue = heldVenue(venueId) ?? null;
     room = effectiveRoom(venueId, roomId) ?? null;

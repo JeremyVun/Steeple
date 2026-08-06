@@ -22,6 +22,14 @@ public sealed class EventIngestService : IEventIngestService
         "application_started",
         "sso_started",
         "notification_opened",
+        // Added 2026-08-07 with web v2's client batcher (v2_migration P5 task 6): the surfaces
+        // that migration built have no server-side moment of their own — a panel opened and
+        // abandoned writes nothing — so these are the only record that they were used at all.
+        "inbox_opened",
+        "decision_pressed",
+        "card_step_opened",
+        "payout_step_opened",
+        "arrival_settled",
     };
 
     private const int MaxBatchSize = 50;

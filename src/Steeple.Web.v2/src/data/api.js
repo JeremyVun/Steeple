@@ -669,6 +669,18 @@ export function getMyNotifications(accessToken, { after = null, pageSize = null 
   return get('/me/notifications', { after, pageSize }, { accessToken });
 }
 
+/**
+ * `POST /events` — a batch of client-sourced interaction events.
+ *
+ * Anonymous is fine; a bearer token only enriches the rows with `userId`. The
+ * answer is always 202 and carries nothing: anything the allowlist does not
+ * recognise is dropped silently, by design (`docs/contracts/analytics.md`).
+ * Callers never wait on this.
+ */
+export function postEvents({ sessionId, events }, { accessToken = null } = {}) {
+  return send('POST', '/events', { sessionId, events }, { accessToken });
+}
+
 /** `POST /me/notifications/read` — marks rows read; ids not yours are ignored. */
 export function markNotificationsRead(ids, { accessToken } = {}) {
   return send('POST', '/me/notifications/read', { ids }, { accessToken });
