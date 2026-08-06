@@ -179,7 +179,7 @@ check(
 );
 
 // ── 4. a drag on the map pans the map, and only the map ─────────────────────
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 check('a deep link opens straight into the product', (await state('roll')) === 1);
 
 const map = await box('.dm-map');
@@ -232,7 +232,7 @@ check('...and the title page is the view again', (await state('view')) === 'arri
 
 // Scrolling got the visitor in; it must never throw them back out. The top of
 // the list is where natural reading ends up, not a request to leave.
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 const list = await box('.dm-list');
 await page.mouse.move(list.cx, list.y + 60);
 await page.mouse.wheel({ deltaY: -600 });
@@ -310,7 +310,7 @@ check(
 check('...and the title page has it back', (await state('view')) === 'arrival', String(await state('view')));
 
 // ── 8. Esc belongs to whoever has focus, and never to the roll ─────────────
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 
 // (a) the search pill has a panel open and owns focus: Esc closes the panel,
 //     and the world stays exactly where it was. (Workstream B replaced the

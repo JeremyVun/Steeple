@@ -59,8 +59,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
-      # Dev-only default signing key — production MUST override via .env (AUTH_JWT_SIGNING_KEY).
-      Auth__Jwt__SigningKey: "${AUTH_JWT_SIGNING_KEY:-4kdPT0yylVMLDzUyD9BXXtDNbjM01xd1Cx3BgDMHo9Q=}"
+      # Required deployment secret. Compose refuses to create the service when it is absent.
+      Auth__Jwt__SigningKey: "${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY must be set}"
       Auth__Google__ClientIds__0: "${GOOGLE_CLIENT_ID:-}"
       Auth__Apple__ClientIds__0: "${APPLE_SERVICES_ID:-}"
       Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
@@ -74,6 +74,9 @@ services:
       Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
       Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
       Geocoding__GoogleApiKey: "${GEOCODING_GOOGLE_API_KEY:-}"
+      Email__ApiKey: "${EMAIL_API_KEY:-}"
+      Email__From: "${EMAIL_FROM:-Steeple <onboarding@resend.dev>}"
+      Email__WebBaseUrl: "${EMAIL_WEB_BASE_URL:-}"
       Flags__mobile.manage_enabled: "${MOBILE_MANAGE_ENABLED:-false}"
       # Must be on whenever web.availability_picker is on (below) — the picker's calendar,
       # free windows, and live check all read this API surface (off → 404 → all-closed grid).

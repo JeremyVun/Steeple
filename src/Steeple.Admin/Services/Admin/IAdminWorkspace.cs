@@ -21,9 +21,9 @@ public interface IAdminWorkspace
     void UnlinkVenueManager(Guid venueManagerId);
 
     /// <summary>
-    /// The one human gate (D2): decides a host's first-listing publish request. Approve verifies
-    /// the venue, publishes the room, stamps first approval (which makes the host trusted for
-    /// every later listing) and writes a <c>listingApproved</c> inbox row; decline clears the
+    /// The venue-scoped human gate: decides an unverified venue's first-listing publish request.
+    /// Approve verifies the venue, publishes the room, stamps first approval (which permits later
+    /// rooms at that venue) and writes a <c>listingApproved</c> inbox row; decline clears the
     /// request and writes <c>listingDeclined</c> with the note. Any evidence the host submitted is
     /// consumed by the same decision. Returns a human-readable error, or null on success.
     /// <paramref name="operatorUser"/> is the authelia-forwarded identity, for the audit line.
@@ -31,9 +31,9 @@ public interface IAdminWorkspace
     string? DecidePublishRequest(Guid roomId, bool approve, string? note, string operatorUser);
 
     /// <summary>
-    /// Takedown lever (abuse/DMCA): pulls one published room back to Unlisted. Honors the listing
-    /// lifecycle — a room with upcoming confirmed occurrences can't leave Published (ending a
-    /// commitment needs explicit cancellation), and says so. The host can relist it themselves.
+    /// Takedown lever (abuse/DMCA): immediately pulls one published room back to Unlisted and
+    /// stamps an operator-controlled suspension marker that prevents manager relisting. Existing
+    /// booking commitments remain in the booking system and can be handled separately.
     /// </summary>
     string? UnlistRoom(Guid roomId, string operatorUser);
 

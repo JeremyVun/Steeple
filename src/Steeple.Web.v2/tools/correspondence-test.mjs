@@ -227,7 +227,7 @@ async function mintVenue({ email, name, venueName, roomName, bookingMode }) {
 
   await call('PATCH', `/manage/rooms/${room.body.id}`, { token, body: { status: 'published' } });
 
-  // The operator's one decision on a new host's first listing. There is no API
+  // The operator's one decision on a newly claimed venue's first listing. There is no API
   // for it by design (Admin owns it), so the harness does what Admin would.
   sql(
     `update rooms set "Status" = 1, "FirstPublishedAtUtc" = now(), "PublishRequestedAtUtc" = null where "Id" = '${room.body.id}';`
@@ -552,9 +552,8 @@ check('there is a free hour to paint', Boolean(painted));
 await guestPage.mouse.click(painted.x, painted.y);
 await settle(guestPage);
 
+// Signed in already, so the send goes straight — no confirm step in between.
 await press(guestPage, '.letter__foot .pill--primary');
-await until(guestPage, () => !document.querySelector('.identity').hidden);
-await press(guestPage, '.identity .pill--primary');
 
 // 402: the card step, not a dead end.
 await until(guestPage, () => Boolean(document.querySelector('.identity--card:not([hidden])')));
@@ -758,8 +757,6 @@ const spot = await iPage.evaluate(() => {
 await iPage.mouse.click(spot.x, spot.y);
 await settle(iPage);
 await press(iPage, '.letter__foot .pill--primary');
-await until(iPage, () => !document.querySelector('.identity').hidden);
-await press(iPage, '.identity .pill--primary');
 await until(iPage, () => window.__steeple.store.guestApplications().length === 1);
 
 const booked = await call('GET', '/me/applications', { token: instantToken });
@@ -856,8 +853,6 @@ await settle(offPage);
 // Cut the wire — nothing answers at all — then send.
 cut = 'dead';
 await press(offPage, '.letter__foot .pill--primary');
-await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step opened');
-await press(offPage, '.identity .pill--primary');
 
 await until(
   offPage,
@@ -889,8 +884,6 @@ await offPage.evaluate(() => {
   if (foot) foot.dataset.wasSaid = foot.textContent;
 });
 await press(offPage, '.letter__foot .pill--primary');
-await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step reopened');
-await press(offPage, '.identity .pill--primary');
 await until(
   offPage,
   () => /nothing was sent/i.test(document.querySelector('.letter__foot')?.textContent ?? ''),
@@ -906,8 +899,6 @@ eq('and a 502 filed nothing either', stillNothing.body?.totalCount, 0);
 // Mend the wire and press send again.
 cut = false;
 await press(offPage, '.letter__foot .pill--primary');
-await until(offPage, () => !document.querySelector('.identity').hidden, null, 30000, 'the identity step reopened');
-await press(offPage, '.identity .pill--primary');
 await until(
   offPage,
   () => window.__steeple.store.guestApplications().length === 1,
@@ -1104,4 +1095,3 @@ if (problems.length) {
 }
 console.log(`\n${checks - failures}/${checks} checks passed`);
 process.exit(failures ? 1 : 0);
-

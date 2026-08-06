@@ -33,6 +33,20 @@ const TICK_ICON =
   '<path d="M3 8.6 6.4 12 13 4.6" fill="none" stroke="currentColor" stroke-width="1.7" ' +
   'stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+// The two practicalities wear the marks the street wears: the parking sign as
+// it stands at the entrance of every lot in Virginia, and the arrow a maps app
+// points with. Line-drawn to the same weight as the copy mark above.
+const PARKING_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+  '<rect x="1.9" y="1.9" width="12.2" height="12.2" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
+  '<path d="M6.4 11.6V4.9h2.2a1.95 1.95 0 0 1 0 3.9H6.4" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const DIRECTIONS_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+  '<path d="M13.9 2.4 2.7 6.8l4.6 1.9 1.9 4.6Z" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.3" stroke-linejoin="round"/></svg>';
+
 /**
  * The address, and a quiet way to take it with you. A church's address is the
  * one thing on this sheet that is meant to leave it — it goes into a maps app,
@@ -100,6 +114,21 @@ function priceTag(room) {
   return el('span', { class: `price price--sm${free ? ' price--free' : ''}` }, [
     el('span', { class: 'price__amount', text: amount }),
     unit && el('span', { class: 'price__unit', text: unit }),
+  ]);
+}
+
+/**
+ * One practicality: its mark, what it answers, and the venue's own words.
+ *
+ * The mark is hand-written markup, never anything from the data (ui/dom.js's
+ * rule) — only the label and the words come from the venue.
+ */
+function practicality(icon, label, words) {
+  const mark = el('span', { class: 'facts__mark' });
+  mark.innerHTML = icon;
+  return el('div', { class: 'facts__pair' }, [
+    el('dt', { class: 'eyebrow facts__label' }, [mark, label]),
+    el('dd', { text: words }),
   ]);
 }
 
@@ -232,19 +261,19 @@ export function createVenuePanel() {
             text: `${drafts.map((room) => room.name.replace(/\s*\(coming soon\)$/, '')).join(', ')} is being prepared and is not listed yet.`,
           }),
       ]),
-      venue.description && el('p', { class: 'prose prose--sm', text: venue.description }),
+      // Under the cards are three different kinds of thing — what sort of place
+      // this is, and two practicalities — and set as three paragraphs they read
+      // as one. The description is a named section in the same voice as the
+      // spaces above it, and each practicality wears its own mark.
+      venue.description &&
+        el('section', { class: 'about' }, [
+          el('h2', { class: 'about__title', text: 'About this place' }),
+          el('p', { class: 'prose prose--sm', text: venue.description }),
+        ]),
       (venue.parking || venue.transit) &&
         el('dl', { class: 'facts facts--pair' }, [
-          venue.parking &&
-            el('div', { class: 'facts__pair' }, [
-              el('dt', { class: 'eyebrow', text: 'Parking' }),
-              el('dd', { text: venue.parking }),
-            ]),
-          venue.transit &&
-            el('div', { class: 'facts__pair' }, [
-              el('dt', { class: 'eyebrow', text: 'Getting there' }),
-              el('dd', { text: venue.transit }),
-            ]),
+          venue.parking && practicality(PARKING_ICON, 'Parking', venue.parking),
+          venue.transit && practicality(DIRECTIONS_ICON, 'Getting there', venue.transit),
         ]),
     ]);
 

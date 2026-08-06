@@ -94,6 +94,29 @@ public class ImageSharpImageProcessorTests
     }
 
     [Fact]
+    public async Task ProcessAsync_HeaderDeclaresExcessivePixelDimensions_RejectsBeforeDecode()
+    {
+        var processor = new ImageSharpImageProcessor();
+        using var oversizedHeader = CreateJpegDeclaringDimensions(width: 20_000, height: 20_000);
+
+        Assert.Null(await processor.ProcessAsync(oversizedHeader));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_AnimatedImage_RejectsBeforeDecode()
+    {
+        var processor = new ImageSharpImageProcessor();
+        using var image = new Image<Rgba32>(16, 16);
+        using var secondFrame = new Image<Rgba32>(16, 16);
+        image.Frames.AddFrame(secondFrame.Frames.RootFrame);
+        using var animated = new MemoryStream();
+        image.SaveAsGif(animated);
+        animated.Position = 0;
+
+        Assert.Null(await processor.ProcessAsync(animated));
+    }
+
+    [Fact]
     public async Task ProcessAsync_SameSourceBytes_ProducesTheSameContentHash()
     {
         var processor = new ImageSharpImageProcessor();
@@ -129,5 +152,29 @@ public class ImageSharpImageProcessorTests
         image.Save(output, new JpegEncoder());
         output.Position = 0;
         return output;
+    }
+
+    /// <summary>
+    /// Changes only the JPEG SOF dimensions. Identify sees a valid 400 MP declaration, while a
+    /// decoder would find only the tiny original scan data — proving the metadata gate runs first.
+    /// </summary>
+    private static MemoryStream CreateJpegDeclaringDimensions(ushort width, ushort height)
+    {
+        var bytes = CreateJpegWithExifAndGps(width: 32, height: 32).ToArray();
+        for (var index = 0; index < bytes.Length - 8; index++)
+        {
+            if (bytes[index] != 0xFF || bytes[index + 1] is not (0xC0 or 0xC1 or 0xC2))
+            {
+                continue;
+            }
+
+            bytes[index + 5] = (byte)(height >> 8);
+            bytes[index + 6] = (byte)height;
+            bytes[index + 7] = (byte)(width >> 8);
+            bytes[index + 8] = (byte)width;
+            return new MemoryStream(bytes);
+        }
+
+        throw new InvalidOperationException("Test JPEG had no start-of-frame marker.");
     }
 }

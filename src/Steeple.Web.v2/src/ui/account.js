@@ -149,20 +149,16 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
   // after and its answer changes nothing here (data/session.js). A revocation
   // that cannot be delivered must never leave somebody signed in on a browser
   // they asked to be signed out of.
-  function signOut({ everywhere = false } = {}) {
+  function signOut() {
     const person = session.currentUser();
-    session.signOut({ everywhere });
+    session.signOut();
     setOpen(false);
     // Every surface that asks who you are reads the session, so most of the
     // page corrects itself. A correspondence is the exception: an inbox, a desk
     // or a letter is somebody's, and once it is nobody's the honest place to
     // stand is the map.
     if (CORRESPONDENCE_VIEWS.has(state.view)) setView('village');
-    announce(
-      everywhere
-        ? `Signed out everywhere${person ? `, ${person.displayName}` : ''}.`
-        : `Signed out${person ? ` of ${person.displayName}` : ''}.`
-    );
+    announce(`Signed out${person ? ` of ${person.displayName}` : ''}.`);
     trigger.focus();
   }
 
@@ -195,17 +191,6 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
         'button',
         { type: 'button', class: 'linkish account__out', onclick: () => signOut() },
         'Sign out'
-      ),
-      // The shared-computer answer, and the one for a laptop left behind: it
-      // ends every session this person holds, not just the one on this page.
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'linkish account__all',
-          onclick: () => signOut({ everywhere: true }),
-        },
-        'Sign out everywhere'
       ),
     ]);
   }

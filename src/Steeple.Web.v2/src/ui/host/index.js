@@ -92,6 +92,9 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
 
   const listing = createListingFlow({
     announce,
+    // The flow's own sign-in: a session that dies mid-draft is answered by the
+    // one panel there is, opened over the sheet, and nothing written is lost.
+    askToSignIn,
     onChanged: () => desk.render(),
     onClose: () => {
       setOpen(desk.element, state.view === 'desk' && state.mode === 'host');
@@ -187,7 +190,11 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       wanted = false;
       // Hosting belongs to whoever was signed in. Signing out leaves it, and
       // leaves it empty — a desk must never outlive the session that earned it.
-      if (state.mode === 'host') {
+      //
+      // A listing being written is not a desk. It is a draft somebody is
+      // standing in, and it says so on its Publish step and offers the way back
+      // in; closing it here would look like the work went with the session.
+      if (state.mode === 'host' && !listing.isOpen()) {
         setMode('guest');
         setView('village');
       }
@@ -315,9 +322,9 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     // either: hosting is somebody's, and this browser is nobody at the moment.
     // Left until the next microtask so the address bar is corrected with the
     // view (core/bus.js will not write a hash back while it is reading one).
-    if ((isDesk || isLetter) && !session.isSignedIn()) {
+    if ((isDesk || isLetter) && !session.isSignedIn() && !listing.isOpen()) {
       queueMicrotask(() => {
-        if (session.isSignedIn() || !HOST_VIEWS.has(state.view)) return;
+        if (session.isSignedIn() || !HOST_VIEWS.has(state.view) || listing.isOpen()) return;
         setMode('guest');
         setView('village');
       });

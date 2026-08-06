@@ -408,16 +408,29 @@
   padding: 16px 26px 18px;
 }
 
-.spaces__title {
+/* The sheet's two named sections speak in the same voice: the spaces on offer,
+   and what kind of place this is. */
+.spaces__title,
+.about__title {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 11px;
+  margin: 0;
   font-family: var(--serif);
   font-weight: 400;
   font-size: 17.5px;
   letter-spacing: -0.005em;
   color: var(--ink);
+}
+
+.spaces__title {
+  margin-bottom: 11px;
+}
+
+/* A heading over its own paragraph sits closer to it than a heading over a
+   grid of cards does. */
+.about__title {
+  margin-bottom: 6px;
 }
 
 .spaces__count {
@@ -559,6 +572,22 @@
   margin-top: 4px;
   font-size: 13px;
   line-height: 1.5;
+}
+
+/* Each practicality is marked rather than merely labelled: at a glance the eye
+   finds the parking sign and the direction arrow without reading the small
+   caps at all. The mark is the sheet's accent, the same terracotta the band
+   over the name is set in — enough to be found, not enough to be loud. */
+.facts__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.facts__mark {
+  display: flex;
+  flex: none;
+  color: var(--terracotta);
 }
 
 /* Give the map more of the page and the rail gets narrow enough that two cards

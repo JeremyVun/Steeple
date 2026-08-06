@@ -200,7 +200,7 @@ if (ctaBox) {
 // ── 7. the way back up still means something ────────────────────────────────
 await page.keyboard.press('Escape');
 await wait(900);
-await page.goto(`${url.split('#')[0]}#/village`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${url.split('#')[0]}#/browse`, { waitUntil: 'domcontentloaded' });
 await wait(1500);
 await clickReal('.wordmark');
 await wait(1600);

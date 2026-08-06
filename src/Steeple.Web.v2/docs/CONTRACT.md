@@ -39,7 +39,7 @@ Nothing is invented; nothing is omitted that the real funnel shows.
    **"Request this space"** (terracotta, the one action). CTA opens a small honest
    modal: this is a demo — link out to the real steeple funnel pattern.
 5. **Back navigation** at every depth (Esc, breadcrumb, and clicking empty ground zooms
-   out one level). Deep links `#/village`, `#/venue/<id>`, `#/room/<venueId>/<roomId>`
+   out one level). Deep links `#/browse`, `#/venue/<id>`, `#/room/<venueId>/<roomId>`
    restore state on load (already wired in `core/bus.js`).
 
 The Renovation Annex (status `draft`) exists in the world as a small building under

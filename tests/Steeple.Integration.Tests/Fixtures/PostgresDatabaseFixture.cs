@@ -4,7 +4,7 @@ using Testcontainers.PostgreSql;
 namespace Steeple.Integration.Tests.Fixtures;
 /// <summary>
 /// Starts a single <c>postgres:18-alpine</c> Testcontainer for the whole collection, then applies
-/// every Liquibase-owned changelog file (<c>db/changelog/001…010</c>, in master-changelog order)
+/// every Liquibase-owned changelog file (<c>db/changelog/001…017</c>, in master-changelog order)
 /// by executing each file's full contents as a raw script. All files are Liquibase *formatted SQL* — every Liquibase directive is a
 /// <c>--</c> line comment — so running them verbatim through Npgsql is valid and keeps this
 /// project from having to depend on Liquibase itself.
@@ -43,7 +43,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
                      "007-venue-verification.sql", "008-ratings.sql", "009-availability.sql",
                      "010-require-price.sql", "011-applicant-identity.sql",
                      "012-room-photo-curation.sql", "013-booking-modes.sql", "014-payments.sql",
-                     "015-reminders.sql", "016-idempotency.sql",
+                     "015-reminders.sql", "016-idempotency.sql", "017-security-hardening.sql",
                  })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(changelogDir, file));

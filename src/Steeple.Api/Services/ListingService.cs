@@ -198,7 +198,7 @@ public sealed class ListingService : IListingService
         // Only Published rooms are publicly visible. Search filters status in SQL, but direct
         // id/slug lookups reach here unfiltered — without this gate a Draft/Unlisted room leaks
         // via a guessed or previously-shared URL.
-        if (room.Status != RoomStatus.Published)
+        if (room.Status != RoomStatus.Published || room.OperatorUnlistedAtUtc is not null)
         {
             return null;
         }

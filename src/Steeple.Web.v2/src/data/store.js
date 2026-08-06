@@ -725,10 +725,12 @@ export function mirrorBooking(dto) {
  * Hold the venues this person manages, and the rooms on each.
  *
  * The product navigates venues by slug, so a managed venue lands under its own
- * slug and carries steeple's id alongside as `remoteId`. A venue the listing
- * flow placed here under a guessed slug before steeple answered is replaced by
- * the one steeple named — two records of one venue is how a desk ends up
- * showing an empty copy of itself.
+ * slug and carries steeple's id alongside as `remoteId`. The filter below drops
+ * a second record of one venue kept under a guessed slug — two records of one
+ * venue is how a desk ends up showing an empty copy of itself. It is a backstop
+ * rather than the fix: the listing flow adopts the server's slug the moment a
+ * create answers (`adoptVenueSlug`), so by the time this runs there is one
+ * record and nothing to drop.
  */
 export function mirrorManagedVenues(venues) {
   load();
@@ -911,6 +913,92 @@ export function upsertPlacedVenue(venue) {
   data.placedVenues.push(entry);
   emit('venue-placed', { venueId: entry.id });
   return { ok: true, venue: entry };
+}
+
+/**
+ * Move every map keyed by `venue/room` from one id to another.
+ *
+ * `from` is either a venue id — every room under it travels — or a whole
+ * `venue/room` key, in which case only that room does. The arrays are carried
+ * whole; the edits are merged, because the newer record is the one being
+ * written now and whatever was already under the new key is older.
+ */
+function moveKeyed(from, to) {
+  const belongs = (key) => key === from || key.startsWith(`${from}/`);
+  const carry = (map, merge) => {
+    for (const key of Object.keys(map)) {
+      if (!belongs(key)) continue;
+      const moved = to + key.slice(from.length);
+      if (moved === key) continue;
+      map[moved] = merge ? { ...(map[moved] ?? {}), ...map[key] } : map[key];
+      delete map[key];
+    }
+  };
+  carry(data.openHours, false);
+  carry(data.blackouts, false);
+  carry(data.roomEdits, true);
+  for (const occurrence of data.occurrences) {
+    if (belongs(occurrence.roomKey ?? '')) {
+      occurrence.roomKey = to + occurrence.roomKey.slice(from.length);
+    }
+  }
+}
+
+/**
+ * Take the id steeple gave a venue this browser placed under a guess.
+ *
+ * A record here is keyed by slug, and the slug guessed while the create was in
+ * flight ('placed-test-space') is rarely the one the service minted
+ * ('test-space'). Two records of one venue is how a desk ends up showing an
+ * empty copy of itself: `mirrorManagedVenues` keeps the server's and drops the
+ * guess, and everything hanging off the old id goes with it — the rooms, their
+ * open hours, their closed days, the host's edits, which venue this desk was
+ * left on. So the moment steeple answers a create, its slug becomes the id here
+ * and every map keyed by the old one is carried across.
+ */
+export function adoptVenueSlug(fromId, toId) {
+  load();
+  if (!toId || !fromId || fromId === toId) return { ok: true, venueId: toId ?? fromId };
+  const at = data.placedVenues.findIndex((v) => v.id === fromId);
+  if (at < 0) return { ok: false };
+  const moved = { ...data.placedVenues[at], id: toId };
+  const already = data.placedVenues.findIndex((v) => v.id === toId);
+  if (already >= 0) {
+    // The desk's own re-read can land the server's copy under the real slug
+    // while this draft is still open. One venue, one record: keep every room
+    // either of them knows about, the draft's own winning where they collide.
+    const held = data.placedVenues[already].rooms ?? [];
+    const rooms = [...held];
+    for (const room of moved.rooms ?? []) {
+      const seen = rooms.findIndex((r) => r.id === room.id);
+      if (seen >= 0) rooms[seen] = { ...rooms[seen], ...room };
+      else rooms.push(room);
+    }
+    data.placedVenues[already] = { ...data.placedVenues[already], ...moved, rooms };
+    data.placedVenues.splice(at, 1);
+  } else {
+    data.placedVenues[at] = moved;
+  }
+  moveKeyed(fromId, toId);
+  if (data.hostVenueId === fromId) data.hostVenueId = toId;
+  emit('venue-placed', { venueId: toId, wasVenueId: fromId });
+  return { ok: true, venueId: toId };
+}
+
+/** The same, for a room: steeple's slug replaces the one guessed from its name. */
+export function adoptRoomSlug(venueId, fromId, toId) {
+  load();
+  if (!toId || !fromId || fromId === toId) return { ok: true, roomId: toId ?? fromId };
+  const venue = data.placedVenues.find((v) => v.id === venueId);
+  const room = venue?.rooms.find((r) => r.id === fromId);
+  if (!room) return { ok: false };
+  // A venue never holds two rooms under one id; where the server's slug is
+  // already here, this draft is that room and its own record is the newer one.
+  venue.rooms = venue.rooms.filter((r) => r.id !== toId);
+  room.id = toId;
+  moveKeyed(`${venueId}/${fromId}`, `${venueId}/${toId}`);
+  emit('venue-placed', { venueId, roomId: toId, wasRoomId: fromId });
+  return { ok: true, roomId: toId };
 }
 
 export function setHomePin(pin) {
@@ -1289,6 +1377,8 @@ export const store = {
   removeBlackout,
   editRoom,
   upsertPlacedVenue,
+  adoptVenueSlug,
+  adoptRoomSlug,
   setHomePin,
   setHostVenue,
   resetDemo,

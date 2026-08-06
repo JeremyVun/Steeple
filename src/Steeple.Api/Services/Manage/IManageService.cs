@@ -83,6 +83,9 @@ public static class ManageErrorCodes
     /// <summary>Unpublishing is blocked by future confirmed occurrences.</summary>
     public const string HasActiveBookings = "has_active_bookings";
 
+    /// <summary>An operator takedown prevents the manager from republishing this room.</summary>
+    public const string OperatorUnlisted = "operator_unlisted";
+
     /// <summary>Publishing is blocked because the room has zero photos.</summary>
     public const string NoPhotos = "no_photos";
 

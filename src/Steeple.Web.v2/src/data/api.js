@@ -404,15 +404,6 @@ export function deleteSession(accessToken = null) {
 }
 
 /**
- * `DELETE /me/sessions` — sign out everywhere: revokes every session this
- * person holds, on every device. Answers 204. Like `deleteSession`, the refresh
- * cookie stands in for an access token that has already expired.
- */
-export function deleteAllSessions(accessToken = null) {
-  return send('DELETE', '/me/sessions', undefined, { accessToken });
-}
-
-/**
  * `GET /me` — the signed-in person, plus their recorded legal acceptances.
  * @returns {Promise<{id:string,displayName:string,email:string|null,createdAtUtc:string,agreements:Array<{docType:string,version:string,acceptedAtUtc:string}>}>}
  */

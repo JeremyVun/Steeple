@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Steeple.Api.Controllers.Ratings;
 
 /// <summary>Public rating/review reads (CONTRACTS §5).</summary>
 [ApiController]
 [Route("api/v1")]
+[EnableRateLimiting(RateLimitPolicies.Discovery)]
 public sealed class RatingsController : ControllerBase
 {
     private readonly IRatingService _ratings;

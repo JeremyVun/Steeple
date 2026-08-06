@@ -13,37 +13,37 @@ identical to an unknown id (no existence leak). Rate limits: `manage` policy (30
 every write below except photo upload, which uses `media` (12/min/account, the expensive image
 pipeline). Errors are ProblemDetails with `code` ∈ `not_found | invalid_venue | invalid_room |
 invalid_photo | invalid_image | invalid_verification | geofence_rejected | has_active_bookings |
-no_photos | already_verified | verification_pending` (409 for `has_active_bookings`,
-`already_verified`, `verification_pending`; 404 for `not_found`; 400 for the rest).
+operator_unlisted | no_photos | already_verified | verification_pending` (409 for
+`has_active_bookings`, `operator_unlisted`, `already_verified`, `verification_pending`; 404 for
+`not_found`; 400 for the rest).
 
 **Manage-only `status` tokens** (never on public reads — `conventions.md` §2.1):
 `draft | published | unlisted`.
 
-### Moderation model — one human gate ✅ *(built 2026-08-05 — `v2_migration` D2)*
-The gate is a **host's first listing**, not every listing, and `ManageService` is its single
+### Moderation model — one human gate per venue ✅ *(hardened 2026-08-06)*
+The gate is an **unverified venue's first listing**, not a person's first listing, and `ManageService` is its single
 enforcement point. Any transition to `status: "published"` first clears the automatic gates
 (≥1 photo → `no_photos`; open hours behind `manage.open_hours_required` → `no_open_hours`;
 geofence on the venue's address). Then:
 
-- **Trusted host** — the caller manages ≥1 room with `FirstPublishedAtUtc` set (derived per
-  request, no schema, no flag) — the room **publishes immediately**: `Published` +
-  `FirstPublishedAtUtc` stamped, no queue, no `publishRequestedAtUtc`. Applies to new rooms on
-  an existing venue *and* to a venue the trusted host has just created.
-- **Untrusted host** — first listing ever — stamps `PublishRequestedAtUtc` and waits. Wire
+- **Verified venue** — later rooms at a venue with `IsIdentityVerified` set publish immediately:
+  `Published` + `FirstPublishedAtUtc` stamped, no queue, no `publishRequestedAtUtc`.
+- **Unverified venue** — its first listing stamps `PublishRequestedAtUtc` and waits. Wire
   representation is unchanged: the room reads as `status: "draft"` with `publishRequestedAtUtc`
   set to its manager, and 404s publicly. An explicit `draft`/`unlisted` PATCH withdraws it.
   An operator decides it once in Admin (`docs/ARCHITECTURE.md` owns the queue mechanics):
   approve → `Published` + `FirstPublishedAtUtc` (once, ever) + `listingApproved` notification;
-  decline → request cleared, note recorded, `listingDeclined`. Approval is what makes the host
-  trusted for everything they list afterwards.
+  decline → request cleared, note recorded, `listingDeclined`. Approval makes later rooms at
+  that venue self-serve; a new venue owned by the same manager still requires review.
 - **Invariant: published ⇒ venue verified.** Every publish path sets
   `Venue.IsIdentityVerified` (`isIdentityVerified: true` on the venue reads) — the badge means
   "belongs to a vetted host". There is no separate venue-verification decision.
-- **After first publish, unlist/relist is entirely provider-controlled** — no further
-  moderation. Edits to an already-published room apply immediately (never blocked) but stamp
+- **After first publish, ordinary unlist/relist is provider-controlled.** Edits to an
+  already-published room apply immediately (never blocked) but stamp
   `ProviderEditedAtUtc` as a dormant abuse-response seam.
-- Operators keep one listing lever: a single-room **Unlist** takedown in Admin, which honors
-  upcoming confirmed occurrences exactly like the provider's own unpublish.
+- An operator **Unlist** is a durable abuse takedown: it immediately stamps
+  `OperatorUnlistedAtUtc/By`, clears a pending request, and returns `409 operator_unlisted` on
+  every manager attempt to republish. Existing bookings remain for separate operator handling.
 
 ### Venues
 - `GET /api/v1/manage/venues` ✅ → `[{id, name, slug}]` — venues the caller manages (also
@@ -83,7 +83,7 @@ geofence on the venue's address). Then:
 
 ### Venue payments (payout onboarding) ✅ *(2026-08-05 — full shapes + mock-era caveats: `payments.md`)*
 `POST /manage/venues/{id}/payments/onboarding` → `{url, mock}` ·
-`POST …/payments/onboarding/mock-complete` (mock-only one-step completion) ·
+`POST …/payments/onboarding/mock-complete` (Development-only one-step completion; absent in Production) ·
 `GET …/payments` → `{onboardingStarted, detailsSubmitted, chargesEnabled, payoutsEnabled,
 optedIn, dashboardUrl?, mock}`. Manager-scoped like everything here; state is owned by the
 Payments module and read through its service.
@@ -186,8 +186,9 @@ never crossing midnight.
 ### Photos
 - `POST /api/v1/manage/rooms/{id}/photos` ✅ — multipart `file` (≤10 MB, enforced by Kestrel
   before the pipeline runs) + optional `caption`. Server decodes (decode failure → `400
-  invalid_image`), auto-orients from EXIF, strips **all** metadata (EXIF/XMP/IPTC — GPS
-  included), encodes JPEG variants at 400/800/1600px (no upscaling smaller sources), and keys
+  invalid_image`). It identifies headers before decoding and rejects animation, dimensions over
+  12,000px, or more than 30 MP; processing is capped at two concurrent images. Accepted images
+  auto-orient from EXIF, strip **all** metadata (EXIF/XMP/IPTC — GPS included), encode JPEG variants at 400/800/1600px (no upscaling smaller sources), and key
   them by a SHA-256 content hash. `201 RoomPhotoDto`.
 - `PATCH /api/v1/manage/photos/{photoId}` ✅ — `UpdatePhotoRequest {caption?, isPrimary?,
   sortOrder?}`; setting `isPrimary` demotes the previous cover. `400 invalid_photo`.

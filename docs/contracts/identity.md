@@ -22,7 +22,7 @@
 `displayName` is an optional hint honored only when the account is first created — Apple sends
 the person's name once, in the authorization response, never in the ID token. `turnstileToken`
 is required wherever Turnstile is enabled (deployed env); environments without a configured
-secret skip the check. Rate limited per IP (shared `auth` policy with `refresh`).
+secret skip the check. Rate limited per IP (`auth`; refresh has its own policy below).
 
 **Development only:** provider `"dev"` accepts `idToken` = `email` or `email|Display Name`
 (no signature) for the local dev loop and automated playtests. Its verifier is registered
@@ -34,6 +34,12 @@ v2 instead calls this API contract from its in-flow identity step through the Vi
 Errors: `401 invalid_id_token`, `403 turnstile_failed`, `409 use_original_provider` (the
 verified email already belongs to an account on the other provider — no auto-linking),
 `429 rate_limited`.
+
+Production validates `Auth:Jwt:SigningKey` eagerly: it must be deployment-supplied base64 for
+at least 32 bytes, and both repository-known development keys are rejected. Compose has no
+fallback and refuses configuration without `AUTH_JWT_SIGNING_KEY`. After deployment, run
+`node tools/security-smoke-test.mjs https://<web-origin>`; a token signed with the former public
+fallback must answer `401`. If that fallback ever ran in production, rotate before redeploying.
 
 ### `POST /api/v1/auth/refresh` ✅ — `{refreshToken?, refreshTransport?}` → rotated `{accessToken, refreshToken}`. `401 invalid_refresh_token` (unknown/expired/none presented); reuse of a rotated token → `401 token_reuse` (whole family revoked, subject to the grace window below). Both body fields are optional and the body itself may be absent: with no `refreshToken` the cookie is read instead. Rate limited per IP on its own `refresh` policy (60/min), **not** the shared `auth` one — every reload of a signed-in browser spends one, and starving sign-in behind a NAT for that would be absurd.
 ### `DELETE /api/v1/auth/sessions` ✅ — revoke current session (logout; session = the access token's `sid`). Accepts **either** a bearer token **or** the refresh cookie: the access token lives fifteen minutes and the cookie ninety days, so most sign-outs arrive with a stale bearer, and one that revoked nothing was the worst of both worlds. `401` only when neither credential is present. The response expires the cookie.
@@ -51,7 +57,7 @@ JSON — native clients hold it in the OS keychain, and mobile is unaffected by 
 | `SameSite` | `Strict` | it is only ever needed on requests the SPA makes from its own origin; the one cross-site entry (an email CTA) is a top-level navigation whose *document* then makes same-site calls |
 | `Path` | `/` | web can live behind a stripped reverse-proxy prefix — a path scoped to the un-stripped route would never be sent |
 | `Max-Age` | `Auth:RefreshTokenDays` (90d); `0` on revoke | |
-| `Secure` | when the request is https | read from `Request.IsHttps` **or** `X-Forwarded-Proto: https` — the deployed edge terminates TLS and forwards plain http, and nginx passes the edge's header through rather than its own `$scheme` |
+| `Secure` | when the request is https | read from `Request.IsHttps`, after trusted one-hop forwarded-proto processing; direct client headers are ignored |
 
 **Whichever way a token arrived is the way its successor leaves.** A body token sent with
 `refreshTransport: "cookie"` is the one exception: that is a client migrating itself onto the

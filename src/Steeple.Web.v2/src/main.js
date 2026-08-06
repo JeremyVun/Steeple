@@ -1,7 +1,9 @@
 // BOOT. Two ways in, and the second one is the point of this file.
 //
-// With the village: renderer, world, journey, interface, in that order, and the
-// title page waiting for the roll.
+// The title page itself is not booted at all: it is printed in index.html and
+// already on screen. What boots here arrives behind it — the interface chunk
+// and the village chunks downloading side by side, the world raised over the
+// poster of its own opening frame, and the roll waiting past that.
 //
 // Without it (`?world=off`, or a build made with VITE_WORLD=off — see
 // package.json's `build:flat`): the same product with nothing behind it. No
@@ -23,7 +25,6 @@
 // raising the world is one calm line in the console and then `bootFlat`.
 
 import { createRoll } from './journey/roll.js';
-import { createUI } from './ui/index.js';
 import {
   bus,
   state,
@@ -77,23 +78,39 @@ function publish(extra) {
   };
 }
 
+// The interface is its own chunk now — the entry stays small enough that the
+// pre-rendered title page in index.html is not waiting on Leaflet and the whole
+// product surface to parse. Started here, unconditionally, so its download runs
+// beside the village chunks rather than after them; built the moment it lands,
+// because createUI never needed the world (it only ever talked to core/bus.js).
+const interfaceReady = import('./ui/index.js').then(({ createUI }) => createUI(null, null));
+
 async function boot() {
   const canvas = document.getElementById('scene');
-  if (BUILT_FLAT || state.world === 'off') return bootFlat(canvas);
+  if (BUILT_FLAT || state.world === 'off') {
+    await interfaceReady;
+    return bootFlat(canvas);
+  }
 
   try {
     await bootVillage(canvas);
   } catch (failure) {
     console.warn('[steeple] The village could not be raised — opening the product without it.', failure);
+    await interfaceReady;
     bootFlat(canvas);
   }
 }
 
 /** The product with the village behind it. Throws rather than half-boots. */
 async function bootVillage(canvas) {
-  const { createEngine } = await import('./core/engine.js');
-  const { buildWorld } = await import('./world/index.js');
-  const { createJourney } = await import('./journey/index.js');
+  // Three chunks, one round trip: nothing in engine.js is needed to *download*
+  // the world or the journey, so fetching them one after the other was three
+  // serial trips for no ordering that mattered.
+  const [{ createEngine }, { buildWorld }, { createJourney }] = await Promise.all([
+    import('./core/engine.js'),
+    import('./world/index.js'),
+    import('./journey/index.js'),
+  ]);
 
   const engine = createEngine(canvas);
   try {
@@ -105,8 +122,20 @@ async function bootVillage(canvas) {
     if (!gl || gl.isContextLost?.()) throw new Error('WebGL context lost before the first frame');
 
     const world = await buildWorld(engine);
-    const journey = createJourney(engine, world);
-    createUI(engine, world);
+    const journey = createJourney(engine, world, { posterAspect: posterAspect() });
+    // The harness contract: __steepleReady (frame 10) means the interface is
+    // standing. The chunk has been downloading since the first line of this
+    // module, so this await is usually already settled.
+    await interfaceReady;
+
+    // Until the first frame is on the canvas the poster underneath is the
+    // village; the crossfade between them is the real opening frame arriving.
+    const arrived = engine.onUpdate(() => {
+      arrived();
+      canvas.classList.add('is-live');
+      const poster = document.getElementById('poster');
+      if (poster) setTimeout(() => poster.remove(), 800);
+    });
 
     engine.onUpdate((dt, elapsed) => {
       world.update(dt, elapsed);
@@ -132,6 +161,19 @@ async function bootVillage(canvas) {
   }
 }
 
+/**
+ * Which photograph the page chose, as an aspect the journey can compose
+ * against — the first live frame must stand exactly where it was taken from
+ * (journey/index.js). From the filename, not naturalWidth: the name is there
+ * before a single byte of the image is, and tools/poster.mjs guarantees its
+ * shape.
+ */
+function posterAspect() {
+  const src = document.querySelector('#poster img')?.currentSrc ?? '';
+  const m = src.match(/-(\d+)x(\d+)\.[0-9a-f]{8}\.webp$/);
+  return m ? Number(m[1]) / Number(m[2]) : null;
+}
+
 function release(engine) {
   try {
     engine.stop();
@@ -143,23 +185,24 @@ function release(engine) {
 }
 
 /**
- * The product with nothing behind it.
+ * The product with nothing behind it. The interface itself is already standing
+ * — boot() awaits `interfaceReady` before coming here — so this is only the
+ * flat page's own furniture: no canvas, no poster, the roll landed.
  *
  * Also the landing place when raising the village fails, so nothing here may
- * assume a clean page: the canvas may already be gone, and #ui may hold a
- * half-built interface — `createUI` empties it before it builds, which is what
- * makes calling this after a partial village boot safe.
+ * assume a clean page: the canvas may already be half-alive.
  */
 function bootFlat(canvas) {
-  // An aria-hidden black rectangle under the paper helps nobody.
+  // An aria-hidden black rectangle under the paper helps nobody, and a poster
+  // of a village that is not coming is a lie about what scrolling reveals.
   canvas?.remove();
+  document.getElementById('poster')?.remove();
   document.documentElement.dataset.world = 'off';
 
   // The roll needs a renderer only to put it down at the top and pick it up
   // again. With no renderer there is nothing to put down.
   const roll = createRoll({ start() {}, stop() {} });
 
-  createUI(null, null);
   publish({ engine: null, world: null, roll });
 
   window.addEventListener('hashchange', applyHash);
@@ -258,4 +301,7 @@ function flatGestures() {
   });
 }
 
-boot();
+// Nothing catches for boot(): if even the interface chunk cannot be had, the
+// page the visitor keeps is the pre-rendered title sheet, and the console says
+// why nothing answers it.
+boot().catch((failure) => console.error('[steeple] Boot failed outright.', failure));

@@ -63,6 +63,11 @@ longitude}`, `rating?{averageStars, count}`. 404 (ProblemDetails) when unknown, 
 Published** (Draft/Unlisted never leak via direct URL), or **outside the geofence**
 (defense in depth).
 
+The exact address/coordinates, venue-supplied public contact email, revealed reviewer display
+name, and free-time windows are deliberate public marketplace data: maps, visits, reviews, and
+the booking calendar depend on them. Bulk access is constrained by nginx's total ceiling and the
+API's `discovery` 120/min/IP plus global 300/min/account-or-IP limits; it is not made secret.
+
 `RoomDetail` also carries additive `openHours?` (the `days` shape from the availability rules
 in `manage.md`; null when the room has no rules rows) and additive `bookingMode` ✅
 *(2026-08-05 — booking-modes.md)*: the **effective** mode, `"instant"` (a valid request

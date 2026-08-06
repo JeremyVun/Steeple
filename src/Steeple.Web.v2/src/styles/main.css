@@ -55,15 +55,33 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The opening frame as a photograph, on the page before WebGL has drawn a
+   thing (tools/poster.mjs makes it; index.html carries it). The canvas sits
+   over it transparent until its first real frame, then takes the page in one
+   soft crossfade — main.js retires the poster once the fade has landed. */
+#poster img {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 #scene {
   position: fixed;
   inset: 0;
   display: block;
+  opacity: 0;
   /* A finger on the title page is drawing the page up, and the browser must be
      told so: left to guess, it reads the first move as a scroll it owns, takes
      the gesture back with a pointercancel, and the roll gets one frame of a
      drag that was going to be a whole one. */
   touch-action: none;
+}
+
+#scene.is-live {
+  opacity: 1;
+  transition: opacity 480ms ease;
 }
 
 #ui {
@@ -462,16 +480,6 @@ body {
   text-align: left;
 }
 
-/* The heavier of the two, so it reads as the deliberate one: quieter type, and
-   no rule of its own — it belongs to the same block as Sign out. */
-.account__all {
-  margin-top: 6px;
-  width: 100%;
-  text-align: left;
-  font-size: 12px;
-  color: var(--ink-faint);
-}
-
 .rail,
 .label,
 .arrival {
@@ -691,7 +699,10 @@ body {
   position: relative;
   max-width: 40rem;
   padding: 0 24px;
-  transform: translateY(calc(-5vh - var(--roll) * 7vh));
+  /* The fallback matters: this sheet is on screen before any script has run,
+     so --roll may not have been published yet, and an unset var would throw the
+     transform away — a 5vh jump the moment the interface arrives. */
+  transform: translateY(calc(-5vh - var(--roll, 0) * 7vh));
 }
 
 .arrival__eyebrow {

@@ -49,13 +49,13 @@ public class ManageServiceTests
         Assert.DoesNotContain(analytics.Events, e => e.EventType == "listing_publish_requested");
     }
 
-    // ----- Trusted-host single gate (design.md D2) ---------------------------------------------
+    // ----- Venue-scoped review gate -------------------------------------------------------------
 
     [Fact]
-    public async Task UpdateRoomAsync_TrustedHostPublishesNewRoom_PublishesImmediatelyWithoutQueueing()
+    public async Task UpdateRoomAsync_VerifiedVenuePublishesNewRoom_PublishesImmediatelyWithoutQueueing()
     {
-        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
-        repo.TrustedHost = true; // already had a listing approved elsewhere
+        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
+        venue.IsIdentityVerified = true;
         AddPhoto(room);
         var service = CreateService(repo, managers, out var analytics);
 
@@ -71,10 +71,9 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_UntrustedHostPublishesNewRoom_StaysUnpublishedAndQueues()
+    public async Task UpdateRoomAsync_UnverifiedVenuePublishesNewRoom_StaysUnpublishedAndQueues()
     {
         var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
-        repo.TrustedHost = false; // no approved listing anywhere yet
         AddPhoto(room);
         var service = CreateService(repo, managers, out var analytics);
 
@@ -89,12 +88,11 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_TrustedHostAutoPublish_VerifiesTheVenue()
+    public async Task UpdateRoomAsync_VerifiedVenueAutoPublish_PreservesVerifiedInvariant()
     {
         var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
-        repo.TrustedHost = true;
+        venue.IsIdentityVerified = true;
         AddPhoto(room);
-        Assert.False(venue.IsIdentityVerified);
         var service = CreateService(repo, managers, out _);
 
         await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
@@ -118,7 +116,7 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_UntrustedHostPublishRequest_LeavesTheVenueUnverified()
+    public async Task UpdateRoomAsync_UnverifiedVenuePublishRequest_LeavesTheVenueUnverified()
     {
         var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
         AddPhoto(room);
@@ -130,10 +128,10 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_TrustedHostWithNoPhotos_StillBlockedByTheAutomaticGate()
+    public async Task UpdateRoomAsync_VerifiedVenueWithNoPhotos_StillBlockedByTheAutomaticGate()
     {
-        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
-        repo.TrustedHost = true;
+        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
+        venue.IsIdentityVerified = true;
         var service = CreateService(repo, managers, out _);
 
         var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
@@ -143,10 +141,10 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_TrustedHostWithOpenHoursFlagOnAndNoOpenHours_StillBlocked()
+    public async Task UpdateRoomAsync_VerifiedVenueWithOpenHoursFlagOnAndNoOpenHours_StillBlocked()
     {
-        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
-        repo.TrustedHost = true;
+        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
+        venue.IsIdentityVerified = true;
         AddPhoto(room);
         var service = CreateService(repo, managers, out _, openHoursRequired: true, roomHasOpenHours: false);
 
@@ -157,20 +155,37 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_HostBecomesTrustedBetweenRequests_PublishesTheQueuedRoom()
+    public async Task UpdateRoomAsync_VenueBecomesVerifiedBetweenRequests_PublishesTheQueuedRoom()
     {
-        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
         AddPhoto(room);
         var service = CreateService(repo, managers, out _);
         await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
         Assert.NotNull(repo.Rooms.Single().PublishRequestedAtUtc);
 
-        repo.TrustedHost = true; // a different listing of theirs got approved meanwhile
+        venue.IsIdentityVerified = true; // a different listing at this venue got approved meanwhile
         await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
 
         var stored = repo.Rooms.Single();
         Assert.Equal(RoomStatus.Published, stored.Status);
         Assert.Null(stored.PublishRequestedAtUtc); // the pending request is consumed, not left behind
+    }
+
+    [Fact]
+    public async Task UpdateRoomAsync_OperatorUnlistedRoom_CannotBeRepublishedByManager()
+    {
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Unlisted);
+        room.FirstPublishedAtUtc = FixedNow.AddMonths(-2);
+        room.OperatorUnlistedAtUtc = FixedNow.AddDays(-1);
+        room.OperatorUnlistedBy = "operator@steeple";
+        AddPhoto(room);
+        var service = CreateService(repo, managers, out _);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
+
+        Assert.Equal(ManageErrorCodes.OperatorUnlisted, result.Error!.Code);
+        Assert.Equal(RoomStatus.Unlisted, room.Status);
+        Assert.Equal(FixedNow.AddDays(-1), room.OperatorUnlistedAtUtc);
     }
 
     [Fact]
@@ -1001,13 +1016,5 @@ public class ManageServiceTests
             Task.FromResult(VerificationRequests.Any(
                 r => r.VenueId == venueId && r.Status == VenueVerificationStatus.Pending));
 
-        /// <summary>
-        /// Set by tests that need the caller to be a trusted host; the EF query derives the same
-        /// answer from "manages a room with FirstPublishedAtUtc set".
-        /// </summary>
-        public bool TrustedHost { get; set; }
-
-        public Task<bool> IsTrustedHostAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(TrustedHost);
     }
 }

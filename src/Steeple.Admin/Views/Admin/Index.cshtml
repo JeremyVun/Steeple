@@ -30,11 +30,11 @@
         <p class="admin-hint">
             @if (waiting == 0)
             {
-                <text>Nothing is waiting. Hosts publish and unlist their own listings — the only listing you decide is a host's first one.</text>
+                <text>Nothing is waiting. Each newly claimed venue needs one listing decision; later rooms at that venue are self-serve.</text>
             }
             else
             {
-                <text>@waiting first @(waiting == 1 ? "listing is" : "listings are") waiting for a decision. Approving one publishes it, verifies the venue, and lets that host publish everything after it themselves.</text>
+                <text>@waiting first venue @(waiting == 1 ? "listing is" : "listings are") waiting for a decision. Approving one publishes it, verifies that venue, and makes its later rooms self-serve.</text>
             }
         </p>
     </section>

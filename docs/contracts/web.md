@@ -10,8 +10,9 @@ Vite + vanilla JS + Leaflet SPA with a Three.js village splash; nginx serves the
 in containers and proxies same-origin `/api` to the API (the API emits **no CORS** by design —
 the proxy is the missing BFF; in dev, `vite.config.js` does the same to `:5200`).
 Layout: `src/{core,data,ui,flows,journey,world,styles}`. Hash routes own navigation:
-`#/village · #/venue/<venueId> · #/room/<venueId>/<roomId> · #/apply/<venueId>/<roomId> ·
+`#/browse · #/venue/<venueId> · #/room/<venueId>/<roomId> · #/apply/<venueId>/<roomId> ·
 #/journal · #/desk[/<venueId>] · #/letter/<applicationId>` (`src/core/bus.js`).
+The retired prototype route `#/village` redirects in place to `#/browse` for old links.
 
 **The seam rule:** the day an upstream name changes, exactly one file moves.
 
@@ -32,7 +33,7 @@ and behind a stripped proxy prefix.
 | Wired (called today) | Caller |
 |---|---|
 | `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
-| `createSession`, `refreshSession`, `getMe`, `deleteSession`, `deleteAllSessions` | `session.js` only |
+| `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
 | `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
 | `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
@@ -76,9 +77,9 @@ Owns identity and **nothing else reads a token**. The two halves live in two pla
   retries; a second 401 is an answer.
 - `fetchCurrentUser()` at boot revalidates a remembered session: cookie refresh, then `GET /me`.
   401 signs the browser out; an unreachable API does **not** cost the guest their sign-in.
-- `signOut({everywhere})` clears storage **first**, then calls `DELETE /auth/sessions`
-  (or `DELETE /me/sessions`) **best-effort** — and no longer needs a live access token, because
-  the API accepts the refresh cookie for those two calls. The response expires the cookie.
+- `signOut()` clears storage **first**, then calls `DELETE /auth/sessions` **best-effort** — and
+  no longer needs a live access token, because the API accepts the refresh cookie for the call.
+  The response expires the cookie.
 - **Migration:** a legacy record still holding `{accessToken, refreshToken}` is scrubbed on the
   first `load()`, and its refresh token is spent once with `refreshTransport:'cookie'` to move the
   browser onto the cookie in a single rotation.
@@ -339,7 +340,7 @@ it is contained by construction: its letters are written under the seed's own id
   room → photo upload → `PUT` availability → `PATCH {status:'published'}` (publish requires a
   photo; moderation answers `draft` + `publishRequestedAtUtc`).
 - **Real (Phase 1, 2026-08-05):** the account surface. The porch carries the account in both
-  states — a monogram + card (Sign out · Sign out everywhere) signed in, one quiet "Sign in"
+  states — a monogram + card with Sign out signed in, one quiet "Sign in"
   chip signed out, which opens the identity panel the flows use (`ui/signIn.js` wraps
   `ui/guest/sso.js` in the shared `.modal__layer`). The inbox tab, its badge, the journal and
   an opened letter render only for a signed-in guest; a cold link to `#/journal` or
@@ -465,6 +466,11 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
 - **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
   guest.css loads after host.css. The desk's booking-mode radios are `.mode*` for that reason —
   the first version reused `.choice` and was silently restyled into an unreadable block.
+  `.chosen*` is a different thing in a different file: the listing flow's label-left rows for
+  the vocabularies a host picks from (amenities, accessibility, who may use it, `host.css`).
+- A `.segments` control is `inline-flex`, so a grid cell stretches it into a full-width track
+  with the switch huddled at one end. Every placement inside a `.field`/`.chosen__value` must
+  set `justify-self`/`justify-items: start`.
 - The desk's Spaces tab reads open hours from the **local** store (`hoursSummary` ←
   `openHoursFor`), so a room whose hours only exist at steeple reads "No open hours set" in red.
   Pre-existing, and now visible beside real bookings; the fix is a managed-availability read.
@@ -502,7 +508,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   loop (402 → card → send → question → answer → counter → accept → booking) and the instant
   loop, with localStorage cleared on both sides mid-flow, the dev mailbox's CTA followed, and
   every state read back from the database. It mints its own venues per run and uses `psql`
-  for exactly one thing — the operator's approve on a new host's first listing, which has no
+  for exactly one thing — the operator's approve on a newly claimed venue's first listing, which has no
   API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets. §8 counts
   the desk's `GET /bookings/{id}` requests (one per booking, never two) and §9 answers for
   steeple with a fabricated page of a hundred whose `totalCount` says twenty-five, proving the

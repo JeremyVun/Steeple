@@ -14,8 +14,8 @@ controller (thin HTTP edge) → service (use-case logic + port interfaces) → p
 
 `Services/` own use-case logic and **define** the port interface for anything external;
 `Proxies/` implement them. `AddSteepleApi` (`Extensions/ServiceCollectionExtensions.cs`) is the
-composition root and the only place adapters are chosen. Cross-cutting pipeline: forwarded
-headers (real client IPs + `X-Forwarded-Prefix` behind caddy) → JwtBearer auth
+composition root and the only place adapters are chosen. Cross-cutting pipeline: trusted one-hop
+forwarded headers (real client IP + proto behind caddy/nginx) → JwtBearer auth
 (`MapInboundClaims=false`, so `sub`/`sid` survive) → rate limiting → ProblemDetails errors.
 
 **The limiter runs *after* authentication, and the order is load-bearing.** The per-account
@@ -59,7 +59,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (one structured JSON line → stdout → Promtail/Loki) |
 | `IIdTokenVerifier` ×2 (+1) | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery, fail-closed without client ids); `DevIdTokenVerifier` registered **only** when `Auth:DevLoginEnabled` |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
-| `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; `Auth:Jwt:SigningKey` required at startup) |
+| `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; key required; repository-known keys rejected in Production) |
 | `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
 | `IVenueManagerRepository` | `EfVenueManagerRepository` (read-only; Admin writes the links) |
@@ -71,12 +71,12 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |
 | `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM push per recipient) |
-| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; log-only without `Email:ApiKey`); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` (Development only) |
+| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; no-send and no PII logging without `Email:ApiKey`); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` (Development only) |
 | `IDevMailbox` | `FileDevMailbox` (JSON-lines under the content root, capped ring; registered **only** with `Email:DevMailboxEnabled`) |
 | `IBookingReminderRepository` | `EfBookingReminderRepository` (read-only over bookings/occurrences; claims via `INSERT … ON CONFLICT DO NOTHING`) |
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) when a service account is configured, else `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
-| `IImageProcessor` | `ImageSharpImageProcessor` (decode-as-validation, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 content-addressed keys; ImageSharp pinned to 3.1.x — SYSTEM_DESIGN §17) |
+| `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-process concurrency cap, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 keys; ImageSharp 3.1.x) |
 | `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) when `MediaOptions.UseObjectStorage`, else `LocalDiskMediaStore` (dev; served by the API at `/media`) |
 | `IFeatureFlags` | `ConfigFeatureFlags` (reads the `Flags:` config section — never a network call) |
 | `IPublicFlagsService` | `PublicFlagsService` (hardcoded public allowlist — see `infra.md`) |
@@ -88,7 +88,8 @@ processor, media store, flags) are **singletons**.
 
 ## Rate-limit policies (`Extensions/RateLimitingExtensions.cs`)
 
-Fixed 1-minute windows: `auth` 10/min per IP · `apply` 5/min per account, per-IP fallback
+Fixed 1-minute windows: global 300/min per account/IP · `discovery` 120/min per IP ·
+`auth` 10/min per IP · `refresh` 60/min per IP · `apply` 5/min per account, per-IP fallback
 (submits, thread messages, counter-offers, ratings) · `payments` 10/min per account (putting
 a card on file) · `manage` 30/min per account · `media` 12/min per account ·
 `availability` 30/min per IP · `events` 60/min per IP.

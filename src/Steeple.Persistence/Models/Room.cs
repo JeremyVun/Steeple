@@ -66,6 +66,15 @@ public class Room
     public DateTimeOffset? FirstPublishedAtUtc { get; set; }
 
     /// <summary>
+    /// When an operator removed this room for abuse or policy reasons. Managers may edit the room
+    /// but cannot publish it again; only an operator/database action can clear this state.
+    /// </summary>
+    public DateTimeOffset? OperatorUnlistedAtUtc { get; set; }
+
+    /// <summary>Audit identity supplied by the authenticated Admin edge.</summary>
+    public string? OperatorUnlistedBy { get; set; }
+
+    /// <summary>
     /// When a provider last edited this room while it was Published. Non-null rows feed the
     /// Admin edited-listings review feed; cleared when an operator marks them reviewed.
     /// </summary>

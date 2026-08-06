@@ -1,6 +1,6 @@
 # Runbook — transactional email (Resend)
 
-Owns: getting Steeple's outbound mail from "log-only" to "actually delivered", and proving it.
+Owns: getting Steeple's outbound mail from "no-send" to "actually delivered", and proving it.
 Receiving is already solved (inbound routing on `admin@jeremyvun.com`) — this is sending only.
 
 Steeple sends nothing but transactional mail: a request arrived, a decision was made, a booking
@@ -57,17 +57,20 @@ Email__From="Steeple <steeple@jeremyvun.com>"
 
 ## 4. Configuration
 
-Production (compose/environment, never committed):
+Production Compose inputs (deployment environment, never committed):
 
 ```
-Email__ApiKey=re_xxxxxxxxxxxxxxxxxxxxxxxx
-Email__From=Steeple <steeple@jeremyvun.com>
-Email__WebBaseUrl=https://steeple.jeremyvun.com
+EMAIL_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+EMAIL_FROM=Steeple <steeple@jeremyvun.com>
+EMAIL_WEB_BASE_URL=https://steeple.jeremyvun.com
 ```
 
-- **`Email__ApiKey`** — absent = log-only mode: the inbox row is still written and the send is
-  logged instead. That is the correct state for any environment that shouldn't mail real people.
-- **`Email__WebBaseUrl`** — the public web origin *including any sub-path*. Empty means emails
+Compose forwards these to ASP.NET's `Email__ApiKey`, `Email__From`, and
+`Email__WebBaseUrl`; use those nested names when running the API directly.
+
+- **`EMAIL_API_KEY` / `Email__ApiKey`** — absent = no-send mode: the inbox row is still written, and recipient,
+  subject, and body are neither sent nor logged. That is correct for environments that should not mail.
+- **`EMAIL_WEB_BASE_URL` / `Email__WebBaseUrl`** — the public web origin *including any sub-path*. Empty means emails
   carry no links at all (a link to nowhere is worse than none). Every email's CTA is built from
   it as `{WebBaseUrl}/?goto=<url-encoded deepLink>` — a query param, not a path, because the SPA
   ships no server-side routes (`docs/contracts/web.md`).

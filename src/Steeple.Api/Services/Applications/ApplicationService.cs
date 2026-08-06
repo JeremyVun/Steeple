@@ -94,7 +94,7 @@ public sealed class ApplicationService : IApplicationService
         }
 
         var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
-        if (room?.Venue is null || room.Status != RoomStatus.Published)
+        if (room?.Venue is null || room.Status != RoomStatus.Published || room.OperatorUnlistedAtUtc is not null)
         {
             // Unknown and unpublished rooms answer identically so direct-URL probing can't
             // distinguish a Draft room from no room (same stance as the listing visibility gate).

@@ -6,6 +6,24 @@
 //
 //   node tools/host-test.mjs "http://localhost:5313/?q=low"
 //   node tools/host-test.mjs "http://localhost:5313/?q=low&style=atlas&desk=ledger" --shots hsc-ledger
+//
+// ⚠ STALE FROM §1, AND NOT RE-BASELINABLE AS IT STANDS (found 2026-08-06).
+//
+// Every section here enters through a desk opened by the porch switch with no
+// session at all, and reads the demo fixture's letters at a seeded church. That
+// desk died with v2_migration D4: hosting needs a session, and a desk exists
+// only for venues `GET /manage/venues` names — the five seeded churches have no
+// manager on the API and never will. So §1 fails on "mode is host" and the rest
+// falls over behind it, and it has been that way since D4 landed, not since
+// anything in this round.
+//
+// What replaced it, suite for suite: the correspondence (§2–§7) is real wire
+// traffic in `correspondence-test.mjs`; the listing flow (§8–§9) is driven end
+// to end against the API in `host-publish-test.mjs`, which also covers adding a
+// second space and editing the venue; the session boundary is
+// `host-session-test.mjs`. The step assertions below were renumbered for the
+// four-step flow (2026-08-06, Verify removed) so that whoever revives this
+// suite is not chasing a number that was already wrong.
 import puppeteer from 'puppeteer';
 
 const url = process.argv[2] ?? 'http://localhost:5313/?q=low';
@@ -277,7 +295,7 @@ check('and it has no hours yet', /No open hours/.test((await text('.desk .spaces
 await shot('desk-spaces');
 await clickText('.space__side .pill', /Finish this listing/, 'Finish this listing');
 check('the listing flow opened', await visible('.listing'));
-check('it opens at Describe', (await text('.steps__step.is-on')) === '3Describe');
+check('it opens at Describe', (await text('.steps__step.is-on')) === '1Describe');
 await page.click('#room-name');
 await page.keyboard.press('End');
 await page.keyboard.type(' — West Wing');
@@ -331,7 +349,7 @@ const blackouts = await store("blackoutsFor('oakton-baptist','renovation-annex')
 check('a closed day was recorded', blackouts === 1, `${blackouts}`);
 
 await click('[data-action="advance"]', 'Review and publish');
-check('publish step', (await text('.steps__step.is-on')) === '5Publish');
+check('publish step', (await text('.steps__step.is-on')) === '3Publish');
 await shot('listing-publish');
 await page.evaluate(() => {
   window.__publishEvents = [];
@@ -366,7 +384,7 @@ check('and says why, kindly', /Paint at least one open window/.test((await text(
 // before the room is ready. What must never happen again is the button being
 // offered there and answering the press by moving them to another step.
 await clickText('.steps__step', /Publish/, 'look at Publish with no hours');
-check('the publish step can be looked at', (await text('.steps__step.is-on')) === '5Publish');
+check('the publish step can be looked at', (await text('.steps__step.is-on')) === '3Publish');
 check(
   'but publishing is not offered while a rule forbids it',
   await page.$eval('[data-action="advance"]', (n) => n.disabled)
@@ -375,7 +393,7 @@ check('and what is missing is named', /Open hours/.test((await text('.guide__lis
 await click('[data-action="fix-hours"]', 'Set the open hours');
 check(
   'the way to fix it is an offer the host takes, not a bounce',
-  (await text('.steps__step.is-on')) === '4Availability',
+  (await text('.steps__step.is-on')) === '2Availability',
   await text('.steps__step.is-on')
 );
 await clickText('.steps__step', /Describe/, 'back to Describe');

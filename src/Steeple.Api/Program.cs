@@ -12,18 +12,22 @@ if (builder.Environment.IsProduction())
     });
 }
 
-builder.Services.AddControllers();
-builder.Services.AddSteepleApi(builder.Configuration);
+builder.Services.AddControllers(options =>
+    options.Conventions.Add(new Steeple.Api.Extensions.DevelopmentOnlyActionConvention(
+        builder.Environment.IsDevelopment())));
+builder.Services.AddSteepleApi(builder.Configuration, builder.Environment);
 // RFC 9457 ProblemDetails for error responses, including bare status-code results (e.g. NotFound()).
 builder.Services.AddProblemDetails();
 
-// Behind caddy in the deployed environment: honour X-Forwarded-For so the per-IP rate limiter
-// and Turnstile see the real client address, not the proxy's.
+// Trust only the loopback development proxies and Docker's private address space. nginx replaces
+// X-Forwarded-For with one canonical client address before the request reaches this process.
 builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardedHeaders =
+        Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+        | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse("172.16.0.0/12"));
 });
 
 var app = builder.Build();
@@ -63,7 +67,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 // Dev mailbox: local sends are otherwise only a log line, and a log line's CTA can't be clicked.
 // The routes exist only where Email:DevMailboxEnabled is set (appsettings.Development.json).
-if (app.Configuration.GetValue<bool>($"{Steeple.Api.Configuration.EmailOptions.SectionName}:DevMailboxEnabled"))
+if (app.Environment.IsDevelopment()
+    && app.Configuration.GetValue<bool>($"{Steeple.Api.Configuration.EmailOptions.SectionName}:DevMailboxEnabled"))
 {
     app.MapDevMailbox();
 }

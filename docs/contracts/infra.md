@@ -35,6 +35,11 @@ public `mobile.*` rows. All default **off** in `appsettings.json` and are **on**
 - **Admin edge auth (authelia):** Admin is only reachable through the authelia-gated
   hostname; it trusts the forwarded identity header (`Remote-User`) for audit
   attribution. Containers must not be reachable except via the edge proxy.
+- **Forwarded headers:** caddy overwrites client forwarding headers; nginx trusts real-IP data
+  only from the private Docker range, replaces `X-Forwarded-For` with one canonical address,
+  and the API accepts one hop only from loopback/private Docker peers. Directly supplied
+  forwarding headers are ignored. nginx applies a 5 req/s API ceiling (burst 30); the API adds
+  a 300/min global account/IP ceiling plus 120/min/IP on discovery reads.
 - **Sub-path hosting:** web v2 uses document-relative build assets and API URLs behind a
   stripped proxy prefix. Admin maps `X-Forwarded-Prefix` to `PathBase` and derives emitted
   URLs from `~/`-relative helpers — see CLAUDE.md.

@@ -345,15 +345,10 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
         }
 
         var now = DateTimeOffset.UtcNow;
-        // Same rule as the API's unpublish guard (EfManageRepository.HasFutureConfirmedOccurrences):
-        // ending a commitment needs explicit cancellation with notice, never a silent takedown.
-        if (db.RoomIdsWithFutureConfirmedOccurrences([roomId], now).Any())
-        {
-            return $"{room.Name} has upcoming confirmed bookings — cancel them first " +
-                "(ending commitments needs explicit cancellation with notice).";
-        }
-
         room.Status = RoomStatus.Unlisted;
+        room.PublishRequestedAtUtc = null;
+        room.OperatorUnlistedAtUtc = now;
+        room.OperatorUnlistedBy = operatorUser;
         room.UpdatedAtUtc = now; // sitemap lastmod
         db.SaveChanges();
 

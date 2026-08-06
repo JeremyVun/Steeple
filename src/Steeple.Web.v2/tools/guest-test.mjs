@@ -110,7 +110,7 @@ async function topmostAtCentre() {
 const style = url.includes('style=atlas') ? 'atlas' : 'diorama';
 console.log(`\n──── guest requests · ${style} · ${url} ────`);
 
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 await page.evaluate('__steeple.store.resetDemo()');
 await wait(400);
 
@@ -279,10 +279,14 @@ check('a letter nobody is signed in to read lands in the village', await state('
 check(
   '...and the address bar is corrected with it, not left lying',
   await page.evaluate('location.hash'),
-  '#/village'
+  '#/browse'
 );
 
 await ready(`${url}#/village`);
+check('the retired village route still opens browse', await state('view'), 'village');
+check('...and is replaced by the public route', await page.evaluate('location.hash'), '#/browse');
+
+await ready(`${url}#/browse`);
 await ready(`${url}#/journal`);
 await page.keyboard.press('Escape');
 await wait(1200);
@@ -299,7 +303,7 @@ check('Esc from the composer returns to the room', await state('view'), 'room');
 // ── 12. the hit-test audit ──────────────────────────────────────────────────
 console.log('\n12. closed surfaces never intercept the scene');
 for (const [label, target] of [
-  ['village', `${url}#/village`],
+  ['village', `${url}#/browse`],
   ['venue', `${url}#/venue/grace-community-vienna`],
   ['room', `${url}#/room/oakton-baptist/gymnasium`],
 ]) {

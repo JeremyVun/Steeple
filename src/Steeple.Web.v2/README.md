@@ -51,6 +51,36 @@ the booking flow work exactly as they do with the village behind them. The
 wordmark still rolls up to the title page, which without a village is paper.
 `?world=off` is the same thing in development, from the full bundle.
 
+## How it boots (2026-08-06)
+
+The first paint owes nothing to JavaScript. The title page's markup is printed
+in `index.html` itself — `ui/arrival.js` adopts that DOM and wires the buttons
+rather than rebuilding it, and `ui/index.js` clears everything in `#ui` *except*
+it — and under the transparent canvas sits a WebP photograph of the village's
+own opening frame. The live render crossfades over the poster on its first
+frame (`#scene.is-live`, `styles/main.css`) and `main.js` then retires the
+poster; the flat boot retires both poster and canvas at once. So a cold visit
+paints the real splash in the document's own time, and the village arriving is
+a crossfade, not a white page becoming one.
+
+The entry chunk carries only boot orchestration: `main.js` dynamic-imports the
+interface (Leaflet and the whole product surface are its own chunk) and the
+three village chunks in parallel — `__steepleReady` still means the interface
+is standing. Product-surface traffic that has no business in the boot window —
+the opening search, the suburbs/geofence vocabulary, and with them the result
+rows' photographs — waits on `core/idle.js`'s `afterBoot`: the first of the
+roll moving or the browser going idle (capped). The map's *tile layer* is
+deliberately not deferred — without a grid layer, Leaflet settles a NaN zoom on
+the unsized container and the next `invalidateSize` kills the boot (note in
+`ui/map/atlas.js`).
+
+The poster is made by `tools/poster.mjs` against any origin serving the app
+with the world on. Its output is content-hashed into `public/assets/` (served
+immutable by nginx), so after a re-run the `#poster` block in `index.html` must
+be updated to the printed names — the splash copy in `index.html`, the build
+path in `ui/arrival.js` and `ui/copy.js` ARRIVAL likewise say one thing in
+three places; change them together.
+
 ## URL flags
 
 | Flag | Values | What it does |
@@ -73,7 +103,7 @@ hosting view is open, since those views have a subject of their own.
 
 ### Deep links
 
-- `#/village` — all five churches, the discovery panel open
+- `#/browse` — the map, listing results, and discovery panel
 - `#/venue/<venueId>` — one church and the spaces it rents
 - `#/room/<venueId>/<roomId>` — one space, framed and detailed
 - `#/apply/<venueId>/<roomId>` — writing the request, at the room's own distance
@@ -295,7 +325,7 @@ Rendering is judged by looking, not by whether it throws.
 
 ```bash
 # screenshot any state (prints console errors, exits non-zero if any)
-node tools/shot.mjs "http://localhost:5173/?q=low#/village" /tmp/village.png --wait 3000
+node tools/shot.mjs "http://localhost:5173/?q=low#/browse" /tmp/village.png --wait 3000
 
 # a batch of states, in parallel; names prefixed with the style to render
 tools/shots.sh myprefix "diorama-village:/village" "atlas-room:/room/oakton-baptist/gymnasium"

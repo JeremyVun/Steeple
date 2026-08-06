@@ -24,6 +24,7 @@ import {
   scheduleSentence,
 } from './copy.js';
 import { createCardStep } from './payment.js';
+import { isSignedIn } from '../../data/session.js';
 import { sendRequest } from './send.js';
 import { createIdentityStep } from './sso.js';
 import { createWeekCard } from './weekCard.js';
@@ -683,9 +684,10 @@ export function createComposer({ announce, onSent, onLeave }) {
       focusField(first);
       return;
     }
-    // Who is asking is the last thing settled, every time — with a session it
-    // is a confirmation, without one it is the sign-in.
-    openIdentity();
+    // Who is asking is settled last — but a guest already signed in has
+    // settled it: the request just goes. The step opens only for the sign-in.
+    if (isSignedIn()) dispatch();
+    else openIdentity();
   }
 
   function focusField(field) {
@@ -754,7 +756,12 @@ export function createComposer({ announce, onSent, onLeave }) {
       // A sign-in that died between opening this step and pressing send: the
       // step is still the right place to stand, so it says so itself.
       if (result.signedOut) {
+        // The send may have gone straight past the step (a signed-in guest),
+        // so make sure the step is actually on screen to say so.
         identity.reset();
+        identity.element.hidden = false;
+        sheet.classList.add('is-signing');
+        columns.setAttribute('inert', '');
         identity.say(result.problem);
         renderFoot(null);
         identity.focus();

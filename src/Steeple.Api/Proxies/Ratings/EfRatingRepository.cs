@@ -112,6 +112,7 @@ public class EfRatingRepository : IRatingRepository
                 r =>
                     r.VenueId == venueId
                     && r.Status == RoomStatus.Published
+                    && r.OperatorUnlistedAtUtc == null
                     && r.Venue!.Latitude >= beachhead.MinLatitude
                     && r.Venue.Latitude <= beachhead.MaxLatitude
                     && r.Venue.Longitude >= beachhead.MinLongitude

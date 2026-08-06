@@ -98,7 +98,7 @@ async function shot(name) {
 }
 
 // ── 1. the surface stands where it belongs ──────────────────────────────────
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 console.log(`\n— ${url} —`);
 console.log('boot view:', await state('view'), '· map:', await state('map'));
 
@@ -140,7 +140,7 @@ await wait(700);
 
 // ── 3. pins and rows are one truth ──────────────────────────────────────────
 // From a clean framing: opening a church a moment ago left the map on it.
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 const grace = await box('.dm-pin[data-venue="grace-community-vienna"]');
 await page.mouse.move(grace.cx, grace.cy);
 await wait(400);
@@ -159,7 +159,7 @@ check('the church sheet says who it is', (await text('.sheet--venue .sheet__titl
 check('...and is set with a picture of one of its spaces', await page.evaluate('!!document.querySelector(".sheet--venue .dm-banner--hero .dm-banner__img")'));
 await shot(`venue-${tag}`);
 
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 await realClick('.dm-row[data-room="gymnasium"]');
 await wait(1200);
 check(
@@ -192,7 +192,7 @@ check('a photograph that fails falls back to a lettered plate', (await count('.d
 check('...and the plate says which space it stands for', (await text('.dm-banner.is-lettered .dm-banner__letter')).length === 1, await text('.dm-banner.is-lettered .dm-banner__letter'));
 
 // ── 5. the search pill: where ───────────────────────────────────────────────
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 await realClick('.dm-seg--where');
 check('the where segment opens its typeahead', (await count('.dm-typeahead__item')) > 1, `${await count('.dm-typeahead__item')} options`);
 // The whole area is always the first option, and it is named after whatever
@@ -218,7 +218,7 @@ check('...and the other four churches rest on the map', (await count('.dm-pin.is
 console.log('  announced:', JSON.stringify(await said()));
 
 // ── 6. the search pill: how many ────────────────────────────────────────────
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 await realClick('.dm-seg--many');
 await realClick('.pill--capacity[data-capacity="100"]');
 check('a size takes the small rooms out', (await text('.dm-count')) === '3 spaces across 3 venues', await text('.dm-count'));
@@ -287,14 +287,14 @@ check('...and re-asked as a search', (await text('.dm-count')).startsWith('1 spa
 // Wave 4 doubled it — + from half a level to a whole one, a 60px notch of the
 // wheel from a quarter to a half. Wave 6 took the notch 30% further again, to
 // 0.65 (CONTRACT5 §2.3); tools/map-feel.mjs is where that number is measured.
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 const beforeButton = await pinSpread();
 await realClick('.leaflet-control-zoom-in');
 await wait(1000);
 const buttonLevels = Math.log2((await pinSpread()) / beforeButton);
 check('the + button takes a whole zoom level, where it took half', buttonLevels > 0.95 && buttonLevels < 1.05, `${buttonLevels.toFixed(2)} levels`);
 
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 const beforeWheel = await pinSpread();
 await page.mouse.move(mapBox.cx, mapBox.cy);
 await page.mouse.wheel({ deltaY: -60 });

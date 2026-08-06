@@ -12,6 +12,7 @@ namespace Steeple.Api.Controllers.Payments;
 /// </summary>
 [ApiController]
 [Authorize]
+[DevelopmentOnly]
 [Route("api/v1")]
 public sealed class PaymentsController : ControllerBase
 {
@@ -27,6 +28,7 @@ public sealed class PaymentsController : ControllerBase
 
     /// <summary>Mock confirm: records the saved method's brand + last4 (display data only, never a PAN).</summary>
     [HttpPost("me/payments/setup/mock-confirm")]
+    [DevelopmentOnly]
     [EnableRateLimiting(RateLimitPolicies.Payments)]
     public async Task<ActionResult<MyPaymentsDto>> MockConfirmSetup(
         [FromBody] MockConfirmSetupRequest request, CancellationToken ct)
@@ -51,6 +53,7 @@ public sealed class PaymentsController : ControllerBase
 
     /// <summary>Mock-completes onboarding in one step (stands in for hosted KYC + webhooks + opt-in).</summary>
     [HttpPost("manage/venues/{id:guid}/payments/onboarding/mock-complete")]
+    [DevelopmentOnly]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<VenuePaymentStateDto>> MockCompleteOnboarding(Guid id, CancellationToken ct)
     {

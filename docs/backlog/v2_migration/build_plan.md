@@ -7,9 +7,13 @@
 > as phases land; record deviations in `SYSTEM_DESIGN.md` §17.
 
 **Dependency graph:** P1 → P2 → (P4) are sequential on the web surface. P3 (API/Admin)
-is independent of P1/P2 and can run in parallel with them. P5 depends on P2 (timeout
-work touches the same send paths) but its API half (idempotency) can pair with P3. P6
-is the closing sweep and runs last.
+is independent of P1/P2 and can run in parallel with them. P3.5 is an independent,
+urgent web boot fix; land it before P4 (both touch the entry/splash and CSP). P3.6
+(harness consolidation) touches `tools/` only, can run in parallel with anything, and
+should be paid before P4 leans on the suites for verification. P5's remainder is small
+(most of it landed 2026-08-06 — trust its checkboxes) and follows P2. P6 is the closing
+sweep and runs last. **Remaining execution order: P3.5 → P3.6 (parallelizable) → P4 →
+P5 remainder → P6.**
 
 **Every phase:** `dotnet test` green (unit instant; integration needs Docker);
 anything touching approval keeps `BookingIntegrityTests` green; drive the real flow
@@ -18,6 +22,13 @@ update the owning docs (CLAUDE.md doc map) in the same change. Web harness suite
 `src/Steeple.Web.v2/tools/*.mjs` each document their own flags/env in their header —
 run them exactly as documented. Known-stale failures predating this work: guest-test 3,
 wave2-test 6, world-test 12.
+
+**Status 2026-08-06** (after the review-driven quality round, local tip `ba5119e`): P1,
+P2, P2.5, P3 landed as recorded below; the quality round then moved numbers the landing
+notes cite — `correspondence-test.mjs` is now **69/69 (§0–§9)** after the desk read-once
+fix, `dotnet test` is 391 unit + 96 integration, the web refresh token became an httpOnly
+cookie (`docs/contracts/identity.md`), and several P5 items landed early (marked in
+place). Landing notes below are history; trust the checkboxes.
 
 ---
 
@@ -32,12 +43,12 @@ Tasks:
 
 1. **Header affordance, both states.** Signed out: quiet "Sign in" chip where the
    account chip sits (`account.js:107` currently hides the element entirely); opens the
-   same identity panel the flows use (`ui/guest/sso.js`). Signed in: existing chip/card;
-   add "Sign out everywhere" (`DELETE /me/sessions`) to the card. Match the design
-   system — calm, never a nav bar bolted on.
+   same identity panel the flows use (`ui/guest/sso.js`). Signed in: existing chip/card
+   with the standard single-session Sign out action. Match the design system — calm,
+   never a nav bar bolted on.
 2. **Server-side sign-out.** `api.js` gains `deleteSession()` (`DELETE /auth/sessions`,
-   bearer) and `deleteAllSessions()`; `session.signOut()` calls the former best-effort
-   (revocation failure must not trap the user signed in locally).
+   bearer); `session.signOut()` calls it best-effort (revocation failure must not trap
+   the user signed in locally).
 3. **Gate the correspondence surfaces on session.** Inbox tab + badge
    (`ui/guest/index.js:130` — currently `state.mode` only), journal, letters: render
    only when signed in; subscribe to `session.onSessionChange`. The journal identity
@@ -108,7 +119,7 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 > outage a person actually meets got the vaguest sentence in the vocabulary and no promise
 > that nothing had been sent. `neverArrived()` covers 0/502/503 — and deliberately not 504.
 >
-> **Outstanding (suite debt only — no product debt known):**
+> **Outstanding (suite debt only — no product debt known; execution home: Phase 3.6):**
 > 1. `wave2-test.mjs`, `host-test.mjs` still drive the demo-store apply/desk path (send as a
 >    seeded persona, decide on seeded requests). Their subject is `correspondence-test.mjs`'s
 >    now; they need the same treatment `guest-test.mjs` got — keep what is uniquely theirs
@@ -116,12 +127,10 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 > 2. `host-publish-test.mjs` is green through §5 (the whole publish chain and its copy); one
 >    tail assertion, `effectiveRoom(venue,'main-space')` for the host's own new room, now
 >    returns null — likely the per-person store scoping (D6). Worth a look, not yet chased.
-> 3. `host-offline-test.mjs` **cannot be re-baselined without a product decision.** It exists
->    to prove a listing can still be written while steeple is away, and since D4 there is no
->    way into hosting at all without a session — which needs the API. Either the flow opens
->    before sign-in (and Verify is the gate), or writing a listing offline is not a promise
->    the product makes any more. Same question makes the signed-out half of the listing
->    flow's **Verify step unreachable** in the product's own order (`host-input-test.mjs` §2).
+> 3. `host-offline-test.mjs` — **settled by P2.5 owner decision 1 (2026-08-05):** hosting
+>    entry requires a session, so writing a listing while steeple is away is no longer a
+>    promise the product makes. Delete the suite or rewrite it signed-in-then-offline
+>    (P3.6 item 4); do not restore the old order.
 > 4. `input-test.mjs` §12 (board ↔ ledger) is **skipped, not passing**, and two desk-specific
 >    plumbing checks beside it ("the porch switch still works over an open desk", "a click
 >    inside the desk is the desk's own") are **removed, owed**: driving them on the inbox
@@ -344,6 +353,160 @@ Admin involvement. Admin serves exactly three action surfaces.
 
 ---
 
+## Phase 3.5 — Product-first boot and durable splash intent (web) `[ ]`
+
+**Why now:** the 2026-08-06 first-paint work put the village poster and title markup in
+`index.html`, but the visible controls remain inert until `ui/index.js` arrives and
+`createArrival()` assigns their handlers. A production-build probe at slow 4G
+(150ms RTT, 1.6Mbps down, 4× CPU) made the DOM interactive at ~0.7s, lost a real click
+at ~0.7s, finished the Three/engine downloads at ~2.2s, and attached the handlers at
+~2.3s. The current production chunks are approximately 105KB gzip for the UI and 184KB
+gzip for journey/world/Three/engine. The controls do not depend on Three, but both
+families start together in `main.js`, so the product and the overture compete for the
+same connection.
+
+**Product rule:** intent beats scenery. A press on **Find a space**, **Host a space**,
+or the down affordance must be accepted from the first frame in which it is shown. If
+the live village is ready, keep the roll cinematic. If it is not ready, go directly to
+the product surface; do not wait for it, do not start it afterward, and do not fetch it
+in the background while the map is in use. That visit is flat from then on, including a
+later return to the title through the wordmark. Cold product deep links already skip the
+cinematic and should follow the same no-world policy.
+
+**Touches:** `src/Steeple.Web.v2/index.html`, `src/main.js`, `src/ui/arrival.js`,
+`src/core/bus.js` and/or a new small boot-intent module, `src/journey/roll.js`,
+`src/core/idle.js`, a new `tools/boot-priority-test.mjs`, `README.md`, and
+`docs/contracts/web.md`. Do not change the village, map, catalog, or API contracts to
+solve boot ordering.
+
+Tasks:
+
+1. **Give every printed control a durable native action.** Render the two CTAs and the
+   down affordance as real links to the existing hash routes (`#/browse`, `#/desk`,
+   `#/browse`) while retaining their button styling and accessible names. Before any
+   JavaScript arrives, a press must at least record its destination in `location.hash`;
+   it must never be a styled `<button>` with no behavior. Once the live roll owns the
+   page, its handler may prevent the native navigation and run the cinematic.
+2. **Separate splash intent from product hydration.** Move the small amount of arrival
+   event ownership out of the 105KB-gzip `ui/index.js` graph. The critical controller
+   may use an external same-origin module (the CSP deliberately forbids inline script),
+   but it must not import Leaflet, product panels, session/store, Three, or world code.
+   Its only job is to record `{destination, requestedAt}`, show immediate quiet progress
+   feedback, prevent duplicate activation, and hand the intent to the boot coordinator.
+3. **Make the intent sticky.** `rollTo()` currently emits a fire-and-forget
+   `roll:request`; a request sent before `createRoll()` subscribes is lost. Do not fix
+   this by merely moving the existing `onclick` earlier. Either give the boot
+   coordinator a one-shot pending intent/ready promise or make this one bus request
+   replayable until claimed. Consume it exactly once. The URL remains the recovery
+   truth across a reload; the in-memory intent controls the current boot.
+4. **Put the product first on the wire.** Start the interface chunk immediately. Do not
+   start `engine.js`, `world/index.js`, or `journey/index.js` until the interface is
+   interactive, the browser has an idle opportunity, and no product intent or deep link
+   exists. There is no useful cancellation handle for a dynamic `import()` already in
+   flight, so sequencing is the dependable bandwidth control; do not add a fetch/blob
+   loader or a package to fake cancellation. Keep the poster as the visual while the
+   village waits. Bound the idle wait (`requestIdleCallback` with a timeout fallback, or
+   equivalent) — a busy main thread must not be able to postpone the village
+   indefinitely on the no-intent path.
+5. **Take the direct path when intent wins.** For an intent received before the village
+   is ready: initialize the existing flat/no-op roll, set the roll to `1`, apply the
+   destination (`village` for Find/down, `desk` for Host), remove/release any partial
+   canvas state, and let the ordinary UI subscribers render the map or hosting surface.
+   If 3D imports began in the narrow interval before the press, let their transfers
+   settle but abandon that boot generation: it must never create/start an engine or
+   overwrite the product state afterward.
+6. **Wake product work on the intent, not on world readiness.** The initial catalog
+   search, listing rows, map setup/tiles, and any destination-specific reads currently
+   wait through `afterBoot`. A direct entry must release that gate as soon as the UI can
+   consume the answer. `window.__steepleReady` continues to mean the currently chosen
+   surface is interactive: frame-warm for a village boot, UI-ready for a direct/flat
+   boot. No product request waits for that signal before *starting*.
+   ⚠️ Trap (2026-08-06 boot round; comment in `ui/map/atlas.js`): **never defer
+   Leaflet's tile layer** — a grid-layer-less map settles a NaN zoom on the unsized
+   container and the next `invalidateSize` kills the boot. The direct path changes
+   map-init timing; the tile layer ships with the map, always.
+7. **Keep the normal arrival intact.** With no early intent or deep link, the current
+   poster → live canvas crossfade and 1.28s roll remain. Do not lower poster priority,
+   degrade the village, infer a slow connection from `navigator.connection`, or disable
+   animation solely because a device is slow. The decision comes from the person's
+   action, which is both more reliable and the product truth.
+8. **Instrument only the settled action.** If the web analytics batcher from P5 has
+   landed, emit one arrival-CTA event with `entry: cinematic | direct` when the intent
+   is consumed, not once on native click and again on hydration. If P5 has not landed,
+   leave the hook named in the controller and add the taxonomy row with P5; do not pull
+   the batcher into this phase.
+9. **Document the boot state machine.** `README.md` and `contracts/web.md` must name the
+   three states and their ownership: printed arrival (native intent), product-first
+   flat boot, and live-village boot. Record that a product-first visit never backfills
+   Three while browsing and that native hash routes are the no-hydration fallback.
+
+**Acceptance:**
+
+- On a throttled production debug build, press each arrival action as soon as its
+  printed DOM exists, before `ui/index.js` or any Three chunk completes. The press
+  eventually lands once in the correct view without pressing again; visible progress
+  feedback is required from the moment the task-2 intent controller is present (in the
+  narrower pre-controller window, the recorded hash alone is the guarantee).
+- An early Find/down press lands on an interactive map and starts the listings request
+  without waiting for `window.__steepleReady` or any 3D resource. An early Host press
+  lands on the desk/sign-in truth by the same path.
+- When the press happens before the deferred world import begins, the resource timeline
+  contains no engine, world, journey, or Three request for the rest of that visit. A
+  direct hash load has the same property. Map tiles, catalog JSON, and listing images
+  receive the freed connection capacity.
+- A press during an already-started village import transitions directly, does not start
+  an engine after the product has landed, and produces no unhandled rejection. The
+  already-issued module requests are allowed to finish; the product does not wait for
+  them.
+- A no-intent cold load still crossfades poster to village without a visual jump, then
+  rolls cinematically on click. `?world=off`, reduced motion, deep links, Back/forward,
+  keyboard Enter/Space, and sub-path hosting retain their current behavior.
+
+**Verify:** add `tools/boot-priority-test.mjs` and run it against `build:debug`, not the
+Vite module graph. Drive CDP network + CPU throttling and delay named chunk responses so
+the three timing windows are deterministic: pre-interface, interface-ready/world-not-
+ready, and world-ready. Assert the destination and exactly-once consumption in all three;
+assert resource absence/order through `performance.getEntriesByType('resource')`. Then
+run `input-test.mjs`, `world-off-test.mjs`, `map-test.mjs`, `host-test.mjs`, and one real
+catalog-backed browse flow using each suite's documented flags. The new test must click
+before waiting on `window.__steepleReady`; waiting first would reproduce the existing
+blind spot.
+
+---
+
+## Phase 3.6 — Harness consolidation (web `tools/` only) `[ ]`
+
+**Why a phase:** P2's suite debt has sat as narrative notes since 2026-08-05 with no
+owner, and P4/P5 verification leans on these suites. Touches `tools/*.mjs` only —
+parallel-safe with any other phase, including P3.5.
+
+Tasks:
+
+1. **Lift `correspondence-test.mjs:mintVenue` into a shared `tools/fixtures.mjs`** so
+   any suite can ask for a host who keeps a venue. This is the unlock for everything
+   below — P2's named "highest-leverage next move on suite debt".
+2. **Rebaseline `wave2-test.mjs` and `host-test.mjs`** onto the wire era: keep what is
+   uniquely theirs (real-input drive), drop the demo-store apply/desk paths whose
+   subject is `correspondence-test.mjs`'s now.
+3. **Restore `input-test.mjs` §12** (board ↔ ledger) and the two removed desk plumbing
+   checks ("porch switch over an open desk", "a click inside the desk is the desk's
+   own") on a host fixture from item 1.
+4. **`host-offline-test.mjs`:** delete, or rewrite signed-in-then-offline (P2.5 owner
+   decision 1 — do not restore the old order).
+5. **Chase the `host-publish-test.mjs` tail** — `effectiveRoom(venue,'main-space')`
+   returns null for the host's own new room; likely D6 per-person store scoping.
+6. **Fix the `surface-test.mjs` §5 crash** (`outBox.cx` null on the account monogram)
+   that truncates its run.
+7. **`pipe: true` + close-in-`finally` sweep across all suites** (absorbs P6 item 5) —
+   headless Chrome outlives a dead node parent; verify by aborting a run mid-suite and
+   checking `ps` shows no PPID-1 "Chrome for Testing" processes.
+
+**Accept when:** every touched suite runs green under its documented flags (or its
+remaining reds are re-documented as known-stale with a reason), and no suite drives
+the demo-store apply/desk path.
+
+---
+
 ## Phase 4 — Production SSO, Turnstile, agreements (web) `[ ]`
 
 **Implements:** D1, D7. **Depends on:** P1 (header affordance exists).
@@ -400,16 +563,20 @@ Tasks:
    is a small per-user ledger: **new changeset `016-idempotency.sql`**, deviating from this
    plan's "no new changesets" (`design.md` §4). Semantics, error shapes and the malformed-key
    rule the web half must build against: `docs/contracts/manage.md` → "Idempotent creates".
-2. **Client sends keys + sane timeouts:** `createManagedVenue`/`createManagedRoom`
-   send keys; write timeout 15s separated from read 4s (`api.js:25`); timeout ≠
-   unreachable in `send.js`/`manage.js` classification. Fix `draft.roomId`
-   always-`'main-space'` (second room per venue collides) while in the listing flow.
-3. **nginx.conf:** CSP (allow self + API + map tiles + Turnstile/Google/Apple script
-   origins as P4 requires), `X-Frame-Options: DENY`, `Referrer-Policy:
-   strict-origin-when-cross-origin`. Coordinate: nginx.conf is also touched by the
-   build workstream — rebase, don't clobber.
-4. **`window.__steeple`** gated on `import.meta.env.DEV` (`main.js:38-52`); confirm
-   every `tools/*.mjs` harness runs against dev builds.
+2. `[~]` **Client sends keys + sane timeouts:** the keys landed (quality round
+   2026-08-06 — `createManagedVenue`/`createManagedRoom` send `Idempotency-Key`), and
+   the `draft.roomId` collision is fixed (`listing.js` mints a `freeRoomId`; the
+   CLAUDE.md hazard entry is stale — prune it in P6). **Remaining:** a longer write
+   timeout separated from the 4s read default (`api.js` `send()` already takes
+   `timeoutMs`; writes still ride the default, and `createManagedVenue`'s own comment
+   notes the 4s abort can fire after the server commits); timeout ≠ unreachable in
+   `send.js`/`manage.js` classification.
+3. `[~]` **nginx.conf:** gzip, security headers and an evidence-based CSP landed
+   2026-08-06 (`c84f4ba`). **Remaining:** the Turnstile/Google/Apple script origins —
+   add them with P4, which is what needs them. Coordinate: nginx.conf is also touched
+   by the build workstream — rebase, don't clobber.
+4. `[x]` **`window.__steeple`** gated out of production (quality round 2026-08-06;
+   `build:debug`/`build:flat:debug` keep it for suites that drive a built bundle).
 5. **SEO reality check (D9):** `docs/SEO.md` was re-marked `✅ v1 (retired) / 🔲 v2`
    on 2026-08-05 — decide + document the crawler-rendering approach and implement only
    the cheap floor now (`robots.txt`, sitemap route wired to `GET /api/v1/sitemap`,
@@ -442,9 +609,12 @@ full flow); SEO.md tells the truth.
    framing and stale hazards that this migration fixed), prune this plan to a
    phase-history stub in `docs/backlog/README.md`.
 4. Confirm nothing here modified build/deploy files owned by the parallel workstream.
-5. **Harness hygiene (owner-reported 2026-08-05):** every `tools/*.mjs` suite closes its
-   browsers happy-path only, and headless Chrome outlives a dead node parent — aborted
-   runs orphan "Chrome for Testing" process trees. Sweep all suites: `pipe: true` in
-   `puppeteer.launch` (browser dies with the node process, even on SIGKILL) + close in
-   `finally`. P2's continuation applies it to the suites it touches; this item is the
-   rest. Verify: abort a run mid-suite → `ps` shows no PPID-1 Chrome processes.
+5. **Harness hygiene** — moved to Phase 3.6 item 7; verify here that it held (abort a
+   run mid-suite → `ps` shows no PPID-1 Chrome processes).
+6. **Media base URL is final before real photos exist:** room photo URLs are stored
+   **absolute** from `Media:PublicBaseUrl` (P2 finding), so renaming the media host
+   orphans every photo already written. Confirm the deployed value, and that nginx's
+   CSP `img-src` includes it.
+7. **Prune stale hazards** from CLAUDE.md's v2 section as part of the docs closeout —
+   at minimum the fixed `draft.roomId` collision (P5 item 2) and any suite hazards
+   P3.6 retired.

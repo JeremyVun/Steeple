@@ -1,9 +1,25 @@
-// THE LISTING FLOW — Place, Verify, Describe, Availability, Publish.
+// THE LISTING FLOW — four ways in, one wizard.
 //
 // A host describes a space here and steeple ends up holding it: the venue, the
 // room, its photograph, its open hours, and a request to publish. The local
 // store is kept alongside as the village's own record, so the desk goes on
 // working whether or not the API answered (CONTRACT6 §3).
+//
+// What is being written decides which steps there are, and `open()` reads that
+// off its arguments — a venue and a room is an edit, a venue alone is another
+// space at it, neither is a venue nobody has listed yet:
+//
+//   venue       {}                      Place · Describe · Availability · Publish
+//   add-room    {venueId}               Describe · Availability · Publish
+//   room        {venueId, roomId}       Describe · Availability · Publish
+//   venue-edit  {venueId, entry}        the Place form alone, over PATCH
+//
+// There was a Verify step between Place and Describe until 2026-08-06. Hosting
+// cannot be entered without a session — "I have space to share" signs somebody
+// in first — so it confirmed a fact nobody had disputed, and its only real work
+// was catching a session that died mid-flow. That is now the Publish step's own
+// blocker, which opens the one sign-in panel there is (`askToSignIn`). The
+// host's name is public on the listing, so Publish says whose it will be.
 //
 // Two rules run through the whole file.
 //
@@ -21,6 +37,8 @@
 
 import {
   addBlackout,
+  adoptRoomSlug,
+  adoptVenueSlug,
   blackoutsFor,
   editRoom,
   effectiveRoom,
@@ -32,7 +50,7 @@ import {
   upsertPlacedVenue,
 } from '../../data/store.js';
 import { ACTIVITY_TYPES, CENTER, VENUES } from '../../data/venues.js';
-import { createIdentityStep } from '../guest/sso.js';
+import { VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import * as manage from './manage.js';
 import {
@@ -44,28 +62,34 @@ import {
 } from './model.js';
 import { createHoursPainter } from './painter.js';
 
-const STEPS = [
-  { id: 'place', label: 'Place' },
-  { id: 'verify', label: 'Verify' },
-  { id: 'describe', label: 'Describe' },
-  { id: 'availability', label: 'Availability' },
-  { id: 'publish', label: 'Publish' },
-];
+const STEP_LABEL = {
+  place: 'Place',
+  describe: 'Describe',
+  availability: 'Availability',
+  publish: 'Publish',
+};
 
-// The identity beat is the guest's, said in the host's words. Hosting is entered
-// through a session, so by the time anybody reads this there is one: the step
-// confirms whose listing this will be, and does not ask again.
-const HOST_IDENTITY = {
-  eyebrow: 'Verify',
-  title: 'Whose listing this is',
-  blurb:
-    'Everything you list carries this account\u2019s verified mark. Groups see the mark and your name; nothing else about your account is shared.',
-  carryOn: (name) => `Continue as ${name}`,
-  signedOutAgain: 'Signed out.',
-  missingEmail: 'An email address, so your listings have an owner.',
-  // The step's own title already says what this is.
-  formEyebrow: null,
-  start: 'email',
+// Each way in has its own steps, and the rail draws those and no others: a
+// numbered step you can never reach is a promise the flow does not keep.
+const FLOWS = {
+  venue: ['place', 'describe', 'availability', 'publish'],
+  'add-room': ['describe', 'availability', 'publish'],
+  room: ['describe', 'availability', 'publish'],
+  'venue-edit': ['place'],
+};
+
+// The head over the rail, per way in. The add-room title names the venue,
+// because "a space" on its own is the one thing this step must not be vague
+// about \u2014 the host has one venue in mind and the flow is bound to it.
+const HEAD = {
+  venue: { eyebrow: 'List a space', title: () => 'A space with room to spare' },
+  'add-room': {
+    eyebrow: 'Add a space',
+    title: (venue, rooms) =>
+      rooms > 0 ? `Another space at ${venue}` : `A space at ${venue}`,
+  },
+  room: { eyebrow: 'Edit this listing', title: (venue) => `A space at ${venue}` },
+  'venue-edit': { eyebrow: 'Venue details', title: (venue) => venue },
 };
 
 // The square of village ground the confirmation is drawn on: honest to lat/lng,
@@ -89,12 +113,16 @@ function bearingLine(lat, lng) {
   return `${km.toFixed(1)} km ${point} of the village centre`;
 }
 
-const slug = (text) =>
-  `placed-${text
+const slugify = (text) =>
+  String(text)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-    .slice(0, 40) || 'church'}`;
+    .slice(0, 40);
+
+// Only ever a guess, and only until steeple answers the create with the slug it
+// minted — at which point `adoptVenueSlug` makes that the id here.
+const venueSlug = (text) => `placed-${slugify(text) || 'church'}`;
 
 /** Strip what discovery said about a draft from what the host is now writing. */
 const withoutDraftNote = (text) =>
@@ -128,6 +156,18 @@ function labelled(label, control, hint) {
   ]);
 }
 
+/**
+ * A field chosen from a vocabulary rather than typed into: the name at the
+ * left, the choices beside it, so three of them read as one aligned block
+ * instead of three ragged stacks.
+ */
+function chosen(label, controls, extra = '') {
+  return el('div', { class: `chosen${extra ? ` ${extra}` : ''}` }, [
+    el('p', { class: 'eyebrow chosen__label', text: label }),
+    el('div', { class: 'chosen__value' }, controls.filter(Boolean)),
+  ]);
+}
+
 function toggleSet(name, options, selected, onToggle) {
   return el(
     'div',
@@ -155,10 +195,16 @@ function toggleSet(name, options, selected, onToggle) {
   );
 }
 
-export function createListingFlow({ announce, onChanged, onClose }) {
+export function createListingFlow({ announce, onChanged, onClose, askToSignIn }) {
   const rail = el('ol', { class: 'steps' });
   const body = el('div', { class: 'listing__body' });
   const foot = el('footer', { class: 'listing__foot' });
+  const eyebrow = el('p', { class: 'eyebrow', text: HEAD.venue.eyebrow });
+  const title = el('h1', {
+    class: 'sheet__title',
+    id: 'listing-title',
+    text: HEAD.venue.title(),
+  });
   const sheet = el(
     'section',
     {
@@ -168,15 +214,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       'aria-labelledby': 'listing-title',
       tabindex: '-1',
     },
-    [
-      el('header', { class: 'listing__head' }, [
-        el('p', { class: 'eyebrow', text: 'List a space' }),
-        el('h1', { class: 'sheet__title', id: 'listing-title', text: 'A space with room to spare' }),
-        rail,
-      ]),
-      body,
-      foot,
-    ]
+    [el('header', { class: 'listing__head' }, [eyebrow, title, rail]), body, foot]
   );
   const element = el('div', { class: 'listing__layer', hidden: true }, sheet);
 
@@ -186,26 +224,14 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     if (step === 'availability') renderFoot();
   });
 
-  // Hosting cannot be entered without a session at all — "I have space to share"
-  // signs somebody in first (v2_migration D4, owner decision 2026-08-05) — so
-  // this step never asks anybody to sign in. It confirms who the listing will
-  // belong to, and the only signed-out state it can reach is a session that died
-  // mid-flow, which says so rather than offering a second front door.
-  const identity = createIdentityStep({
-    announce,
-    words: HOST_IDENTITY,
-    requireSession: true,
-    onVerify: () => advance(),
-  });
-
-  // Signing in happens inside the identity panel, which knows nothing of this
+  // Signing in happens inside the sign-in panel, which knows nothing of this
   // flow's footer. Without this the way forward stays greyed out behind a
-  // session that already exists.
+  // session that already exists — and the Publish step's own list of what is
+  // missing would go on naming a session that is now here.
   manage.onSession(() => {
     if (element.hidden || !draft) return;
     if (manage.signedIn()) draft.offline = null;
-    renderRail();
-    renderFoot();
+    renderBody();
   });
 
   let step = 'place';
@@ -238,16 +264,61 @@ export function createListingFlow({ announce, onChanged, onClose }) {
    * taking its address, its rooms and its place at steeple with it.
    */
   function freeVenueId(name) {
-    const base = slug(name);
+    const base = venueSlug(name);
     const taken = new Set(placedVenues().map((v) => v.id));
     if (!taken.has(base)) return base;
     for (let n = 2; ; n += 1) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`;
   }
 
+  /**
+   * The same, for a space. A venue holds more than one, two of them can honestly
+   * carry one name, and the store keys a room's open hours, its closed days and
+   * its edits by `venue/room` — so a repeated id is not a second space, it is
+   * the first one overwritten. This used to be the constant 'main-space'.
+   */
+  function freeRoomId(venueId, name) {
+    const base = slugify(name) || 'space';
+    const taken = new Set(roomsHere(venueId).map((r) => r.id));
+    if (!taken.has(base)) return base;
+    for (let n = 2; ; n += 1) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`;
+  }
+
+  const roomsHere = (venueId) => venueOf(venueId, placedVenues())?.rooms ?? [];
+
+  /**
+   * The venue's rooms with this draft's own among them.
+   *
+   * Written as `[thisRoom]` — as it was while a venue could only ever have one —
+   * every other space at the venue vanishes from the desk the moment the venue
+   * is saved again, taking its hours and its published state with it.
+   */
+  function roomsAfter(venueId) {
+    const room = {
+      id: draft.roomId,
+      name: draft.room.name,
+      description: draft.room.description,
+      capacity: draft.room.capacity,
+      pricePerHour: localPrice(),
+      houseRules: draft.room.houseRules,
+      status: 'draft',
+      amenities: [...draft.room.amenities],
+      accessibility: [...draft.room.accessibility],
+      activities: [...draft.room.activities],
+    };
+    const rooms = [...roomsHere(venueId)];
+    const at = rooms.findIndex((r) => r.id === room.id);
+    if (at < 0) return [...rooms, room];
+    // A room already here keeps what steeple said about it — its remote id, its
+    // status, the photograph it was published with; the draft only overwrites
+    // the fields the host has been typing into.
+    rooms[at] = { ...rooms[at], ...room, status: rooms[at].status ?? room.status };
+    return rooms;
+  }
+
   function mirrorVenue(remote = null) {
     const id = draft.venueId ?? freeVenueId(draft.venue.name);
     draft.venueId = id;
-    draft.roomId = draft.roomId ?? 'main-space';
+    if (draft.room) draft.roomId ??= freeRoomId(id, draft.room.name);
     upsertPlacedVenue({
       id,
       remoteId: remote?.id ?? draft.remote.venueId ?? null,
@@ -260,32 +331,34 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       // the API has one, the village centre stands in.
       lat: remote?.latitude ?? draft.remote.position?.lat ?? CENTER.lat,
       lng: remote?.longitude ?? draft.remote.position?.lng ?? CENTER.lng,
-      verified: draft.verified,
-      rooms: [
-        {
-          id: draft.roomId,
-          name: draft.room.name,
-          description: draft.room.description,
-          capacity: draft.room.capacity,
-          pricePerHour: localPrice(),
-          houseRules: draft.room.houseRules,
-          status: 'draft',
-          amenities: [...draft.room.amenities],
-          accessibility: [...draft.room.accessibility],
-          activities: [...draft.room.activities],
-        },
-      ],
+      // The mark is steeple's to give. Its own answer wins over the session
+      // this browser is holding, which proves only that somebody is signed in.
+      verified: remote ? remote.isIdentityVerified === true : draft.verified,
+      // A draft with no room of its own — the venue editor — is editing the
+      // venue and nothing else. `upsertPlacedVenue` leaves out what is not named.
+      ...(draft.room ? { rooms: roomsAfter(id) } : {}),
     });
     setHostVenue(id);
   }
 
   async function pushVenue() {
     if (localOnly() || !manage.signedIn()) return { ok: true, skipped: true };
+    // A way in with no Place step never touched the venue, so it has nothing to
+    // say about one. A PATCH from here would be an edit nobody made — and
+    // steeple stamps those (ProviderEditedAtUtc).
+    if (!steps().includes('place') && draft.remote.venueId) return { ok: true, skipped: true };
     const fresh = !draft.remote.venueId;
     const answer = await manage.saveVenue(draft);
     if (answer.ok) {
       draft.remote.venueId = answer.value.id;
       draft.remote.position = { lat: answer.value.latitude, lng: answer.value.longitude };
+      // steeple named it; this browser only guessed. Everything already written
+      // under the guess travels to the real slug before anything else is said
+      // about the venue — including the desk's own re-read, which drops a
+      // second record of one venue and would take the draft's rooms with it.
+      if (adoptVenueSlug(draft.venueId, answer.value.slug).ok) {
+        draft.venueId = answer.value.slug ?? draft.venueId;
+      }
       mirrorVenue(answer.value);
       onChanged?.();
       // The pin is gone because this is the answer to it: steeple read the
@@ -310,6 +383,9 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     const answer = await manage.saveRoom(draft);
     if (!answer.ok) return answer;
     draft.remote.roomId = answer.value.id;
+    if (adoptRoomSlug(draft.venueId, draft.roomId, answer.value.slug).ok) {
+      draft.roomId = answer.value.slug ?? draft.roomId;
+    }
     editRoom(draft.venueId, draft.roomId, {}, answer.value);
     if (draft.room.photo?.file && !draft.room.photo.sent) {
       const photo = await manage.savePhoto(draft);
@@ -351,7 +427,12 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       return;
     }
     if (answer.reach === 'signin') {
-      say('Sign in before this can be sent to Steeple.', 'warn', { label: 'Sign in', step: 'verify' });
+      // The one sign-in there is, opened over this flow. Nothing written here is
+      // lost by it: the draft is on the page and in the store behind it.
+      say('Sign in before this can be sent to Steeple.', 'warn', {
+        label: 'Sign in',
+        act: () => askToSignIn?.(),
+      });
       return;
     }
     // Where the field that offends lives, and what the way there is called.
@@ -367,6 +448,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
   // ── steps ─────────────────────────────────────────────────────────────────
 
   function placeStep() {
+    const editing = draft.entry === 'venue-edit';
     const field = (id, key, label, placeholder, type = 'text') => {
       const input = el('input', {
         class: 'input',
@@ -397,7 +479,11 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     return [
       el('p', {
         class: 'prose',
-        text: 'Steeple puts the venue on the map from its address, so groups can see how far it is before they ask.',
+        text: editing
+          ? // The rename that cannot break a link: steeple derives a listing's
+            // address from the name once, when it is created, and never again.
+            'What groups read about the venue. Renaming it never changes its web address, and a new street address is put back on the map.'
+          : 'Steeple puts the venue on the map from its address, so groups can see how far it is before they ask.',
       }),
       noticeBlock(),
       el('div', { class: 'place__fields' }, [
@@ -445,11 +531,6 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         }),
       ]),
     ]);
-  }
-
-  function verifyStep() {
-    identity.reset();
-    return [noticeBlock(), identity.element];
   }
 
   function describeStep() {
@@ -531,48 +612,58 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     });
     rules.value = room.houseRules ?? '';
 
+    // Two kinds of question, so two shapes. What the host writes about the room
+    // stands in a column of its own; what steeple needs to show it — the
+    // photograph, the seats, the hourly price — stands beside it; and the three
+    // vocabularies are chosen from underneath, on one aligned ledger. The step
+    // used to be a single tall stack that no window could hold at once.
     return [
-      el('p', {
-        class: 'prose',
-        text: 'This is what a group reads before they ask. The fuller it is, the fewer questions you answer twice.',
-      }),
       noticeBlock(),
-      labelled('Name', name),
-      labelled('Description', description),
-      el('div', { class: 'field__pair' }, [
-        labelled('Capacity', capacity),
-        el('div', { class: 'field' }, [
-          el('label', { class: 'eyebrow', for: 'room-price', text: 'Price' }),
-          el('div', { class: 'field__inline' }, [
-            el('span', { class: 'field__prefix', text: '$' }),
-            price,
-            el('span', { class: 'field__suffix', text: 'per hour' }),
-            priceWord,
+      el('div', { class: 'describe' }, [
+        el('div', { class: 'describe__words' }, [
+          labelled('Name', name),
+          labelled('Description', description),
+          labelled('House rules', rules),
+        ]),
+        el('div', { class: 'describe__facts' }, [
+          photoField(),
+          el('div', { class: 'describe__nums' }, [
+            labelled('Capacity', capacity),
+            el('div', { class: 'field' }, [
+              el('label', { class: 'eyebrow', for: 'room-price', text: 'Price' }),
+              el('div', { class: 'field__inline' }, [
+                el('span', { class: 'field__prefix', text: '$' }),
+                price,
+                el('span', { class: 'field__suffix', text: 'per hour' }),
+                priceWord,
+              ]),
+              priceNote,
+            ]),
           ]),
-          priceNote,
         ]),
       ]),
-      photoField(),
-      el('div', { class: 'field' }, [
-        el('p', { class: 'eyebrow', text: 'Amenities' }),
-        toggleSet('Amenities', AMENITY_VOCABULARY, amenities),
+      el('div', { class: 'chosens' }, [
+        chosen('Amenities', [toggleSet('Amenities', AMENITY_VOCABULARY, amenities)]),
+        chosen('Accessibility', [toggleSet('Accessibility features', ACCESS_VOCABULARY, access)]),
+        welcomeField(activities),
       ]),
-      el('div', { class: 'field' }, [
-        el('p', { class: 'eyebrow', text: 'Accessibility' }),
-        toggleSet('Accessibility features', ACCESS_VOCABULARY, access),
-      ]),
-      welcomeField(activities),
-      labelled('House rules', rules),
     ];
   }
 
-  /** The photograph steeple will not publish a space without. */
+  /**
+   * The photograph steeple will not publish a space without — shown as the one
+   * thing it is, a picture of the room. The tile is the control: the file input
+   * lies over it, so a click anywhere opens the picker and a chosen photograph
+   * fills the frame it will be seen in rather than being named in a filename.
+   */
   function photoField() {
-    const preview = el('div', { class: 'shotpick__preview' });
+    const tile = el('label', { class: 'shotpick__tile', for: 'room-photo' });
     const input = el('input', {
       class: 'shotpick__input',
       id: 'room-photo',
       type: 'file',
+      // The tile is a picture once it holds one, so the field says its own name.
+      'aria-label': 'Photograph of the room',
       accept: 'image/jpeg,image/png,image/webp',
       onchange: (event) => {
         const file = event.target.files?.[0];
@@ -584,38 +675,36 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       },
     });
 
+    const remove = el(
+      'button',
+      {
+        type: 'button',
+        class: 'linkish shotpick__remove',
+        onclick: () => {
+          draft.room.photo = null;
+          input.value = '';
+          drawPreview();
+          renderFoot();
+        },
+      },
+      'Remove'
+    );
+
     function drawPreview() {
       const photo = draft.room.photo;
-      replaceChildren(
-        preview,
+      replaceChildren(tile, [
+        input,
         photo
-          ? [
-              // The file input says which file it is; this says it is readable.
-              el('img', { class: 'shotpick__thumb', src: photo.url ?? photo.remoteUrl, alt: '' }),
-              el(
-                'button',
-                {
-                  type: 'button',
-                  class: 'linkish',
-                  onclick: () => {
-                    draft.room.photo = null;
-                    input.value = '';
-                    drawPreview();
-                    renderFoot();
-                  },
-                },
-                'Remove'
-              ),
-            ]
-          : []
-      );
+          ? el('img', { class: 'shotpick__thumb', src: photo.url ?? photo.remoteUrl, alt: '' })
+          : el('span', { class: 'shotpick__prompt', text: 'Add a photograph' }),
+      ]);
+      remove.hidden = !photo;
     }
     drawPreview();
 
     return el('div', { class: 'field shotpick' }, [
-      el('label', { class: 'eyebrow', for: 'room-photo', text: 'Photograph' }),
-      el('div', { class: 'shotpick__row' }, [input, preview]),
-      el('p', { class: 'field__hint', text: 'One photograph of the room. Steeple will not publish a space it cannot show.' }),
+      el('p', { class: 'eyebrow', text: 'Photograph' }),
+      el('div', { class: 'shotpick__row' }, [tile, remove]),
     ]);
   }
 
@@ -626,25 +715,18 @@ export function createListingFlow({ announce, onChanged, onClose }) {
    */
   function welcomeField(activities) {
     const chips = el('div', { class: 'welcome__chips' });
-    const hint = el('p', { class: 'field__hint' });
 
+    // The chips are the sentence: what is on is what may ask. Nothing here says
+    // so in words — the footer already names what a listing still owes, which is
+    // where the host looks when the way forward is greyed out.
     function draw() {
       replaceChildren(
         chips,
         draft.room.welcomeAll
           ? []
-          : [toggleSet('Activities', ACTIVITY_TYPES, activities, () => {
-              hint.textContent = narrowHint();
-              renderFoot();
-            })]
+          : [toggleSet('Activities', ACTIVITY_TYPES, activities, () => renderFoot())]
       );
-      hint.textContent = draft.room.welcomeAll
-        ? 'Every kind of group may ask. You answer each request yourself.'
-        : narrowHint();
     }
-
-    const narrowHint = () =>
-      activities.size ? 'Turn off anything you cannot host.' : 'Leave at least one kind of group.';
 
     const choose = (all) => {
       // Narrowing starts from everything; going back to everyone remembers what
@@ -676,15 +758,17 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       );
 
     draw();
-    return el('div', { class: 'field welcome' }, [
-      el('p', { class: 'eyebrow', text: 'Who can use it' }),
-      el('div', { class: 'segments segments--flat', role: 'group', 'aria-label': 'Who can use it' }, [
-        segment('Everyone', true),
-        segment('Some activities only', false),
-      ]),
-      chips,
-      hint,
-    ]);
+    return chosen(
+      'Who can use it',
+      [
+        el('div', { class: 'segments segments--flat', role: 'group', 'aria-label': 'Who can use it' }, [
+          segment('Everyone', true),
+          segment('Some activities only', false),
+        ]),
+        chips,
+      ],
+      'welcome'
+    );
   }
 
   function availabilityStep() {
@@ -797,6 +881,13 @@ export function createListingFlow({ announce, onChanged, onClose }) {
 
   const FREE_NOTE = 'Steeple lists spaces by the hour, so a free space cannot be published yet.';
 
+  /** The brand's own mark, in the small form the desk uses. */
+  const verifiedChip = () =>
+    el('span', { class: 'verified verified--sm' }, [
+      el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
+      VERIFIED_LABEL,
+    ]);
+
   // Free is a price a host chose; an empty field is a price they have not
   // written yet. Both stop a listing going live, and they are not the same
   // sentence, so they are not the same question either.
@@ -823,7 +914,14 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     }
     if (!withSteeple()) return list;
     if (!manage.signedIn()) {
-      list.push({ id: 'session', step: 'verify', label: 'Sign in', text: 'A signed-in account to list it under.' });
+      // The only blocker with no field behind it: it is answered by the sign-in
+      // panel, over this flow, and the draft is still here afterwards.
+      list.push({
+        id: 'session',
+        label: 'Sign in',
+        text: 'A signed-in account to list it under.',
+        act: () => askToSignIn?.(),
+      });
     }
     if (!draft.room.photo) {
       list.push({ id: 'photo', step: 'describe', label: 'Add a photograph', text: 'A photograph. Steeple will not publish a space it cannot show.' });
@@ -862,6 +960,14 @@ export function createListingFlow({ announce, onChanged, onClose }) {
             ? draft.room.activities.join(', ')
             : 'Nothing chosen yet',
       }),
+      // The one disclosure the Verify step used to make, said where it matters:
+      // the host's name goes out with the listing, and the mark beside it is a
+      // fact about the session, never a decoration.
+      el('dt', { class: 'eyebrow', text: 'Listed by' }),
+      el('dd', { class: 'facts__by' }, [
+        el('span', { text: manage.whoAmI()?.displayName ?? 'You' }),
+        manage.signedIn() ? verifiedChip() : null,
+      ].filter(Boolean)),
     ]);
 
     if (state === 'published') {
@@ -915,7 +1021,9 @@ export function createListingFlow({ announce, onChanged, onClose }) {
                   type: 'button',
                   class: 'pill pill--primary pill--sm',
                   dataset: { action: `fix-${item.id}` },
-                  onclick: () => go(item.step),
+                  // Most of what is missing is a field on another step. The
+                  // session is not — it is answered where sign-in lives.
+                  onclick: () => (item.act ? item.act() : go(item.step)),
                 },
                 item.label
               )
@@ -1019,8 +1127,12 @@ export function createListingFlow({ announce, onChanged, onClose }) {
               type: 'button',
               class: 'pill pill--sm',
               dataset: { action: 'notice' },
-              // The reason travels with the host to the field it is about.
-              onclick: () => go(notice.action.step, { keepNotice: true }),
+              // The reason travels with the host to the field it is about —
+              // unless what it wants is not a field at all, but the sign-in.
+              onclick: () =>
+                notice.action.act
+                  ? notice.action.act()
+                  : go(notice.action.step, { keepNotice: true }),
             },
             notice.action.label
           )
@@ -1028,15 +1140,22 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     ]);
   }
 
+  /** The steps this way in actually has, in order. */
+  const steps = () => FLOWS[draft.entry];
+
   function reachable(id) {
-    if (draft.entry === 'room') return id !== 'place' && (id !== 'verify' || !manage.signedIn());
-    const order = STEPS.findIndex((s) => s.id === id);
-    const at = STEPS.findIndex((s) => s.id === step);
-    return order <= at || done.has(STEPS[order - 1]?.id);
+    const list = steps();
+    // A room that already exists can be looked at from any of its three steps —
+    // it has a name, hours and a state before this flow was ever opened.
+    if (draft.entry === 'room') return list.includes(id);
+    const order = list.indexOf(id);
+    const at = list.indexOf(step);
+    return order <= at || done.has(list[order - 1]);
   }
 
   function canAdvance() {
     if (busy) return false;
+    if (outcome) return true;
     if (step === 'place')
       return (
         draft.venue.name.trim().length > 1 &&
@@ -1045,7 +1164,6 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         draft.venue.suburb.trim().length > 1 &&
         draft.venue.postcode.trim().length > 2
       );
-    if (step === 'verify') return manage.signedIn();
     if (step === 'describe')
       return (
         draft.room.name.trim().length > 1 &&
@@ -1054,17 +1172,16 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         (draft.sets?.activities.size ?? draft.room.activities.length) > 0
       );
     if (step === 'availability') return openHoursFor(draft.venueId, draft.roomId).length > 0;
-    if (outcome) return true;
     return blockers().length === 0;
   }
 
   function advanceLabel() {
     if (busy) return 'Working…';
-    if (step === 'place') return 'Continue';
-    if (step === 'verify') return 'Describe the space';
+    if (outcome) return 'Done';
+    if (step === 'place') return draft.entry === 'venue-edit' ? 'Save changes' : 'Continue';
     if (step === 'describe') return 'Set availability';
     if (step === 'availability') return 'Review and publish';
-    return outcome ? 'Done' : 'Publish this space';
+    return 'Publish this space';
   }
 
   function footHint() {
@@ -1075,16 +1192,19 @@ export function createListingFlow({ announce, onChanged, onClose }) {
           ? 'Seats are counted in whole numbers.'
           : 'A name, a description, a capacity, and who may use it.';
       if (step === 'availability') return 'Paint at least one open window to carry on.';
-      if (step === 'verify') return 'Sign in from the top of the page to carry on — nothing you have written is lost.';
       if (step === 'publish') return blockers()[0]?.text ?? '';
     }
     return '';
   }
 
   function renderRail() {
+    // One step is not a journey: the venue editor is a form with a save on it,
+    // and a rail reading "1 Place" over it would be scaffolding around a door.
+    const list = steps();
+    rail.hidden = list.length < 2;
     replaceChildren(
       rail,
-      STEPS.map((entry, index) =>
+      list.map((id, index) =>
         el(
           'li',
           { class: 'steps__item' },
@@ -1092,17 +1212,17 @@ export function createListingFlow({ announce, onChanged, onClose }) {
             'button',
             {
               type: 'button',
-              class: `steps__step${entry.id === step ? ' is-on' : ''}${
-                done.has(entry.id) ? ' is-done' : ''
+              class: `steps__step${id === step ? ' is-on' : ''}${
+                done.has(id) ? ' is-done' : ''
               }`,
-              dataset: { step: entry.id },
-              'aria-current': entry.id === step ? 'step' : null,
-              disabled: busy || !reachable(entry.id),
-              onclick: () => go(entry.id),
+              dataset: { step: id },
+              'aria-current': id === step ? 'step' : null,
+              disabled: busy || !reachable(id),
+              onclick: () => go(id),
             },
             [
               el('span', { class: 'steps__num', 'aria-hidden': 'true', text: String(index + 1) }),
-              el('span', { text: entry.label }),
+              el('span', { text: STEP_LABEL[id] }),
             ]
           )
         )
@@ -1111,7 +1231,8 @@ export function createListingFlow({ announce, onChanged, onClose }) {
   }
 
   function renderFoot() {
-    const index = STEPS.findIndex((s) => s.id === step);
+    const list = steps();
+    const index = list.indexOf(step);
     const hint = footHint();
 
     replaceChildren(foot, [
@@ -1130,7 +1251,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
           },
           'Close'
         ),
-        index > 0 && reachable(STEPS[index - 1].id)
+        index > 0 && !outcome && reachable(list[index - 1])
           ? el(
               'button',
               {
@@ -1138,7 +1259,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
                 class: 'pill',
                 dataset: { action: 'back' },
                 disabled: busy,
-                onclick: () => go(STEPS[index - 1].id),
+                onclick: () => go(list[index - 1]),
               },
               'Back'
             )
@@ -1161,18 +1282,24 @@ export function createListingFlow({ announce, onChanged, onClose }) {
   /** Keep what this step is worth locally. The wire is asked for separately. */
   function commitStep() {
     if (step === 'place') {
+      // The mark follows the session, and the session is what the venue is
+      // being written under. It was the Verify step's one lasting act.
+      if (draft.entry === 'venue') draft.verified = manage.signedIn();
       mirrorVenue();
       announce?.(`${draft.venue.name} saved.`);
-    }
-    if (step === 'verify' && draft.entry === 'venue') {
-      draft.verified = manage.signedIn();
-      upsertPlacedVenue({ id: draft.venueId, verified: draft.verified });
     }
     if (step === 'describe') {
       if (draft.sets) {
         draft.room.amenities = [...draft.sets.amenities];
         draft.room.accessibility = [...draft.sets.access];
         draft.room.activities = [...draft.sets.activities];
+      }
+      // A space added to a venue already kept here has no id until now: it takes
+      // one from the name just written, and the venue's own record is where a
+      // room first exists at all — an edit over nothing writes nothing.
+      if (!draft.roomId) {
+        draft.roomId = freeRoomId(draft.venueId, draft.room.name);
+        mirrorVenue();
       }
       editRoom(draft.venueId, draft.roomId, {
         name: draft.room.name.trim(),
@@ -1198,7 +1325,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
   async function advance() {
     if (busy || !canAdvance()) return;
     // Once the answer is in, the button is a way out and nothing is in flight.
-    if (step === 'publish' && outcome) {
+    if (outcome) {
       close();
       return;
     }
@@ -1214,7 +1341,7 @@ export function createListingFlow({ announce, onChanged, onClose }) {
       }
       commitStep();
       const answer =
-        at === 'place' || at === 'verify'
+        at === 'place'
           ? await pushVenue()
           : at === 'describe'
             ? await pushRoom()
@@ -1227,11 +1354,29 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         return;
       }
       if (!answer.ok) reportProblem(answer);
-      step = STEPS[STEPS.findIndex((s) => s.id === at) + 1].id;
+      const list = steps();
+      const next = list[list.indexOf(at) + 1];
+      // No next step is an ending of its own: the venue editor's whole flow is
+      // this one save, so what follows is the answer to it and the way out.
+      if (next) step = next;
+      else if (answer.ok) settleEdit();
     } finally {
       busy = false;
       renderStep();
     }
+  }
+
+  /** The venue editor's ending — steeple agreed, and there is nowhere to go. */
+  function settleEdit() {
+    outcome = { state: 'saved' };
+    const at = draft.remote.position;
+    say(
+      at
+        ? `${draft.venue.name} is saved, ${bearingLine(at.lat, at.lng)}.`
+        : `${draft.venue.name} is saved.`,
+      'quiet'
+    );
+    announce?.(`${draft.venue.name} is saved.`);
   }
 
   function go(next, { keepNotice = false } = {}) {
@@ -1242,10 +1387,14 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     renderStep();
   }
 
-  function renderStep() {
+  /**
+   * Draw the step as it now stands, and nothing else. A session appearing or
+   * going redraws this much — the Publish step's list of what is missing is
+   * about the session — but must not take the focus off whatever asked for it.
+   */
+  function renderBody() {
     const build = {
       place: placeStep,
-      verify: verifyStep,
       describe: describeStep,
       availability: availabilityStep,
       publish: publishStep,
@@ -1253,63 +1402,99 @@ export function createListingFlow({ announce, onChanged, onClose }) {
     replaceChildren(body, build().filter(Boolean));
     renderRail();
     renderFoot();
+  }
+
+  function renderStep() {
+    const list = steps();
+    renderBody();
     body.scrollTop = 0;
     const first = body.querySelector('input, textarea, button, [tabindex="0"]');
     (first ?? sheet).focus({ preventScroll: true });
     announce?.(
-      `${STEPS.find((s) => s.id === step).label}, step ${STEPS.findIndex((s) => s.id === step) + 1} of ${STEPS.length}.`
+      list.length > 1
+        ? `${STEP_LABEL[step]}, step ${list.indexOf(step) + 1} of ${list.length}.`
+        : title.textContent
     );
   }
 
-  function open({ venueId = null, roomId = null, step: at = null } = {}) {
+  /** A blank space, ready to be described. */
+  const blankRoom = (name = 'Main space') => ({
+    name,
+    description: '',
+    capacity: 40,
+    pricePerHour: null,
+    houseRules: '',
+    amenities: [],
+    accessibility: [],
+    activities: [...ACTIVITY_TYPES],
+    welcomeAll: true,
+    photo: null,
+  });
+
+  /**
+   * Open on what the arguments describe.
+   *
+   *   {}                     a venue nobody has listed — the whole four steps
+   *   {venueId}              another space at a venue already kept here
+   *   {venueId, roomId}      the listing that space already has
+   *   {venueId, entry:'venue-edit'}   the venue's own details, over PATCH
+   */
+  function open({ venueId = null, roomId = null, step: at = null, entry: want = null } = {}) {
     const placed = placedVenues();
     const venue = venueId ? venueOf(venueId, placed) : null;
-    const room = venueId && roomId ? effectiveRoom(venueId, roomId) : null;
+    const room = venue && roomId ? effectiveRoom(venueId, roomId) : null;
     done = new Set();
     notice = null;
     outcome = null;
     busy = false;
 
-    if (venue && room) {
+    if (venue) {
       const address = splitAddress(venue.address, venue.suburb);
+      const editing = want === 'venue-edit';
       draft = {
-        entry: 'room',
+        entry: editing ? 'venue-edit' : room ? 'room' : 'add-room',
         venueId,
-        roomId,
+        roomId: room ? roomId : null,
         // The five villages steeple seeded have no manager on this API, so a
         // room inside one can only ever be listed in this browser's own record.
         localOnly: !venue.placed,
         offline: null,
-        // The mark follows the session, here as everywhere: editing a listing
+        // The mark is the venue's, and steeple gives it: standing at this desk
         // does not confer one, and this browser cannot award itself a fact.
-        verified: manage.signedIn(),
-        remote: { venueId: venue.remoteId ?? null, roomId: room.remoteId ?? null, position: null },
+        verified: venue.verified === true,
+        remote: { venueId: venue.remoteId ?? null, roomId: room?.remoteId ?? null, position: null },
         venue: {
           name: venue.name,
           description: venue.description ?? '',
           ...address,
         },
-        room: {
-          // "(coming soon)" and "listing is being prepared" are what discovery
-          // said while the space was a draft, not what the space is. The host
-          // is finishing the listing now, so both start clean.
-          name: withoutDraftNote(room.name),
-          description: withoutDraftNote(room.description ?? ''),
-          capacity: room.capacity,
-          // The store says free with a null; the field says it with a zero.
-          pricePerHour: room.pricePerHour ?? 0,
-          houseRules: room.houseRules ?? '',
-          amenities: [...room.amenities],
-          accessibility: [...room.accessibility],
-          activities: [...room.activities],
-          welcomeAll: room.activities.length === ACTIVITY_TYPES.length,
-          photo: room.photo ? { remoteUrl: room.photo, url: room.photo, name: 'Photograph', sent: true } : null,
-        },
+        // The venue editor has no space in hand at all — it is the property
+        // being written, not a room in it.
+        room: editing
+          ? null
+          : room
+            ? {
+                // "(coming soon)" and "listing is being prepared" are what
+                // discovery said while the space was a draft, not what the space
+                // is. The host is finishing the listing now, so both start clean.
+                name: withoutDraftNote(room.name),
+                description: withoutDraftNote(room.description ?? ''),
+                capacity: room.capacity,
+                // The store says free with a null; the field says it with a zero.
+                pricePerHour: room.pricePerHour ?? 0,
+                houseRules: room.houseRules ?? '',
+                amenities: [...room.amenities],
+                accessibility: [...room.accessibility],
+                activities: [...room.activities],
+                welcomeAll: room.activities.length === ACTIVITY_TYPES.length,
+                photo: room.photo
+                  ? { remoteUrl: room.photo, url: room.photo, name: 'Photograph', sent: true }
+                  : null,
+              }
+            : blankRoom(''),
       };
       if (venue.lat != null) draft.remote.position = { lat: venue.lat, lng: venue.lng };
-      done.add('place');
-      done.add('verify');
-      step = at ?? 'describe';
+      step = editing ? 'place' : (at ?? 'describe');
     } else {
       draft = {
         entry: 'venue',
@@ -1320,22 +1505,14 @@ export function createListingFlow({ announce, onChanged, onClose }) {
         verified: manage.signedIn(),
         remote: { venueId: null, roomId: null, position: null },
         venue: { name: '', description: '', addressLine: '', suburb: '', postcode: '' },
-        room: {
-          name: 'Main space',
-          description: '',
-          capacity: 40,
-          pricePerHour: null,
-          houseRules: '',
-          amenities: [],
-          accessibility: [],
-          activities: [...ACTIVITY_TYPES],
-          welcomeAll: true,
-          photo: null,
-        },
+        room: blankRoom(),
       };
       step = 'place';
     }
 
+    const head = HEAD[draft.entry];
+    eyebrow.textContent = head.eyebrow;
+    title.textContent = head.title(draft.venue.name, roomsHere(draft.venueId).length);
     element.hidden = false;
     renderStep();
     return true;
@@ -1348,11 +1525,15 @@ export function createListingFlow({ announce, onChanged, onClose }) {
   }
 
   // Capture on window: the flow owns Escape while it is open, wherever focus
-  // happens to be, and the journey never hears it.
+  // happens to be, and the journey never hears it — but not while something is
+  // open *over* it. The sign-in panel a blocker opens is a layer of its own, and
+  // Escape there belongs to it; closing the draft underneath as well would look
+  // like the work went with the panel.
   window.addEventListener(
     'keydown',
     (event) => {
       if (element.hidden || event.key !== 'Escape') return;
+      if (document.querySelector('.modal__layer:not([hidden])')) return;
       event.stopPropagation();
       event.preventDefault();
       close();

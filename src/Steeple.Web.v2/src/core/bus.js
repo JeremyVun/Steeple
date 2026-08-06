@@ -212,7 +212,7 @@ export function setHover(venueId = null, roomId = null) {
   bus.emit('hover:change', { venueId, roomId });
 }
 
-// Deep links: #/village · #/venue/<venueId> · #/room/<venueId>/<roomId>
+// Deep links: #/browse · #/venue/<venueId> · #/room/<venueId>/<roomId>
 //   · #/apply/<venueId>/<roomId> · #/journal · #/desk[/<venueId>]
 //   · #/letter/<applicationId>
 let applyingHash = false;
@@ -225,7 +225,7 @@ function syncHash() {
       : state.view === 'venue'
         ? `#/venue/${state.venueId}`
         : state.view === 'village'
-          ? '#/village'
+          ? '#/browse'
           : state.view === 'apply'
             ? `#/apply/${state.venueId}/${state.roomId}`
             : state.view === 'journal'
@@ -243,12 +243,13 @@ function syncHash() {
 export function applyHash() {
   if (typeof window === 'undefined') return;
   const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const isLegacyVillageRoute = parts[0] === 'village';
   applyingHash = true;
   if (parts[0] === 'room' && parts[1] && parts[2]) {
     setView('room', { venueId: parts[1], roomId: parts[2] });
   } else if (parts[0] === 'venue' && parts[1]) {
     setView('venue', { venueId: parts[1] });
-  } else if (parts[0] === 'village') {
+  } else if (parts[0] === 'browse' || isLegacyVillageRoute) {
     setView('village');
   } else if (parts[0] === 'apply' && parts[1] && parts[2]) {
     setView('apply', { venueId: parts[1], roomId: parts[2] });
@@ -260,4 +261,5 @@ export function applyHash() {
     setView('letter', { applicationId: parts[1] });
   }
   applyingHash = false;
+  if (isLegacyVillageRoute) syncHash();
 }

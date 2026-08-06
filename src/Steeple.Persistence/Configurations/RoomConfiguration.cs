@@ -8,7 +8,9 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<Room> builder)
     {
-        builder.ToTable("rooms");
+        builder.ToTable("rooms", table => table.HasCheckConstraint(
+            "CK_rooms_operator_unlisted_not_published",
+            "\"Status\" <> 1 OR \"OperatorUnlistedAtUtc\" IS NULL"));
 
         builder.HasKey(r => r.Id);
 
@@ -16,6 +18,7 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
         builder.Property(r => r.Slug).IsRequired().HasMaxLength(160);
         builder.Property(r => r.Description).HasMaxLength(4000);
         builder.Property(r => r.HouseRules).HasMaxLength(4000);
+        builder.Property(r => r.OperatorUnlistedBy).HasMaxLength(320);
 
         builder.Property(r => r.PricePerHour).IsRequired().HasPrecision(10, 2);
         builder.Property(r => r.Currency).IsRequired().HasMaxLength(3);
@@ -32,6 +35,7 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
         // Moderation-queue scans touch only flagged rows (partial indexes in 006-manage.sql).
         builder.HasIndex(r => r.PublishRequestedAtUtc).HasFilter("\"PublishRequestedAtUtc\" IS NOT NULL");
         builder.HasIndex(r => r.ProviderEditedAtUtc).HasFilter("\"ProviderEditedAtUtc\" IS NOT NULL");
+        builder.HasIndex(r => r.OperatorUnlistedAtUtc).HasFilter("\"OperatorUnlistedAtUtc\" IS NOT NULL");
 
         // Slugs are unique within a venue (venueSlug + roomSlug forms the public URL).
         builder.HasIndex(r => new { r.VenueId, r.Slug }).IsUnique();

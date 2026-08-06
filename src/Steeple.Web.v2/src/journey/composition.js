@@ -161,6 +161,13 @@ export function createCompositions(engine, world) {
     return out.set(Math.sin(azimuth) * c, Math.sin(el), Math.cos(azimuth) * c).normalize();
   }
 
+  // Normally the window's own aspect — but the fit is a function of it, so the
+  // boot may pin it to the poster photograph's aspect for a moment: the first
+  // live frame then stands exactly where the photograph was taken from, and
+  // the journey eases this back to null once the crossfade has landed
+  // (journey/index.js). Null means the camera's truth.
+  let fitAspect = null;
+
   /**
    * Smallest distance along `dir` that keeps the whole bounding box inside the
    * frame. Exact: lateral/vertical offsets in the camera basis do not change as
@@ -168,7 +175,7 @@ export function createCompositions(engine, world) {
    */
   function fitBounds(fov, fx, fy, fill) {
     const ty = Math.tan(fov * 0.5 * DEG) * fill * (1 - Math.abs(fy));
-    const tx = ty * camera.aspect * (1 - Math.abs(fx));
+    const tx = ty * (fitAspect ?? camera.aspect) * (1 - Math.abs(fx));
     let d = 1;
     for (let i = 0; i < fitCount; i++) {
       _v.subVectors(fitPoints[i], center);
@@ -186,7 +193,7 @@ export function createCompositions(engine, world) {
   /** The same exact fit as `fitBounds`, for one box around one subject. */
   function fitBox(box, subject, fov, fx, fy, fill) {
     const ty = Math.tan(fov * 0.5 * DEG) * fill * (1 - Math.abs(fy));
-    const tx = ty * camera.aspect * (1 - Math.abs(fx));
+    const tx = ty * (fitAspect ?? camera.aspect) * (1 - Math.abs(fx));
     let d = 1;
     for (let i = 0; i < 8; i++) {
       _corner.set(
@@ -528,6 +535,10 @@ export function createCompositions(engine, world) {
     center,
     bounds,
     remeasure: measure,
+    /** Pin (or release, with null) the aspect every fit composes against. */
+    setFitAspect(aspect) {
+      fitAspect = aspect;
+    },
     /** Fill `pose` with the composition this view wants right now. */
     evaluate(pose, view, venueId, roomId, elapsed) {
       trackFocus(elapsed);

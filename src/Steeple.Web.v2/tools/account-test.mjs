@@ -299,7 +299,15 @@ await wait(1200);
 await clickOn('.account');
 await wait(300);
 check('the card offers a way out', await visible('.account__out'));
-check('and the shared-computer one', await visible('.account__all'));
+check(
+  'and no global sign-out action',
+  await page.evaluate(
+    () =>
+      ![...document.querySelectorAll('#account-card button')].some(
+        (button) => button.textContent?.trim() === 'Sign out everywhere'
+      )
+  )
+);
 await page.screenshot({ path: '/tmp/steeple-webp1-card.png' });
 // Held for the replay below. Only the harness can read this: it is httpOnly, so
 // the page itself has no way to, which is the point of §4's first checks.

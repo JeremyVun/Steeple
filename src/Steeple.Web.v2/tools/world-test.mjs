@@ -274,7 +274,7 @@ for (const style of styles) {
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   // `#/desk/...` would land in the village now — hosting is somebody's, and
   // this page is nobody (D4). The village is where this half of the story is.
-  await page.goto(`${base}/?style=diorama&q=low#/village`, {
+  await page.goto(`${base}/?style=diorama&q=low#/browse`, {
     waitUntil: 'networkidle0',
   });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });

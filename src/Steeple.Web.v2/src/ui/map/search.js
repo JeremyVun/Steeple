@@ -17,6 +17,7 @@
 // the whole query instead, and emits the same shape (CONTRACT4 §2).
 
 import { bus, state } from '../../core/bus.js';
+import { afterBoot } from '../../core/idle.js';
 import { getGeofence, getSuburbs, readFailure, searchListings } from '../../data/catalog.js';
 import { resultLine } from '../copy.js';
 import { el } from '../dom.js';
@@ -308,28 +309,32 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     }
   });
 
-  // A refused read leaves the vocabulary as it stands: an empty typeahead over
-  // "the whole area" is a control with nothing to offer yet, and the seed's
-  // suburbs would be a list of places this search cannot actually look in.
-  getSuburbs()
-    .then((list) => {
-      suburbs = list;
-      if (openSegment === 'where') renderSuburbs();
-    })
-    .catch(() => {});
+  // The Where segment's own vocabulary, read once — called with the opening
+  // search, after the boot's traffic (see the foot of this file).
+  function vocabulary() {
+    // A refused read leaves the vocabulary as it stands: an empty typeahead over
+    // "the whole area" is a control with nothing to offer yet, and the seed's
+    // suburbs would be a list of places this search cannot actually look in.
+    getSuburbs()
+      .then((list) => {
+        suburbs = list;
+        if (openSegment === 'where') renderSuburbs();
+      })
+      .catch(() => {});
 
-  // The search area names itself. Until it answers the segment says "Anywhere
-  // nearby", which is true of every geofence steeple could hand back.
-  getGeofence()
-    .then((fence) => {
-      const named = String(fence?.areaName ?? '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-      if (!named) return;
-      anywhere = named;
-      whereInput.setAttribute('placeholder', named);
-      whereInput.setAttribute('aria-label', `Where — ${named}. Search a suburb.`);
-      if (openSegment === 'where') renderSuburbs();
-    })
-    .catch(() => {});
+    // The search area names itself. Until it answers the segment says "Anywhere
+    // nearby", which is true of every geofence steeple could hand back.
+    getGeofence()
+      .then((fence) => {
+        const named = String(fence?.areaName ?? '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+        if (!named) return;
+        anywhere = named;
+        whereInput.setAttribute('placeholder', named);
+        whereInput.setAttribute('aria-label', `Where — ${named}. Search a suburb.`);
+        if (openSegment === 'where') renderSuburbs();
+      })
+      .catch(() => {});
+  }
 
   // ── when ───────────────────────────────────────────────────────────────────
 
@@ -648,7 +653,14 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
   }
 
   paint();
-  search();
+  // The opening question and the Where vocabulary go to steeple only once the
+  // boot's own traffic has had the wire (core/idle.js): none of it is on the
+  // title page, and the rows' photographs are most of what it downloads. A
+  // visitor who rolls down early is the signal to ask right then.
+  afterBoot(() => {
+    vocabulary();
+    search();
+  });
 
   return {
     element,

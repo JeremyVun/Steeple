@@ -11,8 +11,8 @@ The API, mobile app, and deprecated web v1 reference implement the full two-side
 geo-fenced discovery → SSO → apply → provider decision → booking with DB-enforced
 no-double-booking, notifications, cancellation, and no-show handling. Active web v2 uses
 the real API for catalog, application submit, and provider listing creation, but its inbox,
-request decisions, and production SSO are still integration work. Admin moderates each host's
-first listing; everything that host lists afterwards publishes itself.
+request decisions, and production SSO are still integration work. Admin moderates the first
+listing at each newly claimed venue; later rooms at that venue publish themselves.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
 screen, FCM push, and the analytics/flags client proxies. The deprecated web v1 source still
@@ -58,8 +58,8 @@ registered as project-wide global usings per csproj.
 Controllers are thin HTTP edges; `Services/` own use-case logic and define **port**
 interfaces for everything external; `Proxies/` implement them. `AddSteepleApi`
 (`Extensions/ServiceCollectionExtensions.cs`) wires adapters into the container.
-Cross-cutting: forwarded headers (real client IPs + `X-Forwarded-Prefix` behind caddy) →
-rate limiting → JwtBearer auth (`MapInboundClaims=false`) → ProblemDetails errors.
+Cross-cutting: trusted forwarded headers (one canonical client IP/proto from caddy → nginx) →
+JwtBearer auth (`MapInboundClaims=false`) → rate limiting → ProblemDetails errors.
 
 | Port | Adapter |
 |---|---|
@@ -69,19 +69,19 @@ rate limiting → JwtBearer auth (`MapInboundClaims=false`) → ProblemDetails e
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (structured JSON line → stdout → Promtail/Loki) |
 | `IIdTokenVerifier` ×2 | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery; fail-closed without client ids) |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
-| `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; `Auth:Jwt:SigningKey` required at startup) |
+| `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; key required; known repository keys rejected in Production) |
 | `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
 | `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM data-message push per recipient) |
-| `IEmailGateway` | `ResendEmailGateway` (HTTP API; log-only without `Email:ApiKey`) |
+| `IEmailGateway` | `ResendEmailGateway` (HTTP API; no-send/no-PII-log without `Email:ApiKey`) |
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) / `LoggingPushGateway` when unconfigured |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save) |
 | `IPaymentGateway` | `MockPaymentGateway` (mock era — instant success, synthetic ids, card ending 0002 declines; the Stripe adapter is the drop-in at Stripe-time) |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first payment rows under the one-live-payment partial unique index; SQLSTATE 23505 → lost claim; session advisory lock for the sweep) |
 | `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only — Admin writes the venue↔manager links) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
-| `IImageProcessor` | `ImageSharpImageProcessor` (decode-as-validation, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 content-addressed keys; pinned to ImageSharp 3.1.x — SYSTEM_DESIGN §17) |
+| `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-slot processing cap, auto-orient, metadata strip, JPEG variants; ImageSharp 3.1.x) |
 | `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) / `LocalDiskMediaStore` (dev fallback, served at `/media`) — chosen at startup by whether `Media:ServiceUrl` etc. are configured |
 
 ## Modules (as built)
@@ -165,6 +165,9 @@ same slice: `venues.BookingMode` (instant default, host-set via Manage) makes an
 venue's submit *be* the booking transaction — same one-`SaveChanges` machinery and exclusion
 constraint as approval; a lost race answers `409 slot_taken` with nothing persisted. Public
 listing detail emits the *effective* mode (manual while the flag is off).
+The Payments controller is removed from endpoint discovery outside Development while mock is
+the only gateway. Production startup rejects `payments.enabled=true` with `Payments:Gateway=mock`, and changeset
+017 clears synthetic provider state before a real gateway can use the tables.
 
 **Ratings** — Phase 6 Slice 1. `POST /bookings/{id}/ratings` writes one immutable
 rating per booking direction (`RateeType = Venue` for organizer→venue,
@@ -186,19 +189,19 @@ externally-hosted/signed document links only, not raw deed/lease/ID contents. A 
 no decision of its own any more: it is evidence shown inside the first-listing review, and the
 listing decision marks it decided. Slugs (`Utils/Slugs.cs`) are derived once from the name and
 **immutable** — renames never break a shared listing URL.
-**Moderation model** (single gate, `v2_migration` D2, 2026-08-05): the human gate is a
-**host's first listing**, not every listing, and the whole rule lives in `ManageService` —
-Admin only performs the decision. A publish request that clears the automatic gates (≥1 photo,
-open hours behind `manage.open_hours_required`, geofence) either:
-publishes immediately when the caller is a **trusted host** — derived, not stored: they
-manage ≥1 room with `FirstPublishedAtUtc` set (`IManageRepository.IsTrustedHostAsync`) — or
-stamps `PublishRequestedAtUtc` and waits in the Admin review queue. Admin's approval sets
-`Published` + `FirstPublishedAtUtc` (once, ever), which is what makes the host trusted.
+**Moderation model** (venue-scoped gate, hardened 2026-08-06): the human gate is an
+**unverified venue's first listing**, and the whole rule lives in `ManageService` — Admin only
+performs the decision. A publish request that clears the automatic gates (≥1 photo, open hours
+behind `manage.open_hours_required`, geofence) publishes immediately only when that venue is
+already verified; otherwise it stamps `PublishRequestedAtUtc` and waits. Admin approval sets
+`Published` + `FirstPublishedAtUtc` and verifies that venue, permitting its later rooms without
+granting the manager global trust at unrelated venues.
 **Invariant: published ⇒ venue verified** — every route to `Published` sets
 `Venue.IsIdentityVerified`, in `ManageService` and in Admin's decision alike. Auto-publishes
-emit `listing_moderated` with `actor: "auto:trusted_host"` so the moderation funnel stays
-complete. After first publish, unlist/relist is entirely provider-controlled — no further
-gate; the operator's only listing lever is Admin's Unlist takedown. Edits to an
+emit `listing_moderated` with `actor: "auto:verified_venue"` so the moderation funnel stays
+complete. Ordinary unlist/relist stays provider-controlled, but Admin's Unlist takedown stamps
+`OperatorUnlistedAtUtc/By`; managers receive `409 operator_unlisted` until an operator clears
+it. Takedowns apply even with existing bookings, which remain separate commitments. Edits to an
 already-published
 room apply immediately but stamp `ProviderEditedAtUtc`, which is Admin's after-the-fact review
 signal, not a block. Both timestamp columns (006-manage.sql) carry partial indexes so the
@@ -233,8 +236,9 @@ shaping** for guests and hosts; the `booking_occurrences` exclusion constraint r
 the only booking authority.
 
 **Media** (Phase 5) — photo upload for managed rooms, same venue-manager scoping. `Upload`
-decodes the file (failure → `400 invalid_image`, this *is* the content validation),
-auto-orients from EXIF, strips all metadata (EXIF/XMP/IPTC — GPS included), re-encodes JPEG
+identifies headers before decoding and rejects multi-frame, >12,000px, or >30 MP sources;
+only two images process concurrently. Accepted files auto-orient from EXIF, strip all metadata
+(EXIF/XMP/IPTC — GPS included), and re-encode JPEG
 variants at 400/800/1600px (`ImageSharpImageProcessor`, never upscaling a smaller source), and
 keys the stored objects by a SHA-256 content hash. `IMediaStore` is `S3MediaStore` (DO Spaces,
 public-read/CDN) when `Media:ServiceUrl`/bucket/keys are configured, else `LocalDiskMediaStore`
@@ -407,9 +411,9 @@ Web + Admin can sit under a sub-path (e.g. `jeremyvun.com/steeple`) or a domain 
   whole prefix); Admin `handle /steeple/admin*` + `uri strip_prefix /steeple` (keeps the
   app's own `/admin` segment). Admin receives `X-Forwarded-Prefix: /steeple`.
 
-> **Trust note:** the ASP.NET apps clear `KnownProxies`/`KnownIPNetworks`, so forwarded headers
-> are trusted from any source. Keep the containers reachable **only via caddy** (don't
-> publish dev host ports publicly) so the prefix can't be spoofed.
+> **Trust boundary:** caddy overwrites forwarding headers; nginx accepts real-IP input only from
+> private Docker peers and emits one canonical address; the API accepts one forwarded hop only
+> from loopback/private Docker networks. Directly supplied forwarding headers are ignored.
 
 Compose runs the ASP.NET containers in **Production** and serves web from nginx; only
 web/admin publish general host ports. nginx proxies `/api` over the private Compose network.
@@ -419,6 +423,16 @@ stack has no Spaces credentials configured and falls back to `LocalDiskMediaStor
 API serves itself at `/media`). It's dev-only, not reachable off the host, and unnecessary once
 `MEDIA_*` env vars point at real Spaces (deviation from the "api compose-internal" rule —
 SYSTEM_DESIGN §17). The api's `steeple_api_media` volume backs that local-disk store.
+
+For the local Development deployment, `./deploy.sh` keeps only Postgres and the one-shot
+Liquibase migration in Compose, then supervises the API (prefers `:5200`), Admin (prefers
+`:5198`) and the Web v2 Vite server (prefers `:5173`) as host processes. Occupied default ports
+are replaced with the next free loopback port. It waits for each HTTP health endpoint before
+declaring the stack ready and stops all three app processes together on Ctrl-C; Postgres stays
+up for the next run. The script uses the checked-in development database credentials and does
+not load a repository `.env`, so deployed credentials cannot leak into the local loop. The
+`STEEPLE_{POSTGRES,API,ADMIN,WEB}_PORT` overrides force exact ports; every selected port is
+propagated to connection strings, media URLs, email links, CSP and the Vite proxy.
 
 ### The web container's nginx (`src/Steeple.Web.v2/nginx.conf`)
 
@@ -443,6 +457,9 @@ The SPA has no server of its own, so its host sets everything a static host must
   it. `script-src 'self'` needs no exception: the bundle contains no inline `<script>`.
   No directive names a path, so the policy is unchanged behind a stripped sub-path prefix.
   `/api/` adds no headers at all — the API answers for its own responses.
+- **Proxy abuse controls** — real-IP/proto input is trusted only from private Docker peers;
+  nginx emits one canonical `X-Forwarded-For` value and caps `/api/` at 5 req/s (burst 30).
+  The API independently applies 300/min total per account/IP and 120/min/IP to discovery.
 - ⚠ **Coupling:** uploaded room photos are served from `Media:PublicBaseUrl` and stored as
   absolute URLs. While that is the web origin they are covered by `'self'`; pointing it at
   a CDN or Spaces bucket means adding that origin to `img-src` or every uploaded photo

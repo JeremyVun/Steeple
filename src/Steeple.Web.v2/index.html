@@ -17,10 +17,66 @@
     <link rel="stylesheet" href="/src/styles/panels.css" />
     <link rel="stylesheet" href="/src/styles/guest.css" />
     <link rel="stylesheet" href="/src/styles/host.css" />
+    <style>
+      /* Paper, not white, on the frames before the stylesheet lands. */
+      html {
+        background: #fbf7f0;
+      }
+    </style>
   </head>
   <body>
+    <!-- The village's own opening frame, photographed once per frame shape at
+         the shape's widest aspect (tools/poster.mjs — a re-run prints this
+         whole block; paste it). One poster per aspect because the camera
+         composes by aspect; the live render opens composed against the chosen
+         photograph's aspect and eases to the window's own once the crossfade
+         has landed (journey/index.js), which is what makes the handoff
+         seamless. It stands under the transparent canvas so the first paint is
+         the real splash artwork; main.js retires it. -->
+    <picture id="poster" aria-hidden="true">
+      <source media="(min-aspect-ratio: 15/8)" srcset="assets/poster-village-2585x1100.acc3dcde.webp" />
+      <source media="(min-aspect-ratio: 33/20)" srcset="assets/poster-village-2400x1280.5bf5bd54.webp" />
+      <source media="(min-aspect-ratio: 29/20)" srcset="assets/poster-village-2376x1440.aa8cf4c8.webp" />
+      <source media="(min-aspect-ratio: 23/20)" srcset="assets/poster-village-2088x1440.89ed72fe.webp" />
+      <source media="(min-aspect-ratio: 4/5)" srcset="assets/poster-village-1656x1440.1cdbef47.webp" />
+      <source media="(min-aspect-ratio: 5/8)" srcset="assets/poster-village-1280x1600.5a0d6911.webp" />
+      <img src="assets/poster-village-1000x1600.47c6db44.webp" fetchpriority="high" decoding="async" alt="" />
+    </picture>
     <canvas id="scene" aria-hidden="true"></canvas>
-    <div id="ui"></div>
+    <div id="ui">
+      <!-- The title page, printed into the document so it is on screen before a
+           byte of JavaScript has arrived. ui/arrival.js adopts this markup and
+           wires the buttons rather than rebuilding it; its shape and words are
+           the build path in that file and ui/copy.js ARRIVAL — change all three
+           together. -->
+      <div id="arrival" class="arrival is-open">
+        <div class="arrival__sheet">
+          <p class="eyebrow arrival__eyebrow">Community space in Northern Virginia</p>
+          <div class="arrival__mark">
+            <svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true" focusable="false">
+              <path
+                d="M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <h1 class="arrival__wordmark">Steeple</h1>
+          <p class="arrival__line">
+            Affordable halls, studios and gyms to rent by the hour from neighborhood venues —
+            for playgroups, classes, rehearsals and clubs.
+          </p>
+          <div class="arrival__actions">
+            <button type="button" class="pill pill--primary arrival__cta">Find a space</button>
+            <button type="button" class="pill arrival__host">Host a space</button>
+          </div>
+          <p class="arrival__hint">Or scroll to browse the spaces nearby.</p>
+          <button type="button" class="arrival__scroll" aria-label="Scroll down to the spaces nearby">
+            <span class="arrival__thread" aria-hidden="true"></span>
+            <span class="arrival__chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+    </div>
     <div id="a11y" class="visually-hidden" aria-live="polite"></div>
     <script type="module" src="/src/main.js"></script>
   </body>

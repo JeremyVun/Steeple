@@ -56,7 +56,7 @@ async function clickText(selector, pattern, label) {
   return false;
 }
 
-await ready(`${url}#/village`);
+await ready(`${url}#/browse`);
 console.log('boot view:', await state('view'));
 
 // The chips are behind the search pill's funnel now — the segment is the

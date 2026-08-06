@@ -49,12 +49,8 @@ internal static class RefreshTokenCookie
     };
 
     /// <summary>
-    /// True when the person's connection is https. The deployed edge (caddy) terminates TLS and
-    /// forwards plain http, so the header is the only witness — read directly rather than through
-    /// ForwardedHeaders, which is configured for <c>X-Forwarded-For</c> alone and whose proto
-    /// handling would change <c>Request.IsHttps</c> for every other surface in the API.
+    /// True when the person's connection is https. Trusted forwarded-proto processing has already
+    /// updated <see cref="HttpRequest.IsHttps"/> before controllers run.
     /// </summary>
-    private static bool IsHttps(HttpRequest request) =>
-        request.IsHttps
-        || string.Equals(request.Headers["X-Forwarded-Proto"].ToString(), "https", StringComparison.OrdinalIgnoreCase);
+    private static bool IsHttps(HttpRequest request) => request.IsHttps;
 }

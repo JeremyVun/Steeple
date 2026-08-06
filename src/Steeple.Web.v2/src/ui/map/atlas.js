@@ -19,6 +19,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { setHover, setView, state } from '../../core/bus.js';
+import { afterBoot } from '../../core/idle.js';
 import { AREA_CENTER, knownVenues } from '../../data/catalog.js';
 import { placedVenues } from '../../data/store.js';
 import { priceBand, publishedRooms } from '../copy.js';
@@ -113,6 +114,10 @@ export function createAtlas() {
   L.control.zoom({ position: 'topright' }).addTo(map);
   map.attributionControl.setPrefix('');
 
+  // Added with the map, not deferred behind the boot (core/idle.js) like the
+  // opening search is: without a grid layer, the early framing of the
+  // not-yet-sized container settles a NaN zoom that throws at the next
+  // invalidateSize and takes the whole boot down (Leaflet 1.9, 2026-08-06).
   L.tileLayer(TILES, {
     maxZoom: 19,
     minZoom: 9,

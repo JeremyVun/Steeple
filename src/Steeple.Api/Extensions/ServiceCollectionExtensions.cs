@@ -18,7 +18,10 @@ public static class ServiceCollectionExtensions
     /// Registers all Steeple API services and binds the geofence options (the "Geofence" section
     /// and the "SteepleDb" connection string).
     /// </summary>
-    public static IServiceCollection AddSteepleApi(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddSteepleApi(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         services.Configure<GeofenceOptions>(configuration.GetSection(GeofenceOptions.SectionName));
 
@@ -38,9 +41,9 @@ public static class ServiceCollectionExtensions
         // see docs/ANALYTICS.md) -> singleton.
         services.AddSingleton<IAnalyticsSink, StdoutLogAnalyticsSink>();
 
-        services.AddSteepleIdentity(configuration);
-        services.AddSteepleApplications(configuration);
-        services.AddSteeplePayments(configuration);
+        services.AddSteepleIdentity(configuration, environment);
+        services.AddSteepleApplications(configuration, environment);
+        services.AddSteeplePayments(configuration, environment);
         services.AddSteepleManage(configuration);
         services.AddSteepleAvailability();
         services.AddSteepleMedia(configuration);
@@ -58,9 +61,25 @@ public static class ServiceCollectionExtensions
     /// and the <see cref="PaymentSweeper"/> (the first background worker; SYSTEM_DESIGN §17).
     /// Swapping <see cref="MockPaymentGateway"/> for the Stripe adapter is the whole Stripe cost.
     /// </summary>
-    private static IServiceCollection AddSteeplePayments(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddSteeplePayments(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         services.Configure<PaymentsOptions>(configuration.GetSection(PaymentsOptions.SectionName));
+
+        var payments = configuration.GetSection(PaymentsOptions.SectionName).Get<PaymentsOptions>() ?? new PaymentsOptions();
+        var paymentsEnabled = configuration.GetValue<bool>("Flags:payments.enabled");
+        if (!string.Equals(payments.Gateway, PaymentsOptions.MockGateway, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Unsupported payment gateway '{payments.Gateway}'.");
+        }
+
+        if (environment.IsProduction() && paymentsEnabled)
+        {
+            throw new InvalidOperationException(
+                "Production cannot enable 'payments.enabled' while Payments:Gateway is 'mock'.");
+        }
 
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IPaymentRepository, EfPaymentRepository>();
@@ -186,7 +205,10 @@ public static class ServiceCollectionExtensions
     /// Applications + Notifications + Manage modules (SYSTEM_DESIGN §4, ROADMAP Phase 2): the
     /// apply → decide state machine, venue-manager authz reads, the inbox, and email fan-out.
     /// </summary>
-    private static IServiceCollection AddSteepleApplications(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddSteepleApplications(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
 
@@ -212,7 +234,7 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<ResendEmailGateway>();
 
         var email = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
-        if (email.DevMailboxEnabled)
+        if (environment.IsDevelopment() && email.DevMailboxEnabled)
         {
             // Development only (the flag lives in appsettings.Development.json): the real gateway
             // still runs, with every send also captured for /dev/mailbox to render.
@@ -270,10 +292,18 @@ public static class ServiceCollectionExtensions
     /// Identity module (SYSTEM_DESIGN §6): SSO ID-token verifiers, the API's own token issuance,
     /// bearer validation of self-issued access tokens, and the Turnstile abuse gate.
     /// </summary>
-    private static IServiceCollection AddSteepleIdentity(this IServiceCollection services, IConfiguration configuration)
+    private static IServiceCollection AddSteepleIdentity(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
         services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.SectionName));
         services.Configure<TurnstileOptions>(configuration.GetSection(TurnstileOptions.SectionName));
+
+        // Validate eagerly during composition so a missing/known Production key prevents the
+        // process from starting, rather than waiting for the first authenticated request.
+        var auth = configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+        _ = JwtAccessTokenIssuer.CreateSigningKey(auth.Jwt, environment.IsProduction());
 
         services.AddSingleton(TimeProvider.System);
 
@@ -309,7 +339,7 @@ public static class ServiceCollectionExtensions
 
         services
             .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
-            .Configure<IOptions<AuthOptions>>((bearer, auth) =>
+            .Configure<IOptions<AuthOptions>, IHostEnvironment>((bearer, auth, environment) =>
             {
                 var jwt = auth.Value.Jwt;
                 bearer.MapInboundClaims = false;
@@ -317,7 +347,7 @@ public static class ServiceCollectionExtensions
                 {
                     ValidIssuer = jwt.Issuer,
                     ValidAudience = jwt.Audience,
-                    IssuerSigningKey = JwtAccessTokenIssuer.CreateSigningKey(jwt),
+                    IssuerSigningKey = JwtAccessTokenIssuer.CreateSigningKey(jwt, environment.IsProduction()),
                     ValidateIssuerSigningKey = true,
                     ValidateLifetime = true,
                 };

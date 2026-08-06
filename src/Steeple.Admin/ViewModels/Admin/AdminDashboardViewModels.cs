@@ -16,7 +16,7 @@ public sealed record AdminListingRow(
     int ActiveBookings);
 
 /// <summary>
-/// A room awaiting the one human gate: a host's first listing (`v2_migration/design.md` D2).
+/// A room awaiting the venue-scoped human gate: the first listing at an unverified venue.
 /// Carries everything the decision needs — listing preview, venue, and any evidence the host
 /// submitted — because approve/decline is a single decision with no separate verification step.
 /// </summary>

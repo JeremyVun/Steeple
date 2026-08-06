@@ -21,6 +21,7 @@ owned by Liquibase) · EF Core (database-first) · Flutter mobile · self-hosted
 ## Prerequisites
 
 - **.NET SDK 10**
+- **Node.js + npm** (Web v2 development server)
 - **Docker** (Postgres + the one-shot Liquibase migrate service; also Testcontainers for integration tests)
 - _(optional)_ `psql` for poking the database
 
@@ -31,7 +32,12 @@ owned by Liquibase) · EF Core (database-first) · Flutter mobile · self-hosted
 docker compose up -d --build
 # Web  → http://localhost:8080        Admin → http://localhost:8082/admin
 
-# Or the local dev loop (hot reload):
+# Or run the complete Development loop (Ctrl-C stops the apps; Postgres stays up):
+./deploy.sh
+# Uses 5173/5198/5200 when available and prints the alternatives it selects when they are not.
+# STEEPLE_{POSTGRES,WEB,ADMIN,API}_PORT forces a specific port instead.
+
+# The equivalent manual commands:
 docker compose up -d postgres migrate      # provision + seed the DB
 dotnet run --project src/Steeple.Api     # http://localhost:5200
 npm run dev --prefix src/Steeple.Web.v2  # http://localhost:5173 (proxies /api to :5200)

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Steeple.Api.Services.Flags;
 
 namespace Steeple.Api.Controllers;
@@ -9,6 +10,7 @@ namespace Steeple.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/flags")]
+[EnableRateLimiting(RateLimitPolicies.Discovery)]
 public sealed class FlagsController : ControllerBase
 {
     private readonly IPublicFlagsService _flags;

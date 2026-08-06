@@ -14,7 +14,10 @@ exists anywhere, ids are synthetic (`cus_mock_… / seti_mock_… / pi_mock_… 
 one lever makes failure paths testable — **a saved card ending `0002` declines every charge**
 (Stripe's decline test card, so the convention survives the swap). Swapping in
 `StripePaymentGateway` behind the same `IPaymentGateway` port is the entire Stripe cost; every
-non-`mock-*` wire shape below is final. Endpoints marked *(mock-only)* retire at Stripe-time.
+non-`mock-*` wire shape below is final. While mock is the only registered gateway, the entire
+Payments controller is mapped only in Development; Production exposes no synthetic provider
+surface. Startup also fails when `payments.enabled=true` while
+`Payments:Gateway=mock`, and migration 017 removes synthetic provider state before rollout.
 
 **Behavioral switch:** config flag **`payments.enabled`** (off in base config, on in
 Development). Off = the pre-payments request→approve loop exactly as before: no 402 gate, no
@@ -35,7 +38,7 @@ make double-charging impossible by construction.
   mock: true}`. Ensures the caller's provider customer and opens a setup intent. At
   Stripe-time the same two fields feed Stripe Elements; `mock: true` tells clients to render
   the mock card form instead.
-- `POST /api/v1/me/payments/setup/mock-confirm` ✅ *(mock-only — Elements' confirm step
+- `POST /api/v1/me/payments/setup/mock-confirm` ✅ *(Development-only — Elements' confirm step
   replaces it)* — `{clientSecret, brand, last4}` → `200 MyPayments`. Records display data
   only. Errors: `400 invalid_payment` (bad last4/brand/unknown clientSecret).
 - `GET /api/v1/me/payments` ✅ → `MyPayments`: `{hasPaymentMethod, method?{brand, last4,
@@ -97,7 +100,7 @@ policy page): venue-no-show auto-refund, goodwill refund endpoint
   (`mock-onboarding:acct_mock_…`) is **not navigable** — mock-era clients render their own
   screen and complete via the endpoint below; at Stripe-time `url` is the Stripe-hosted
   account-link URL, consumed unchanged.
-- `POST …/payments/onboarding/mock-complete` ✅ *(mock-only)* — one call collapses hosted KYC
+- `POST …/payments/onboarding/mock-complete` ✅ *(Development-only)* — one call collapses hosted KYC
   + `account.updated` webhooks + the opt-in switch: flips `detailsSubmitted/chargesEnabled/
   payoutsEnabled` and stamps the opt-in. `400 invalid_payment` before onboarding starts.
 - `GET …/payments` ✅ → `{onboardingStarted, detailsSubmitted, chargesEnabled, payoutsEnabled,

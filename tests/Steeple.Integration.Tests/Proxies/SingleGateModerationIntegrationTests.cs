@@ -12,10 +12,10 @@ namespace Steeple.Integration.Tests.Proxies;
 
 /// <summary>
 /// The whole moderation loop across both halves that own it: <see cref="ManageService"/> (the API,
-/// where the trusted-host rule lives) and <see cref="PostgresAdminWorkspace"/> (the operator's one
-/// decision) — `docs/backlog/v2_migration/design.md` D2/D3. Drives the real code against the real
-/// schema: a new host's first listing waits for a human; approval publishes it, verifies the venue
-/// and writes the inbox row; everything that host lists afterwards publishes itself.
+/// where the venue-scoped review rule lives) and <see cref="PostgresAdminWorkspace"/> (the operator's
+/// decision). Drives the real code against the real
+/// schema: a newly claimed venue's first listing waits for a human; approval publishes it, verifies the venue
+/// and writes the inbox row; later rooms at that venue publish themselves, while new venues wait.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public class SingleGateModerationIntegrationTests
@@ -124,13 +124,13 @@ public class SingleGateModerationIntegrationTests
     }
 
     [Fact]
-    public async Task TrustedHostsBrandNewVenue_AutoPublishesAndVerifiesThatVenueToo()
+    public async Task ApprovedHostBrandNewVenue_StillRequiresVenueScopedReview()
     {
         var host = await NewHostAsync();
         var (_, firstRoomId) = await CreateVenueWithPublishRequestAsync(host.Id, "Cedar Lane Meeting House", "Main Hall");
         Assert.Null(CreateWorkspace().DecidePublishRequest(firstRoomId, approve: true, null, "operator@steeple"));
 
-        // A second, entirely separate venue by the now-trusted host.
+        // A second, entirely separate venue by the already-approved host.
         Guid secondVenueId;
         Guid roomId;
         await using (var db = CreateContext())
@@ -144,8 +144,10 @@ public class SingleGateModerationIntegrationTests
 
         await using (var db = CreateContext())
         {
-            Assert.Equal(RoomStatus.Published, await db.Rooms.Where(r => r.Id == roomId).Select(r => r.Status).SingleAsync());
-            Assert.True(await db.Venues.Where(v => v.Id == secondVenueId).Select(v => v.IsIdentityVerified).SingleAsync());
+            var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
+            Assert.Equal(RoomStatus.Draft, room.Status);
+            Assert.Equal(FixedNow, room.PublishRequestedAtUtc);
+            Assert.False(await db.Venues.Where(v => v.Id == secondVenueId).Select(v => v.IsIdentityVerified).SingleAsync());
         }
     }
 
@@ -232,12 +234,27 @@ public class SingleGateModerationIntegrationTests
 
         Assert.Null(workspace.UnlistRoom(roomId, "operator@steeple"));
 
-        await using var db = CreateContext();
-        Assert.Equal(RoomStatus.Unlisted, await db.Rooms.Where(r => r.Id == roomId).Select(r => r.Status).SingleAsync());
+        await using (var db = CreateContext())
+        {
+            var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
+            Assert.Equal(RoomStatus.Unlisted, room.Status);
+            Assert.NotNull(room.OperatorUnlistedAtUtc);
+            Assert.Equal("operator@steeple", room.OperatorUnlistedBy);
+
+            var relist = await CreateService(db).UpdateRoomAsync(
+                host.Id, roomId, NewSaveRoomRequest("Back Room", status: "published"));
+            Assert.Equal(ManageErrorCodes.OperatorUnlisted, relist.Error!.Code);
+            Assert.Equal(RoomStatus.Unlisted, room.Status);
+
+            // The database closes the concurrent stale-read race too: even a write that bypasses
+            // ManageService cannot combine Published with the operator marker.
+            room.Status = RoomStatus.Published;
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
     }
 
     [Fact]
-    public async Task UnlistRoom_RoomWithUpcomingConfirmedBooking_IsBlockedAndStaysPublished()
+    public async Task UnlistRoom_RoomWithUpcomingConfirmedBooking_IsStillTakenDown()
     {
         var host = await NewHostAsync();
         var (_, roomId) = await CreateVenueWithPublishRequestAsync(host.Id, "Committed Hall", "Committed Room");
@@ -245,12 +262,12 @@ public class SingleGateModerationIntegrationTests
         Assert.Null(workspace.DecidePublishRequest(roomId, approve: true, null, "operator@steeple"));
         await SeedFutureConfirmedBookingAsync(roomId);
 
-        var error = workspace.UnlistRoom(roomId, "operator@steeple");
+        Assert.Null(workspace.UnlistRoom(roomId, "operator@steeple"));
 
-        Assert.NotNull(error);
-        Assert.Contains("confirmed bookings", error);
         await using var db = CreateContext();
-        Assert.Equal(RoomStatus.Published, await db.Rooms.Where(r => r.Id == roomId).Select(r => r.Status).SingleAsync());
+        var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
+        Assert.Equal(RoomStatus.Unlisted, room.Status);
+        Assert.NotNull(room.OperatorUnlistedAtUtc);
     }
 
     [Fact]

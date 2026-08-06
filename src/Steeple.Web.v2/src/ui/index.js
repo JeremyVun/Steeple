@@ -37,7 +37,12 @@ import { createHostFlows } from './host/index.js';
 
 export function createUI(_engine, _world) {
   const root = document.getElementById('ui');
-  root.textContent = '';
+  // Everything but the title page: that markup is printed in index.html and was
+  // on screen long before this module arrived — createArrival adopts it, and
+  // wiping it here would blank the one thing the visitor is already reading.
+  for (const child of [...root.children]) {
+    if (child.id !== 'arrival') child.remove();
+  }
   if (state.reducedMotion) document.documentElement.classList.add('reduced-motion');
   // How much map stands above a property sheet on a phone. One number, declared
   // in ui/rail.js, spent by styles/panels.css and by ui/map/index.js — which

@@ -56,6 +56,9 @@ built so only `signIn()` changes.
 
 ### D2 — One human gate: a new host's first listing goes "under review"
 
+> Superseded 2026-08-06: approval is scoped to the venue, not the host; every newly claimed
+> venue waits for its first decision. See `docs/contracts/manage.md` and SYSTEM_DESIGN §17.
+
 Owner decision 2026-08-05, superseding the two-step moderation model (separate venue
 verification + per-room publish approval):
 
@@ -145,8 +148,7 @@ honest; inventing correspondence is not).
 - Signed out: a quiet header affordance ("Sign in") opens the same identity panel the
   flows use. The Inbox tab, badge, and every "Identity verified (SSO)" chip render only
   when signed in (chips only when factually verified).
-- Signed in: the existing chip/card, plus the card gains "Sign out everywhere"
-  (`DELETE /me/sessions`) alongside sign-out.
+- Signed in: the existing chip/card with one standard Sign out action for this browser.
 - Sign-out calls `DELETE /auth/sessions` (server-side revocation), then clears local
   state. The store key becomes per-user (`steeple-village-store:{userId}`) so shared
   browsers never leak correspondence between accounts; sign-out drops the in-memory

@@ -487,6 +487,32 @@ export function createDesk({
     ]);
   }
 
+  /**
+   * The venue itself, as a thing that can be corrected. A name typed in a hurry
+   * and an address that has changed are both ordinary, and until now the only
+   * screen that could take either was the one that registers a new venue.
+   */
+  function venueSettings(venue) {
+    if (!venue) return null;
+    return el('section', { class: 'settings', 'aria-label': 'The venue itself' }, [
+      el('p', { class: 'eyebrow', text: 'The venue' }),
+      el('p', {
+        class: 'prose prose--sm',
+        text: `${venue.address ?? 'This venue'} — the name and address groups read, and where the map puts you.`,
+      }),
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'linkish',
+          dataset: { action: 'edit-venue' },
+          onclick: () => onListing({ venueId, entry: 'venue-edit' }),
+        },
+        'Edit venue details'
+      ),
+    ]);
+  }
+
   function spaceRow(room) {
     const published = room.status === 'published';
     // A room whose publish request steeple has recorded is not a draft the host
@@ -647,15 +673,32 @@ export function createDesk({
           ),
         ]),
       ]),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'pill',
-          onclick: () => onListing({ step: 'place' }),
-        },
-        'List a space'
-      ),
+      // Two different things, and the desk used to offer only the second of
+      // them under the first one's name. A host who has a venue and wants
+      // another space was sent back through venue registration — the only way
+      // out of a venue with no rooms was to register a second venue.
+      el('div', { class: 'desk__actions' }, [
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'linkish',
+            dataset: { action: 'new-venue' },
+            onclick: () => onListing({ step: 'place' }),
+          },
+          'List another venue'
+        ),
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'pill pill--primary',
+            dataset: { action: 'add-space' },
+            onclick: () => onListing({ venueId }),
+          },
+          'Add a space'
+        ),
+      ]),
     ].filter(Boolean));
   }
 
@@ -698,16 +741,23 @@ export function createDesk({
       const rooms = roomsOf(venueId, placed);
       replaceChildren(body, [
         said,
+        // "0 spaces are published" is true and useless — the answer to a
+        // question nobody asked, on the one screen that owes the host what to do
+        // next. A venue registered and abandoned before its first space lands
+        // exactly here.
         el('p', {
           class: 'desk__count',
-          text: `${plural(rooms.filter((r) => r.status === 'published').length, 'space is', 'spaces are')} published${
-            rooms.some((r) => r.status !== 'published')
-              ? `, ${rooms.filter((r) => r.status !== 'published').length} still in draft`
-              : ''
-          }.`,
+          text: rooms.length
+            ? `${plural(rooms.filter((r) => r.status === 'published').length, 'space is', 'spaces are')} published${
+                rooms.some((r) => r.status !== 'published')
+                  ? `, ${rooms.filter((r) => r.status !== 'published').length} still in draft`
+                  : ''
+              }.`
+            : 'No spaces here yet. Add one and Steeple will put it on the map.',
         }),
-        el('ul', { class: 'spaces' }, rooms.map(spaceRow)),
+        rooms.length ? el('ul', { class: 'spaces' }, rooms.map(spaceRow)) : null,
         venue?.remoteId ? bookingModeBlock(venue) : null,
+        venueSettings(venue),
       ].filter(Boolean));
       if (working) for (const control of body.querySelectorAll('button, input')) control.disabled = true;
       return;

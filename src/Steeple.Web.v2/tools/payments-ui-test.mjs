@@ -27,7 +27,7 @@
 // Auth:DevLoginEnabled and payments.enabled, this app on the given origin with
 // its proxy pointed at that same API, and `psql` reachable at the dev database.
 // psql stands in for two things and only two: the operator's approve on a new
-// host's first listing (docs/backlog/v2_migration D2, no API by design), and
+// newly claimed venue's first listing (no API by design), and
 // seeding one notification row so §6 is deterministic rather than waiting on
 // the 15-minute reminder worker.
 //
@@ -210,7 +210,7 @@ async function mintVenue({ email, name, venueName, roomName, bookingMode }) {
 
   await call('PATCH', `/manage/rooms/${room.body.id}`, { token, body: { status: 'published' } });
 
-  // The operator's one decision on a new host's first listing. Admin owns it and
+  // The operator's one decision on a newly claimed venue's first listing. Admin owns it and
   // there is no API for it by design, so the harness does what Admin would.
   sql(
     `update rooms set "Status" = 1, "FirstPublishedAtUtc" = now(), "PublishRequestedAtUtc" = null where "Id" = '${room.body.id}';`

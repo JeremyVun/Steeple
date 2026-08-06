@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Primitives;
 using Steeple.Api.Utils;
 
@@ -17,6 +18,7 @@ namespace Steeple.Api.Controllers;
 /// </remarks>
 [ApiController]
 [Route("api/v1")]
+[EnableRateLimiting(RateLimitPolicies.Discovery)]
 public sealed class ListingsApiController : ControllerBase
 {
     /// <summary>Time-first ("When") search is gated behind this flag (off → params ignored).</summary>

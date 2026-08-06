@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Processing;
 
@@ -12,6 +13,9 @@ namespace Steeple.Api.Proxies.Media;
 public sealed class ImageSharpImageProcessor : IImageProcessor
 {
     private const int JpegQuality = 82;
+    private const int MaxDimension = 12_000;
+    private const long MaxPixels = 30_000_000;
+    private static readonly SemaphoreSlim ProcessingSlots = new(initialCount: 2, maxCount: 2);
 
     /// <inheritdoc />
     public async Task<ProcessedImage?> ProcessAsync(Stream content, CancellationToken ct = default)
@@ -25,46 +29,76 @@ public sealed class ImageSharpImageProcessor : IImageProcessor
             return null; // Image.Load throws ArgumentNullException on empty input, not a decode exception
         }
 
-        Image image;
+        ImageInfo info;
         try
         {
-            image = Image.Load(sourceBytes);
+            // Read headers with a two-frame ceiling: enough to reject animation without scanning
+            // an attacker-controlled number of frames or allocating the decoded pixel buffer.
+            info = Image.Identify(new DecoderOptions { MaxFrames = 2 }, sourceBytes);
         }
-        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException)
+        catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
         {
             return null; // not an image (or a format we don't accept) — the caller 400s
         }
 
-        using (image)
+        if (info.Width <= 0
+            || info.Height <= 0
+            || info.Width > MaxDimension
+            || info.Height > MaxDimension
+            || (long)info.Width * info.Height > MaxPixels
+            || info.FrameMetadataCollection.Count > 1)
         {
-            // Bake the EXIF orientation into the pixels before the metadata is dropped.
-            image.Mutate(x => x.AutoOrient());
+            return null;
+        }
 
-            // Dropping metadata wholesale is the EXIF strip (GPS, serials, thumbnails, all of it).
-            image.Metadata.ExifProfile = null;
-            image.Metadata.XmpProfile = null;
-            image.Metadata.IptcProfile = null;
-
-            var encoder = new JpegEncoder { Quality = JpegQuality };
-            var variants = new List<ImageVariant>(MediaVariants.Widths.Length);
-
-            foreach (var width in MediaVariants.Widths)
+        await ProcessingSlots.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            Image image;
+            try
             {
-                using var variant = image.Clone(x =>
-                {
-                    if (image.Width > width)
-                    {
-                        // Height 0 = preserve aspect ratio; never upscale small sources.
-                        x.Resize(width, 0);
-                    }
-                });
-
-                using var output = new MemoryStream();
-                await variant.SaveAsync(output, encoder, ct).ConfigureAwait(false);
-                variants.Add(new ImageVariant(width, output.ToArray()));
+                image = Image.Load(new DecoderOptions { MaxFrames = 1 }, sourceBytes);
+            }
+            catch (Exception ex) when (ex is UnknownImageFormatException or InvalidImageContentException or NotSupportedException)
+            {
+                return null;
             }
 
-            return new ProcessedImage(variants, Convert.ToHexStringLower(SHA256.HashData(sourceBytes)));
+            using (image)
+            {
+                // Bake the EXIF orientation into the pixels before the metadata is dropped.
+                image.Mutate(x => x.AutoOrient());
+
+                // Dropping metadata wholesale is the EXIF strip (GPS, serials, thumbnails, all of it).
+                image.Metadata.ExifProfile = null;
+                image.Metadata.XmpProfile = null;
+                image.Metadata.IptcProfile = null;
+
+                var encoder = new JpegEncoder { Quality = JpegQuality };
+                var variants = new List<ImageVariant>(MediaVariants.Widths.Length);
+
+                foreach (var width in MediaVariants.Widths)
+                {
+                    using var variant = image.Clone(x =>
+                    {
+                        if (image.Width > width)
+                        {
+                            // Height 0 = preserve aspect ratio; never upscale small sources.
+                            x.Resize(width, 0);
+                        }
+                    });
+
+                    using var output = new MemoryStream();
+                    await variant.SaveAsync(output, encoder, ct).ConfigureAwait(false);
+                    variants.Add(new ImageVariant(width, output.ToArray()));
+                }
+
+                return new ProcessedImage(variants, Convert.ToHexStringLower(SHA256.HashData(sourceBytes)));
+            }
+        }
+        finally
+        {
+            ProcessingSlots.Release();
         }
     }
 }

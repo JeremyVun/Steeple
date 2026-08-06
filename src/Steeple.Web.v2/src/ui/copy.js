@@ -6,6 +6,7 @@
 import { heldRoom } from '../data/catalog.js';
 import { effectiveRoom, roomEdits } from '../data/store.js';
 
+// Also printed verbatim in index.html's pre-rendered splash — change both.
 export const ARRIVAL = {
   eyebrow: 'Community space in Northern Virginia',
   wordmark: 'Steeple',

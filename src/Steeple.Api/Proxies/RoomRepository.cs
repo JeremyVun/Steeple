@@ -90,7 +90,9 @@ public class RoomRepository : IRoomRepository
     {
         return await _db.Rooms
             .AsNoTracking()
-            .Where(r => r.Status == RoomStatus.Published && r.Venue!.Suburb != "")
+            .Where(r => r.Status == RoomStatus.Published
+                && r.OperatorUnlistedAtUtc == null
+                && r.Venue!.Suburb != "")
             .Select(r => r.Venue!.Suburb)
             .Distinct()
             .OrderBy(s => s)
@@ -102,7 +104,7 @@ public class RoomRepository : IRoomRepository
     {
         return await _db.Rooms
             .AsNoTracking()
-            .Where(r => r.Status == RoomStatus.Published)
+            .Where(r => r.Status == RoomStatus.Published && r.OperatorUnlistedAtUtc == null)
             .OrderBy(r => r.Venue!.Slug)
             .ThenBy(r => r.Slug)
             // The listing page renders venue fields too, so lastmod is whichever changed last.
@@ -122,6 +124,7 @@ public class RoomRepository : IRoomRepository
 
         query = query.Where(r =>
             r.Status == RoomStatus.Published &&
+            r.OperatorUnlistedAtUtc == null &&
             r.Venue!.Latitude >= bounds.MinLatitude &&
             r.Venue.Latitude <= bounds.MaxLatitude &&
             r.Venue.Longitude >= bounds.MinLongitude &&

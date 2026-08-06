@@ -10,6 +10,12 @@ public sealed class PaymentsOptions
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Payments";
 
+    /// <summary>The only local-development gateway currently implemented.</summary>
+    public const string MockGateway = "mock";
+
+    /// <summary>Payment adapter name. Production may not enable payments while this is mock.</summary>
+    public string Gateway { get; set; } = MockGateway;
+
     /// <summary>The client-side key for the payment form (mock placeholder until Stripe).</summary>
     public string PublishableKey { get; set; } = "pk_mock_steeple";
 

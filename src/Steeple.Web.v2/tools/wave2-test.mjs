@@ -140,7 +140,7 @@ for (const style of STYLES) {
       return null;
     }, except);
 
-  await ready(`${url}#/village`);
+  await ready(`${url}#/browse`);
   await store('resetDemo()');
   await wait(600);
 
@@ -317,7 +317,7 @@ for (const style of STYLES) {
 
   // ── 7. reset puts the village back ─────────────────────────────────────────
   console.log('\n7. reset');
-  await ready(`${url}#/village`);
+  await ready(`${url}#/browse`);
   const seeded = await store('resetDemo()');
   void seeded;
   await wait(1600);

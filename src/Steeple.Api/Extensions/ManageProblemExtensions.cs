@@ -13,6 +13,7 @@ public static class ManageProblemExtensions
         var status = error.Code switch
         {
             ManageErrorCodes.HasActiveBookings => StatusCodes.Status409Conflict,
+            ManageErrorCodes.OperatorUnlisted => StatusCodes.Status409Conflict,
             ManageErrorCodes.AlreadyVerified => StatusCodes.Status409Conflict,
             ManageErrorCodes.VerificationPending => StatusCodes.Status409Conflict,
             ManageErrorCodes.NotFound => StatusCodes.Status404NotFound,

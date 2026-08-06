@@ -199,9 +199,9 @@ E2E suites mint real accounts/venues/applications on the local API each run.
 **Real vs demo (the integration work):** Real — catalog reads, auth sessions (sign-in **and
 sign-out**, `DELETE /auth/sessions` best-effort), application submit (`Idempotency-Key`,
 mirrors into local store), the whole hosting chain (dev SSO → POST venue → room → photo
-upload → PUT availability → PATCH published; publish requires a photo; a first-time host's
-publish answers `draft` + `publishRequestedAtUtc`, a trusted host's answers `published`
-outright), and the account surface — a "Sign in" chip on the porch when signed out, chip +
+upload → PUT availability → PATCH published; publish requires a photo; an unverified venue's
+first publish answers `draft` + `publishRequestedAtUtc`, while later rooms at that verified
+venue answer `published` outright), and the account surface — a "Sign in" chip on the porch when signed out, chip +
 card when signed in, inbox/badge/journal/letters and every "Identity verified (SSO)" chip
 gated on fact (v2_migration Phase 1), **and the whole correspondence** (Phase 2, D4/D5): the
 guest inbox is `GET /me/applications`, the thread `GET /applications/{id}`, and withdraw /
@@ -236,7 +236,9 @@ host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactl
 `host-offline-test.mjs` is **not re-baselinable**: hosting requires a session, so writing a
 listing while steeple is away is no longer a promise the product makes (owner call 2026-08-05);
 room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
-orphans every photo already written (and, locally, rows from other agents' API ports 404 —
+orphans every photo already written (and, locally, rows from other agents' API ports 404 or
+refuse outright, and the suites that count console errors — input-test, world-off-test — go
+red on that noise alone while every check line is green: judge the check lines —
 also add any new media origin to nginx.conf's CSP `img-src` or photos silently stop loading);
 `draft.roomId` is always `'main-space'` (second room per venue collides);
 dev geocoding = `StubGeocodingGateway` (every address → village centre, so geofence-rejection

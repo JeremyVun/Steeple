@@ -3,7 +3,7 @@
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–016` and `src/Steeple.Persistence/` (2026-08-05).
+> Verified against `db/changelog/001–017` and `src/Steeple.Persistence/` (2026-08-06).
 
 ## Ownership rule (non-negotiable)
 
@@ -28,7 +28,8 @@ Venue 1─* Room 1─* RoomPhoto
                         Room: capacity, price (NOT NULL, CHECK > 0), house rules, flags enums as
                         int bitmasks (Amenity / AccessibilityFeature / ActivityType),
                         Status (Draft/Published/Unlisted), UpdatedAtUtc,
-                        PublishRequestedAtUtc / FirstPublishedAtUtc / ProviderEditedAtUtc
+                        PublishRequestedAtUtc / FirstPublishedAtUtc / ProviderEditedAtUtc /
+                        OperatorUnlistedAtUtc / OperatorUnlistedBy
                         (moderation state — see manage.md)
                                 RoomPhoto: legacy Url (full-size, always populated) +
                                 StorageKey/ThumbUrl/CardUrl/CreatedAtUtc (upload pipeline)
@@ -96,6 +97,8 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
   `application_counter_offers (ApplicationId) WHERE Status = 0`.
 - **Priced listings only:** `rooms."PricePerHour"` NOT NULL + `CHECK (> 0)` (010 — free
   listings were removed from the product).
+- **Durable takedowns:** `CK_rooms_operator_unlisted_not_published` rejects `Status=Published`
+  whenever `OperatorUnlistedAtUtc` is set, closing stale/concurrent service-write races.
 - **One rating per direction:** unique `(BookingId, RateeType)`, `Stars` CHECK 1..5.
 - **One reminder per occurrence per kind:** unique `booking_reminders (OccurrenceId, Kind)` —
   the sweep claims the row (`INSERT … ON CONFLICT DO NOTHING`) *before* dispatching, so a
@@ -109,7 +112,8 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
 - **Identity:** unique `user_logins (Provider, Subject)`; refresh tokens stored only as SHA-256
   hashes; unique `devices.FcmToken`.
 - **Cheap operator queues:** partial indexes on `rooms.PublishRequestedAtUtc`,
-  `rooms.ProviderEditedAtUtc`, `venues.ProviderEditedAtUtc` (all `WHERE … IS NOT NULL`), and
+  `rooms.ProviderEditedAtUtc`, `rooms.OperatorUnlistedAtUtc`, `venues.ProviderEditedAtUtc`
+  (all `WHERE … IS NOT NULL`), and
   on visible (`HiddenAtUtc IS NULL`) ratings by venue/organizer.
 
 ## Rules enforced in services (not the DB)
@@ -128,6 +132,8 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
   the only booking authority.
 - **Only Published rooms are publicly visible** — search filters status in SQL *and*
   `ListingService` gates direct id/slug lookups (Draft/Unlisted → 404).
+- **Operator takedowns are manager-proof:** `OperatorUnlistedAtUtc` is only written by Admin;
+  Manage refuses every transition back to Published while it remains set.
 
 ## Geofence
 

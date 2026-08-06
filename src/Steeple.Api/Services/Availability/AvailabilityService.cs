@@ -102,7 +102,7 @@ public sealed class AvailabilityService : IAvailabilityService
         Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default)
     {
         var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
-        if (room?.Venue is null || room.Status != RoomStatus.Published)
+        if (room?.Venue is null || room.Status != RoomStatus.Published || room.OperatorUnlistedAtUtc is not null)
         {
             return AvailabilityReadResult<RoomAvailabilityDto>.NotFound();
         }
@@ -156,7 +156,7 @@ public sealed class AvailabilityService : IAvailabilityService
         Guid roomId, ScheduleDto? schedule, CancellationToken ct = default)
     {
         var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
-        if (room?.Venue is null || room.Status != RoomStatus.Published)
+        if (room?.Venue is null || room.Status != RoomStatus.Published || room.OperatorUnlistedAtUtc is not null)
         {
             return AvailabilityReadResult<ScheduleCheckResultDto>.NotFound();
         }

@@ -54,7 +54,7 @@ const pinBand = () =>
 
 async function ready() {
   await page.goto('about:blank');
-  await page.goto(`${url}#/village`, { waitUntil: 'networkidle0' });
+  await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   // The product lives past the roll; the harness lands there without the tween.
   await page.evaluate('__steeple.roll.set(1)');

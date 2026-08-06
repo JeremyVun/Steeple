@@ -6,8 +6,8 @@ namespace Steeple.Api.Proxies.Notifications;
 /// <summary>
 /// <see cref="IEmailGateway"/> adapter for Resend's HTTP API (<c>POST /emails</c>, bearer key) —
 /// a managed transactional sender per SYSTEM_DESIGN §8 (never SMTP from the droplet; free tier
-/// fits the cost ceiling). Without a configured key it logs the send instead (dev-friendly, and
-/// the inbox row is the record of truth anyway). Failures log and return — callers may
+/// fits the cost ceiling). Without a configured key it does nothing: the notification inbox row
+/// remains the record of truth, and private recipient/content data never reaches logs. Failures log and return — callers may
 /// fire-and-forget. Transport only: the body arrives fully composed from the dispatcher, CTA
 /// link included.
 /// </summary>
@@ -32,9 +32,6 @@ public sealed class ResendEmailGateway : IEmailGateway
     {
         if (string.IsNullOrEmpty(_options.ApiKey))
         {
-            _logger.LogInformation(
-                "Email (log-only mode, no Email:ApiKey): to={To} subject={Subject}\n{Body}",
-                toEmail, content.Subject, content.TextBody);
             return;
         }
 

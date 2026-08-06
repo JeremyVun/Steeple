@@ -186,17 +186,14 @@ export async function signIn({ email, displayName = null }) {
  * the refresh cookie as proof for this one call, which is what makes a sign-out
  * after a long lunch actually revoke something instead of failing quietly.
  *
- * `everywhere` revokes every session this person holds rather than this one
- * (`DELETE /me/sessions` — the shared-computer answer, CONTRACTS §4).
- *
  * @returns {Promise<void>} resolves once the revocation has been attempted.
  */
-export async function signOut({ everywhere = false } = {}) {
+export async function signOut() {
   const token = access;
   inherited = null;
   write(null, REASON.signedOut);
   try {
-    await (everywhere ? api.deleteAllSessions(token) : api.deleteSession(token));
+    await api.deleteSession(token);
   } catch {
     // Nothing to say and nothing to undo: this browser is signed out either
     // way, and an unrevoked refresh token expires on its own.

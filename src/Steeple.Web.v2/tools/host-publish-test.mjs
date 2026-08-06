@@ -7,6 +7,15 @@
 // obtained, because a green screen is not evidence that a service was written
 // to. Everything asserted twice: what the host sees, and what the API answers.
 //
+// §7–§10 are the second half of the story, added 2026-08-06 with the Verify step
+// removed: a venue is a property and a space is a room in it, and a host who has
+// one must be able to add another, correct the venue's own details, and never be
+// stranded at a venue with no spaces (the owner's own trap — a venue registered,
+// the wizard abandoned, and the desk's only button offering to register another
+// venue). §7 also holds the root cause as a named check: the local record takes
+// the slug steeple minted the moment the create answers, or the desk's own
+// re-read drops the draft and everything keyed under it.
+//
 // Needs the API on localhost:5200 and the app on the given origin (vite proxies
 // /api/v1). Nothing here is reset or reseeded: each run mints its own venue
 // under its own dev account, so runs never collide.
@@ -28,6 +37,12 @@ const stamp = Date.now().toString(36);
 const venueName = `Trinity Hall ${stamp}`;
 const roomName = `Long Room ${stamp}`;
 const hostEmail = `host-${stamp}@example.org`;
+// The second venue: registered, abandoned before it has a space, and picked up
+// again from the desk — the owner's trap, driven.
+const strandedName = `Chapel Yard ${stamp}`;
+const renamedName = `Chapel Yard Rooms ${stamp}`;
+const firstSpace = `Upper Room ${stamp}`;
+const secondSpace = `Lower Room ${stamp}`;
 
 let checks = 0;
 let failures = 0;
@@ -178,6 +193,8 @@ await wait(1400);
 // ── 1. Place: address fields, no pin ──────────────────────────────────────
 console.log('\n1. Place — the address, and no pin to drop');
 check('a host who keeps no venue is taken straight to the flow', (await text('.steps__step.is-on')) === '1Place');
+check('the flow is four steps, not five', (await page.$$eval('.steps__step', (n) => n.length)) === 4, await page.$$eval('.steps__step', (n) => n.map((s) => s.textContent).join(' ')));
+check('and none of them is Verify', !/Verify/.test((await text('.steps')) ?? ''));
 check('the pin picker is gone', !(await page.$('.plan[role="application"]')), 'no draggable plan');
 check('there is nowhere to drop a pin', (await page.$$('.place__pin')).length === 0);
 check('the step asks for an address', await visible('#place-address'));
@@ -193,30 +210,17 @@ await type('#place-postcode', '22180');
 check('the whole address earns the way forward', !(await disabled('[data-action="advance"]')));
 await shot('01-place');
 await click('[data-action="advance"]', 'Continue');
-check('Verify is next', (await text('.steps__step.is-on')) === '2Verify', await text('.steps__step.is-on'));
+await wait(2500);
 
-// ── 2. Verify: the same session the guest surface uses ─────────────────────
-//
-// ⚠ The signed-*out* half of this step is unreachable in the product's own order
-// now (see §1's note), so what it can still be held to is that it names the
-// session the listing will be written under, in steeple's own words.
-console.log('\n2. Verify — steeple’s own sign-in, not a checkbox');
-check('the identity panel is the step, not a floating card', await visible('.listing .identity'));
-check('it is in the sheet’s own flow', await page.$eval('.listing .identity', (n) => getComputedStyle(n).position === 'static'));
-check('a signed-in host is not asked to sign in again', (await page.$('#identity-email')) === null);
+// The venue is created on the way out of Place — there is no Verify step to
+// wait for, because there is no way into hosting without a session. Where it
+// stands is steeple's answer to the address, which is the pin's replacement.
+check('Describe is next', (await text('.steps__step.is-on')) === '2Describe', await text('.steps__step.is-on'));
+const placedNote = await text('.notice__text');
+check('the host is told the venue is on the map', /on the map/.test(placedNote ?? ''), placedNote);
 const signedIn = await page.evaluate('__steeple.session.currentUser()');
 check('a real session exists', Boolean(signedIn?.id), signedIn?.displayName);
 check('the API agrees who that is', (await api('/me', await bearer())).email === hostEmail);
-check('the brand words are exact', /Identity verified \(SSO\)/.test((await text('.listing .verified')) ?? ''));
-await shot('02-verify');
-await clickText('.listing .identity__actions .pill--primary', /^Continue as/, 'Continue as Ruth');
-await wait(2500);
-
-// The venue is created the moment there is a session to create it under, and
-// where it stands is steeple's answer to the address — the pin's replacement.
-check('Describe is next', (await text('.steps__step.is-on')) === '3Describe', await text('.steps__step.is-on'));
-const placedNote = await text('.notice__text');
-check('the host is told the venue is on the map', /on the map/.test(placedNote ?? ''), placedNote);
 const token = await bearer();
 const managed = await api('/manage/venues', token);
 check('steeple holds exactly this venue', managed.some?.((v) => v.name === venueName), JSON.stringify(managed));
@@ -226,9 +230,13 @@ check('with the address as typed', venue.addressLine === '18 Church Street' && v
 check('geocoded server-side', Number.isFinite(venue.latitude) && Number.isFinite(venue.longitude), `${venue.latitude}, ${venue.longitude}`);
 const mirrored = (await store('placedVenues()')).find((v) => v.name === venueName);
 check('and the local mirror holds the server’s position, not a guess', mirrored?.lat === venue.latitude && mirrored?.lng === venue.longitude, `${mirrored?.lat}, ${mirrored?.lng}`);
+// The root cause of the stranding bug, as a named check: a record kept under a
+// guessed slug is a second record of one venue, and the desk's re-read drops it.
+check('the local record took the slug steeple minted', mirrored?.id === venue.slug, `${mirrored?.id} vs ${venue.slug}`);
+check('and there is exactly one record of it', (await store('placedVenues()')).filter((v) => v.name === venueName).length === 1);
 
-// ── 3. Describe: one price, one photograph, welcome-all by default ─────────
-console.log('\n3. Describe — a price, a photograph, and everyone welcome');
+// ── 2. Describe: one price, one photograph, welcome-all by default ─────────
+console.log('\n2. Describe — a price, a photograph, and everyone welcome');
 check('there is one price field and no price segments', (await page.$$('[data-price]')).length === 0);
 check('the seats helper is gone', !/How many people it seats/.test((await text('.listing__body')) ?? ''));
 check('"say what the room is, plainly" is gone', !/plainly/.test((await text('.listing__body')) ?? ''));
@@ -267,7 +275,7 @@ await clickText('.welcome__chips .chip--toggle', /^Sports$/, 'turn Sports off');
 await shot('03-describe');
 await click('[data-action="advance"]', 'Set availability');
 await wait(2200);
-check('Availability is next', (await text('.steps__step.is-on')) === '4Availability', await text('.steps__step.is-on'));
+check('Availability is next', (await text('.steps__step.is-on')) === '3Availability', await text('.steps__step.is-on'));
 
 const roomAfter = await api(`/manage/venues/${venueId}`, token);
 const remoteRoom = roomAfter.rooms?.[0];
@@ -278,9 +286,14 @@ check('the price it was given', Number(remoteRoom?.pricePerHour) === 30, String(
 check('and the capacity it was given', remoteRoom?.capacity === 60, String(remoteRoom?.capacity));
 const roomDetail = await api(`/manage/rooms/${remoteRoom.id}`, token);
 check('six activities, Sports excluded', roomDetail.activities?.length === 6 && !roomDetail.activities.includes('sports'), roomDetail.activities?.join(' '));
+// The room's own slug, adopted the same way the venue's was. It used to be the
+// constant 'main-space', which is a collision waiting for a second space.
+const roomSlug = (await store('placedVenues()')).find((v) => v.id === mirrored.id)?.rooms?.[0]?.id;
+check('the local room took the slug steeple minted', roomSlug === remoteRoom.slug, `${roomSlug} vs ${remoteRoom.slug}`);
+check('and it is not the old constant', roomSlug !== 'main-space');
 
-// ── 4. Availability: the painter, and a closed day ─────────────────────────
-console.log('\n4. Availability — the week, and a day set aside');
+// ── 3. Availability: the painter, and a closed day ─────────────────────────
+console.log('\n3. Availability — the week, and a day set aside');
 check('the closed-days form is one composed block', await visible('.closed__form'));
 const labelsAligned = await page.$$eval('.closed__form .eyebrow', (nodes) =>
   nodes.every((n) => Math.abs(n.getBoundingClientRect().top - nodes[0].getBoundingClientRect().top) < 2)
@@ -289,7 +302,7 @@ check('its labels sit on one line, none orphaned', labelsAligned);
 check('the wordy closed-days blurb is gone', !/fortnight of repairs/.test((await text('.closed')) ?? ''));
 await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
 await wait(400);
-check('seven windows are painted', (await store(`openHoursFor('${mirrored.id}','main-space')`)).length === 7);
+check('seven windows are painted', (await store(`openHoursFor('${mirrored.id}','${roomSlug}')`)).length === 7);
 const closedDay = new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 10);
 await page.$eval(
   '#blackout-date',
@@ -305,7 +318,7 @@ check('the closed day is listed', /Parish festival/.test((await text('.blackouts
 await shot('04-availability');
 await click('[data-action="advance"]', 'Review and publish');
 await wait(2500);
-check('Publish is next', (await text('.steps__step.is-on')) === '5Publish', await text('.steps__step.is-on'));
+check('Publish is next', (await text('.steps__step.is-on')) === '4Publish', await text('.steps__step.is-on'));
 
 const rules = await api(`/manage/rooms/${remoteRoom.id}/availability`, token);
 const openDays = rules.days?.filter((d) => d.windows.length > 0) ?? [];
@@ -313,11 +326,17 @@ check('steeple holds seven open days', openDays.length === 7, `${openDays.length
 check('with the painted hours', openDays[0]?.windows[0]?.startTime === '08:00' && openDays[0]?.windows[0]?.endTime === '22:00', JSON.stringify(openDays[0]?.windows));
 check('and the closed day', rules.blackouts?.some((b) => b.date === closedDay), JSON.stringify(rules.blackouts));
 
-// ── 5. Publish: the ask, and the answer the server gave ───────────────────
-console.log('\n5. Publish — and the service’s own answer to it');
+// ── 4. Publish: the ask, and the answer the server gave ───────────────────
+console.log('\n4. Publish — and the service’s own answer to it');
 check('nothing is missing, so publishing is offered', !(await disabled('[data-action="advance"]')));
 check('the button says what it does', (await text('[data-action="advance"]')) === 'Publish this space');
 check('the review shows where steeple put it', await visible('.placed .plan'));
+// The one disclosure the Verify step used to make, in the place it belongs: the
+// host's name goes out with the listing, and the mark is a fact about the
+// session rather than a decoration.
+check('the review says whose listing it will be', /Listed by/.test((await text('.listing .facts')) ?? ''), (await text('.listing .facts'))?.slice(-60));
+check('under the name steeple holds', /Ruth Ellery/.test((await text('.facts__by')) ?? ''), await text('.facts__by'));
+check('with the brand words exact', /Identity verified \(SSO\)/.test((await text('.listing .verified')) ?? ''));
 await shot('05-review');
 await click('[data-action="advance"]', 'Publish this space');
 await wait(4000);
@@ -330,12 +349,12 @@ const said = (await text('.guide')) ?? '';
 check('the host is told exactly that', /sent for review/.test(said), said.slice(0, 90));
 check('and not told it is live', !/is published/.test(said));
 check('no exclamation marks anywhere on the step', !/!/.test((await text('.listing')) ?? ''));
-const localRoom = await store(`effectiveRoom('${mirrored.id}','main-space')`);
-check('the local mirror carries the server’s state', localRoom.status === 'draft' && Boolean(localRoom.publishRequestedAt), JSON.stringify({ status: localRoom.status, requested: localRoom.publishRequestedAt }));
-check('and the server’s photograph', typeof localRoom.photo === 'string' && localRoom.photo.includes('/media/'), localRoom.photo);
+const localRoom = await store(`effectiveRoom('${mirrored.id}','${roomSlug}')`);
+check('the local mirror carries the server’s state', localRoom?.status === 'draft' && Boolean(localRoom?.publishRequestedAt), JSON.stringify({ status: localRoom?.status, requested: localRoom?.publishRequestedAt }));
+check('and the server’s photograph', typeof localRoom?.photo === 'string' && localRoom.photo.includes('/media/'), localRoom?.photo);
 
-// ── 6. the way out, and the desk afterwards ───────────────────────────────
-console.log('\n6. the way out, and the desk it leads to');
+// ── 5. the way out, and the desk afterwards ───────────────────────────────
+console.log('\n5. the way out, and the desk it leads to');
 check('the button is now a way out', (await text('[data-action="advance"]')) === 'Done');
 await click('[data-action="advance"]', 'Done');
 await wait(900);
@@ -345,6 +364,137 @@ await clickText('.tab', /^Spaces/, 'Spaces tab');
 check('the new venue is the one being kept', /Trinity Hall/.test((await text('.desk .desk__head')) ?? ''), await text('.desk .desk__head'));
 check('and its space reads as with steeple, not as a draft', /With Steeple/.test((await text('.desk .spaces')) ?? ''), (await text('.desk .spaces'))?.slice(0, 80));
 await shot('07-desk');
+
+// ── 6. the desk's two ways on ─────────────────────────────────────────────
+//
+// One button reading "List a space" that restarted venue registration was the
+// trap: a host with a venue and no space had no way to add one.
+console.log('\n6. the desk offers a space and a venue, and they are different things');
+check('the primary way on is another space here', await visible('[data-action="add-space"]'));
+check('and it says so', (await text('[data-action="add-space"]')) === 'Add a space');
+check('a whole new venue is offered quietly beside it', (await text('[data-action="new-venue"]')) === 'List another venue');
+check('the venue itself can be corrected from Spaces', await visible('[data-action="edit-venue"]'));
+
+// ── 7. the trap: a venue registered and abandoned before its first space ───
+console.log('\n7. a venue abandoned at Place — the desk still has a way on');
+await click('[data-action="new-venue"]', 'List another venue');
+await wait(900);
+check('it opens on Place, the whole four steps', (await text('.steps__step.is-on')) === '1Place', await text('.steps__step.is-on'));
+await type('#place-name', strandedName);
+await type('#place-description', 'A yard behind the chapel with two rooms off it.');
+await type('#place-address', '9 Yard Lane');
+await type('#place-suburb', 'Vienna');
+await type('#place-postcode', '22180');
+await click('[data-action="advance"]', 'Continue');
+await wait(2600);
+const stranded = (await api('/manage/venues', token)).find((v) => v.name === strandedName);
+check('steeple holds the second venue', Boolean(stranded?.id), JSON.stringify(stranded));
+const strandedLocal = (await store('placedVenues()')).find((v) => v.name === strandedName);
+check('and this browser holds it under steeple’s own slug', strandedLocal?.id === stranded?.slug, `${strandedLocal?.id} vs ${stranded?.slug}`);
+
+// The abandonment itself: away before the space is described.
+await click('[data-action="close"]', 'Close before describing anything');
+await wait(2600);
+check('the desk is back', await visible('.desk'));
+check('on the venue just registered', new RegExp(strandedName).test((await text('.desk .desk__head')) ?? ''), await text('.desk .desk__head'));
+check('and the venue survived the desk’s own re-read', (await store('placedVenues()')).some((v) => v.id === stranded.slug));
+await clickText('.tab', /^Spaces/, 'Spaces tab');
+const empty = (await text('.desk .desk__count')) ?? '';
+check('a venue with no spaces says so, and says what to do', /No spaces here yet/.test(empty), empty);
+check('and does not count nothing at you', !/0 spaces are published/.test(empty));
+await shot('08-empty-spaces');
+
+console.log('\n   …and Add a space is the way out of it');
+await click('[data-action="add-space"]', 'Add a space');
+await wait(900);
+check('the flow opens on Describe', (await text('.steps__step.is-on')) === '1Describe', await text('.steps__step.is-on'));
+check('three steps, because the venue is settled', (await page.$$eval('.steps__step', (n) => n.length)) === 3);
+check('and there is no Place step to walk back into', !/Place/.test((await text('.steps')) ?? ''));
+check('the title names the venue this space belongs to', new RegExp(`A space at ${strandedName}`).test((await text('#listing-title')) ?? ''), await text('#listing-title'));
+check('the eyebrow says what is happening', (await text('.listing__head .eyebrow')) === 'Add a space');
+await shot('09-add-space');
+
+await type('#room-name', firstSpace, { clear: true });
+await type('#room-description', 'A quiet upstairs room with a long table and eight chairs.');
+await type('#room-capacity', '18', { clear: true });
+await type('#room-price', '22', { clear: true });
+await (await page.$('#room-photo')).uploadFile(PHOTO);
+await wait(400);
+await click('[data-action="advance"]', 'Set availability');
+await wait(2400);
+check('Availability is next', (await text('.steps__step.is-on')) === '2Availability', await text('.steps__step.is-on'));
+await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await wait(400);
+await click('[data-action="advance"]', 'Review and publish');
+await wait(2400);
+await click('[data-action="advance"]', 'Publish this space');
+await wait(4000);
+const afterFirst = await api(`/manage/venues/${stranded.id}`, token);
+check('steeple holds the space at that venue', afterFirst.rooms?.some((r) => r.name === firstSpace), JSON.stringify(afterFirst.rooms?.map((r) => r.name)));
+await click('[data-action="advance"]', 'Done');
+await wait(2600);
+await clickText('.tab', /^Spaces/, 'Spaces tab');
+check('the desk lists it', new RegExp(firstSpace).test((await text('.desk .spaces')) ?? ''), (await text('.desk .spaces'))?.slice(0, 80));
+
+// ── 8. a second space at the same venue ───────────────────────────────────
+//
+// The old flow could not do this at all: every local room was 'main-space', so
+// a second one overwrote the first — its hours, its state and all.
+console.log('\n8. a second space at the same venue');
+await click('[data-action="add-space"]', 'Add a space');
+await wait(900);
+check('the title knows there is already one', new RegExp(`Another space at ${strandedName}`).test((await text('#listing-title')) ?? ''), await text('#listing-title'));
+await type('#room-name', secondSpace, { clear: true });
+await type('#room-description', 'The room off the yard, with its own door and a kitchenette.');
+await type('#room-capacity', '30', { clear: true });
+await type('#room-price', '26', { clear: true });
+await (await page.$('#room-photo')).uploadFile(PHOTO);
+await wait(400);
+await click('[data-action="advance"]', 'Set availability');
+await wait(2400);
+await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await wait(400);
+await click('[data-action="advance"]', 'Review and publish');
+await wait(2400);
+await click('[data-action="advance"]', 'Publish this space');
+await wait(4000);
+await click('[data-action="advance"]', 'Done');
+await wait(2600);
+
+const bothRooms = await api(`/manage/venues/${stranded.id}`, token);
+check('steeple holds two spaces at the venue', bothRooms.rooms?.length === 2, JSON.stringify(bothRooms.rooms?.map((r) => r.name)));
+check('with slugs of their own', new Set(bothRooms.rooms?.map((r) => r.slug)).size === 2, JSON.stringify(bothRooms.rooms?.map((r) => r.slug)));
+const localRooms = (await store('placedVenues()')).find((v) => v.id === stranded.slug)?.rooms ?? [];
+check('and this browser keeps them apart too', new Set(localRooms.map((r) => r.id)).size === 2, JSON.stringify(localRooms.map((r) => r.id)));
+const hoursApart = await Promise.all(
+  localRooms.map((r) => store(`openHoursFor('${stranded.slug}','${r.id}')`))
+);
+check('each with its own open hours, not one shared set', hoursApart.every((h) => h.length === 7), JSON.stringify(hoursApart.map((h) => h.length)));
+await clickText('.tab', /^Spaces/, 'Spaces tab');
+check('the desk lists both', new RegExp(secondSpace).test((await text('.desk .spaces')) ?? '') && new RegExp(firstSpace).test((await text('.desk .spaces')) ?? ''));
+await shot('10-two-spaces');
+
+// ── 9. the venue's own details, corrected ─────────────────────────────────
+console.log('\n9. Edit venue details — a rename steeple agrees to');
+await click('[data-action="edit-venue"]', 'Edit venue details');
+await wait(900);
+check('it opens as one step, with no rail over it', !(await visible('.listing .steps')), await page.$eval('.listing .steps', (n) => n.hidden));
+check('prefilled with the venue as it stands', (await page.$eval('#place-name', (n) => n.value)) === strandedName);
+check('and the address it was geocoded from', (await page.$eval('#place-address', (n) => n.value)) === '9 Yard Lane');
+check('the button saves rather than continues', (await text('[data-action="advance"]')) === 'Save changes');
+await shot('11-venue-editor');
+await type('#place-name', renamedName, { clear: true });
+await click('[data-action="advance"]', 'Save changes');
+await wait(2600);
+const renamed = await api(`/manage/venues/${stranded.id}`, token);
+check('steeple holds the new name', renamed.name === renamedName, renamed.name);
+check('and the slug never moved — a rename must not break a link', renamed.slug === stranded.slug, `${renamed.slug} vs ${stranded.slug}`);
+check('the host is told it is saved', /is saved/.test((await text('.notice__text')) ?? ''), await text('.notice__text'));
+check('and the button is a way out', (await text('[data-action="advance"]')) === 'Done');
+await click('[data-action="advance"]', 'Done');
+await wait(2600);
+check('the desk agrees', new RegExp(renamedName).test((await text('.desk .desk__head')) ?? ''), await text('.desk .desk__head'));
+await shot('12-renamed');
 
 // Nothing invisible left over the surface.
 const audit = await page.evaluate(() => {
@@ -366,7 +516,7 @@ if (problems.length) {
 } else {
   console.log('zero console errors');
 }
-console.log(`(this run left ${venueName} on the API under ${hostEmail})`);
+console.log(`(this run left ${venueName} and ${renamedName} on the API under ${hostEmail})`);
 
 await browser.close();
 process.exit(failures || problems.length ? 1 : 0);

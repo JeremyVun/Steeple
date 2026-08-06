@@ -202,8 +202,17 @@
 
 /* The foot is a pair, but the layout switch belongs to one tab only — with it
    gone the remaining button keeps its side rather than sliding to the middle. */
-.desk__foot > .pill:only-child {
+.desk__foot > .pill:only-child,
+.desk__foot > .desk__actions:only-child {
   margin-left: auto;
+}
+
+/* Two ways on: another space here, or another venue entirely. The quiet one
+   goes first so the primary keeps the corner the eye returns to. */
+.desk__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
 }
 
 .segments--flat {
@@ -1459,10 +1468,16 @@
 .field__inline {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-top: 7px;
   font-size: 12.5px;
   color: var(--ink-faint);
+}
+
+/* "per hour" is two words or none: squeezed, it would otherwise break into a
+   column of single letters beside the price. */
+.field__suffix {
+  white-space: nowrap;
 }
 
 .input {
@@ -1490,6 +1505,7 @@
 
 .input--num {
   width: 92px;
+  max-width: 100%;
 }
 
 .input:disabled {
@@ -1779,6 +1795,20 @@
   border-bottom: 1px solid var(--line);
 }
 
+/* A single-step flow — the venue editor — draws no rail at all. */
+.steps[hidden] {
+  display: none;
+}
+
+/* Whose the listing will be, on the Publish step's ledger: the name, and the
+   mark beside it when the fact holds. */
+.facts__by {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
 .steps__step {
   display: inline-flex;
   align-items: center;
@@ -2047,64 +2077,133 @@
   transform: translate(-50%, -50%);
 }
 
-/* ── the photograph, and who may use the room ───────────────────────────── */
+/* ── describing the room ────────────────────────────────────────────────── */
+
+/* What the host writes, beside what steeple needs to show it. */
+.describe {
+  /* The photograph's frame, said once: the column it sits in is exactly as wide,
+     so an empty tile and a filled one are the same size and nothing jumps. */
+  --tile: 212px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 28px;
+}
+
+.describe__words {
+  display: grid;
+  align-content: start;
+  gap: 15px;
+}
+
+/* The picture, and the two numbers, side by side: neither is tall enough to
+   deserve a row of its own, and stacked they left the column half empty. */
+.describe__facts {
+  display: grid;
+  grid-template-columns: var(--tile) minmax(0, 1fr);
+  align-items: start;
+  gap: 15px 22px;
+}
+
+.describe__nums {
+  display: grid;
+  align-content: start;
+  gap: 15px;
+}
+
+/* The three vocabularies, as one ledger: names down the left, choices beside. */
+.chosens {
+  display: grid;
+  gap: 13px;
+}
+
+.chosen {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px 14px;
+}
+
+/* The name reads level with the first row of what it names, not with its top. */
+.chosen__label {
+  padding-top: 7px;
+}
+
+.chosen__value {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+}
+
+/* ── the photograph ─────────────────────────────────────────────────────── */
 
 .shotpick__row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px 16px;
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+}
+
+/* The tile is the control: the input covers it, invisible, so the whole frame
+   opens the picker and keyboard focus still lands somewhere that shows it. */
+.shotpick__tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--tile, 212px);
+  max-width: 100%;
+  aspect-ratio: 3 / 2;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: var(--paper-sheet);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 150ms var(--ease), color 150ms var(--ease);
+}
+
+.shotpick__tile:hover {
+  border-color: var(--terracotta);
+}
+
+.shotpick__tile:has(.shotpick__thumb) {
+  border-style: solid;
+  border-color: var(--line);
+}
+
+.shotpick__tile:has(.shotpick__input:focus-visible) {
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px var(--sage-tint);
 }
 
 .shotpick__input {
-  font: inherit;
-  font-size: 12.5px;
-  color: var(--ink-soft);
-}
-
-.shotpick__input::file-selector-button {
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--ink);
-  background: var(--paper-sheet);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
-  padding: 6px 14px;
-  margin-right: 10px;
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   cursor: pointer;
 }
 
-.shotpick__input::file-selector-button:hover {
-  border-color: var(--terracotta);
-  color: var(--terracotta-deep);
-}
-
-.shotpick__preview {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
+.shotpick__prompt {
+  font-size: 12px;
+  letter-spacing: 0.01em;
   color: var(--ink-faint);
 }
 
+.shotpick__tile:hover .shotpick__prompt {
+  color: var(--terracotta-deep);
+}
+
 .shotpick__thumb {
-  width: 52px;
-  height: 40px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 4px;
-  border: 1px solid var(--line);
 }
 
-.shotpick__name {
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.shotpick__remove[hidden] {
+  display: none;
 }
 
-.welcome__chips:not(:empty) {
-  margin-top: 9px;
+/* Signed out of the choice, the chips are gone — and so is the gap above them. */
+.welcome__chips:empty {
+  display: none;
 }
 
 /* Free is sage wherever a host reads it, as it is wherever a guest does. */
@@ -2232,6 +2331,21 @@
   color: var(--ink-faint);
 }
 
+/* ── short viewports ────────────────────────────────────────────────────── */
+
+/* A laptop window is short before it is narrow, and a step that fits at 900px
+   was scrolling at 800 only because the sheet left a band of the window unused
+   above and below itself. */
+@media (max-height: 880px) {
+  .listing__layer {
+    padding: 14px;
+  }
+
+  .listing {
+    max-height: 94vh;
+  }
+}
+
 /* ── narrow viewports ───────────────────────────────────────────────────── */
 
 @media (max-width: 1120px) {
@@ -2260,6 +2374,16 @@
 @media (max-width: 720px) {
   .desk__head {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Two columns and a label at the left both need width to be worth having. */
+  .describe,
+  .chosen {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chosen__label {
+    padding-top: 0;
   }
 
   .desk__switch {

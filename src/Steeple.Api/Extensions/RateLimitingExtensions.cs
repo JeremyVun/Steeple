@@ -6,6 +6,9 @@ namespace Steeple.Api.Extensions;
 /// <summary>Names of the API's rate-limiting policies (referenced by controllers).</summary>
 public static class RateLimitPolicies
 {
+    /// <summary>Per-IP limiter for anonymous discovery/config reads.</summary>
+    public const string Discovery = "discovery";
+
     /// <summary>Per-IP limiter for the public writable auth endpoints (SYSTEM_DESIGN §6).</summary>
     public const string Auth = "auth";
 
@@ -61,6 +64,8 @@ public static class RateLimitingExtensions
     private const int ManagePermitLimit = 30;
     private const int MediaPermitLimit = 12;
     private const int AvailabilityPermitLimit = 30;
+    private const int DiscoveryPermitLimit = 120;
+    private const int GlobalPermitLimit = 300;
 
     // Both policies share a 1-minute window, which keeps the single OnRejected Retry-After honest.
     private static readonly TimeSpan Window = TimeSpan.FromMinutes(1);
@@ -70,6 +75,28 @@ public static class RateLimitingExtensions
     {
         services.AddRateLimiter(options =>
         {
+            // A final application-wide ceiling covers every route, including forgotten future
+            // endpoints. Authenticated callers partition by account; anonymous callers by IP.
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.User.FindFirst("sub")?.Value ?? ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = GlobalPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.Discovery, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = DiscoveryPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
             options.AddPolicy(RateLimitPolicies.Auth, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     // The forwarded-headers middleware has already rewritten RemoteIpAddress to

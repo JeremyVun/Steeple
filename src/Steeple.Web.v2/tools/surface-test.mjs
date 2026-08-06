@@ -56,7 +56,7 @@ async function surface({ width, height, block = null } = {}) {
   }
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.clear());
-  await page.goto(`${url}#/village`, { waitUntil: 'networkidle0' });
+  await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   await page.evaluate('__steeple.roll.set(1)');
   await wait(3000);
@@ -135,7 +135,7 @@ async function press(page, sel, { touch = false } = {}) {
     // A goto that only changes the hash is not a navigation: the page would keep
     // the pan the last venue left the map on.
     await page.goto('about:blank');
-    await page.goto(`${url}#/village`, { waitUntil: 'networkidle0' });
+    await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
     await page.evaluate('__steeple.roll.set(1)');
     await wait(3000);
