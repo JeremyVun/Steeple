@@ -415,3 +415,36 @@ stack has no Spaces credentials configured and falls back to `LocalDiskMediaStor
 API serves itself at `/media`). It's dev-only, not reachable off the host, and unnecessary once
 `MEDIA_*` env vars point at real Spaces (deviation from the "api compose-internal" rule —
 SYSTEM_DESIGN §17). The api's `steeple_api_media` volume backs that local-disk store.
+
+### The web container's nginx (`src/Steeple.Web.v2/nginx.conf`)
+
+The SPA has no server of its own, so its host sets everything a static host must
+(hardened 2026-08-06):
+
+- **Compression** — `gzip on` for CSS, JS, JSON, SVG and plain text (`gzip_vary`,
+  512-byte floor). Measured on the built bundle: CSS 120.9 kB → 27.3 kB, JS 375.3 kB →
+  117.2 kB. `text/html` is never listed in `gzip_types` — nginx always compresses it.
+  Hashed `/assets/` keep their year-long `immutable` caching; `/` stays `no-cache`.
+- **Headers** — `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+  strict-origin-when-cross-origin`, `X-Frame-Options: DENY`, and a Content-Security-Policy.
+  They are repeated in each app `location` because nginx's `add_header` does not merge:
+  a location with any `add_header` of its own inherits none from the server block. The
+  policy text itself is written once into `$csp`.
+- **CSP** — `default-src 'self'` with four deliberate exceptions, all of them images:
+  `https://*.tile.openstreetmap.org` (map tiles), `https://images.unsplash.com` (room
+  photography, absolute in the DB per `db/changelog/012`), `data:` (favicon + SVG drawn in
+  CSS) and `blob:` (a host previewing their own photo before it is sent). `style-src`
+  carries `'unsafe-inline'` — the request sheet's week card sets grid geometry as a `style`
+  attribute (`ui/guest/weekCard.js`), which raises `style-src-attr blocked inline` without
+  it. `script-src 'self'` needs no exception: the bundle contains no inline `<script>`.
+  No directive names a path, so the policy is unchanged behind a stripped sub-path prefix.
+  `/api/` adds no headers at all — the API answers for its own responses.
+- ⚠ **Coupling:** uploaded room photos are served from `Media:PublicBaseUrl` and stored as
+  absolute URLs. While that is the web origin they are covered by `'self'`; pointing it at
+  a CDN or Spaces bucket means adding that origin to `img-src` or every uploaded photo
+  silently stops loading.
+
+Verified in the real container (an isolated compose project on :8180): headers and
+`Content-Encoding: gzip` by `curl`, then the app driven headless with village on and
+`?world=off` — map tiles and Unsplash photographs fetched 200, a space sheet opened by a
+real click, zero `securitypolicyviolation` events.
