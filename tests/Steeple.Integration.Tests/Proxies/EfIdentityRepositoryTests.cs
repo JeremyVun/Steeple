@@ -121,7 +121,7 @@ public class EfIdentityRepositoryTests
     }
 
     [Fact]
-    public async Task ReplaceRefreshTokenAsync_RevokesCurrentAndInsertsNextAtomically()
+    public async Task TryReplaceRefreshTokenAsync_RevokesCurrentAndInsertsNextAtomically()
     {
         await using var seedDb = CreateContext();
         var user = NewUser();
@@ -137,10 +137,13 @@ public class EfIdentityRepositoryTests
         {
             var repository = new EfIdentityRepository(db, clock);
             var tracked = await db.RefreshTokens.SingleAsync(t => t.Id == current.Id);
-            tracked.RevokedAtUtc = FixedNow;
             var next = NewRefreshToken(user.Id, familyId, nextHash);
 
-            await repository.ReplaceRefreshTokenAsync(tracked, next);
+            Assert.True(await repository.TryReplaceRefreshTokenAsync(tracked, next, FixedNow));
+
+            // A second rotation of the same row is refused rather than forking the family.
+            Assert.False(await repository.TryReplaceRefreshTokenAsync(
+                tracked, NewRefreshToken(user.Id, familyId, $"loser-{Guid.NewGuid():N}"), FixedNow));
         }
 
         await using var readDb = CreateContext();

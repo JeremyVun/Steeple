@@ -15,6 +15,20 @@ public sealed class AuthOptions
     /// <summary>Idle expiry for refresh tokens, in days (SYSTEM_DESIGN §6: ~90).</summary>
     public int RefreshTokenDays { get; set; } = 90;
 
+    /// <summary>
+    /// How long a just-rotated refresh token still answers with its successor instead of being
+    /// treated as theft. Browsers open the same session in several tabs and each one may 401 at the
+    /// same instant; without a grace window the second tab's honest retry revokes the family
+    /// (SYSTEM_DESIGN §17 — refresh-rotation grace). Seconds; 0 disables the grace entirely.
+    /// </summary>
+    public int RefreshReuseGraceSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// Name of the httpOnly cookie carrying the refresh token for browser clients
+    /// (<c>refreshTransport: "cookie"</c>). Mobile keeps the token in the response body.
+    /// </summary>
+    public string RefreshCookieName { get; set; } = "steeple_refresh";
+
     /// <summary>Google SSO verification settings.</summary>
     public ProviderOptions Google { get; set; } = new();
 

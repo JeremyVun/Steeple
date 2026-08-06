@@ -247,8 +247,12 @@ edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/
 **Web SPA** — `Steeple.Web.v2` is the deployed web surface. Vite produces static assets and
 the nginx host serves them while proxying same-origin `/api` requests to the API container;
 the API still emits no CORS headers. Hash routes own navigation. `src/data/api.js` is the
-wire seam and `src/data/session.js` stores the API token pair in localStorage with
-single-flight refresh and one 401 retry. Catalog reads, application submit, and the host
+wire seam and `src/data/session.js` owns identity: the refresh token is an **httpOnly cookie**
+the API sets (`refreshTransport: "cookie"`), the access token lives in module memory, and
+localStorage holds only the person and why their session last changed — which is also how
+sibling tabs learn about a sign-in or sign-out (`storage` event). Refresh is single-flight per
+tab with one 401 retry; simultaneous tabs are made safe by the API's rotation grace, not by the
+client (`contracts/identity.md`, SYSTEM_DESIGN §17, 2026-08-06). Catalog reads, application submit, and the host
 venue/room/photo/publish chain use the real API. Sign-in is still the Development-only dev
 provider; guest inbox/letters and host request decisions still use the local demo store.
 The deprecated v1 BFF remains in source for reference but is excluded from the solution,

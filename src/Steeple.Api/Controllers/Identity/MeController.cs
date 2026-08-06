@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Steeple.Api.Services.Notifications;
 
 namespace Steeple.Api.Controllers.Identity;
@@ -15,11 +16,13 @@ public sealed class MeController : ControllerBase
 {
     private readonly IIdentityService _identity;
     private readonly IDeviceRegistry _devices;
+    private readonly AuthOptions _options;
 
-    public MeController(IIdentityService identity, IDeviceRegistry devices)
+    public MeController(IIdentityService identity, IDeviceRegistry devices, IOptions<AuthOptions> options)
     {
         _identity = identity;
         _devices = devices;
+        _options = options.Value;
     }
 
     /// <summary>Profile plus recorded ToS/Privacy acceptances.</summary>
@@ -51,12 +54,42 @@ public sealed class MeController : ControllerBase
                 extensions: new Dictionary<string, object?> { ["code"] = "unknown_doc_type" });
     }
 
-    /// <summary>Signs out everywhere: revokes every session the user holds.</summary>
+    /// <summary>
+    /// Signs out everywhere: revokes every session the user holds.
+    ///
+    /// Like <c>DELETE /auth/sessions</c>, this accepts the refresh cookie in place of a live access
+    /// token — the shared-computer answer is worth nothing if it stops working fifteen minutes
+    /// after the page was opened.
+    /// </summary>
+    [AllowAnonymous]
     [HttpDelete("sessions")]
     public async Task<IActionResult> RevokeAllSessions(CancellationToken ct)
     {
-        await _identity.RevokeAllSessionsAsync(User.GetUserId(), ct);
-        return NoContent();
+        var cookie = RefreshTokenCookie.Read(Request, _options);
+        if (cookie is not null)
+        {
+            RefreshTokenCookie.Expire(HttpContext, _options);
+        }
+
+        if (User.Identity?.IsAuthenticated == true)
+        {
+            await _identity.RevokeAllSessionsAsync(User.GetUserId(), ct);
+            return NoContent();
+        }
+
+        if (cookie is not null)
+        {
+            // One revocation to find the person, one to end the rest of their sessions.
+            var userId = await _identity.RevokeSessionByRefreshTokenAsync(cookie, ct);
+            if (userId is not null)
+            {
+                await _identity.RevokeAllSessionsAsync(userId.Value, ct);
+            }
+
+            return NoContent();
+        }
+
+        return Unauthorized();
     }
 
     /// <summary>Registers (or refreshes) a push device for the current user — upsert by <c>fcmToken</c>.</summary>

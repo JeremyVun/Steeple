@@ -335,9 +335,23 @@ export function getRoomAvailability(roomId, { from, to } = {}) {
  * `turnstileToken` is required only where Turnstile is enabled; locally it is
  * null. A 401 carries `code: invalid_id_token`, a 409 `use_original_provider`.
  *
+ * `refreshTransport: 'cookie'` asks steeple to keep the rotating refresh token
+ * in an httpOnly cookie instead of the answer — the response then carries no
+ * `refreshToken` at all, and the browser presents it on its own. This is what a
+ * browser wants and what native clients do not: `'body'` is the default and the
+ * shape mobile still reads.
+ *
  * @returns {Promise<WireSession>}
  */
-export function createSession({ provider, idToken, nonce = null, turnstileToken = null, displayName = null, device = null }) {
+export function createSession({
+  provider,
+  idToken,
+  nonce = null,
+  turnstileToken = null,
+  displayName = null,
+  device = null,
+  refreshTransport = null,
+}) {
   return send('POST', '/auth/sessions', {
     provider,
     idToken,
@@ -345,33 +359,45 @@ export function createSession({ provider, idToken, nonce = null, turnstileToken 
     turnstileToken,
     displayName,
     device,
+    refreshTransport,
   });
 }
 
 /**
- * `POST /auth/refresh` — rotate the pair. The old refresh token dies here; using
- * it twice revokes every session in its family, so a caller must keep exactly
- * one refresh in flight.
- * @returns {Promise<{accessToken:string,refreshToken:string}>}
+ * `POST /auth/refresh` — rotate the pair. The old refresh token dies here.
+ *
+ * On cookie transport there is nothing to send: steeple reads the cookie the
+ * browser attached and answers with a new one, so `refreshToken` stays null and
+ * the returned pair carries only an access token. Presenting a token that was
+ * rotated moments ago is answered with its successor rather than treated as
+ * theft (the rotation grace window), which is what makes two tabs safe; a replay
+ * after that window still revokes the whole family.
+ *
+ * @returns {Promise<{accessToken:string,refreshToken?:string}>}
  */
-export function refreshSession(refreshToken) {
-  return send('POST', '/auth/refresh', { refreshToken });
+export function refreshSession({ refreshToken = null, refreshTransport = null } = {}) {
+  return send('POST', '/auth/refresh', { refreshToken, refreshTransport });
 }
 
 /**
  * `DELETE /auth/sessions` — sign out here: revokes this session's refresh-token
  * family, so the pair this browser was holding can never be rotated again.
  * Answers 204.
+ *
+ * The access token is optional: with none, steeple authenticates the revocation
+ * from the refresh cookie instead — which is the common case, since a tab left
+ * open outlives its fifteen-minute access token.
  */
-export function deleteSession(accessToken) {
+export function deleteSession(accessToken = null) {
   return send('DELETE', '/auth/sessions', undefined, { accessToken });
 }
 
 /**
  * `DELETE /me/sessions` — sign out everywhere: revokes every session this
- * person holds, on every device. Answers 204.
+ * person holds, on every device. Answers 204. Like `deleteSession`, the refresh
+ * cookie stands in for an access token that has already expired.
  */
-export function deleteAllSessions(accessToken) {
+export function deleteAllSessions(accessToken = null) {
   return send('DELETE', '/me/sessions', undefined, { accessToken });
 }
 

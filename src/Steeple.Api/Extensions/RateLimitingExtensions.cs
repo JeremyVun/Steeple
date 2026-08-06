@@ -10,6 +10,16 @@ public static class RateLimitPolicies
     public const string Auth = "auth";
 
     /// <summary>
+    /// Per-IP limiter for refresh rotation. Deliberately not <see cref="Auth"/>: the auth budget is
+    /// sized to slow down guessing at sign-in, and a refresh guesses nothing — it presents a
+    /// 256-bit opaque token or the httpOnly cookie, and a wrong one revokes the family rather than
+    /// inviting another try. Since the web access token lives in memory only (docs/contracts/identity.md),
+    /// every reload of a signed-in browser spends one of these, and several tabs behind one NAT
+    /// would otherwise starve sign-in itself.
+    /// </summary>
+    public const string Refresh = "refresh";
+
+    /// <summary>
     /// Limiter for application submits + thread messages: per-account when authenticated
     /// (the endpoints require auth, so this is the per-account limit CONTRACTS §5 asks for),
     /// falling back to per-IP.
@@ -44,6 +54,7 @@ public static class RateLimitPolicies
 public static class RateLimitingExtensions
 {
     private const int AuthPermitLimit = 10;
+    private const int RefreshPermitLimit = 60;
     private const int ApplyPermitLimit = 5;
     private const int PaymentsPermitLimit = 10;
     private const int EventsPermitLimit = 60;
@@ -67,6 +78,16 @@ public static class RateLimitingExtensions
                     _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = AuthPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.Refresh, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = RefreshPermitLimit,
                         Window = Window,
                         QueueLimit = 0,
                     }));

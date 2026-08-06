@@ -269,28 +269,28 @@ eq('the inbox shows it', await page.evaluate('document.querySelectorAll(".jrow")
 
 // ── 4. signing out revokes the session at steeple ───────────────────────────
 console.log('\n4. signing out');
-const held = await page.evaluate(
-  "JSON.parse(localStorage.getItem('steeple-village-session'))"
+const stored = await page.evaluate("JSON.parse(localStorage.getItem('steeple-village-session'))");
+check('storage holds the person', Boolean(stored?.user?.id));
+check('and no token of any kind', !stored?.accessToken && !stored?.refreshToken);
+check(
+  'the refresh token is a cookie script cannot read',
+  !(await page.evaluate('document.cookie')).includes('steeple_refresh')
 );
-check('the browser was holding a refresh token', Boolean(held?.refreshToken));
+const jar = await page.cookies();
+const refreshCookie = jar.find((c) => c.name === 'steeple_refresh');
+check('but the browser is holding one', Boolean(refreshCookie), refreshCookie?.httpOnly ? 'httpOnly' : '');
 
-const stillGood = await fetch(`${origin}/api/v1/auth/refresh`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ refreshToken: held.refreshToken }),
+// The cookie alone rotates, which is what the session's whole boot depends on.
+const stillGood = await page.evaluate(async () => {
+  const response = await fetch('api/v1/auth/refresh', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  return response.status;
 });
-eq('which steeple honours while the session lives', stillGood.status, 200);
-const rotated = await stillGood.json();
-// The browser's own token was just rotated out from under it; put the pair the
-// API answered with back, so signing out revokes a family that is still live.
-await page.evaluate(
-  (pair) =>
-    localStorage.setItem(
-      'steeple-village-session',
-      JSON.stringify({ ...JSON.parse(localStorage.getItem('steeple-village-session')), ...pair })
-    ),
-  { accessToken: rotated.accessToken, refreshToken: rotated.refreshToken }
-);
+eq('which steeple honours while the session lives', stillGood, 200);
+
 await page.reload({ waitUntil: 'networkidle0' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
 await page.evaluate('__steeple.roll.set(1)');
@@ -301,11 +301,22 @@ await wait(300);
 check('the card offers a way out', await visible('.account__out'));
 check('and the shared-computer one', await visible('.account__all'));
 await page.screenshot({ path: '/tmp/steeple-webp1-card.png' });
+// Held for the replay below. Only the harness can read this: it is httpOnly, so
+// the page itself has no way to, which is the point of §4's first checks.
+const live = (await page.cookies()).find((c) => c.name === 'steeple_refresh')?.value;
 await clickOn('.account__out');
 await wait(1200);
 
 eq('the browser holds nobody', await page.evaluate('!!__steeple.session.currentUser()'), 'false');
-eq('and no session in storage', await page.evaluate("localStorage.getItem('steeple-village-session')"), 'null');
+eq(
+  'and storage names nobody either',
+  await page.evaluate("String(JSON.parse(localStorage.getItem('steeple-village-session') ?? 'null')?.user)"),
+  'null'
+);
+check(
+  'the refresh cookie is gone with it',
+  !(await page.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
+);
 check('the inbox tab is gone', !(await visible('.letters')));
 eq('the shelf offers the way back in', await text('.account'), 'Sign in');
 eq('and the view is the village', await page.evaluate('__steeple.state.view'), 'village');
@@ -316,10 +327,12 @@ check(
   )
 );
 
+// The token the cookie was carrying, replayed from outside the browser: the
+// sign-out has to have ended it at steeple, not merely here.
 const replayed = await fetch(`${origin}/api/v1/auth/refresh`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ refreshToken: rotated.refreshToken }),
+  body: JSON.stringify({ refreshToken: live }),
 });
 eq('steeple has revoked the family — replaying the refresh token', replayed.status, 401);
 
@@ -342,18 +355,23 @@ await page.screenshot({ path: '/tmp/steeple-webp1-second.png' });
 
 // ── 6. a session that ends without being asked ──────────────────────────────
 console.log('\n6. a session that expires under them');
-await page.evaluate(() => {
-  const held = JSON.parse(localStorage.getItem('steeple-village-session'));
-  localStorage.setItem(
-    'steeple-village-session',
-    JSON.stringify({ ...held, accessToken: 'spent', refreshToken: 'spent' })
-  );
-});
-await page.reload({ waitUntil: 'networkidle0' });
+// The person is still written down; the credential that proves it is not. Taking
+// the httpOnly cookie is the only way to stage this now — which is the point.
+const held = (await page.cookies()).find((c) => c.name === 'steeple_refresh');
+const cdp = await page.createCDPSession();
+await cdp.send('Network.deleteCookies', { name: held.name, domain: held.domain, path: held.path });
+await cdp.detach();
+check(
+  'the credential really is gone before the reload',
+  !(await page.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
+);
+// Not networkidle0: with no access token in memory the session now expires in
+// the first breath of boot, and the slip lives twelve seconds. Waiting for the
+// map's blocked tiles to give up first can spend the whole of it.
+await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
 await page.evaluate('__steeple.roll.set(1)');
 await page.waitForFunction('!__steeple.session.currentUser()', { timeout: 20000 }).catch(() => {});
-await wait(1200);
 eq('the dead session is dropped', await page.evaluate('!!__steeple.session.currentUser()'), 'false');
 check('and the page says so rather than going quiet', await waitVisible('.slip'));
 eq('in words', await text('.slip__line'), "You've been signed out.");
