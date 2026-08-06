@@ -90,21 +90,34 @@ const ANON = 'anon';
 
 const MS_DAY = 86400000;
 
+// Calendar arithmetic runs in UTC, always. These are venue-local wall-clock
+// *dates*, not instants, and UTC is the only clock without DST: adding 86400000ms
+// to a local midnight lands on the same calendar date whenever the day is 25
+// hours long, so `2026-11-01 + 1 day` returned 2026-11-01 in America/New_York and
+// `2026-04-05 + 1` returned 2026-04-05 in Australia/Sydney — which spun
+// `materializeDates` forever and took the tab with it.
+
+/** A calendar date as the UTC instant of its midnight. */
+function fromIso(s) {
+  const [y, m, d] = String(s).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
 function iso(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
-function fromIso(s) {
-  const [y, m, d] = s.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
+/** Today on the browser's own calendar — the one date read in local time. */
+export const todayIso = () => {
+  const now = new Date();
+  return iso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+};
 
-export const todayIso = () => iso(new Date());
 export const addDays = (isoDate, n) => iso(new Date(fromIso(isoDate).getTime() + n * MS_DAY));
-export const weekdayOf = (isoDate) => fromIso(isoDate).getDay();
+export const weekdayOf = (isoDate) => fromIso(isoDate).getUTCDay();
 
 /** The first date on weekday `dow` that is on or after `isoDate`. */
 export function nextWeekday(isoDate, dow) {
@@ -414,8 +427,17 @@ export function materializeDates(schedule, blackouts = []) {
     return blocked.has(schedule.startDate) ? [] : [schedule.startDate];
   }
   const dates = [];
-  for (let d = schedule.startDate; d <= schedule.endDate; d = addDays(d, 1)) {
+  for (let d = schedule.startDate; d <= schedule.endDate; ) {
     if (schedule.daysOfWeekMask & (1 << weekdayOf(d)) && !blocked.has(d)) dates.push(d);
+    const next = addDays(d, 1);
+    // A day that does not advance is an unbounded loop with the main thread in
+    // it. UTC arithmetic cannot produce one; a malformed date could. Stop short
+    // and say so rather than freeze the tab.
+    if (!(next > d)) {
+      console.error(`store: the calendar stalled at ${d} — schedule truncated`);
+      break;
+    }
+    d = next;
   }
   return dates;
 }
@@ -537,17 +559,26 @@ const upsertBy = (list, row) => {
  * whole thread and replaces it. `counterOffer` is the latest live counter — the
  * service returns no history, so neither does this.
  *
- * The counter rides the *same* switch as the thread, because the API omits it
- * from lists for the same reason (`ApplicationMappings.ToDto`: "lists omit it,
- * matching the thread/conflicts"). Reading it off a list read means reading
- * `null` and forgetting a live counter-offer — which is what a background inbox
- * refresh did to a letter the guest was standing in front of.
+ * Wire fact this reads by: a list read hardcodes both `messages: []` and
+ * `counterOffer: null` (`ApplicationMappings.ToDto`, `includeThread: false` —
+ * "lists omit it, matching the thread/conflicts"), and `Messages` is
+ * non-nullable, so `[]` is sent rather than omitted. Two consequences:
+ *
+ * - Anything the payload *carries* proves a detail read, so it is always held.
+ * - Emptiness proves nothing — a list read and a detail read of a request
+ *   nobody has written on are byte-identical. Only the caller knows, which is
+ *   what `thread` is for, and it is therefore the only thing that may *clear*.
+ *
+ * The old gate read `messages.length > 0` as the mode for both blocks, so a
+ * detail read carrying a live counter and no messages was taken for a list read
+ * and the counter was dropped on the floor. The two blocks answer to their own
+ * evidence now.
  *
  * @param {object} dto steeple's ApplicationDto
  * @param {{thread?: boolean}} options `thread` when the dto is a detail read
  * @returns {object} the mirrored application
  */
-export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) && dto.messages.length > 0 } = {}) {
+export function mirrorApplication(dto, { thread = false } = {}) {
   load();
   const application = fromWireApplication(dto);
   // What changed, for the surfaces that animate a change rather than draw a
@@ -557,7 +588,8 @@ export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) &
   const settled = before?.status !== APP_STATUS.approved && application.status === APP_STATUS.approved;
   upsertBy(data.applications, application);
 
-  if (thread) {
+  // A message present proves a detail read; only a declared one may empty it.
+  if (thread || dto?.messages?.length > 0) {
     const organizerId = dto.organizer?.id ?? null;
     data.messages = data.messages.filter((m) => m.applicationId !== application.id);
     for (const message of dto.messages ?? []) {
@@ -573,7 +605,9 @@ export function mirrorApplication(dto, { thread = Array.isArray(dto?.messages) &
     }
   }
 
-  if (thread) {
+  // And a counter present proves the same, on its own evidence — reading it off
+  // the thread's switch is what lost one behind a background inbox refresh.
+  if (thread || dto?.counterOffer) {
     data.counterOffers = data.counterOffers.filter((c) => c.applicationId !== application.id);
     if (dto.counterOffer) data.counterOffers.push(fromWireCounter(dto.counterOffer, application.id));
   }

@@ -137,6 +137,14 @@ server's. Clearing localStorage mid-flow costs a reload, never a fact.
   carries no thread (`messages: []`) and leaves the one already held alone; a **detail** read
   replaces it. `counterOffer` is the latest live counter — steeple returns no history, so
   neither does this (the host's "times you have offered" list shows the live one only).
+  The thread and the counter answer to **their own evidence**, not to one shared switch: a
+  list read hardcodes `messages: []` *and* `counterOffer: null` (`ApplicationMappings.ToDto`,
+  `includeThread: false`), and `Messages` is non-nullable, so anything the payload carries
+  proves a detail read and is held, while emptiness proves nothing — a list read and a detail
+  read of a request nobody has written on are byte-identical. `thread: true` is therefore the
+  only thing that may **clear** either, and every detail path in `correspondence.js` passes it.
+  (Reading both off `messages.length > 0` once dropped a live counter-offer that arrived with
+  an empty thread.)
 - `mirrorApplications(dtos, {scope})` — a page as the whole of a scope: anything matching
   `scope` that the page did not carry is dropped, which is how a withdrawal made on another
   device leaves this browser.
@@ -157,6 +165,16 @@ server's. Clearing localStorage mid-flow costs a reload, never a fact.
   (live form validation — hours are only checked when the caller has been told them, and the
   room may be handed in because it may be one only the catalog knows), `setOpenHours`,
   blackouts, `editRoom`, `upsertPlacedVenue` — the listing flow's working copy.
+
+**Calendar arithmetic is UTC, always.** `addDays`, `weekdayOf`, `nextWeekday` and
+`materializeDates` handle venue-local wall-clock **dates**, not instants, so they parse with
+`Date.UTC` and read back with `getUTC*` — UTC is the only clock without DST. Doing it in local
+time meant a 25-hour day absorbed the `+86400000ms` and the date never advanced, which froze
+`materializeDates` (and the tab) on the US fall-back and Sydney's. `todayIso()` is the single
+deliberate exception: it is this person's own calendar date, read in local time.
+`materializeDates` additionally refuses to loop without forward progress. `tools/store-test.mjs`
+pins all of it and **must be run under `TZ=UTC`, `TZ=America/New_York` and
+`TZ=Australia/Sydney`** — a UTC-only run cannot see the bug class at all.
 
 **The key is `steeple-village-store:{organizerId}`** (Phase 1, D6), where the id is
 **steeple's own user id** or `'anon'`. `currentOrganizerId()` reads `session.currentUser()`
