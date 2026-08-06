@@ -274,7 +274,7 @@ group asking is a field on the request sheet (the hardcoded email→organization
 writes wait 15s and a timeout is never reported as an absence; the desk reads each room's hours
 from the wire; the client analytics batcher, so nothing user-visible ships dark; and the SEO
 floor — `public/robots.txt`, `GET /api/v1/sitemap.xml` aliased at the edge, site-level OG +
-`WebSite` JSON-LD. Driven by `tools/hardening-test.mjs` (63/63, §1–§8). Demo — the card step and
+`WebSite` JSON-LD. Driven by `tools/hardening-test.mjs` (65/65, §1–§8). Demo — the card step and
 the payout screen are the mock gateway's own stand-ins, and no provider/Turnstile keys exist
 yet, so those paths are env-gated-off locally by design. Accounts-consolidation order agreed
 2026-08-05: signed-out header state (**done**) → inbox onto `/me/applications` (**done**) →
