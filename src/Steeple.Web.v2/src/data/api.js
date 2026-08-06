@@ -671,11 +671,18 @@ export function getManagedVenue(venueId, accessToken) {
  * address/suburb/postcode. Name, description and the three address fields are
  * required; a location outside the beachhead answers `geofence_rejected` and an
  * address that resolves to nothing answers `invalid_venue`.
+ *
+ * An `Idempotency-Key` makes a replay (the 4s client abort can fire after the
+ * server has already committed) answer with the original venue instead of
+ * creating a second one — same idiom as `submitApplication` above.
  * @param {{name:string,description:string,addressLine:string,suburb:string,postcode:string,venueType?:string,contactEmail?:string|null}} body
  * @returns {Promise<WireManagedVenue>}
  */
-export function createManagedVenue(body, { accessToken } = {}) {
-  return send('POST', '/manage/venues', body, { accessToken });
+export function createManagedVenue(body, { accessToken, idempotencyKey = null } = {}) {
+  return send('POST', '/manage/venues', body, {
+    accessToken,
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+  });
 }
 
 /** `PATCH /manage/venues/{id}` — null fields stay as they are; address changes re-geocode. */
@@ -687,10 +694,16 @@ export function updateManagedVenue(venueId, body, { accessToken } = {}) {
  * `POST /manage/venues/{id}/rooms` — a room, always created in draft.
  * `pricePerHour` is required and must be greater than zero, and `description`
  * may not be empty: both answer `invalid_room` otherwise.
+ *
+ * An `Idempotency-Key` makes a replay answer with the original room instead of
+ * creating a second one — same idiom as `createManagedVenue` above.
  * @returns {Promise<WireManagedRoom>}
  */
-export function createManagedRoom(venueId, body, { accessToken } = {}) {
-  return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/rooms`, body, { accessToken });
+export function createManagedRoom(venueId, body, { accessToken, idempotencyKey = null } = {}) {
+  return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/rooms`, body, {
+    accessToken,
+    headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+  });
 }
 
 /**

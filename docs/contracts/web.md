@@ -256,17 +256,22 @@ it is contained by construction: its letters are written under the seed's own id
   gateway's own (`saveMockCard` retires at Stripe-time), and the payout screen is the mock's
   stand-in for hosted KYC.
 
-⚠ Still unbuilt: D7 (Turnstile, agreements, real providers), D8's client half (client-sent
-idempotency keys on manage creates, longer write timeouts), D9 (CSP, `window.__steeple`
-gated to dev).
+⚠ Still unbuilt: D7 (Turnstile, agreements, real providers), D8's longer-write-timeouts half
+(the idempotency-key half is done — see below), D9 (CSP, `window.__steeple` gated to dev).
 
 ## Known hazards (unfixed)
 
-- The 4s abort timeout on writes can **double-create venues**: a timed-out create retried by
-  the user creates twice. The API *does* honour `Idempotency-Key` on manage creates now
-  (`ManageIdempotencyIntegrationTests`); the missing half is the client, which does not send
-  one (D8). The guest's submit does, and is proven to keep it across a failed send
-  (`correspondence-test.mjs` §7).
+- ~~The 4s abort timeout on writes can double-create venues~~ — fixed for the in-session retry
+  path (D8's client half): `createManagedVenue`/`createManagedRoom` (`data/api.js`) now accept
+  and send `Idempotency-Key`, and `ui/host/manage.js`'s `saveVenue`/`saveRoom` generate one
+  `crypto.randomUUID()` per logical create, hold it on `draft.remote.{venue,room}IdempotencyKey`
+  across every retry (same idiom as `guest/send.js`'s `draft.idempotencyKey`), and delete it
+  only once steeple has answered — so the wizard's own retry (or `withAccess`'s 401-refresh
+  replay) lands on the request that already happened. The API already honoured
+  `Idempotency-Key` on manage creates (`ManageIdempotencyIntegrationTests`). Residual gap: the
+  key lives only on the in-memory `draft` for that flow session, so a full page reload between
+  the timed-out request and the retry still mints a fresh key (the guest submit path shares
+  this same shape). The 4s timeout itself is unchanged (D8's other half).
 - `draft.roomId` is always `'main-space'` in the listing flow — a second room per venue collides.
 - Dev geocoding is `StubGeocodingGateway`: every address resolves to the village centre, so
   geofence-rejection paths are locally unreachable.
