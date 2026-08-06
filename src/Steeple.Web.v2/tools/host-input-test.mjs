@@ -240,27 +240,18 @@ check('markup does not run', (await page.evaluate('window.__pwned')) === undefin
 check('and nothing was injected into the sheet', (await page.$$('.listing script')).length === 0);
 await shot('01-place');
 await click('[data-action="advance"]', 'Continue');
-check('Verify is next', (await onStep()) === '2Verify', await onStep());
+check('Describe is next — the venue is created on the way out of Place', (await onStep()) === '2Describe', await onStep());
 
-// ── 2. Verify ─────────────────────────────────────────────────────────────
+// ── 2. the session it is written under ────────────────────────────────────
 //
-// Re-baselined for v2_migration Phase 2. This step used to be where a host
-// signed in, because the flow could be reached by a stranger. It cannot be
-// reached by a stranger any more (D4: no desk, and no way to hosting, without a
-// session), so by the time anybody stands here they are already somebody — the
-// step shows them who, and asks them to carry on rather than to sign in again.
-//
-// ⚠ Note for whoever owns the flow next: the signed-*out* half of this step is
-// now unreachable in the product's own order. Either the flow should be openable
-// before signing in (and this step is the gate), or the step should be dropped
-// and the flow entered already-identified. That is a product call, not a
-// harness one — it is written up in `docs/backlog/v2_migration/build_plan.md`.
-console.log('\n2. Verify — the session it will be written under');
-check('the step does not ask a signed-in host to sign in again', (await page.$('#identity-email')) === null);
-check('it shows who the listing will belong to', (await page.$('.listing .identity .verified')) !== null);
-await clickText('.listing .identity__actions .pill--primary', /^Continue as/, 'carry on as this person');
-await wait(2600);
-check('Describe is next', (await onStep()) === '3Describe', await onStep());
+// Re-baselined 2026-08-07 (P6). The Verify step died on 2026-08-06: hosting
+// cannot be entered without a session, so the flow is four steps and nobody is
+// asked to sign in again in the middle of it. The "whose listing this will be"
+// disclosure lives on the Publish review now (host-publish-test §4 holds it).
+// What is still this suite's: the flow never re-asks the question.
+console.log('\n2. the session it is written under — never asked twice');
+check('no step asks a signed-in host to sign in again', (await page.$('.listing #identity-email')) === null);
+check('and none of the steps is Verify', !/Verify/.test((await text('.steps')) ?? ''), await text('.steps'));
 const token = await bearer();
 const held = await api('/manage/venues', token);
 const mine = held.find?.((v) => v.name.includes(venueName));
@@ -300,7 +291,7 @@ await click('[data-action="advance"]', 'Set availability, unpriced');
 await wait(2600);
 check(
   'and is not stranded there by the service',
-  (await onStep()) === '4Availability',
+  (await onStep()) === '3Availability',
   `${await onStep()} · ${await noticeText()}`
 );
 const beforePrice = await api(`/manage/venues/${venueId}`, token);
@@ -312,13 +303,13 @@ await clickText('.paint__quick .linkish', /Open every day/, 'the standard week')
 await wait(500);
 await click('[data-action="advance"]', 'Review and publish, unpriced');
 await wait(2600);
-check('an unpriced draft reaches Publish', (await onStep()) === '5Publish', await onStep());
+check('an unpriced draft reaches Publish', (await onStep()) === '4Publish', await onStep());
 check('but publishing is not offered', (await disabled('[data-action="advance"]')) === true);
 check('Publish names the price as what is missing', /hourly price/.test((await text('.guide')) ?? ''), (await text('.guide'))?.slice(0, 90));
 check('and offers the way to it', Boolean(await page.$('[data-action="fix-price"]')));
 await click('[data-action="fix-price"]', 'Set an hourly price');
 await wait(600);
-check('which is Describe', (await onStep()) === '3Describe', await onStep());
+check('which is Describe', (await onStep()) === '2Describe', await onStep());
 await type('#room-price', '0', { clear: true });
 check('zero reads as Free', (await text('.listing .price--free')) === 'Free');
 await type('#room-price', '-5', { clear: true });
@@ -326,7 +317,7 @@ check('minus five does not read as Free', (await text('.listing .price--free')) 
 await type('#room-price', '30', { clear: true });
 await click('[data-action="advance"]', 'Set availability');
 await wait(3000);
-check('a priced room advances', (await onStep()) === '4Availability', await onStep());
+check('a priced room advances', (await onStep()) === '3Availability', await onStep());
 const withRoom = await api(`/manage/venues/${venueId}`, token);
 const remoteRoom = withRoom.rooms?.[0];
 check('and now steeple holds it', remoteRoom?.name === roomName, JSON.stringify(remoteRoom?.name));
@@ -348,7 +339,7 @@ async function refused(label, field, said) {
   await wait(2800);
   const step = await onStep();
   const said2 = (await noticeText()) ?? '';
-  check(`${label}: the step does not move on`, step === '3Describe', step);
+  check(`${label}: the step does not move on`, step === '2Describe', step);
   check(`${label}: and the refusal is a sentence, not a shrug`, Boolean(said2) && said2 !== 'Steeple could not accept that.', said2.slice(0, 70));
 }
 
@@ -375,14 +366,17 @@ await shot('04-boundaries');
 
 await click('[data-action="advance"]', 'Set availability');
 await wait(2800);
-check('and a sound room still advances', (await onStep()) === '4Availability', await onStep());
+check('and a sound room still advances', (await onStep()) === '3Availability', await onStep());
 
 // ── 5. Availability: dates and reasons that do not belong ─────────────────
 console.log('\n5. Availability — a day gone, a day twice, a reason nobody reads');
 await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
 await wait(500);
 const venueKey = await store('hostVenueId()');
-const blackouts = () => store(`blackoutsFor('${venueKey}','main-space')`);
+// The room's slug is steeple's own now ('main-space' died with the freeRoomId
+// fix) — read it off the mirror rather than assuming a constant.
+const roomKey = (await store('placedVenues()')).find((v) => v.id === venueKey)?.rooms?.[0]?.id;
+const blackouts = () => store(`blackoutsFor('${venueKey}','${roomKey}')`);
 
 const setDate = (said) => put('#blackout-date', said);
 const today = new Date().toISOString().slice(0, 10);
@@ -425,14 +419,15 @@ check(
   /200 characters/.test((await noticeText()) ?? ''),
   `${await onStep()} · ${(await noticeText() ?? '').slice(0, 70)}`
 );
-check('and the host is still on the step that owns it', (await onStep()) === '4Availability', await onStep());
+// Step ordinals follow the four-step flow (the Verify step died 2026-08-06).
+check('and the host is still on the step that owns it', (await onStep()) === '3Availability', await onStep());
 
 const rows = await page.$$('.blackouts__item .linkish');
 await rows.at(-1)?.click();
 await wait(500);
 await click('[data-action="advance"]', 'Review and publish, once more');
 await wait(3000);
-check('undoing it carries the host on', (await onStep()) === '5Publish', `${await onStep()} · ${await noticeText()}`);
+check('undoing it carries the host on', (await onStep()) === '4Publish', `${await onStep()} · ${await noticeText()}`);
 
 const tokenNow = await bearer();
 const roomId = (await api(`/manage/venues/${venueId}`, tokenNow)).rooms?.[0]?.id;
@@ -466,7 +461,9 @@ await clickText('.listing__buttons .pill--primary', /^Done$/, 'Done');
 await wait(800);
 const before = (await store('placedVenues()')).length;
 for (const address of ['2 Windmill Lane', '77 Orchard Way']) {
-  await clickText('.desk button', /^List a space$/, 'List a space');
+  // The desk's way to a whole new venue is "List another venue" now — "Add a
+  // space" adds a room to the venue being kept (build_plan P2.5 / host-publish §6).
+  await clickText('.desk button', /^List another venue$/, 'List another venue');
   await type('#place-name', `Bell Hall ${stamp} twin`, { clear: true });
   await type('#place-description', 'A parish hall behind the church.', { clear: true });
   await type('#place-address', address, { clear: true });

@@ -85,6 +85,30 @@ export async function paceAuth() {
   authAt.push(Date.now());
 }
 
+// The two legal documents at the versions this build ships, read from
+// src/data/agreements.js itself so the harness can never drift from the app.
+// (Importing the module would drag session/store's localStorage probes into
+// node; the constant is the only thing wanted.)
+const agreementSource = readFileSync(new URL('../src/data/agreements.js', import.meta.url), 'utf8');
+export const CURRENT_AGREEMENTS = [...agreementSource.matchAll(/docType:\s*'([^']+)',\s*version:\s*'([^']+)'/g)].map(
+  ([, docType, version]) => ({ docType, version })
+);
+
+/**
+ * Record the current agreements for an account, on the wire.
+ *
+ * A fixture account that never agreed is a person the P4 ask will one day
+ * interrupt — it waits for a quiet moment and opens the sign-in panel over the
+ * page, which is the product working. A suite that is *about* that ask must
+ * not call this (hardening-test §4 asserts the un-agreed state); every other
+ * suite should, or a modal it never planned for will swallow a click mid-beat.
+ */
+export async function agreeCurrent(token) {
+  for (const doc of CURRENT_AGREEMENTS) {
+    await call('POST', '/me/agreements', { token, body: doc });
+  }
+}
+
 export async function signIn(email, name) {
   await paceAuth();
   const answer = await call('POST', '/auth/sessions', {

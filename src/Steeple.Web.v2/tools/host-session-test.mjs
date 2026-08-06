@@ -190,6 +190,40 @@ try {
     await wait(3000);
   }
   check('signed back in', Boolean(await page.evaluate('__steeple.session.currentUser()')));
+  // A first *panel* sign-in is asked to agree to the two documents (P4). This
+  // account's opening sign-in went through the harness seam, which deliberately
+  // raises nothing — so the ask lands here, inside the panel, and the panel is
+  // right to stay until it is answered.
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('.signin .pill--primary')].some((n) =>
+          /Agree and continue/.test(n.textContent)
+        ),
+      { timeout: 10000 }
+    )
+    .catch(() => {});
+  const askedToAgree = await page.evaluate(() =>
+    [...document.querySelectorAll('.signin .pill--primary')].some((n) => /Agree and continue/.test(n.textContent))
+  );
+  check('a first panel sign-in is asked to agree before it goes', askedToAgree);
+  if (askedToAgree) {
+    await page.evaluate(() => {
+      const button = [...document.querySelectorAll('.signin .pill--primary')].find((n) =>
+        /Agree and continue/.test(n.textContent)
+      );
+      button?.scrollIntoView({ block: 'center', behavior: 'instant' });
+    });
+    await wait(200);
+    const agreeBox = await (async () => {
+      for (const handle of await page.$$('.signin .pill--primary')) {
+        if (/Agree and continue/.test(await handle.evaluate((n) => n.textContent))) return handle.boundingBox();
+      }
+      return null;
+    })();
+    if (agreeBox) await page.mouse.click(agreeBox.x + agreeBox.width / 2, agreeBox.y + agreeBox.height / 2);
+    await wait(1500);
+  }
   check('the sign-in panel let itself out', !(await visible('.signin')));
   check('and the draft is still where it was left', await visible('.listing'));
   check('still on Publish', (await text('.steps__step.is-on')) === '4Publish', await text('.steps__step.is-on'));

@@ -47,6 +47,7 @@
 // So: judge the check lines, not the count, and if the opening beats are red
 // while §4 onward is green, the machine was busy. Not this suite's to chase.
 import {
+  agreeCurrent,
   apiIsUp,
   apply,
   closeBrowsers,
@@ -80,6 +81,11 @@ const host = await mintVenue({
 });
 const guest = await mintGuest({ email: `input-guest-${stamp}@example.org`, name: 'Nadia Prosser' });
 await apply(guest, host);
+// Answer the P4 agreements on the wire, or the quiet-moment ask opens the
+// sign-in panel over the page mid-suite and swallows a pointer beat — the
+// product working, but not this suite's subject (tools/fixtures.mjs).
+await agreeCurrent(host.token);
+await agreeCurrent(guest.token);
 
 const browser = await launch();
 const page = await browser.newPage();

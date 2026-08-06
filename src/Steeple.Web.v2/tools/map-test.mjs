@@ -6,7 +6,7 @@
 //
 //   node tools/map-test.mjs "http://localhost:5322/?q=low"
 //   node tools/map-test.mjs "http://localhost:5322/?q=low&map=dusk" dusk
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { agreeCurrent, closeBrowsers, launch, signIn, signInPage, stamp } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -321,6 +321,20 @@ check('it is not clickable', await page.evaluate('!document.querySelector(".dm-n
 check('and it is not among the spaces for rent', (await count('.dm-row')) === 9);
 
 // ── 11. the surface withdraws where it has nothing to answer ────────────────
+//
+// Re-baselined 2026-08-07 (P6): a stranger has no journal since D6 — asking for
+// it signed out bounces to the village, which is its own guarantee. The
+// withdrawal this section is about needs somebody with a correspondence view to
+// stand over the map, so one is signed in for it (and agrees on the wire, or
+// the P4 quiet-moment ask would stand its own panel over this beat).
+const strangerJournal = await page.evaluate(
+  '(__steeple.setView("journal"), new Promise((r) => setTimeout(() => r(__steeple.state.view), 900)))'
+);
+check('a stranger asking for a journal is returned to the village', strangerJournal === 'village');
+const reader = await signIn(`map-reader-${stamp}@example.org`, 'Quiet Reader');
+await agreeCurrent(reader.accessToken);
+await signInPage(page, `map-reader-${stamp}@example.org`, 'Quiet Reader');
+await wait(600);
 await page.evaluate('__steeple.setView("journal")');
 await wait(900);
 check('the surface withdraws from a correspondence view', await page.evaluate('document.querySelector(".discovery").hasAttribute("inert")'));
