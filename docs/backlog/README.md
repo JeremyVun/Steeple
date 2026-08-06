@@ -36,6 +36,15 @@ Recorded, deliberately not built — each needs an owner decision or a gated tri
   the mock gateway refuses to run in Production with `payments.enabled=true`.
 - **Counter-offers stay behind `booking.counter_offers`** (off ⇒ endpoints 404 and the
   desk says "not available here yet" — verified in the closing sweep).
+- **The booking race can deadlock instead of losing cleanly** (found by the sweep, once,
+  under full-suite parallel load; `CounterOfferRaceTests` reproduces it rarely). Two
+  simultaneous booking transactions each insert an occurrence and each GiST
+  exclusion-constraint check waits on the other's uncommitted row — Postgres aborts one
+  with `40P01`. **Integrity holds** (exactly one booking, ever), but `EfBookingRepository`
+  translates only `23P01`, so the aborted caller gets a 500 instead of the graceful
+  `slot_taken` decline; their retry resolves correctly. Fix when touched: a deadlock-retry
+  of the whole booking use-case (the victim's rerun deterministically hits `23P01`), not a
+  blind `40P01 → slot_taken` mapping.
 
 ## Phase history (decoder for "Phase N" stamps in code and docs)
 
