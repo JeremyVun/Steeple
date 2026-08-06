@@ -280,10 +280,19 @@ the booking and materializes its dates), ask a question, decline with a kind
 note written for you, or counter-offer a different time in an editor whose
 every change redraws the ribbon live.
 
-The listing flow — Place, Verify, Describe, Availability, Publish — puts a new
-church on the map with a dragged pin, and takes the scaffolding off a draft
-room. Publishing needs open hours first; the weekly painter is a drag along a
-day (or arrows and Space) and writes windows straight through `setOpenHours`.
+The listing flow puts a venue on the map from its address and takes the
+scaffolding off a space. It has four ways in, and what is being written decides
+how many steps there are: a venue nobody has listed is **Place · Describe ·
+Availability · Publish**; another space at a venue already held, or the listing
+one already has, is **Describe · Availability · Publish**; and the venue's own
+details are one railless form over `PATCH /manage/venues/{id}`. There was a
+Verify step until 2026-08-06 — hosting is entered through a session, so it
+confirmed a fact nobody disputed; its one real job, a session dying mid-draft,
+is now the Publish step's own blocker, which opens the sign-in panel over the
+flow. Publish says whose listing it will be instead, because the host's name is
+public on it. Publishing needs open hours first; the weekly painter is a drag
+along a day (or arrows and Space) and writes windows straight through
+`setOpenHours`.
 Discovery answers immediately: the published space joins its church's list of
 spaces to rent, the village counts it, and the note about a space still being
 prepared is gone, because those surfaces read the store rather than the seed.
@@ -385,14 +394,21 @@ node tools/guest-test.mjs "http://localhost:5173/?q=low&letter=ledger"
 
 # real clicks through the host's side: mode switch, requests, the four
 # decisions, the hours painter, the listing flow, Esc and hit-testing
+# ⚠ stale from §1 since D4 — it enters through a desk that no longer opens
+# without a session; read its header before believing a failure
 node tools/host-test.mjs "http://localhost:5173/?q=low"
 node tools/host-test.mjs "http://localhost:5173/?q=low&style=atlas&desk=ledger"
 
 # the hosting journey against the real steeple API on :5200 — an empty draft to
-# a room the service holds — then the same journey with every call refused, then
-# the same flow given hostile input at every field
+# a room the service holds, then a venue abandoned before its first space, a
+# second space at it, and the venue editor — then the same journey with every
+# call refused, then the same flow given hostile input at every field
 node tools/host-publish-test.mjs "http://localhost:5173/?q=low&world=off"
 node tools/host-offline-test.mjs "http://localhost:5173/?q=low&world=off"
+
+# a session killed under a half-written listing: the draft survives, the
+# Publish blocker opens the sign-in panel over it, and the publish resumes
+node tools/host-session-test.mjs "http://localhost:5173/?q=low&world=off"
 node tools/host-input-test.mjs   "http://localhost:5173/?q=low&world=off"
 
 # the whole story in one session, both styles: a request written and sent, the
@@ -462,7 +478,7 @@ src/ui/               the printed layer over the world
     letter.js         one request opened, and the four decisions
     ribbon.js         the schedule ribbon: a request over a real week
     painter.js        the weekly open-hours painter
-    listing.js        Place · Verify · Describe · Availability · Publish
+    listing.js        the wizard, four ways in (venue · add-room · room · venue-edit)
     model.js          what the host's side knows, read out of data/store.js
 src/data/store.js     applications, bookings, threads — the demo store
 src/styles/main.css   design tokens, the roll, the shared type primitives

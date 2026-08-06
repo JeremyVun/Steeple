@@ -201,7 +201,16 @@ sign-out**, `DELETE /auth/sessions` best-effort), application submit (`Idempoten
 mirrors into local store), the whole hosting chain (dev SSO → POST venue → room → photo
 upload → PUT availability → PATCH published; publish requires a photo; an unverified venue's
 first publish answers `draft` + `publishRequestedAtUtc`, while later rooms at that verified
-venue answer `published` outright), and the account surface — a "Sign in" chip on the porch when signed out, chip +
+venue answer `published` outright). The listing wizard is **Place → Describe → Availability →
+Publish** for a new venue and **Describe → Availability → Publish** for a space at one already
+held (2026-08-06: the Verify step is gone — hosting is entered through a session, so the only
+thing it still did was catch one dying mid-draft, which is now the Publish step's own blocker
+opening `signIn`; Publish's facts carry a "Listed by" row instead). The desk offers **Add a
+space** (the current venue) beside a quiet **List another venue**, and **Edit venue details**
+over `PATCH /manage/venues/{id}`. A local record takes the slug steeple minted the moment a
+create answers (`adoptVenueSlug`/`adoptRoomSlug` in `store.js`) — a guessed slug left in place
+is dropped by the desk's own re-read, taking the draft's rooms, hours and closed days with it.
+And the account surface — a "Sign in" chip on the porch when signed out, chip +
 card when signed in, inbox/badge/journal/letters and every "Identity verified (SSO)" chip
 gated on fact (v2_migration Phase 1), **and the whole correspondence** (Phase 2, D4/D5): the
 guest inbox is `GET /me/applications`, the thread `GET /applications/{id}`, and withdraw /
@@ -213,7 +222,9 @@ can file a request. A `402 payment_method_required` opens a minimal mock-card st
 send resumes itself; instant venues answer the submit with the booking and say so. Email CTA
 deep links (`?goto=`) are followed at boot. All of it is **driven end to end** by
 `tools/correspondence-test.mjs` (69/69, §0–§9), two people in two browsers against real rows,
-including D5's honest-offline send. **Real (Phase 2.5, 2026-08-05) — the money, both sides:**
+including D5's honest-offline send. The hosting side is `tools/host-publish-test.mjs`
+(134/134, §1–§9 — the whole journey, then the abandoned venue, a second space, and the venue
+editor) and `tools/host-session-test.mjs` (24/24 — a session killed mid-draft). **Real (Phase 2.5, 2026-08-05) — the money, both sides:**
 the desk is **Bookings · Requests · Spaces** and opens on Bookings (Requests renders only for a
 manual venue, or one still owing answers after leaving manual); a confirmed booking carries the
 frozen per-session price, the next charge, each date's `paymentStatus`, and the host's cancel
@@ -240,7 +251,15 @@ orphans every photo already written (and, locally, rows from other agents' API p
 refuse outright, and the suites that count console errors — input-test, world-off-test — go
 red on that noise alone while every check line is green: judge the check lines —
 also add any new media origin to nginx.conf's CSP `img-src` or photos silently stop loading);
-`draft.roomId` is always `'main-space'` (second room per venue collides);
+`host-test.mjs` is stale from §1 and not re-baselinable as written — every section enters
+through a desk opened with no session at a seeded church, which D4 abolished (its coverage now
+lives in `correspondence-test.mjs`, `host-publish-test.mjs` and `host-session-test.mjs`);
+`guest-test.mjs`'s stale set is wider than "test 3": §3–§4 (the week card's painted bands) and
+§11–§12 (the `#/browse` hash, the map surface over the world) fail too, all predating this
+round;
+signing out mid-listing swaps the store to `:anon` (D6), so the draft's own open hours read as
+missing until the same person signs back in — the Publish step names them, honestly, while
+they cannot be seen;
 dev geocoding = `StubGeocodingGateway` (every address → village centre, so geofence-rejection
 paths are locally unreachable, and every locally host-listed venue stacks on one map point —
 harnesses drive pins by keyboard or assert "aimed === opened", never a pointer at a named pin);

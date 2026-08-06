@@ -199,8 +199,10 @@ timeout as "unreachable".
 ## 3. Target flows (post-migration, for orientation)
 
 - **Visitor:** village splash → map → listing panels. Quiet "Sign in" in the header.
-  No inbox tab, no verified chips, no host desk. "I have space to share" → listing
-  flow, which requires sign-in at the Verify step (unchanged).
+  No inbox tab, no verified chips, no host desk. "I have space to share" signs them in
+  first, then opens the listing flow (2026-08-06: the flow's own Verify step is gone —
+  the session is the door, and a session that dies mid-draft is answered by the Publish
+  step's blocker, which opens the sign-in panel over the flow).
 - **Guest:** applies (draft → identity step if signed out → Turnstile → real submit
   with idempotency key). Inbox tab shows *their* applications from
   `GET /me/applications`; letters show the real thread; withdraw / counter-accept /
@@ -256,5 +258,5 @@ applications module already uses.)
 | Harness suites encode demo-store behavior (`tools/*.mjs`, `store-test.mjs` gates `GUEST_ID` semantics) | Each phase's brief re-baselines affected suites; a suite asserting demo behavior that D4/D5 removes is *updated with the product*, not preserved. Run each suite with its header-documented flags — inverting them produces convincing, meaningless failures |
 | Approve path touches booking creation | `BookingIntegrityTests` (concurrent-approval exclusion) must stay green — non-negotiable |
 | Dev geocoding stub sends every address to the village centre | Geofence-rejection paths are unreachable locally; don't "fix" silently-passing geofence tests against the stub |
-| `draft.roomId` hardcoded `'main-space'` in the listing flow | Second room per venue collides — fix rides along in the phase touching the listing flow |
+| ~~`draft.roomId` hardcoded `'main-space'` in the listing flow~~ | **Fixed 2026-08-06** with the add-a-space flow: a local room id is derived from the name (`freeRoomId`) and then replaced by the slug steeple minted (`adoptRoomSlug`) |
 | SPA SEO regression vs v1 | D9 investigation task; at minimum keep sitemap + robots correct at launch |

@@ -493,8 +493,12 @@ Tasks:
    own") on a host fixture from item 1.
 4. **`host-offline-test.mjs`:** delete, or rewrite signed-in-then-offline (P2.5 owner
    decision 1 — do not restore the old order).
-5. **Chase the `host-publish-test.mjs` tail** — `effectiveRoom(venue,'main-space')`
-   returns null for the host's own new room; likely D6 per-person store scoping.
+5. ~~**Chase the `host-publish-test.mjs` tail**~~ — **done 2026-08-06.** Not D6 scoping:
+   the local venue was kept under a *guessed* slug (`placed-trinity-hall-…`) while steeple
+   minted its own (`trinity-hall-…`), and `mirrorManagedVenues`' dedupe filter dropped the
+   guess mid-flow, orphaning the room, its hours and its closed days. The store now adopts
+   the server's slug the moment a create answers (`adoptVenueSlug`/`adoptRoomSlug`), and
+   the suite asserts it. Item 2's `host-test.mjs` half is still open (see its header).
 6. **Fix the `surface-test.mjs` §5 crash** (`outBox.cx` null on the account monogram)
    that truncates its run.
 7. **`pipe: true` + close-in-`finally` sweep across all suites** (absorbs P6 item 5) —

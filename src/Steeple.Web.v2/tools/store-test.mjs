@@ -550,6 +550,47 @@ expect(
   true
 );
 
+// ---- the slug steeple minted replaces the one this browser guessed ----------
+//
+// The listing flow has to key a venue before the create is answered, so it
+// guesses ('placed-chapel-yard'); steeple mints its own ('chapel-yard'). Left
+// as two records of one venue, `mirrorManagedVenues` keeps the server's and
+// drops the guess — and everything hanging off the old id goes with it. That is
+// the whole stranding bug, so what is asserted is that nothing is left behind.
+
+store.upsertPlacedVenue({
+  id: 'placed-chapel-yard',
+  remoteId: 'e1f0a5c2-0000-4000-8000-000000000abc',
+  name: 'Chapel Yard',
+  address: '9 Yard Lane, Vienna 22180',
+  rooms: [{ id: 'upper-rm', name: 'Upper Room', capacity: 18, status: 'draft', amenities: [], accessibility: [], activities: [] }],
+});
+store.setHostVenue('placed-chapel-yard');
+store.setOpenHours('placed-chapel-yard', 'upper-rm', [{ day: 2, start: '09:00', end: '17:00' }]);
+store.addBlackout('placed-chapel-yard', 'upper-rm', addDays(todayIso(), 10), 'Yard resurfacing');
+store.editRoom('placed-chapel-yard', 'upper-rm', { houseRules: 'Shoes off upstairs.' });
+
+store.adoptVenueSlug('placed-chapel-yard', 'chapel-yard');
+expect('slug: the venue is held under steeple’s id now', store.placedVenues().some((v) => v.id === 'chapel-yard'), true);
+expect('slug: and not under the guess as well', store.placedVenues().some((v) => v.id === 'placed-chapel-yard'), false);
+expect('slug: its open hours came with it', store.openHoursFor('chapel-yard', 'upper-rm').length, 1);
+expect('slug: so did its closed days', store.blackoutsFor('chapel-yard', 'upper-rm').length, 1);
+expect('slug: so did the host’s own edits', store.effectiveRoom('chapel-yard', 'upper-rm')?.houseRules, 'Shoes off upstairs.');
+expect('slug: and the desk is still standing at it', store.hostVenueId(), 'chapel-yard');
+expect('slug: nothing is left under the old key', store.openHoursFor('placed-chapel-yard', 'upper-rm').length, 0);
+
+store.adoptRoomSlug('chapel-yard', 'upper-rm', 'upper-room');
+expect('slug: the room is held under steeple’s id now', store.placedVenues().find((v) => v.id === 'chapel-yard')?.rooms[0].id, 'upper-room');
+expect('slug: its hours travelled too', store.openHoursFor('chapel-yard', 'upper-room').length, 1);
+expect('slug: and its edits', store.effectiveRoom('chapel-yard', 'upper-room')?.houseRules, 'Shoes off upstairs.');
+expect('slug: with nothing left under the guess', store.openHoursFor('chapel-yard', 'upper-rm').length, 0);
+
+// A slug that has not changed must not be a move at all — the update path
+// answers with the same slug every time, and a rename of a thing to itself that
+// deleted as it went would empty the record it was meant to keep.
+store.adoptVenueSlug('chapel-yard', 'chapel-yard');
+expect('slug: re-adopting the same slug changes nothing', store.openHoursFor('chapel-yard', 'upper-room').length, 1);
+
 // ---- one store per person (D6) ----------------------------------------------
 
 store.mirrorApplication(dto());

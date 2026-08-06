@@ -596,10 +596,13 @@
    width the card lies down instead — picture beside the words, the same card,
    the same target, a third of the height.
 
-   The floor this buys: with --browse-map at 68% (a 460px rail) a two-space
-   church still stands on a 1440×900 page whole. Past 70% the parking and the
-   transit go below the fold — the spaces themselves never do. Anyone giving
-   the map more of the page than that should re-run tools/panel-fit.mjs. */
+   The floor this buys: with --browse-map at 66% a two-space church still
+   stands on a 1440×900 page whole (4px to spare on the tightest of them).
+   Past 66% the parking and the transit go below the fold — the spaces
+   themselves never do. That floor was 68% before the description became a
+   named section; the heading costs about 26px and was judged worth it, the
+   default share being 64% and the phone's 58%. Anyone giving the map more of
+   the page than that should re-run tools/panel-fit.mjs. */
 @container (max-width: 404px) {
   .spaces__grid {
     grid-template-columns: minmax(0, 1fr);
