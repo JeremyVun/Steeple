@@ -16,6 +16,44 @@ The retired prototype route `#/village` redirects in place to `#/browse` for old
 
 **The seam rule:** the day an upstream name changes, exactly one file moves.
 
+## The boot state machine ✅ *(2026-08-07 — build_plan Phase 3.5)*
+
+**Product rule: intent beats scenery.** A press on the printed title page's *Find a space*,
+*Host a space* or down affordance is accepted from the first frame it is shown. Three states,
+with one owner each:
+
+| State | Owner | Contract |
+| --- | --- | --- |
+| **printed arrival** | `index.html` markup | the three controls are `<a href="#/browse">` / `#/desk` carrying `data-intent="village\|desk"`, styled as pills. Before any script, a press records its destination in `location.hash` — **the URL is the recovery truth across a reload**. Never a styled `<button>` with no behaviour. |
+| **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** hash deep link, `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. **The village is never started and never backfilled** — that visit is flat for its whole life, including a later return to the title page through the wordmark. |
+| **live-village boot** | `src/journey/roll.js` | no intent and no hash. Poster → canvas crossfade, then the 1.28s cinematic roll on a press. |
+
+- `src/core/intent.js` is the critical controller: **the entry's first import, importing
+  nothing** — no bus, no roll, no session/store, no Leaflet, no panels, no Three, no world.
+  It records `{destination, requestedAt}`, sets `data-working="on"` on the pressed control
+  (visible progress from the frame of the press) and leaves the native navigation alone.
+  It is not inline: the CSP forbids that. A second `<script>` in `index.html` buys nothing —
+  Vite folds every extra html entry back into the first as a static import.
+- The intent is **claimed exactly once** (`claimArrival()`); `releaseArrival()` hands the page
+  to the live roll only when `journey/roll.js` actually exists, and answers a press that
+  landed in the last moments of the boot rather than dropping it. `core/bus.js` additionally
+  holds one `roll:request` while `roll.js` is still arriving (`drainRollRequest()`).
+- **Wire order:** the interface chunk (~106KB gzip) goes first and alone. `core/engine.js`,
+  `world/index.js` and `journey/index.js` start only after the interface is interactive, an
+  idle opportunity (`requestIdleCallback`, capped at 600ms), and no intent/deep link. There is
+  no cancellation for an `import()` in flight, so **sequencing is the bandwidth control** — do
+  not add a fetch/blob loader. A press during those transfers lets them land and abandons that
+  boot generation (`taken`): no engine is created or started afterwards, and no unhandled
+  rejection is raised.
+- `window.__steepleReady` means the **chosen** surface is interactive: frame-warm for a village
+  boot, UI-ready for a flat one. **No product request waits for it** — `core/idle.js`'s
+  `releaseBoot()` opens the `afterBoot` gate the instant the product takes the page.
+- `reportArrival(destination, entry)` is the named analytics seam (`entry: direct | cinematic`),
+  emitted once when the intent settles — never once on the native press and again on hydration.
+  P5's web batcher has not landed; wire it there and add the CONTRACTS §7 row with it.
+- ⚠️ Leaflet's tile layer ships **with** the map, never deferred (`ui/map/atlas.js`).
+- Driven by `tools/boot-priority-test.mjs` (51 checks, §1–§6) against a `build:debug` bundle.
+
 ## `src/data/api.js` — the wire
 
 `/api/v1` names verbatim, **one function per request**; nothing renamed, no enum translated,
@@ -504,6 +542,20 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   the moving box has slid off.
 - E2E suites mint real accounts/venues/applications against the local API each run.
 - Known-stale failure sets predating wave 7: guest-test 3, wave2-test 6, world-test 12.
+- ⚠️ **A cold hash is a product-first boot** (2026-08-07): `page.goto(url + '#/browse')` now
+  boots flat, so `__steeple.engine`/`.world` are `null` and any camera read throws. A suite
+  that wants a route *and* a village must load with no hash, wait on `__steepleReady`, then
+  set `location.hash` and `__steeple.roll.set(1)`. `tools/world-test.mjs`'s reduced-motion
+  section is the worked example; **`tools/input-test.mjs`'s `ready()` still needs the same
+  change** (it crashes at its map-drag section otherwise).
+- `tools/boot-priority-test.mjs` is Phase 3.5's gate (51 checks, §1–§6). It is the one suite
+  that drives a **non-flat built bundle**: `npm run build:debug` then
+  `npx vite preview --outDir dist-debug --port 5279 --strictPort`. It holds named chunk
+  responses open over CDP (slow-4G + 4× CPU) so "before the interface arrives" is a real
+  interval, and it **clicks before waiting on `__steepleReady`** — waiting first was the blind
+  spot that let a lost click ship. Its own trap: `performance.getEntriesByType('resource')`
+  only learns of a request when it *finishes*, so catching a download in flight needs the
+  node-side `page.on('request')` log, not the page's timeline.
 - `tools/correspondence-test.mjs` is Phase 2's live probe: two browsers complete the manual
   loop (402 → card → send → question → answer → counter → accept → booking) and the instant
   loop, with localStorage cleared on both sides mid-flow, the dev mailbox's CTA followed, and

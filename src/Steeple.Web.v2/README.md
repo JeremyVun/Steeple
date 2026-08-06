@@ -51,28 +51,62 @@ the booking flow work exactly as they do with the village behind them. The
 wordmark still rolls up to the title page, which without a village is paper.
 `?world=off` is the same thing in development, from the full bundle.
 
-## How it boots (2026-08-06)
+## How it boots (2026-08-07)
 
 The first paint owes nothing to JavaScript. The title page's markup is printed
-in `index.html` itself — `ui/arrival.js` adopts that DOM and wires the buttons
-rather than rebuilding it, and `ui/index.js` clears everything in `#ui` *except*
-it — and under the transparent canvas sits a WebP photograph of the village's
-own opening frame. The live render crossfades over the poster on its first
-frame (`#scene.is-live`, `styles/main.css`) and `main.js` then retires the
-poster; the flat boot retires both poster and canvas at once. So a cold visit
-paints the real splash in the document's own time, and the village arriving is
-a crossfade, not a white page becoming one.
+in `index.html` itself — `ui/arrival.js` adopts that DOM rather than rebuilding
+it, and `ui/index.js` clears everything in `#ui` *except* it — and under the
+transparent canvas sits a WebP photograph of the village's own opening frame.
+The live render crossfades over the poster on its first frame
+(`#scene.is-live`, `styles/main.css`) and `main.js` then retires the poster; the
+flat boot retires both poster and canvas at once. So a cold visit paints the
+real splash in the document's own time, and the village arriving is a crossfade,
+not a white page becoming one.
 
-The entry chunk carries only boot orchestration: `main.js` dynamic-imports the
-interface (Leaflet and the whole product surface are its own chunk) and the
-three village chunks in parallel — `__steepleReady` still means the interface
-is standing. Product-surface traffic that has no business in the boot window —
-the opening search, the suburbs/geofence vocabulary, and with them the result
-rows' photographs — waits on `core/idle.js`'s `afterBoot`: the first of the
-roll moving or the browser going idle (capped). The map's *tile layer* is
-deliberately not deferred — without a grid layer, Leaflet settles a NaN zoom on
-the unsized container and the next `invalidateSize` kills the boot (note in
-`ui/map/atlas.js`).
+**Intent beats scenery.** A press on *Find a space*, *Host a space* or the down
+affordance is answered from the first frame it is shown, and the page ends in
+one of three states:
+
+| State | Who owns the press | What is on the page |
+| --- | --- | --- |
+| **printed arrival** | the markup | the three controls are real `<a href="#/browse">`/`#/desk` links, so a press before any script records its destination in `location.hash` — the recovery truth across a reload |
+| **product-first (flat)** | `src/core/intent.js` → `main.js` | somebody asked. The product opens at once with `roll = 1`, canvas and poster removed, `data-world="off"`; the village is never started, and one already downloading is abandoned. **That visit stays flat**, including a later return to the title page through the wordmark — no Three is backfilled while the map is in use |
+| **live village** | `journey/roll.js` | nobody asked in time. Poster → canvas crossfade, and a press is the 1.28s cinematic roll it has always been |
+
+`src/core/intent.js` is the one thing that answers a press before the product
+exists. It is the entry's first import and imports **nothing** — no bus, no
+roll, no session, no store, nothing of Leaflet, the interface chunk or three.js
+— so it is armed a whole 105KB-gzip chunk earlier than the handlers used to be.
+It records `{destination, requestedAt}`, marks the pressed control
+`data-working="on"` (one slow breath, `styles/main.css`) and leaves the native
+navigation alone. `main.js` claims that intent **exactly once**; after the roll
+is genuinely live it calls `releaseArrival()` and from then on a press is
+prevented and handed to `ui/arrival.js`'s handler instead. `reportArrival()` is
+the named seam P5's analytics batcher wires into (`entry: direct | cinematic`),
+and `__steeple.arrival()` reads back what settled.
+
+Order on the wire: the interface chunk goes first and **alone**. `engine.js`,
+`world/index.js` and `journey/index.js` are not started until the interface is
+interactive, the browser has an idle opportunity (`requestIdleCallback` capped
+at 600ms so a busy main thread cannot postpone the village forever), and no
+intent or hash deep link exists. A dynamic `import()` in flight cannot be called
+back, so sequencing is the bandwidth control — there is no fetch/blob loader
+faking cancellation. A press during those transfers lets them finish and
+abandons that boot generation: `main.js` checks `taken` at every await, and no
+engine is created or started afterwards.
+
+`__steepleReady` still means the chosen surface is interactive — frame-warm for
+a village boot, UI-ready for a flat one — and **no product request waits for
+it**. `core/idle.js`'s `afterBoot` holds the opening search, the
+suburbs/geofence vocabulary and the result rows' photographs out of the boot
+window, and `releaseBoot()` opens that gate the instant the product takes the
+page. The map's *tile layer* is deliberately not deferred — without a grid
+layer, Leaflet settles a NaN zoom on the unsized container and the next
+`invalidateSize` kills the boot (note in `ui/map/atlas.js`).
+
+`tools/boot-priority-test.mjs` drives all three states against a built debug
+bundle, holding named chunk responses open so each timing window is a real
+interval rather than a race.
 
 The poster is made by `tools/poster.mjs` against any origin serving the app
 with the world on. Its output is content-hashed into `public/assets/` (served
@@ -107,14 +141,21 @@ hosting view is open, since those views have a subject of their own.
 - `#/venue/<venueId>` — one church and the spaces it rents
 - `#/room/<venueId>/<roomId>` — one space, framed and detailed
 - `#/apply/<venueId>/<roomId>` — writing the request, at the room's own distance
-- `#/journal` — the guest's inbox, the village breathing behind it
+- `#/journal` — the guest's inbox
 - `#/desk[/<venueId>]` — hosting: requests waiting, spaces listed, their
   church at their shoulder
 - `#/letter/<applicationId>` — one request opened, in whichever lens it belongs to
-  (a cold link carries only the application; the world asks the store where that is)
+  (a cold link carries only the application; the store is asked where that is)
 
 e.g. `#/room/grace-community-vienna/fellowship-hall`. Deep links restore state
 on load and the hash follows you as you move.
+
+A **cold** hash load is somebody who has already chosen, so it takes the
+product-first path: no title page, no cinematic, and no village fetched behind
+it (see "How it boots"). A hash set *after* the boot — the way the product moves
+around itself — changes nothing about the village. A suite that needs both a
+route and a world must therefore load without a hash and set it afterwards; the
+reduced-motion section of `tools/world-test.mjs` shows the shape.
 
 ## What the village says about your requests
 

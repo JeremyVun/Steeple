@@ -89,8 +89,12 @@ function press(event, node, destination) {
   waiting.clear();
 }
 
+// A middle click, or one with a modifier down, is somebody opening the title
+// page's route in a window of their own. That is the link's business and none
+// of this module's: it must not record an intent for a page nobody is on.
 function onClick(event) {
-  if (event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey) return;
+  if (event.defaultPrevented || event.button > 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   const found = destinationOf(event.target);
   if (found) press(event, found.node, found.destination);
 }

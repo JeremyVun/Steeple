@@ -35,7 +35,7 @@
 // back down. What it loses is the canvas that used to carry the gesture, so the
 // flat boot puts the wheel and the down-arrow on the page instead.
 //
-// The second way in is also the safety net. A visitor whose browser refuses a
+// The flat way in is also the safety net. A visitor whose browser refuses a
 // WebGL context — an old machine, a hardened profile, a blocklisted driver — or
 // whose three.js chunk never arrives, is not owed a blank page: the village is
 // the overture, and the product underneath it is whole without one. Any failure
