@@ -4,7 +4,6 @@ using System.Xml.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Primitives;
-using Steeple.Api.Utils;
 
 namespace Steeple.Api.Controllers;
 

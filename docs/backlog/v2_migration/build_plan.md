@@ -12,8 +12,7 @@ urgent web boot fix; land it before P4 (both touch the entry/splash and CSP). P3
 (harness consolidation) touches `tools/` only, can run in parallel with anything, and
 should be paid before P4 leans on the suites for verification. P5's remainder is small
 (most of it landed 2026-08-06 — trust its checkboxes) and follows P2. P6 is the closing
-sweep and runs last. **Remaining execution order: P3.5 → P3.6 (parallelizable) → P4 →
-P5 remainder → P6.**
+sweep and runs last. **Remaining execution order: P6 only.**
 
 **Every phase:** `dotnet test` green (unit instant; integration needs Docker);
 anything touching approval keeps `BookingIntegrityTests` green; drive the real flow
@@ -29,6 +28,13 @@ notes cite — `correspondence-test.mjs` is now **69/69 (§0–§9)** after the 
 fix, `dotnet test` is 391 unit + 96 integration, the web refresh token became an httpOnly
 cookie (`docs/contracts/identity.md`), and several P5 items landed early (marked in
 place). Landing notes below are history; trust the checkboxes.
+
+**Status 2026-08-07:** P3.5, P3.6, P4 and P5 landed (three parallel-agent waves +
+sequenced merges; an integration pass proved the merged tree — no product regressions,
+`input-test`/`wave2-test` rebaselined to the cold-hash-is-a-flat-boot rule). P4's
+provider paths are env-gated and verified as far as local allows; Google/Apple/Turnstile
+keyed runs await the owner's client IDs (runbook: `docs/runbooks/sso-and-turnstile.md`).
+Suite truth now lives in each suite's header + CLAUDE.md's v2 section. Only P6 remains.
 
 ---
 
@@ -90,7 +96,7 @@ venue, not from an inbox), `input-test` §11 (signs in before the inbox deep lin
 
 ---
 
-## Phase 2 — Correspondence onto the wire (web) `[~]` *(code landed + driven 2026-08-05; suite debt below)*
+## Phase 2 — Correspondence onto the wire (web) `[x]` *(code landed + driven 2026-08-05; its suite debt was paid by Phase 3.6 on 2026-08-07)*
 
 > **The phase's own acceptance script is met and driven.** `correspondence-test.mjs` is
 > **61/61 green** across §0–§7: a stranger is shown no business; the request goes through the
@@ -353,7 +359,7 @@ Admin involvement. Admin serves exactly three action surfaces.
 
 ---
 
-## Phase 3.5 — Product-first boot and durable splash intent (web) `[ ]`
+## Phase 3.5 — Product-first boot and durable splash intent (web) `[x]` *(landed 2026-08-07 — boot-priority-test 51/51; cold hash = flat boot)*
 
 **Why now:** the 2026-08-06 first-paint work put the village poster and title markup in
 `index.html`, but the visible controls remain inert until `ui/index.js` arrives and
@@ -474,7 +480,7 @@ blind spot.
 
 ---
 
-## Phase 3.6 — Harness consolidation (web `tools/` only) `[ ]`
+## Phase 3.6 — Harness consolidation (web `tools/` only) `[x]` *(landed 2026-08-07 — fixtures.mjs shared; all seven items paid)*
 
 **Why a phase:** P2's suite debt has sat as narrative notes since 2026-08-05 with no
 owner, and P4/P5 verification leans on these suites. Touches `tools/*.mjs` only —
@@ -511,7 +517,7 @@ the demo-store apply/desk path.
 
 ---
 
-## Phase 4 — Production SSO, Turnstile, agreements (web) `[ ]`
+## Phase 4 — Production SSO, Turnstile, agreements (web) `[x]` *(landed 2026-08-07 — env-gated; keyed Google/Apple/Turnstile runs await owner IDs)*
 
 **Implements:** D1, D7. **Depends on:** P1 (header affordance exists).
 **Touches:** `data/session.js`, `data/api.js`, `ui/guest/sso.js`, `ui/guest/send.js`,
@@ -552,7 +558,7 @@ widget token through; first sign-in records agreements; dev provider still works
 
 ---
 
-## Phase 5 — Hardening (API idempotency + SPA posture) `[ ]`
+## Phase 5 — Hardening (API idempotency + SPA posture) `[x]` *(landed 2026-08-07 — hardening-test 65/65)*
 
 **Implements:** D8, D9. **API half pairs naturally with P3; web half after P2.**
 
