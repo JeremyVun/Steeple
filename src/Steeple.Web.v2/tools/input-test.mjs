@@ -30,19 +30,22 @@
 // about a **desk**, and since D4 a desk exists only for somebody
 // `GET /manage/venues` answers for, so this suite mints one (tools/fixtures.mjs).
 //
-// Known-stale, measured 2026-08-06 at 366fc83 before Phase 3.6 touched this file
-// and again after: **two or three roll-completion reds**, and which ones move
-// between runs — "a finger draws the page up into the product", "...and lands
-// there", "the wordmark rolls back up to the title page". A roll that is
-// *scrubbed* (held, turned around mid-flight) reads correctly every time; it is
-// the ones that must **finish on their own momentum** that go red, and they go
-// red in proportion to how busy the machine is. That is a roll-completion
-// threshold against a headless GL clock, not a harness question, and not this
-// suite's to chase. Judge the rest of the check lines.
+// ⚠ Known-flaky, and the count is a load reading, not a verdict.
 //
-// The seven opening reds this suite carried through Phase 2 (the arrival beats
-// and the "canvas is topmost" hit tests) are **gone** as of 366fc83 — fixed
-// upstream, not here.
+// Measured 2026-08-06 at 366fc83 (before Phase 3.6 touched this file) and again
+// after, on the same machine: **0 to 8 reds, all of one family** — a roll that
+// has to **finish on its own momentum** does not always finish under headless
+// GL, and everything downstream of it then reads the title page and fails too
+// ("...and the product is the village — arrival", the "canvas is topmost" hit
+// tests, "hovering a pin warms that church"). A roll that is *scrubbed* — held,
+// turned around mid-flight — reads correctly every single run. On a quiet
+// machine this suite came in at 2 reds; with a second suite running beside it,
+// 8. That is the set build_plan carried as "seven opening reds / map-first
+// drift" through Phase 2: it is neither seven nor drift, it is a completion
+// threshold against a clock that runs six times slow.
+//
+// So: judge the check lines, not the count, and if the opening beats are red
+// while §4 onward is green, the machine was busy. Not this suite's to chase.
 import {
   apiIsUp,
   apply,

@@ -174,8 +174,15 @@ keep `window.__steeple` for suites that drive a built bundle (production builds 
 documents its own flags/env in its header (some are world-ON, some world-OFF —
 **inverting a suite's documented flags produces convincing, meaningless failures**).
 Headless GL runs app-time ~6× slow: tests wait on state, never wall-clock. Known-stale
-failure sets that predate wave 7: guest-test 3, wave2-test 6, world-test 12.
-E2E suites mint real accounts/venues/applications on the local API each run.
+failure sets that predate wave 7: guest-test 3, world-test 12 (wave2-test's 6 retired
+2026-08-06 with its rebaseline); input-test's opening beats are **load-flaky, 0–8 reds
+of one family** — a roll that must finish on its own momentum, plus everything
+downstream of it — so judge its check lines, not its count.
+E2E suites mint real accounts/venues/applications on the local API each run:
+**`tools/fixtures.mjs`** is the shared way to ask for one (a host who keeps a venue, a
+guest with a card, a weekly ask, the wire from node, per-IP sign-in pacing, and the one
+`launch()` that puts every headless browser on a pipe). `STEEPLE_API`/`STEEPLE_PSQL`/
+`STEEPLE_DB` configure it; psql stands in only for the operator's first-listing approve.
 
 **Seams (frozen — the day an upstream name changes, one file moves):**
 - `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
@@ -233,20 +240,23 @@ header state (**done**) → inbox onto `/me/applications` (**done**) → real pr
 `.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —
 host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason;
 `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own);
-`host-offline-test.mjs` is **not re-baselinable**: hosting requires a session, so writing a
-listing while steeple is away is no longer a promise the product makes (owner call 2026-08-05);
 room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
 orphans every photo already written (and, locally, rows from other agents' API ports 404 or
-refuse outright, and the suites that count console errors — input-test, world-off-test — go
-red on that noise alone while every check line is green: judge the check lines —
+refuse outright — `fixtures.mjs:isEnvironmentNoise` is what a console-error-counting suite
+should filter with, and it still counts a failed `/api/v1` call;
 also add any new media origin to nginx.conf's CSP `img-src` or photos silently stop loading);
-`draft.roomId` is always `'main-space'` (second room per venue collides);
 dev geocoding = `StubGeocodingGateway` (every address → village centre, so geofence-rejection
 paths are locally unreachable, and every locally host-listed venue stacks on one map point —
 harnesses drive pins by keyboard or assert "aimed === opened", never a pointer at a named pin);
 search reads one page of 100, so a venue beyond it has no pin or row until a narrower search
 reaches it (its sheet works by slug either way; paging the map is unbuilt);
-`surface-test.mjs` §5 crashes on the account monogram (`outBox.cx` null) and truncates its run.
+the **village animates a change, not a state** (`flows/world/index.js` on `store:change`), and
+the engine sleeps past the roll — a posted letter hangs in the air until the visitor rolls
+back up, which is what `wave2-test.mjs` drives; a *seal* at the door needs a second event, so
+only a manual venue can produce one and no seeded venue is manual.
+Retired 2026-08-06 (Phase 3.6): `host-offline-test.mjs` (rewritten signed-in-then-offline),
+`surface-test.mjs` §5's `outBox.cx` crash, and `draft.roomId === 'main-space'` — a room has
+taken steeple's own minted slug since 366fc83, proven by `host-publish-test.mjs` §7–§8.
 API gaps compiled for steeple: v2 `docs/CONTRACT4.md` §5
 (CORS, venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint…).
 

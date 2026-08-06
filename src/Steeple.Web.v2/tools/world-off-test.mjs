@@ -11,7 +11,7 @@
 // `npm run build:flat` dist. The second is the one that matters: the flag is
 // only worth having if the bundle it produces actually works.
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { closeBrowsers, isEnvironmentNoise, launch } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -33,7 +33,12 @@ let failures = 0;
 const errors = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
-  if (m.type() === 'error' && !m.text().includes('GL Driver') && !(m.location()?.url ?? '').includes('/api/v1/')) {
+  // `isEnvironmentNoise` covers software GL and any resource that would not
+  // load — map tiles from an internet a sealed machine has none of, and the
+  // shared dev database's room photographs, whose absolute URLs point at API
+  // ports nobody is listening on any more. The `/api/v1/` exclusion beside it
+  // is this suite's own: it is about the page with no world, not the wire.
+  if (m.type() === 'error' && !isEnvironmentNoise(m) && !(m.location()?.url ?? '').includes('/api/v1/')) {
     errors.push(`[console] ${m.text()}`);
   }
 });
