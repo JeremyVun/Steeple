@@ -12,8 +12,8 @@
 // `porch` is the shared top-right shelf their entry affordances mount into.
 
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
+import { heldVenue, readVenue } from '../data/catalog.js';
 import * as session from '../data/session.js';
-import { getVenue } from '../data/venues.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
 import { createAccount } from './account.js';
@@ -159,10 +159,31 @@ export function createUI(_engine, _world) {
   let venueShown = null;
   let roomShown = null;
 
+  // A venue nobody searched for — a link out of an email, a deep link, one that
+  // sat beyond the last page of results — is not on the surface yet, so there is
+  // nothing to build a sheet from. It is read once, and the sheets are built the
+  // ordinary way when it lands. A venue steeple has never heard of simply never
+  // arrives, and the surface stays on the map, which is the truth.
+  const asked = new Set();
+  function readIfUnknown(venueId) {
+    if (!venueId || heldVenue(venueId) || asked.has(venueId)) return;
+    asked.add(venueId);
+    readVenue(venueId).finally(() => {
+      if (state.venueId === venueId) render();
+    });
+  }
+
   function render({ rebuild = false } = {}) {
     const { view, venueId, roomId } = state;
-    const venue = venueId ? getVenue(venueId) : null;
-    const room = venue && roomId ? liveRoom(venueId, roomId) : null;
+    readIfUnknown(venueId);
+    const venue = venueId ? heldVenue(venueId) : null;
+    // The room sheet is the listing, and a Draft is not one. steeple settles
+    // this for every room it has ever heard of — Draft and Unlisted answer 404
+    // to the public — so the only Drafts that reach here are the two this
+    // browser knows of itself: the seed's deliberate one, and a space a host has
+    // written but not yet sent. A deep link to either lands on the map.
+    const shown = venue && roomId ? liveRoom(venueId, roomId) : null;
+    const room = shown?.status === 'published' ? shown : null;
     const venueKey = venue ? venue.id : null;
     const roomKey = venue && room ? `${venue.id}/${room.id}` : null;
 

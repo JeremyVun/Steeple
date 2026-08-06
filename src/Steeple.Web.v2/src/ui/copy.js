@@ -1,10 +1,10 @@
-// Words and numbers. Every count here is computed from src/data/venues.js —
-// nothing shown to a visitor is estimated, rounded, or invented — and read
-// through the store, so a room a host has just published counts from the
-// moment it is published rather than from the seed data.
+// Words and numbers. Every count here is computed from what the catalog
+// answered with (src/data/catalog.js) — nothing shown to a visitor is
+// estimated, rounded, or invented — and read through the store, so a room a
+// host has just published counts from the moment it is published.
 
-import { getRoom, VENUES } from '../data/venues.js';
-import { effectiveRoom } from '../data/store.js';
+import { heldRoom } from '../data/catalog.js';
+import { effectiveRoom, roomEdits } from '../data/store.js';
 
 export const ARRIVAL = {
   eyebrow: 'Community space in Northern Virginia',
@@ -21,9 +21,23 @@ export const HOME_LABEL = 'All spaces';
 
 export const VERIFIED_LABEL = 'Identity verified (SSO)';
 
-/** The space as it stands now: the seed data with any host edits applied. */
+/**
+ * The space as it stands now: what the catalog answered about it, with any host
+ * edits this browser is still holding laid over the top.
+ *
+ * The order is the whole of it. This used to read the village's scenery and
+ * apply the edits to that, which meant a seed space was shown as the scenery
+ * described it however far steeple had moved on — no photographs among other
+ * things, because the scenery keeps photo ids and the catalog keeps URLs — and
+ * a space the scenery had never heard of was not shown at all. `effectiveRoom`
+ * remains the answer for a room only this browser knows: one a host has placed
+ * and not yet sent.
+ */
 export function liveRoom(venueId, roomId) {
-  return effectiveRoom(venueId, roomId) ?? getRoom(venueId, roomId);
+  const base = heldRoom(venueId, roomId) ?? effectiveRoom(venueId, roomId);
+  if (!base) return null;
+  const edits = roomEdits(venueId, roomId);
+  return edits ? { ...base, ...edits } : base;
 }
 
 const liveRooms = (venue) => venue.rooms.map((room) => liveRoom(venue.id, room.id) ?? room);
@@ -36,27 +50,17 @@ export function draftRooms(venue) {
   return liveRooms(venue).filter((room) => room.status !== 'published');
 }
 
-/** Published rooms accepting every selected activity, and the venues holding them. */
-export function countMatches(filters) {
-  const wanted = [...filters];
-  let spaces = 0;
-  let churches = 0;
-  for (const venue of VENUES) {
-    const matches = publishedRooms(venue).filter((room) =>
-      wanted.every((activity) => room.activities.includes(activity))
-    );
-    if (matches.length > 0) churches += 1;
-    spaces += matches.length;
-  }
-  return { spaces, churches };
-}
-
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-export function resultLine(filters) {
-  const { spaces, churches } = countMatches(filters);
-  if (spaces === 0) return 'No spaces match every activity selected';
-  return `${plural(spaces, 'space', 'spaces')} across ${plural(churches, 'venue', 'venues')}`;
+/**
+ * "9 spaces across 5 venues" — the search's own answer, not an estimate. It
+ * used to be counted from the bundled scenery, which was true only while the
+ * scenery was the catalog.
+ */
+export function resultLine(items) {
+  if (items.length === 0) return 'No spaces match this search';
+  const venues = new Set(items.map((item) => item.venueSlug)).size;
+  return `${plural(items.length, 'space', 'spaces')} across ${plural(venues, 'venue', 'venues')}`;
 }
 
 export function filterSummary(filters) {

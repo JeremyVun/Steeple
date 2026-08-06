@@ -13,9 +13,8 @@
 // first: you never lose a written request to a key you pressed to dismiss a
 // card.
 
-import { getRoomAvailability, getListing, readFailure } from '../../data/catalog.js';
+import { getRoomAvailability, getListing, heldVenue, readFailure } from '../../data/catalog.js';
 import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
-import { getVenue } from '../../data/venues.js';
 import { priceParts } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import {
@@ -815,7 +814,7 @@ export function createComposer({ announce, onSent, onLeave }) {
   function open(venueId, roomId) {
     if (!venueId || !roomId) return false;
     opened = `${venueId}/${roomId}`;
-    venue = getVenue(venueId) ?? null;
+    venue = heldVenue(venueId) ?? null;
     room = effectiveRoom(venueId, roomId) ?? null;
 
     roomHours = null;

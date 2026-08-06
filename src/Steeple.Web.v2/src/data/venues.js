@@ -1,5 +1,14 @@
-// Canonical dataset — transcribed from steeple db/changelog/002-seed.sql with
-// Amenity / AccessibilityFeature / ActivityType bitmasks decoded to labels.
+// SCENERY — the 3D village's dataset, and the seed data/bundledCatalog.js
+// answers from when nothing served /api/v1. Transcribed from steeple
+// db/changelog/002-seed.sql with Amenity / AccessibilityFeature / ActivityType
+// bitmasks decoded to labels.
+//
+// It is not the product's data. Every surface a visitor reads — the pins, the
+// list, the venue and room sheets, the request — goes through data/catalog.js,
+// which answers from steeple and borrows from here only what the wire has no
+// field for. A venue a host listed this morning is on the map and openable
+// because of that; it used to be invisible everywhere but a hand-typed URL.
+//
 // World positions project real lat/lng onto the village plane:
 //   x = (lng - CENTER.lng) * 8000   (east = +x)
 //   z = -(lat - CENTER.lat) * 10000 (north = -z)
@@ -327,16 +336,3 @@ export function getRoom(venueId, roomId) {
   return getVenue(venueId)?.rooms.find((r) => r.id === roomId) ?? null;
 }
 
-/** Venue ids with at least one published room accepting every selected activity filter. */
-export function venuesMatching(activityFilters) {
-  const filters = [...activityFilters];
-  return new Set(
-    VENUES.filter((v) =>
-      v.rooms.some(
-        (r) =>
-          r.status === 'published' &&
-          filters.every((f) => r.activities.includes(f))
-      )
-    ).map((v) => v.id)
-  );
-}

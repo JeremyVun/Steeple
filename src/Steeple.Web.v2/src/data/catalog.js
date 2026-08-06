@@ -25,9 +25,11 @@
 
 import * as api from './api.js';
 import * as bundled from './bundledCatalog.js';
-import { VENUES } from './venues.js';
 
 const PAGE_SIZE = 100;
+
+/** The frame the map opens on, before the geofence has named itself. */
+export const AREA_CENTER = bundled.AREA_CENTER;
 
 // After a failed call the catalog stops asking for a while: one dead API should
 // cost one timeout, not one per keystroke. It retries eventually, so a backend
@@ -89,6 +91,10 @@ async function live(fromApi, fromSeed) {
     readingSeed = false;
     return answer;
   } catch (error) {
+    // A question this browser withdrew is not an answer and not a silence.
+    // Reading it as "nothing served /api/v1" would put a working catalog on the
+    // seed for thirty seconds every time somebody typed quickly.
+    if (error?.aborted) throw error;
     if (absent(error?.status ?? 0)) {
       fallBackToSeed(error);
       return fromSeed();
@@ -200,7 +206,7 @@ const weekday = (value) => {
 // The wire has no short display name and no venue description. The village's
 // bundled seed is keyed by the very same slugs, so it lends both where it can,
 // and the venue's own name stands in where it cannot (CONTRACT4 §5).
-const scenery = (venueSlug) => VENUES.find((v) => v.id === venueSlug) ?? null;
+const scenery = (venueSlug) => bundled.getVenueRecord(venueSlug);
 
 const shortNameFor = (venueSlug, venueName) =>
   scenery(venueSlug)?.shortName ?? venueName.replace(/\s+Church$/, '');
@@ -323,6 +329,228 @@ function listingFrom(detail) {
   };
 }
 
+// ─── venue presence ──────────────────────────────────────────────────────────
+//
+// steeple's funnel is room-first and has no venue endpoint (CONTRACT4 §5), so a
+// venue is never fetched — it is assembled, from the two answers that carry one:
+//
+//   · a search answer, whose every room summary names its venue and says where
+//     it stands. That is enough for a pin and enough for the head of a sheet,
+//     and it arrives with the results, so a row is openable the moment it is on
+//     the page;
+//   · RoomDetail, whose venue block carries the address, the parking, the
+//     transit and the verification, and whose rooms the sitemap enumerates. That
+//     is the rest of the sheet, and it lands a moment later.
+//
+// One record per slug, filled in as answers arrive. `heldVenue` is what is known
+// right now — synchronous, for the first paint; `readVenue` is the whole of it.
+//
+// This is the seam that data/venues.js used to be. The bundled seed still lends
+// what the wire has no field for (a short name, a description, and the one line
+// a sheet says about a space being prepared), and it stands in whole when
+// nothing served /api/v1 — but no product surface reads it directly any more.
+
+const venues = new Map();
+
+// The seed's venues stand on the map from the first frame: a map that opens
+// empty and fills in is a map that flickers, and these are the same five
+// steeple serves. They are provisional — the first answer that actually came
+// from steeple clears them, so a live catalog with other venues never leaves a
+// phantom pin behind.
+let seededRoster = true;
+
+function record(venueSlug) {
+  let held = venues.get(venueSlug);
+  if (held) return held;
+  held = scenery(venueSlug) ?? {
+    id: venueSlug,
+    slug: venueSlug,
+    name: venueSlug,
+    shortName: venueSlug,
+    suburb: '',
+    lat: null,
+    lng: null,
+    address: null,
+    description: null,
+    parking: null,
+    transit: null,
+    contactEmail: null,
+    verified: false,
+    rooms: [],
+  };
+  held.provisional = true;
+  venues.set(venueSlug, held);
+  return held;
+}
+
+for (const slug of bundled.venueSlugs()) record(slug);
+
+/** Later answers add; they never blank a field an earlier one filled. */
+const said = (values) =>
+  Object.fromEntries(Object.entries(values).filter(([, v]) => v !== null && v !== undefined));
+
+function noteRoom(venue, room) {
+  const at = venue.rooms.findIndex((held) => held.id === room.id);
+  if (at < 0) venue.rooms.push({ status: 'published', ...said(room) });
+  else venue.rooms[at] = { ...venue.rooms[at], ...said(room) };
+}
+
+const roomFromSummary = (item) => ({
+  id: item.roomSlug,
+  name: item.name,
+  capacity: item.capacity,
+  pricePerHour: item.pricePerHour,
+  currency: item.currency,
+  primaryPhotoUrl: item.primaryPhotoUrl,
+  activities: item.activities,
+  amenities: item.amenities,
+  accessibility: item.accessibility,
+  status: 'published',
+});
+
+const roomFromListing = (listing) => ({
+  ...roomFromSummary(listing),
+  roomId: listing.roomId,
+  bookingMode: listing.bookingMode,
+  openHours: listing.openHours,
+  description: listing.description,
+  houseRules: listing.houseRules,
+  photos: listing.photos,
+});
+
+/** What a page of results says about the venues standing behind its rooms. */
+function noteSummaries(items, fromSeed) {
+  if (!fromSeed && seededRoster) {
+    for (const [slug, held] of venues) if (held.provisional) venues.delete(slug);
+    seededRoster = false;
+  }
+  for (const item of items) {
+    const venue = record(item.venueSlug);
+    venue.provisional = fromSeed;
+    Object.assign(
+      venue,
+      said({
+        name: item.venueName,
+        shortName: item.venueShortName,
+        suburb: item.suburb,
+        lat: item.lat,
+        lng: item.lng,
+      })
+    );
+    noteRoom(venue, roomFromSummary(item));
+  }
+}
+
+/** What one listing says — the venue block behind it, and the room itself. */
+function noteListing(listing, fromSeed) {
+  const venue = record(listing.venueSlug);
+  const profile = listing.venue ?? {};
+  venue.provisional = fromSeed;
+  Object.assign(
+    venue,
+    said({
+      name: profile.name ?? listing.venueName,
+      shortName: profile.shortName ?? listing.venueShortName,
+      suburb: profile.suburb ?? listing.suburb,
+      lat: profile.lat ?? listing.lat,
+      lng: profile.lng ?? listing.lng,
+      address: profile.addressLine,
+      description: profile.description,
+      parking: profile.parkingInfo,
+      transit: profile.transitInfo,
+      contactEmail: profile.contactEmail,
+      verified: profile.isIdentityVerified,
+    })
+  );
+  noteRoom(venue, roomFromListing(listing));
+  return venue;
+}
+
+/**
+ * The venue as it is known this instant, or null if the catalog has never
+ * answered with it. Synchronous on purpose: a sheet opened from a row must be
+ * on the page in the same frame as the press that opened it.
+ */
+export function heldVenue(venueSlug) {
+  return (venueSlug && venues.get(venueSlug)) || null;
+}
+
+/** One space of it, the same way. */
+export function heldRoom(venueSlug, roomSlug) {
+  return heldVenue(venueSlug)?.rooms.find((room) => room.id === roomSlug) ?? null;
+}
+
+/**
+ * Every venue the catalog has answered with, positioned — the map's roster.
+ * Which of them answer the search in hand is a separate question, and the
+ * search's own answer decides it (ui/map/atlas.js `setMatching`).
+ */
+export function knownVenues() {
+  return [...venues.values()].filter(
+    (venue) => Number.isFinite(venue.lat) && Number.isFinite(venue.lng)
+  );
+}
+
+/** The rooms of the last search answer — what the surface is currently saying. */
+let lastItems = [];
+export const heldResults = () => lastItems;
+
+// A venue is read once and held: it changes when a listing is published, not
+// while somebody is browsing. `forgetVenues` is the other half — publishing or
+// editing a space is exactly the moment the held answer stops being true.
+const reads = new Map();
+const whole = new Set();
+
+export function forgetVenues() {
+  reads.clear();
+  whole.clear();
+}
+
+/**
+ * The venue in full: the sitemap says which rooms it has, and each room's
+ * detail carries the venue block and the room's own words. Answers from what is
+ * already held when steeple cannot be reached, and null when nothing anywhere
+ * knows the slug.
+ */
+export function readVenue(venueSlug) {
+  if (!venueSlug) return Promise.resolve(null);
+  if (whole.has(venueSlug)) return Promise.resolve(heldVenue(venueSlug));
+  let reading = reads.get(venueSlug);
+  if (!reading) {
+    reading = assemble(venueSlug).finally(() => reads.delete(venueSlug));
+    reads.set(venueSlug, reading);
+  }
+  return reading;
+}
+
+async function assemble(venueSlug) {
+  let roomSlugs;
+  try {
+    const entries = await sitemapEntries();
+    roomSlugs = entries.filter((entry) => entry.venueSlug === venueSlug).map((e) => e.roomSlug);
+  } catch {
+    // Nothing served the sitemap. The seed answers for its own venues and for
+    // nothing else, which is the same promise every read here makes.
+    const seeded = scenery(venueSlug);
+    if (seeded) {
+      const { rooms, ...place } = seeded;
+      const venue = record(venueSlug);
+      Object.assign(venue, said(place), { provisional: true });
+      for (const room of rooms) noteRoom(venue, room);
+      return venue;
+    }
+    return heldVenue(venueSlug);
+  }
+
+  // Each read keeps itself (see getListing) — the venue is what they add up to.
+  const listings = (
+    await Promise.all(roomSlugs.map((roomSlug) => getListing(venueSlug, roomSlug).catch(() => null)))
+  ).filter(Boolean);
+  if (listings.length === 0) return heldVenue(venueSlug);
+  whole.add(venueSlug);
+  return heldVenue(venueSlug);
+}
+
 // ─── the surface ─────────────────────────────────────────────────────────────
 
 /**
@@ -334,9 +562,13 @@ function listingFrom(detail) {
  * Throws the ApiError when steeple answered and refused — the seed cannot
  * honour a schedule term, so standing in for a refused search would be a claim
  * about free hours nobody made. `readFailure` turns it into a sentence.
+ *
+ * `signal` takes a superseded question off the wire (ui/map/search.js). An
+ * abort is not an answer and not a silence: it is rethrown as it is, so nothing
+ * here mistakes it for a steeple that is away and starts reading the seed.
  */
-export async function searchListings(query = {}) {
-  return live(
+export async function searchListings(query = {}, { signal = null } = {}) {
+  const answer = await live(
     async () => {
       // The live search's schedule grammar, learned from the wire: time terms
       // must be anchored to a date or weekdays, and a time-of-day band stands
@@ -346,25 +578,31 @@ export async function searchListings(query = {}) {
       const anchored = Boolean(query.date) || daysOfWeek.length > 0;
       const timeOfDay =
         anchored && query.timeOfDay ? String(query.timeOfDay).toLowerCase() : null;
-      const result = await api.searchListings({
-        suburb: query.suburb ?? null,
-        minCapacity: query.minCapacity || null,
-        activities: tokens(query.activities, ACTIVITY_TOKENS),
-        amenities: tokens(query.amenities, AMENITY_TOKENS),
-        accessibility: tokens(query.accessibility, ACCESS_TOKENS),
-        date: query.date ?? null,
-        daysOfWeek,
-        timeOfDay,
-        startTime: anchored && !timeOfDay ? (query.startTime ?? null) : null,
-        endTime: anchored && !timeOfDay ? (query.endTime ?? null) : null,
-        durationMinutes: anchored ? (query.durationMinutes ?? null) : null,
-        page: query.page ?? null,
-        pageSize: query.pageSize ?? PAGE_SIZE,
-      });
+      const result = await api.searchListings(
+        {
+          suburb: query.suburb ?? null,
+          minCapacity: query.minCapacity || null,
+          activities: tokens(query.activities, ACTIVITY_TOKENS),
+          amenities: tokens(query.amenities, AMENITY_TOKENS),
+          accessibility: tokens(query.accessibility, ACCESS_TOKENS),
+          date: query.date ?? null,
+          daysOfWeek,
+          timeOfDay,
+          startTime: anchored && !timeOfDay ? (query.startTime ?? null) : null,
+          endTime: anchored && !timeOfDay ? (query.endTime ?? null) : null,
+          durationMinutes: anchored ? (query.durationMinutes ?? null) : null,
+          page: query.page ?? null,
+          pageSize: query.pageSize ?? PAGE_SIZE,
+        },
+        { signal }
+      );
       return { items: result.items.map(summaryFrom), total: result.totalCount };
     },
     () => bundled.searchListings(query)
   );
+  noteSummaries(answer.items, readingSeed);
+  lastItems = answer.items;
+  return answer;
 }
 
 /**
@@ -372,7 +610,7 @@ export async function searchListings(query = {}) {
  * throws when steeple answered and refused (`readFailure`).
  */
 export async function getListing(venueSlug, roomSlug) {
-  return live(
+  const listing = await live(
     async () => {
       const detail = await api.getListingBySlug(venueSlug, roomSlug);
       if (detail) return listingFrom(detail);
@@ -390,6 +628,11 @@ export async function getListing(venueSlug, roomSlug) {
     },
     () => bundled.getListing(venueSlug, roomSlug)
   );
+  // Every listing read is also the answer to "who is this venue" — the block
+  // behind it is the only place the address, the parking and the transit are
+  // ever said. Keeping it is what lets a sheet open on a venue nobody searched.
+  if (listing) noteListing(listing, readingSeed);
+  return listing;
 }
 
 // Which rooms a venue has, asked the only way steeple offers: the sitemap. Held

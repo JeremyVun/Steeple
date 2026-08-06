@@ -309,8 +309,19 @@ export function blackoutsFor(venueId, roomId) {
 export function effectiveRoom(venueId, roomId) {
   const base = getRoom(venueId, roomId) ?? placedRoom(venueId, roomId);
   if (!base) return null;
-  const edits = load().roomEdits[roomKey(venueId, roomId)];
+  const edits = roomEdits(venueId, roomId);
   return edits ? { ...base, ...edits } : base;
+}
+
+/**
+ * Just the edits — what this browser is holding about a space that steeple has
+ * not been told about yet. They are an overlay, and the product surface lays
+ * them over the catalog's answer rather than over the village's scenery
+ * (ui/copy.js `liveRoom`): a space steeple knows and the scenery does not is the
+ * ordinary case now.
+ */
+export function roomEdits(venueId, roomId) {
+  return load().roomEdits[roomKey(venueId, roomId)] ?? null;
 }
 
 export function placedVenues() {

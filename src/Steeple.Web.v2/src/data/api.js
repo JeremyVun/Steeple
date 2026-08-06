@@ -63,9 +63,14 @@ function queryString(params) {
   return query ? `?${query}` : '';
 }
 
-async function get(path, params, { notFoundAsNull = false, accessToken = null } = {}) {
+async function get(path, params, { notFoundAsNull = false, accessToken = null, signal = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  // A caller may withdraw its question — a search superseded by the next
+  // keystroke. Its abort and the timeout's are the same signal to fetch and two
+  // different things to a caller, so the failure says which one happened.
+  const withdraw = () => controller.abort();
+  signal?.addEventListener('abort', withdraw, { once: true });
   let response;
   try {
     response = await fetch(`${BASE}${path}${queryString(params)}`, {
@@ -76,11 +81,17 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null } 
       },
     });
   } catch (cause) {
+    if (signal?.aborted) {
+      const withdrawn = new ApiError(`${path} was withdrawn`);
+      withdrawn.aborted = true;
+      throw withdrawn;
+    }
     throw new ApiError(
       cause.name === 'AbortError' ? `${path} timed out after ${TIMEOUT_MS}ms` : `${path} did not answer`
     );
   } finally {
     clearTimeout(timer);
+    signal?.removeEventListener('abort', withdraw);
   }
   // A 404 is an answer — an unpublished or unknown listing — not a failure.
   if (response.status === 404 && notFoundAsNull) return null;
@@ -263,8 +274,8 @@ const safeJson = (text) => {
  * @param {number} [params.pageSize]         ≤100
  * @returns {Promise<{items:WireRoomSummary[],totalCount:number,isZeroResult:boolean,page:number,pageSize:number}>}
  */
-export function searchListings(params) {
-  return get('/listings/search', params);
+export function searchListings(params, { signal = null } = {}) {
+  return get('/listings/search', params, { signal });
 }
 
 /**

@@ -196,9 +196,15 @@
    loose on the map had to stay out of the hit test or it would steal the click
    meant for the pin beside it; a tag is a drawn object with an edge, it is the
    biggest target a thumb has on this map, and it is what people aim at. It is
-   inside its own marker, so the press it takes is that church's either way.
-   Verified by real clicks in tools/surface-test.mjs — the tags are hand-placed
-   (NAME_SET, ui/map/atlas.js) and none of them stands over another's pin. */
+   inside its own marker, so the press it takes is that venue's either way.
+
+   Hand-placing every tag out of every other pin's way (NAME_SET, ui/map/atlas.js)
+   was possible while the map drew five venues staged by the village. It draws
+   whatever the catalog answers with now, so tags do cross pins, and the rule
+   that holds instead is the one that was always the point: a press opens the
+   thing that was under it on the screen. Leaflet raises the marker the pointer
+   is over before the click lands, so what you pressed is what you saw. Driven
+   by tools/discovery-test.mjs §1 — the pin pressed and the sheet opened agree. */
 .dm-pin__tag {
   pointer-events: auto;
   cursor: pointer;

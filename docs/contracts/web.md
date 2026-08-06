@@ -149,9 +149,10 @@ translations happen here and only here: **names** (wire `roomName/latitude/longi
 → product `name/lat/lng/total`) and **vocabulary** (wire camelCase tokens → printed labels,
 unknown tokens humanized rather than dropped).
 
-Exports: `searchListings`, `getListing`, `getVenueProfile`, `getSuburbs`, `getGeofence`,
-`getRoomAvailability`, `readFailure(error)`, `isLive()`. `getListing` additionally carries
-steeple's own `roomId`
+Exports: `searchListings(query, {signal})`, `getListing`, `getVenueProfile`, `getSuburbs`,
+`getGeofence`, `getRoomAvailability`, `readFailure(error)`, `isLive()`, and the venue-presence
+seam below (`heldVenue`, `heldRoom`, `knownVenues`, `heldResults`, `readVenue`, `forgetVenues`,
+`AREA_CENTER`). `getListing` additionally carries steeple's own `roomId`
 (every write and the availability feed are addressed by it), `bookingMode`
 (`instant | manual | null`) and `openHours` translated into the product's `{day, start, end}`
 windows. **`getRoomAvailability(roomId, {from, to})` has no bundled fallback and answers
@@ -189,8 +190,82 @@ sentence and a **Try again** in place of rows, the count reads "No answer just n
 lose their prices and rest (`ui/map/{search,index,results}.js`); the request sheet refuses to
 open on a room steeple would not describe (`ui/guest/composer.js` — no hours means no honest
 calendar at the commitment point); the two property sheets lose only a photograph. Driven by
-`tools/catalog-honesty-test.mjs` (34/34, §1–§6), which needs two dev servers — one proxying a
+`tools/catalog-honesty-test.mjs` (35/35, §1–§6), which needs two dev servers — one proxying a
 live API, one with a dead target — and proves the 502 case against a real proxy.
+
+### Venue presence — the seam that `venues.js` used to be (2026-08-06, review issue 7)
+
+steeple has **no venue endpoint** (`docs/CONTRACT4.md` §5): its funnel is room-first. So a
+venue is never fetched, it is **assembled**, from the two answers that carry one — a search
+summary (venue name, short name, suburb, lat/lng, and the rooms that matched) and `RoomDetail`'s
+venue block (address, parking, transit, `isIdentityVerified`), with the sitemap saying which
+rooms a venue has. One record per slug, filled in as answers land:
+
+| export | | |
+|---|---|---|
+| `heldVenue(slug)` | sync | the venue as known **this instant**, or `null`. A sheet opened from a row must be on the page in the same frame as the press. |
+| `heldRoom(venueSlug, roomSlug)` | sync | one space of it, the same way |
+| `knownVenues()` | sync | every venue the catalog has answered with, positioned — **the map's roster** |
+| `heldResults()` | sync | the rooms of the last search answer (what the surface is currently saying) |
+| `readVenue(slug)` | async | the venue **in full**: sitemap → `getListing` per room. Held for the session; answers from what is held when steeple cannot be reached; `null` when nothing anywhere knows the slug. |
+| `forgetVenues()` | | publishing or editing a space is the one moment a held venue stops being true (`ui/map/index.js`, on `store:change`) |
+
+The bundled seed still lends what the wire has no field for — a short display name, a venue
+description, and the one line a sheet says about a space being **prepared** (a Draft never
+leaves the API, so the live catalog cannot contradict it; it only adds) — and stands in whole
+when nothing served `/api/v1`. The seed's five are on the map from the first frame, marked
+**provisional**: the first answer that actually came from steeple clears them, so a live catalog
+with other venues never leaves a phantom pin.
+
+**The rule this replaced:** pins and the two property sheets were built from `src/data/venues.js`
+— the 3D village's scenery — while the results came from the catalog. A venue a host listed had
+a row and nothing else: no pin, no sheet, and no way into its apply flow but a hand-typed
+`#/apply/<venueSlug>/<roomSlug>`. `venues.js` is now scenery and the seed behind
+`bundledCatalog.js`, and **no product surface reads it**. Consumers that moved: `ui/index.js`,
+`ui/map/atlas.js`, `ui/copy.js`, `ui/nav.js`, `ui/announcer.js`, `ui/guest/{composer,letter,
+journal,index}.js`, `core/bus.js`.
+
+Three rules that fall out of it, and are asserted:
+
+- **The map follows the answer.** Every venue the catalog has answered with is pinned; the
+  search in hand decides which stand and which rest, and which are priced (`atlas.setVenues`
+  reconciles rather than rebuilds, so a pin never loses the focus a keyboard was holding).
+- **A sheet paints what is known and completes itself.** `heldVenue` gives the head at once;
+  `readVenue` fills the street address, the parking, the transit and the spaces the search did
+  not return. For a seed venue the record is already whole, so the second paint is invisible.
+  The room sheet does the same with `getListing` (paragraph, house rules, photograph).
+- **`ui/copy.js` `liveRoom` is `heldRoom` first, `effectiveRoom` second, host edits over the
+  top.** The old order read the scenery and applied edits to *that*, which showed a seed space
+  as the scenery described it however far steeple had moved on — no photographs among other
+  things, because the scenery keeps photo ids and the catalog keeps URLs.
+
+`state.matching` is no longer derived from the scenery by `bus.setFilters`: only the search
+knows which venues answered, and it publishes the set with every answer.
+
+**One question per settled gesture** (`ui/map/search.js`). Every control calls `ask()`, which
+waits **150ms** for the hand to stop before going to steeple; `search()` — the boot read, the
+**Try again** press, a filter set from elsewhere — goes immediately. Each run aborts whatever is
+still in flight and passes its `AbortSignal` down through `catalog.searchListings(query,
+{signal})` to `api.js`'s `get`. A withdrawn request throws an `ApiError` carrying
+**`aborted: true`**, and that flag is load-bearing in two places: `catalog.js`'s `live()`
+rethrows it *before* the `absent` test (otherwise a fast typist would put a healthy catalog on
+the bundled seed for thirty seconds), and the pill drops it silently rather than printing a
+failure the next answer is about to replace. The sequence number stays — it stopped a stale
+answer being *painted*; the signal stops the request holding a connection and a rate-limit slot
+for a question nobody is waiting on.
+
+A **Draft is not a listing**, and `ui/index.js` opens the room sheet only on a published room.
+steeple settles this for everything it knows (Draft and Unlisted answer 404 to the public); the
+guard is for the two Drafts this browser knows of itself — the seed's deliberate
+`renovation-annex`, and a space a host has written but not yet sent.
+
+The **verified mark** on the venue sheet (and in the announcer) is gated on
+`isIdentityVerified`. It was printed unconditionally while the only venues that could be opened
+were the seed's, every one of which is verified.
+
+Driven end to end by `tools/discovery-test.mjs` (57/57): a venue minted through the real hosting
+chain and a seed venue take the same journey — search → pin (mouse **and** keyboard) → venue
+sheet → room sheet → Request → composer.
 
 ## `src/data/store.js` — the mirror, one per person
 
@@ -365,15 +440,23 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   this same shape). The 4s timeout itself is unchanged (D8's other half).
 - `draft.roomId` is always `'main-space'` in the listing flow — a second room per venue collides.
 - Dev geocoding is `StubGeocodingGateway`: every address resolves to the village centre, so
-  geofence-rejection paths are locally unreachable.
+  geofence-rejection paths are locally unreachable — **and every venue a host has ever listed
+  locally stacks on one point of the map.** Nothing is wrong with the pins (a press opens the
+  chip that was under it), but a harness must not aim a pointer at a named pin and expect that
+  venue: use the keyboard, or assert the invariant (`discovery-test.mjs` §1, `surface-test.mjs`
+  §2.1). It also broke two rulers that measured the map's scale between the *first and last*
+  pins on the page — both were zero, and every zoom figure derived from them was `NaN`; they
+  now measure between two named pins (`map-test.mjs`, `map-feel.mjs` `pinSpread`).
 - API gaps compiled for steeple live in this project's `docs/CONTRACT4.md` §5 (CORS,
   venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint, …).
-- **The property sheets are still scenery-backed.** `ui/index.js` builds the venue and room
-  panels from `venues.js` (`liveRoom`), so a venue a host listed has no detail sheet and no
-  clickable way into the apply flow — `#/apply/<venueSlug>/<roomSlug>` opens it perfectly
-  (the composer is catalog-backed since Phase 2), but nothing on the map leads there. The map
-  and list are catalog-backed and do show it. This is the next real gap on the discovery
-  surface.
+- ~~The property sheets are scenery-backed~~ — fixed 2026-08-06 (review issue 7). Pins and both
+  property sheets are the catalog's; see "Venue presence" above.
+- **A search answers one page.** `searchListings` asks for `pageSize: 100` and the surface shows
+  what came back, so with more published rooms than that (the shared dev database holds ~108) a
+  venue past the end of the first page has no pin and no row until a narrower search reaches it.
+  Its *sheet* works either way — `readVenue` goes by slug through the sitemap — so a deep link
+  or an email CTA lands correctly. The count line says what is on the page, not `totalCount`.
+  Paging the map is unbuilt.
 - Sign-out's revocation uses the access token it was holding. A token already expired means
   the `DELETE` answers 401 and the refresh-token family outlives the sign-out (until its own
   expiry); the local half is unconditional either way.
@@ -431,6 +514,17 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   `bookingReminder` rendering as the slip. Same env vars; `STEEPLE_SHOTS=<dir>` additionally
   photographs each surface on the way past (a photograph proves nothing about interactivity —
   it is for looking at what was built).
+- `tools/discovery-test.mjs` is the venue-presence probe (2026-08-06, 57 checks, world-OFF):
+  a venue minted through the real hosting chain and a seed venue take the same journey — search
+  → pin → venue sheet → room sheet → Request → composer — plus the Draft staying invisible, the
+  pins and the rows being one answer, and a superseded search leaving the wire. Pass the live
+  venue's slug pair as argv 3 and 4, or it finds a non-scenery venue on the wire itself. Two
+  things it learned so the next agent does not have to: the dev geocoder stacks every
+  host-listed venue on one point, so a *pointer* cannot be aimed at a named pin (it asserts the
+  invariant — the sheet that opens is the pin that was pressed — and uses the keyboard when it
+  needs a particular venue); and a superseded search cannot be caught by typing fast against a
+  local API that answers in 20ms, so §5 holds the first request open with `setRequestInterception`
+  and waits for `net::ERR_ABORTED`.
 - `tools/catalog-honesty-test.mjs` guards the line between an absent steeple and a refusing
   one (the table under `catalog.js` above). It wants **two** dev servers — `npx vite --port
   5177` and `STEEPLE_API_ORIGIN=http://localhost:59999 npx vite --port 5179` — because §6 is

@@ -18,6 +18,7 @@
 
 import { bus, state } from '../../core/bus.js';
 import { getGeofence, getSuburbs, readFailure, searchListings } from '../../data/catalog.js';
+import { resultLine } from '../copy.js';
 import { el } from '../dom.js';
 import { createFilterPanel } from './filters.js';
 
@@ -62,15 +63,6 @@ function icon(markup, className) {
   const span = el('span', { class: className, 'aria-hidden': 'true' });
   span.innerHTML = markup; // hand-written markup, never data
   return span;
-}
-
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-/** "9 spaces across 5 venues" — the search's own answer, not an estimate. */
-export function resultLine(items) {
-  if (items.length === 0) return 'No spaces match this search';
-  const churches = new Set(items.map((item) => item.venueSlug)).size;
-  return `${plural(items.length, 'space', 'spaces')} across ${plural(churches, 'venue', 'venues')}`;
 }
 
 const prettyDate = (iso) => {
@@ -129,16 +121,40 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
 
   let announceTimer = 0;
 
+  // Every touch of this control is a new question, and a person setting a date
+  // or a group size makes several of them a second. `ask` waits for the hand to
+  // settle before going to steeple, and `search` withdraws whatever is still in
+  // flight: the sequence number below already stopped a stale answer being
+  // painted, but the request itself went on holding a connection and a
+  // rate-limit slot for a question nobody was waiting on any more.
+  //
+  // Short enough that nobody waits for it, long enough that a five-keystroke
+  // capacity is one search rather than five.
+  const SETTLE_MS = 150;
+  let settleTimer = 0;
+  let inFlight = null;
+
+  function ask() {
+    clearTimeout(settleTimer);
+    settleTimer = setTimeout(search, SETTLE_MS);
+  }
+
   async function search() {
+    clearTimeout(settleTimer);
     const token = (run += 1);
+    inFlight?.abort();
+    const withdraw = new AbortController();
+    inFlight = withdraw;
     let answer;
     try {
-      answer = await searchListings(catalogQuery());
+      answer = await searchListings(catalogQuery(), { signal: withdraw.signal });
     } catch (error) {
+      // A question this control withdrew is not a failure to report: the
+      // answer it was superseded by is on its way.
+      if (error?.aborted || token !== run) return;
       // steeple answered and refused. The seed cannot stand in for a search —
       // it knows nothing of open hours or bookings — so the surface says it has
       // no answer rather than showing rooms nobody vouched for.
-      if (token !== run) return;
       const failure = readFailure(error);
       paint();
       publish([]);
@@ -146,6 +162,8 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
       clearTimeout(announceTimer);
       announceTimer = setTimeout(() => announce(failure.message), 350);
       return;
+    } finally {
+      if (inFlight === withdraw) inFlight = null;
     }
     const { items } = answer;
     if (token !== run) return; // a later question has already been asked
@@ -265,7 +283,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     query.suburb = name;
     whereInput.value = name ?? '';
     setOpen(null);
-    search();
+    ask();
   }
 
   whereInput.addEventListener('focus', () => setOpen('where'));
@@ -332,7 +350,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
         dataset: { mode },
         onclick: () => {
           query.mode = mode;
-          search();
+          ask();
         },
       },
       label
@@ -347,7 +365,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     'aria-label': 'The date you need it',
     oninput: () => {
       query.date = dateInput.value || null;
-      search();
+      ask();
     },
   });
   const onceRow = el('div', { class: 'dm-when__once' }, dateInput);
@@ -364,7 +382,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
         onclick: () => {
           if (query.days.has(day.n)) query.days.delete(day.n);
           else query.days.add(day.n);
-          search();
+          ask();
         },
       },
       day.short
@@ -386,7 +404,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
         dataset: { band: band.id },
         onclick: () => {
           query.band = query.band === band.id ? null : band.id;
-          search();
+          ask();
         },
       },
       [el('span', { class: 'dm-band__name', text: band.id }), el('span', { class: 'dm-band__hint', text: band.hint })]
@@ -413,7 +431,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
             query.days.clear();
             query.band = null;
             dateInput.value = '';
-            search();
+            ask();
           },
         },
         'Any time'
@@ -434,7 +452,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     'aria-label': 'At least this many people',
     oninput: () => {
       query.minCapacity = Math.max(0, Number(capacityInput.value) || 0);
-      search();
+      ask();
     },
   });
 
@@ -449,7 +467,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
         onclick: () => {
           query.minCapacity = query.minCapacity === n ? 0 : n;
           capacityInput.value = query.minCapacity || '';
-          search();
+          ask();
         },
       },
       `${n}+`
@@ -470,7 +488,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
 
   // ── filters ────────────────────────────────────────────────────────────────
 
-  const filterPanel = createFilterPanel({ onChange: () => search() });
+  const filterPanel = createFilterPanel({ onChange: () => ask() });
   const filterCount = el('span', { class: 'dm-seg__badge', hidden: true });
   const filterButton = el(
     'button',

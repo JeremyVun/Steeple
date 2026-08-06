@@ -19,7 +19,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { setHover, setView, state } from '../../core/bus.js';
-import { CENTER, VENUES } from '../../data/venues.js';
+import { AREA_CENTER, knownVenues } from '../../data/catalog.js';
 import { placedVenues } from '../../data/store.js';
 import { priceBand, publishedRooms } from '../copy.js';
 import { el } from '../dom.js';
@@ -27,10 +27,11 @@ import { el } from '../dom.js';
 const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 const ATTRIBUTION = '© OpenStreetMap contributors';
 
-// Where each church's tag is set relative to its pin. Hand-placed, the way a
-// cartographer would: the Vienna pair stand almost on top of each other, so
-// one takes the sky above its pin and the other the ground below it, and the
-// eastern tags are set inboard or they run off the sheet.
+// Where a venue's tag is set relative to its pin, for the five the beachhead
+// opened with. Hand-placed, the way a cartographer would: the Vienna pair stand
+// almost on top of each other, so one takes the sky above its pin and the other
+// the ground below it, and the eastern tags are set inboard or they run off the
+// sheet. A venue nobody has hand-placed takes the default and reads fine.
 const NAME_SET = {
   'grace-community-vienna': 'above',
   'vienna-presbyterian': 'below',
@@ -108,7 +109,7 @@ export function createAtlas() {
 
   // A view has to exist before anything may be added to the map; the real
   // framing is fitted to the churches once the panel has given the map a size.
-  map.setView([CENTER.lat, CENTER.lng], 12);
+  map.setView([AREA_CENTER.lat, AREA_CENTER.lng], 12);
   L.control.zoom({ position: 'topright' }).addTo(map);
   map.attributionControl.setPrefix('');
 
@@ -122,7 +123,9 @@ export function createAtlas() {
     className: 'dm-tiles',
   }).addTo(map);
 
-  const bounds = L.latLngBounds(VENUES.map((v) => [v.lat, v.lng]));
+  // The frame is drawn around the venues the catalog has answered with, so it
+  // grows with the beachhead rather than around a hard-coded five.
+  let bounds = L.latLngBounds([[AREA_CENTER.lat, AREA_CENTER.lng]]);
   // Tight enough that the Vienna pair and Dunn Loring separate their names,
   // loose enough that the outer three keep their labels on the sheet.
   const PADDING = [24, 28];
@@ -154,10 +157,17 @@ export function createAtlas() {
     ownPan = false;
   }
 
-  // ── church pins ────────────────────────────────────────────────────────────
+  // ── venue pins ─────────────────────────────────────────────────────────────
+  //
+  // One pin per venue the catalog has answered with — the seed's five while
+  // steeple is away, every published venue when it is there, and a venue a host
+  // listed this morning the moment a search returns it. The map used to be
+  // built from the village's scenery, which meant a real venue had no pin, no
+  // sheet and no way in but a hand-typed URL (review issue 7).
   const markerFor = new Map();
+  const placeOf = new Map();
 
-  for (const venue of VENUES) {
+  function addPin(venue) {
     const marker = L.marker([venue.lat, venue.lng], {
       icon: churchIcon(venue),
       keyboard: true,
@@ -185,6 +195,42 @@ export function createAtlas() {
     marker.on('click', () => setView('venue', { venueId: venue.id }));
 
     markerFor.set(venue.id, marker);
+    placeOf.set(venue.id, venue);
+  }
+
+  /**
+   * The roster, reconciled. Pins are kept rather than rebuilt — a marker torn
+   * down and made again loses the focus a keyboard was holding on it — and a
+   * venue that has left the catalog's answers takes its pin with it.
+   */
+  function setVenues(venues) {
+    const roster = venues.filter((v) => Number.isFinite(v.lat) && Number.isFinite(v.lng));
+    const standing = new Set(roster.map((v) => v.id));
+    for (const [id, marker] of markerFor) {
+      if (standing.has(id)) continue;
+      marker.remove();
+      markerFor.delete(id);
+      placeOf.delete(id);
+    }
+    for (const venue of roster) {
+      const held = markerFor.get(venue.id);
+      if (!held) {
+        addPin(venue);
+        label(venue.id, priceBand(publishedRooms(venue).map((room) => room.pricePerHour)));
+        continue;
+      }
+      placeOf.set(venue.id, venue);
+      const at = held.getLatLng();
+      if (at.lat !== venue.lat || at.lng !== venue.lng) held.setLatLng([venue.lat, venue.lng]);
+    }
+
+    // A frame drawn around venues that were not there yet is the wrong frame,
+    // and the first answer is exactly when that happens. It is only redrawn
+    // while the framing is still this module's — a visitor's own pan is theirs.
+    const next = L.latLngBounds(roster.map((v) => [v.lat, v.lng]));
+    if (!next.isValid() || next.equals(bounds)) return;
+    bounds = next;
+    if (!ownPan) frameChurches();
   }
 
   // ── what a pin says ────────────────────────────────────────────────────────
@@ -197,7 +243,7 @@ export function createAtlas() {
   // church, because that is what a pin is.
   function label(venueId, band) {
     const node = markerFor.get(venueId)?.getElement();
-    const venue = VENUES.find((v) => v.id === venueId);
+    const venue = placeOf.get(venueId);
     if (!node || !venue) return;
     node.querySelector('.dm-pin__price').textContent = band ? band.text : venue.shortName;
     node.dataset.shows = band ? 'price' : 'name';
@@ -209,11 +255,11 @@ export function createAtlas() {
     );
   }
 
-  // The seed's own prices stand from the first frame, so no pin is ever a blank
-  // chip while the catalog is still answering.
-  for (const venue of VENUES) {
-    label(venue.id, priceBand(publishedRooms(venue).map((room) => room.pricePerHour)));
-  }
+  // The seed's own venues and prices stand from the first frame, so the map is
+  // never blank and no pin is ever an empty chip while the catalog is still
+  // answering. The first answer that came from steeple replaces them
+  // (data/catalog.js — the roster is provisional until then).
+  setVenues(knownVenues());
 
   function warm(venueId) {
     if (state.view === 'village' || state.view === 'venue') setHover(venueId, null);
@@ -263,6 +309,8 @@ export function createAtlas() {
     remeasure: () => map.invalidateSize({ animate: false }),
     frameChurches,
     renderPlaced,
+    /** Every venue the catalog has answered with, pinned (see setVenues). */
+    setVenues,
     /**
      * How much of the map's head and foot something else is standing on. The
      * map is re-measured either way; it is only re-framed while the framing is
@@ -294,6 +342,10 @@ export function createAtlas() {
         node.classList.toggle('is-current', current);
         if (current) node.setAttribute('aria-current', 'true');
         else node.removeAttribute('aria-current');
+        // Leaflet stacks pins by latitude, so two venues at one address stack
+        // in whatever order they arrived and the chosen one can end up under
+        // the others. The one being read about comes to the top.
+        marker.setZIndexOffset(current ? 1000 : 0);
       }
       // The sheet that opens beside the map is about a place: bring the place
       // under the eye rather than leaving the visitor to hunt for its pin.

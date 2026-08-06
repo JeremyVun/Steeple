@@ -16,7 +16,7 @@ import { bus, setView, state } from '../../core/bus.js';
 import { refreshMine } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { getApplication, guestApplications } from '../../data/store.js';
-import { getVenue } from '../../data/venues.js';
+import { heldVenue } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
 import { createComposer } from './composer.js';
 import { createJournal } from './journal.js';
@@ -86,7 +86,7 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
 
   function showConfirmation(application, instant = false) {
     confirmationView = state.view;
-    const venue = getVenue(application.venueId);
+    const venue = heldVenue(application.venueId);
     const where = venue?.shortName ?? application.venueName ?? 'the venue';
     replaceChildren(confirmation, [
       // An instant venue answered the send with the booking itself. Saying it is
