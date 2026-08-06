@@ -21,7 +21,7 @@
 //     waiting for an answer.
 
 import * as api from '../../data/api.js';
-import { neverArrived, problemText, toWireSchedule } from '../../data/correspondence.js';
+import { neverArrived, problemText, timedOut, toWireSchedule } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { mirrorApplication, mirrorBooking } from '../../data/store.js';
 
@@ -35,15 +35,24 @@ const ACTIVITY_TOKENS = {
   Music: 'music',
 };
 
-/** The draft as SubmitApplicationRequest — steeple's names, steeple's tokens. */
-export function toSubmitRequest(draft, { organizationName = null } = {}) {
+/**
+ * The draft as SubmitApplicationRequest — steeple's names, steeple's tokens.
+ *
+ * `organizationName` is the group asking, and it belongs to the request rather
+ * than to the person: one organizer can write on behalf of the playgroup one
+ * week and the chess club the next, which is why it is a field on the sheet and
+ * not a fact about the account (v2_migration D1 — the old email→organization
+ * table died with it).
+ */
+export function toSubmitRequest(draft, { organizationName, turnstileToken = null } = {}) {
+  const org = String(organizationName ?? draft.organizationName ?? '').trim();
   return {
     activityType: ACTIVITY_TOKENS[draft.activityType] ?? String(draft.activityType ?? '').toLowerCase(),
     groupSize: Number(draft.groupSize),
     schedule: toWireSchedule(draft),
     intentText: String(draft.intentText ?? '').trim(),
-    turnstileToken: null,
-    organizationName,
+    turnstileToken,
+    organizationName: org || null,
   };
 }
 
@@ -59,10 +68,10 @@ export { problemText };
  *
  * @returns {Promise<
  *   {ok:true, application:object, instant:boolean} |
- *   {ok:false, problem:string, signedOut?:boolean, needsCard?:boolean, offline?:boolean, retake?:boolean}
+ *   {ok:false, problem:string, signedOut?:boolean, needsCard?:boolean, offline?:boolean, slow?:boolean, retake?:boolean}
  * >}
  */
-export async function sendRequest(draft) {
+export async function sendRequest(draft, { turnstileToken = null } = {}) {
   draft.idempotencyKey ??= newKey();
 
   let roomId = draft.remoteRoomId ?? null;
@@ -73,7 +82,12 @@ export async function sendRequest(draft) {
       if (roomId) draft.remoteRoomId = roomId;
     }
   } catch (error) {
-    return { ok: false, problem: problemText(error), offline: neverArrived(error?.status) };
+    return {
+      ok: false,
+      problem: problemText(error),
+      offline: !timedOut(error) && neverArrived(error?.status),
+      slow: timedOut(error),
+    };
   }
   if (!roomId) {
     return {
@@ -84,7 +98,7 @@ export async function sendRequest(draft) {
 
   try {
     const dto = await session.withAccess((accessToken) =>
-      api.submitApplication(roomId, toSubmitRequest(draft), {
+      api.submitApplication(roomId, toSubmitRequest(draft, { turnstileToken }), {
         accessToken,
         idempotencyKey: draft.idempotencyKey,
       })
@@ -121,7 +135,14 @@ export async function sendRequest(draft) {
       ok: false,
       problem: problemText(error),
       signedOut: error?.status === 401,
-      offline: neverArrived(error?.status),
+      // A Turnstile token is spent by the check it fails as surely as by the
+      // one it passes: the widget has to be asked for another before a retry.
+      refused: error?.code === 'turnstile_failed',
+      // A send this browser stopped waiting for is not a send that never
+      // happened: it keeps its key and says so, rather than promising the guest
+      // that nothing left (D8).
+      offline: !timedOut(error) && neverArrived(error?.status),
+      slow: timedOut(error),
     };
   }
 }

@@ -1118,6 +1118,83 @@
   color: var(--terracotta-deep);
 }
 
+/* The providers. Two buttons at most, stacked, each the full width of the card
+   so neither reads as the lesser way in. Google renders its own button into
+   .identity__google — its guidelines require it — so the only styling here is
+   the room it sits in; Apple's is ours to draw, to their weight and colour. */
+.identity__providers {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.identity__google {
+  display: grid;
+  justify-items: stretch;
+  min-height: 40px;
+}
+
+.identity__google > div {
+  width: 100% !important;
+}
+
+.provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: opacity 150ms var(--ease), transform 150ms var(--ease);
+}
+
+.provider--apple {
+  background: #000;
+  color: #fff;
+}
+
+.provider--apple svg {
+  margin-top: -2px;
+}
+
+.provider:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.provider:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.provider:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The two documents, said where they are agreed to. */
+.identity__legal {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+}
+
+/* Turnstile's own widget, in the only part of this panel that never redraws. */
+.identity__check {
+  display: grid;
+  justify-items: center;
+  margin-top: 16px;
+}
+
+.identity__check[hidden] {
+  display: none;
+}
+
 .identity__actions--quiet {
   margin-top: 14px;
 }

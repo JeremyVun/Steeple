@@ -66,6 +66,9 @@ export const COUNTER_STATUS = {
 
 // Bit n = day n, Sunday = 0 — the .NET DayOfWeek convention the schema uses.
 export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Weekday names as steeple spells them on the wire (`conventions.md` §2.1). */
+const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 export const daysToMask = (days) => days.reduce((m, d) => m | (1 << d), 0);
 export const maskToDays = (mask) => DAY_LABELS.map((_, d) => d).filter((d) => mask & (1 << d));
 
@@ -802,6 +805,37 @@ export function forgetApplication(applicationId) {
   emit('mirror', { applicationId, gone: true });
 }
 
+/**
+ * Steeple's own answer to "when is this room open", held here.
+ *
+ * The desk used to read a room's hours from this browser alone, so a room whose
+ * hours were set on another device — or by a host who has since cleared their
+ * storage — was printed as "No open hours set", in red, about a room that keeps
+ * perfectly good hours. Hours are the service's fact like every other; this is
+ * the mirror of `GET /manage/rooms/{id}/availability`, replace-all exactly as
+ * the service is.
+ *
+ * @param {{days:Array<{dayOfWeek:string,windows:Array<{startTime:string,endTime:string}>}>,
+ *          blackouts:Array<{date:string,reason:string|null}>}} dto
+ */
+export function mirrorRoomAvailability(venueId, roomId, dto) {
+  load();
+  const key = roomKey(venueId, roomId);
+  const windows = [];
+  for (const entry of dto?.days ?? []) {
+    const day = DAY_TOKENS.indexOf(String(entry.dayOfWeek ?? '').toLowerCase());
+    if (day < 0) continue;
+    for (const window of entry.windows ?? []) {
+      windows.push({ day, start: window.startTime, end: window.endTime });
+    }
+  }
+  data.openHours[key] = windows.sort((a, b) => a.day - b.day || (a.start < b.start ? -1 : 1));
+  data.blackouts[key] = (dto?.blackouts ?? []).map((b) => ({ date: b.date, reason: b.reason ?? null }));
+  // A list read, not a change somebody made: the desk redraws, nothing animates.
+  emit('mirror-list', { venueId, roomId, windows: windows.length });
+  return windows;
+}
+
 /** Replace-all weekly windows for a room, as the Manage service does. */
 export function setOpenHours(venueId, roomId, windows) {
   load();
@@ -1373,6 +1407,7 @@ export const store = {
   forgetApplication,
   fromWireApplication,
   setOpenHours,
+  mirrorRoomAvailability,
   addBlackout,
   removeBlackout,
   editRoom,

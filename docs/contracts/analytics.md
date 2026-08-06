@@ -50,14 +50,25 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `payment_succeeded` ✅ / `payment_failed` ✅ | server | bookingId, occurrenceId, amount, currency / bookingId, occurrenceId, failureCode |
 | `refund_issued` ✅ | server | bookingId, occurrenceId, amount, currency |
 | `payout_onboarding_started` ✅ / `payout_onboarding_completed` ✅ | server | venueId |
+| `inbox_opened` ✅ *(2026-08-07)* | client | surface (`guest` \| `host`) |
+| `decision_pressed` ✅ *(2026-08-07)* | client | decision (`approve`\|`decline`\|`ask`\|`counter`\|`message`\|`withdraw`\|`counterAccept`\|`counterDecline`), surface |
+| `card_step_opened` ✅ *(2026-08-07)* | client | reason (`apply` \| `account` \| `failure`) |
+| `payout_step_opened` ✅ *(2026-08-07)* | client | state (`prompt` \| `onboarding` \| `connected`) |
+| `arrival_settled` ✅ *(2026-08-07)* | client | destination (`village` \| `desk`), entry (`cinematic` \| `direct`) — one per press the boot actually answered (`src/core/intent.js`, build plan P3.5) |
 
-¹ The deprecated v1 BFF emits these client-ish funnel events server-side (`IWebAnalytics`,
-same stdout log line shape). Active web v2 does not yet emit them; it must call the built
-`POST /api/v1/events` endpoint. `sso_started` at the apply gate carries `trigger` instead of
-`provider` (the provider isn't chosen yet at that point). `map_interacted` and
-`notification_opened` are the two client-sourced rows the mobile app (and, once migrated, Web)
-call the Ingest endpoint for directly; the Ingest allowlist is exactly these four rows
-(`map_interacted`, `application_started`, `sso_started`, `notification_opened`) — everything else
-is server-authoritative and rejected if a client attempts to submit it.
+¹ The deprecated v1 BFF emitted these client-ish funnel events server-side (`IWebAnalytics`, same
+stdout log line shape) and retired with it. **Web v2 emits them from its own batcher**
+(`src/data/analytics.js`, built 2026-08-07): `track()` queues and returns, a timer posts batches
+of ≤25 to `POST /api/v1/events`, and `pagehide`/`visibilitychange` flush through `sendBeacon` —
+which carries no `Authorization` header, so unload-time events reach steeple **without a
+`userId`**. That is the accepted cost of not losing the last batch. `sso_started` at the apply
+gate carries `trigger` instead of `provider` (the provider isn't chosen yet at that point).
+
+The Ingest allowlist (`EventIngestService.AllowedEventNames`) is exactly the nine client-sourced
+rows in the table — `map_interacted`, `application_started`, `sso_started`,
+`notification_opened`, `inbox_opened`, `decision_pressed`, `card_step_opened`,
+`payout_step_opened`, `arrival_settled`. Everything else is server-authoritative and silently
+rejected if a client attempts to submit it; the client keeps the same list so it never sends what
+would be dropped.
 
 Naming: `snake_case`, past tense.

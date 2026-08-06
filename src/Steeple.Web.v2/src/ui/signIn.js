@@ -9,6 +9,7 @@
 // It is a layer of its own over everything, because it can be opened from
 // anywhere: the village, an open letter, the desk.
 
+import { track } from '../data/analytics.js';
 import * as session from '../data/session.js';
 import { createIdentityStep } from './guest/sso.js';
 import { el } from './dom.js';
@@ -34,6 +35,10 @@ export function createSignInPanel({ announce } = {}) {
     words: WORDS,
     onVerify: () => close(),
     onCancel: () => close(),
+    // Signing in from the shelf asks one question, so the panel leaves the
+    // moment it is answered — unless the answer left something to agree to,
+    // which is the panel's own business to finish first.
+    onSettled: () => close(),
   });
 
   // No chrome of its own: the identity panel is already a sheet of paper, and
@@ -51,7 +56,14 @@ export function createSignInPanel({ announce } = {}) {
 
   const element = el('div', { class: 'modal__layer signin__layer', hidden: true }, [sheet]);
 
-  function open(from = null) {
+  /**
+   * @param from     what to give focus back to on the way out
+   * @param trigger  what brought them here — the shelf's own chip, a flow that
+   *                 needs a name before it can start, or a document still owed
+   *                 an acceptance. Reported, not rendered.
+   */
+  function open(from = null, { trigger = 'account' } = {}) {
+    track('sso_started', { surface: 'header', trigger });
     opener = from ?? document.activeElement;
     element.hidden = false;
     // A transition needs a frame to start from, and the layer has only just
@@ -92,9 +104,15 @@ export function createSignInPanel({ announce } = {}) {
   );
 
   // Signing in from anywhere ends the panel's business: it opened to ask one
-  // question and the session answered it.
-  session.onSessionChange((held) => {
-    if (held && isOpen()) close();
+  // question and the session answered it. A panel still holding an agreement
+  // prompt has not finished asking, and closing on the session alone would shut
+  // it before anybody could read it (v2_migration D7).
+  session.onSessionChange((held, reason) => {
+    // Only a sign-in ends this panel's business. A pair rotating underneath it —
+    // which is what asking steeple who you are does — is not an answer to
+    // anything it asked, and closing on it shut the agreement prompt before it
+    // had rendered.
+    if (held && reason === session.REASON.signedIn && isOpen() && identity.settled()) close();
   });
 
   // A layer of its own has to stop its own events reaching the world behind,

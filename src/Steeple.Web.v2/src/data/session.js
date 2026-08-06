@@ -30,11 +30,13 @@
 // race worse, which it does by keeping one refresh in flight per tab and by
 // re-reading what the other tabs have said before starting one.
 //
-// The sign-in itself is steeple's dev provider (Auth:DevLoginEnabled, which
-// exists only in appsettings.Development.json): the "ID token" is an email, or
-// `email|Display Name`, and the account is created on first use. When Google
-// and Apple arrive, only `signIn` changes — the rest of this file already
-// speaks in provider tokens.
+// Signing in is one call whoever asks: `signInWithProvider` takes a provider's
+// ID token and hands back the person steeple made of it. Google and Apple get
+// their tokens from data/providers.js; the dev provider (Auth:DevLoginEnabled,
+// which exists only in appsettings.Development.json) takes an email — or
+// `email|Display Name` — as its "token" and creates the account on first use.
+// Everything after that point is the same for all three, including the cookie
+// the refresh token arrives as.
 
 import * as api from './api.js';
 
@@ -138,6 +140,15 @@ export function currentUser() {
 export const isSignedIn = () => Boolean(load());
 
 /**
+ * The access token as it stands — in memory, and null whenever this document
+ * has not asked for one yet. For the single caller that cannot use
+ * {@link withAccess}: a fire-and-forget post nobody waits on and nobody would
+ * retry (data/analytics.js), where a null simply means the batch arrives
+ * without a `userId`. Everything that matters goes through `withAccess`.
+ */
+export const accessToken = () => (load() ? access : null);
+
+/**
  * Told whenever the session appears, changes person, or goes — with the
  * {@link REASON} it changed for. This is the only channel: surfaces subscribe,
  * nothing polls. It fires for what another tab did, too.
@@ -150,25 +161,38 @@ export function onSessionChange(watch) {
 }
 
 /**
- * Sign in through steeple's dev provider. Any email works — the account is
- * created the first time it is seen, and the same email always lands on the
- * same account.
+ * Exchange a provider's ID token for steeple's own pair.
  *
- * The refresh token is asked for as a cookie and never touches this file.
+ * This is the one sign-in there is — Google, Apple and the dev provider all
+ * arrive here with the same four things, because that is all
+ * `POST /auth/sessions` has ever wanted (`docs/contracts/identity.md`). The
+ * providers themselves live in data/providers.js; what happens to the pair
+ * afterwards lives here, and the refresh half of it is asked for as a cookie
+ * and never touches this file.
  *
- * @param {{email:string, displayName?:string|null}} who
+ * `displayName` is a hint honoured only when the account is created, which is
+ * what Apple's once-only name needs. `nonce` is compared against the token's
+ * own claim, so it must be the one the provider was given.
+ *
+ * @param {{provider:string, idToken:string, nonce?:string|null,
+ *          displayName?:string|null, turnstileToken?:string|null}} credential
  * @returns {Promise<Person>}
  * @throws {api.ApiError} status 0 when nothing answered; otherwise steeple's
  *   own problem document, `code` and all.
  */
-export async function signIn({ email, displayName = null }) {
-  const address = String(email ?? '').trim().toLowerCase();
-  const name = String(displayName ?? '').trim();
+export async function signInWithProvider({
+  provider,
+  idToken,
+  nonce = null,
+  displayName = null,
+  turnstileToken = null,
+}) {
   const session = await api.createSession({
-    provider: 'dev',
-    idToken: name ? `${address}|${name}` : address,
-    turnstileToken: null,
-    displayName: name || null,
+    provider,
+    idToken,
+    nonce,
+    turnstileToken,
+    displayName: displayName?.trim() || null,
     device: { platform: 'web', label: 'Steeple Village' },
     refreshTransport: 'cookie',
   });
@@ -176,6 +200,27 @@ export async function signIn({ email, displayName = null }) {
   inherited = null;
   write(session.user, REASON.signedIn);
   return session.user;
+}
+
+/**
+ * Sign in through steeple's dev provider. Any email works — the account is
+ * created the first time it is seen, and the same email always lands on the
+ * same account. Development only: the verifier exists solely where
+ * `Auth:DevLoginEnabled` is on, and it is the local loop's and every harness's
+ * way in (`tools/fixtures.mjs` signs a browser in through exactly this).
+ *
+ * @param {{email:string, displayName?:string|null, turnstileToken?:string|null}} who
+ * @returns {Promise<Person>}
+ */
+export function signIn({ email, displayName = null, turnstileToken = null }) {
+  const address = String(email ?? '').trim().toLowerCase();
+  const name = String(displayName ?? '').trim();
+  return signInWithProvider({
+    provider: 'dev',
+    idToken: name ? `${address}|${name}` : address,
+    displayName: name || null,
+    turnstileToken,
+  });
 }
 
 /**

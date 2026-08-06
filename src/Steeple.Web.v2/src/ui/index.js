@@ -12,6 +12,8 @@
 // `porch` is the shared top-right shelf their entry affordances mount into.
 
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
+import { outstanding as outstandingAgreements } from '../data/agreements.js';
+import { track } from '../data/analytics.js';
 import { heldVenue, readVenue } from '../data/catalog.js';
 import * as session from '../data/session.js';
 import { el } from './dom.js';
@@ -77,7 +79,7 @@ export function createUI(_engine, _world) {
   const host = createHostFlows({
     announce: announcer.say,
     porch,
-    askToSignIn: () => signIn.open(),
+    askToSignIn: () => signIn.open(null, { trigger: 'host' }),
   });
 
   // Last onto the shelf, so it sits at the end of the line where an account
@@ -101,6 +103,75 @@ export function createUI(_engine, _world) {
       onPick: () => signIn.open(),
     });
   });
+
+  // The two documents, for a session that arrived without being asked.
+  //
+  // Every sign-in a *person* performs goes through the identity panel, and the
+  // panel asks inline before it lets them carry on — that is the whole of P4
+  // task 4 and it covers almost everyone. What it cannot cover is the session
+  // this browser was already holding when the words changed: they signed in
+  // months ago, against an older version, and nothing will ask them again until
+  // they next sign in. That is the one case this exists for, so this fires **at
+  // boot and nowhere else**.
+  //
+  // Deliberately *not* on `REASON.signedIn`: that fires in the middle of
+  // whatever is being done at the time, and a prompt that lands on a desk being
+  // answered from, or a listing half written, interrupts work to ask a question
+  // that has kept for months and can keep a minute longer. (Both
+  // tools/correspondence-test.mjs and tools/payments-ui-test.mjs stalled at a
+  // desk this panel had covered — a harness meeting it exactly as a host would.)
+  //
+  // Even at boot it waits for a quiet moment, and steps aside if the person goes
+  // somewhere before answering.
+  let owedAnAcceptance = false;
+  /** Whether the panel on screen is one this asked for, rather than the person. */
+  let askingHere = false;
+
+  const nothingElseIsAsking = () =>
+    state.view === 'village' &&
+    ![...document.querySelectorAll('#ui .modal__layer, #ui .listing__layer')].some(
+      (node) => !node.hidden
+    ) &&
+    ![...document.querySelectorAll('#ui .identity')].some((node) =>
+      node.checkVisibility ? node.checkVisibility() : !node.hidden
+    );
+
+  function offerAgreements() {
+    if (!owedAnAcceptance || !session.isSignedIn() || !nothingElseIsAsking()) return;
+    owedAnAcceptance = false;
+    askingHere = true;
+    signIn.open(null, { trigger: 'agreements' });
+  }
+
+  /**
+   * Somebody who has gone somewhere else has answered this prompt the way people
+   * answer prompts they did not ask for: by leaving. It gets out of the way and
+   * waits for the next quiet moment rather than sitting over a desk or a letter
+   * — a panel nobody opened must never be a panel somebody has to dismiss.
+   */
+  function withdrawAgreements() {
+    if (!askingHere) return;
+    askingHere = false;
+    if (signIn.isOpen()) signIn.close();
+    owedAnAcceptance = true;
+  }
+
+  async function askAboutAgreements() {
+    if (!session.isSignedIn()) return;
+    const owed = await outstandingAgreements();
+    owedAnAcceptance = Boolean(owed.length) && session.isSignedIn();
+    offerAgreements();
+  }
+
+  // A session that goes takes the question with it.
+  session.onSessionChange((held) => {
+    if (!held) {
+      owedAnAcceptance = false;
+      askingHere = false;
+    }
+  });
+  // The one trigger: a session this browser was already holding when it opened.
+  if (session.isSignedIn()) session.fetchCurrentUser().then(() => askAboutAgreements());
 
   // What steeple wrote while this person was away — ambient, not a tab. It
   // borrows the same slip the session notice uses, because it is the same kind
@@ -224,12 +295,28 @@ export function createUI(_engine, _world) {
     document.documentElement.dataset.mode = state.mode;
   }
 
-  bus.on('view:change', () => {
+  bus.on('view:change', ({ view, previous }) => {
     render();
     announcer.view();
+    // Somebody coming to read their correspondence — the guest's inbox or the
+    // host's board. Arrival only: `view:change` does not fire for a redraw, and
+    // a deep link straight into a letter is not an inbox that was opened
+    // (`docs/contracts/analytics.md` `inbox_opened`).
+    if (view !== previous?.view && (view === 'journal' || view === 'desk')) {
+      track('inbox_opened', { surface: view === 'desk' ? 'host' : 'guest' });
+    }
+    // Back on the map with nothing over it: the moment an acceptance that has
+    // been waiting may be asked for without interrupting anything. Anywhere
+    // else, a prompt already up steps aside.
+    if (view === 'village') offerAgreements();
+    else withdrawAgreements();
   });
 
-  bus.on('mode:change', () => render());
+  bus.on('mode:change', () => {
+    render();
+    // Entering hosting is going somewhere, even when the view has not moved yet.
+    if (state.mode !== 'guest') withdrawAgreements();
+  });
 
   bus.on('roll:change', () => {
     render();

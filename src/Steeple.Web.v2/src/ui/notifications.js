@@ -22,6 +22,7 @@
 //   createNotifications({ notice, announce }) -> { read, ambient }
 
 import { rollTo, state } from '../core/bus.js';
+import { track } from '../data/analytics.js';
 import { markNotificationsRead, notifications } from '../data/correspondence.js';
 import * as session from '../data/session.js';
 import { followDeepLink } from './deepLink.js';
@@ -141,6 +142,9 @@ export function createNotifications({ notice, announce } = {}) {
         : null
     );
     announce?.(line);
+    // Shown is delivered here — this app has no bell to press, so the slip
+    // appearing on the page is the moment steeple's notification was opened.
+    track('notification_opened', { type: row.type, channel: 'web' });
     markNotificationsRead([row.id]);
     // Held so `ambient()` stops offering it as unread the moment it was said.
     row.readAt = new Date().toISOString();

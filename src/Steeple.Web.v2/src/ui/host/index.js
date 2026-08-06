@@ -16,6 +16,7 @@ import {
   managedVenues,
   refreshManaged,
   refreshManagedBookings,
+  refreshRoomHours,
   venuePayments,
 } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
@@ -31,7 +32,7 @@ import { createDesk } from './desk.js';
 import { createLetterPage } from './letter.js';
 import { createListingFlow } from './listing.js';
 import { createPayoutScreen } from './payouts.js';
-import { deskVenues, venueOf } from './model.js';
+import { deskVenues, roomsOf, venueOf } from './model.js';
 
 const HOST_VIEWS = new Set(['desk', 'letter']);
 
@@ -146,6 +147,18 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     if (answer.ok) mirrorManagedVenues(answer.value);
     const slugs = mine();
     if (slugs.length) {
+      // When each room is open, from steeple rather than from this browser's
+      // memory of setting it — the Spaces tab was printing "No open hours set"
+      // about rooms that keep them.
+      await refreshRoomHours(
+        slugs.flatMap((venueId) =>
+          roomsOf(venueId, placedVenues()).map((room) => ({
+            venueId,
+            id: room.id,
+            remoteId: room.remoteId ?? null,
+          }))
+        )
+      );
       await refreshManaged(slugs);
       // What a yes actually made. Each booking is then read in full, because a
       // page names bookings and says nothing about the inside of one — the

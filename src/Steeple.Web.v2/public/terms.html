@@ -1,0 +1,185 @@
+<!doctype html>
+<!--
+  The terms, as a plain page.
+
+  Version-stamped, and the stamp is load-bearing: `src/data/agreements.js` sends
+  this version to POST /me/agreements, and steeple records acceptance against
+  it. Change the words here and bump the version there in the same commit, or
+  people will have agreed to something they were never shown.
+
+  Deliberately standalone — no bundle, no framework, no script. A legal page has
+  to render when the app does not, and be readable by a crawler that runs
+  nothing (docs/SEO.md).
+
+  The text began as the deprecated v1 web's (Steeple.Web.v1/Views/Site/Terms.cshtml
+  @ 2026-07-04) and was corrected at 2026-08-07 where v1's words describe a product
+  that no longer exists: v2 takes payment through Steeple's processor rather than
+  leaving every arrangement to be settled venue-side, so the version moved with the
+  words.
+
+  ⚠ PREVIEW TEXT, NOT LEGAL ADVICE. This is a plain-English summary written by the
+  founder, and the page says so. A lawyer's version is a launch gate
+  (docs/backlog/phase-6-reputation-and-launch.md), not a migration deliverable.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terms &amp; safety — Steeple</title>
+    <meta
+      name="description"
+      content="The basics of using Steeple, and how trust and safety work here."
+    />
+    <link rel="canonical" href="terms.html" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z' fill='%23C0623F'/%3E%3C/svg%3E"
+    />
+    <style>
+      :root {
+        --paper: #fbf7f0;
+        --ink: #2a2620;
+        --ink-soft: #5c544a;
+        --ink-faint: #6b6253;
+        --terracotta: #c0623f;
+        --line: #e6decf;
+        --serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+          sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 56px 24px 96px;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.65;
+      }
+      main {
+        max-width: 34rem;
+        margin: 0 auto;
+      }
+      .eyebrow {
+        margin: 0 0 6px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--terracotta);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-family: var(--serif);
+        font-size: 34px;
+        font-weight: 500;
+        line-height: 1.2;
+      }
+      h2 {
+        margin: 34px 0 8px;
+        font-family: var(--serif);
+        font-size: 20px;
+        font-weight: 500;
+      }
+      .lead {
+        margin: 0;
+        color: var(--ink-soft);
+      }
+      .version {
+        margin: 22px 0 0;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 13px;
+        color: var(--ink-faint);
+      }
+      a {
+        color: var(--terracotta);
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 13.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Legal</p>
+      <h1>Terms &amp; safety</h1>
+      <p class="lead">
+        The basics of using Steeple, and how trust and safety work here. This is a plain-English
+        summary for our early preview.
+      </p>
+      <p class="version">Version 2026-08-07</p>
+
+      <h2>What Steeple is</h2>
+      <p>
+        Steeple is a noticeboard that helps people find local community spaces and connect with the
+        venues that run them. We are not the owner, operator, or manager of any space listed here,
+        and we are not a party to any arrangement you make with a venue.
+      </p>
+
+      <h2>Listings &amp; bookings</h2>
+      <p>
+        Venues are responsible for their own listings — descriptions, photos, pricing, availability,
+        and house rules. The arrangement itself is between you and the venue: what happens in the
+        space, and on what terms, is theirs and yours. Always confirm the details with the venue
+        before you rely on them.
+      </p>
+
+      <h2>Payments</h2>
+      <p>
+        Where a venue charges for a space, Steeple takes the payment through its payment processor
+        and passes it on to the venue, less any fee we tell you about before you book. A recurring
+        booking is charged per session, at the price shown when the booking was confirmed. If a
+        booking is cancelled, the sessions that have not happened are released and anything already
+        charged for them is refunded. We never see or hold your card number — the processor does.
+      </p>
+
+      <h2>Trust &amp; safety</h2>
+      <p>
+        We confirm the identity of the people who run each venue: a verified host has signed in with
+        Google or Apple, so we know who they are. Verification tells you who you're dealing with — it
+        isn't a safety inspection or an endorsement.
+      </p>
+      <p>
+        Steeple does not run background checks on hosts or organisers, and we don't vet how spaces
+        are used. Venues are responsible for the safeguarding of their own premises and activities,
+        and everyone using a space should bring the same good sense they'd use with any local venue:
+        go and look first, ask questions, and trust your judgement.
+      </p>
+      <p>If something doesn't look right about a listing, please let us know so we can look into it.</p>
+
+      <h2>Your account</h2>
+      <p>
+        You sign in with Google or Apple; keep that provider account secure, because it's how you
+        prove who you are here. Signing in accepts the then-current version of these terms and the
+        privacy policy — we record which version you accepted, and we'll ask again if they change in
+        a way that matters. You can delete your account at any time from your account page.
+      </p>
+
+      <h2>Acceptable use</h2>
+      <p>
+        Use Steeple lawfully and respectfully. Don't post false or misleading listings, and don't use
+        the contact details of a venue for spam or anything other than a genuine enquiry.
+      </p>
+
+      <h2>Liability</h2>
+      <p>
+        Because Steeple simply introduces neighbours to one another, we can't accept responsibility
+        for the condition of a space, the conduct of a host or organiser, or the outcome of any
+        arrangement made through the site. To the extent the law allows, Steeple is provided "as is".
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        We'll update these terms as Steeple grows, and we'll publish a full, dated version before any
+        public launch or app-store release.
+      </p>
+
+      <footer>
+        <a href="./">Back to Steeple</a> · <a href="privacy.html">Privacy policy</a>
+      </footer>
+    </main>
+  </body>
+</html>

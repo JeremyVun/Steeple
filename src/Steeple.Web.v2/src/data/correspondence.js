@@ -12,6 +12,8 @@
 //   'refused'  — steeple answered no, and its own sentence is what to print;
 //   'offline'  — nothing answered at all, so nothing happened, and the surface
 //                says so rather than pretending;
+//   'slow'     — this browser gave up waiting, which is not the same fact: the
+//                write may have landed, so nothing may promise that it did not;
 //   'signedOut'— the session died under the person; the way back is signing in;
 //   'unavailable' — the route is not there (a flag off server-side, CONTRACTS
 //                §5 counter-offers): a feature that is absent, not an error.
@@ -19,12 +21,14 @@
 // A verdict is never `ok` on a guess. `ok` means steeple answered.
 
 import * as api from './api.js';
+import { track } from './analytics.js';
 import * as session from './session.js';
 import {
   maskToDays,
   mirrorApplication,
   mirrorApplications,
   mirrorBooking,
+  mirrorRoomAvailability,
   forgetApplication,
 } from './store.js';
 
@@ -67,7 +71,21 @@ export function toWireSchedule(schedule) {
  */
 export const neverArrived = (status) => status === 0 || status === 502 || status === 503;
 
+/**
+ * Whether this browser stopped waiting rather than failing to reach steeple.
+ *
+ * A timeout wears `status: 0` like a dead connection does, and reads exactly the
+ * same to {@link neverArrived} — but it is the opposite fact. The request may
+ * have landed and may be finishing right now, so the one thing that must never
+ * be said about it is "nothing was sent" (v2_migration D8). It has to be tested
+ * before `neverArrived`, and it is why writes carry an idempotency key.
+ */
+export const timedOut = (error) => error?.timedOut === true;
+
 export function problemText(error) {
+  if (timedOut(error)) {
+    return 'Steeple is taking longer than usual to answer. This may still have gone through — give it a moment before trying again.';
+  }
   if (neverArrived(error?.status)) {
     return 'Steeple could not be reached just now — nothing was sent. Try again in a moment.';
   }
@@ -95,8 +113,15 @@ async function attempt(work) {
     return { ok: true, value: await session.withAccess(work) };
   } catch (error) {
     const status = error?.status ?? 0;
-    const reach =
-      neverArrived(status) ? 'offline' : status === 401 ? 'signedOut' : status === 404 ? 'unavailable' : 'refused';
+    const reach = timedOut(error)
+      ? 'slow'
+      : neverArrived(status)
+        ? 'offline'
+        : status === 401
+          ? 'signedOut'
+          : status === 404
+            ? 'unavailable'
+            : 'refused';
     return { ok: false, reach, status, code: error?.code ?? null, problem: problemText(error) };
   }
 }
@@ -324,9 +349,40 @@ export async function managedVenues() {
   };
 }
 
+/**
+ * When each of a venue's rooms is open, as steeple holds it.
+ *
+ * The desk printed hours out of this browser's own record, which is only ever
+ * the hours somebody set *here*: a room whose hours live at steeple — set on
+ * another device, or by a host whose storage has since been cleared — read
+ * "No open hours set" in red about a room that keeps them perfectly well.
+ * Rooms without steeple's id are skipped: they are the village's scenery, and
+ * there is nothing to ask about them.
+ */
+export async function refreshRoomHours(rooms = []) {
+  const mine = rooms.filter((room) => room.remoteId);
+  const answers = await together(mine, (room) =>
+    attempt((token) => api.getRoomAvailabilityRules(room.remoteId, token))
+  );
+  let read = 0;
+  for (const [at, answer] of answers.entries()) {
+    if (!answer.ok) return answer;
+    mirrorRoomAvailability(mine[at].venueId, mine[at].id, answer.value);
+    read += 1;
+  }
+  return { ok: true, value: read };
+}
+
 // ── the guest's three moves ──────────────────────────────────────────────────
+//
+// Every move either party makes passes through this file, which is why the
+// `decision_pressed` event is emitted here rather than at seven buttons: the
+// press is what steeple never sees on its own — an approve that was refused, or
+// a counter-offer the flag had turned off, writes nothing server-side and would
+// otherwise be invisible (`docs/contracts/analytics.md`).
 
 export async function sendMessage(applicationId, body) {
+  track('decision_pressed', { decision: 'message', surface: 'letter' });
   const answer = await attempt((token) =>
     api.postApplicationMessage(applicationId, body, { accessToken: token })
   );
@@ -335,6 +391,7 @@ export async function sendMessage(applicationId, body) {
 }
 
 export async function withdraw(applicationId) {
+  track('decision_pressed', { decision: 'withdraw', surface: 'guestLetter' });
   const answer = await attempt((token) => api.postWithdraw(applicationId, { accessToken: token }));
   if (!answer.ok) return answer;
   return { ok: true, value: await hold(answer.value, { thread: true }) };
@@ -346,6 +403,10 @@ export async function withdraw(applicationId) {
  * meantime and the request was auto-declined — which the answer already says.
  */
 export async function respondToCounter(applicationId, accept) {
+  track('decision_pressed', {
+    decision: accept ? 'counterAccept' : 'counterDecline',
+    surface: 'guestLetter',
+  });
   const answer = await attempt((token) =>
     api.postCounterOfferResponse(applicationId, accept ? 'accept' : 'decline', { accessToken: token })
   );
@@ -357,6 +418,7 @@ export async function respondToCounter(applicationId, accept) {
 
 /** Approve or decline. Approving is the booking transaction. */
 export async function decide(applicationId, decision, message = null) {
+  track('decision_pressed', { decision, surface: 'desk' });
   const answer = await attempt((token) =>
     api.postDecision(applicationId, decision, message, { accessToken: token })
   );
@@ -373,6 +435,7 @@ export const ask = sendMessage;
  * something broken.
  */
 export async function counterOffer(applicationId, schedule, message) {
+  track('decision_pressed', { decision: 'counter', surface: 'desk' });
   const answer = await attempt((token) =>
     api.postCounterOffer(
       applicationId,

@@ -159,18 +159,36 @@ export function releaseArrival() {
 }
 
 /**
+ * Whoever wants to hear about arrivals. One at a time, and told about the ones
+ * that settled before it asked.
+ *
+ * A subscriber rather than an import, because this module still imports nothing
+ * — that is the whole reason it can be armed before the entry's own body runs.
+ * The batcher is a chunk that lands much later than the boot it wants to
+ * measure, which is why the replay below is not optional: a direct entry has
+ * already settled by the time anything can subscribe.
+ */
+let sink = null;
+
+export function watchArrivals(report) {
+  sink = report;
+  for (const row of settled) report(row);
+}
+
+/**
  * One arrival, settled. Called exactly once per press that actually decided
  * something: when a boot claims a pending intent (`direct`), or when the live
  * roll answers a press (`cinematic`) — never once on the press and again on
  * hydration.
  *
- * P5's web analytics batcher has not landed (v2_migration Phase 5). This is the
- * named seam it wires into, and the row it adds to the CONTRACTS §7 taxonomy;
- * until then the record is only read back by tools/boot-priority-test.mjs
- * through the debug API.
+ * This is the named seam the analytics batcher wires into (`arrival_settled`,
+ * `docs/contracts/analytics.md`); the record is also read back by
+ * tools/boot-priority-test.mjs through the debug API.
  */
 export function reportArrival(destination, entry) {
-  settled.push({ destination, entry, at: Math.round(performance.now()) });
+  const row = { destination, entry, at: Math.round(performance.now()) };
+  settled.push(row);
+  sink?.(row);
 }
 
 /** Debug/verification only, published by main.js as `__steeple.arrival()`. */

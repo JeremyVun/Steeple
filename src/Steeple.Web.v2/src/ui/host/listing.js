@@ -426,6 +426,13 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       say('Steeple could not be reached. What you have written is kept here.', 'quiet');
       return;
     }
+    // Not the same as away: this browser stopped waiting, and the write may be
+    // finishing at steeple. Nothing is promised "kept here" over a maybe, and the
+    // way on is to send it again — the idempotency key makes that free (D8).
+    if (answer.reach === 'slow') {
+      say(answer.detail, 'quiet');
+      return;
+    }
     if (answer.reach === 'signin') {
       // The one sign-in there is, opened over this flow. Nothing written here is
       // lost by it: the draft is on the page and in the store behind it.

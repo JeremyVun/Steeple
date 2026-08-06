@@ -13,6 +13,7 @@
 // first: you never lose a written request to a key you pressed to dismiss a
 // card.
 
+import { track } from '../../data/analytics.js';
 import { getRoomAvailability, getListing, heldVenue, readFailure } from '../../data/catalog.js';
 import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
 import { priceParts } from '../copy.js';
@@ -44,6 +45,7 @@ const blankDraft = (venueId, roomId, room) => ({
   roomId,
   activityType: room.activities.length === 1 ? room.activities[0] : null,
   groupSize: '',
+  organizationName: '',
   frequency: 'oneOff',
   startDate: null,
   endDate: null,
@@ -290,6 +292,24 @@ export function createComposer({ announce, onSent, onLeave }) {
     setSize(held, `${room.name} seats up to ${room.capacity}.`);
   });
 
+  // Who is asking, in their own words. The host is shown this beside the name
+  // on the request; it is the request's fact, not the account's — the same
+  // person writes for the playgroup one week and the chess club the next
+  // (v2_migration D1, which is where the hardcoded email→organization table
+  // died). Optional, because plenty of people are only themselves.
+  const organization = el('input', {
+    class: 'field__input',
+    id: 'letter-organization',
+    type: 'text',
+    maxlength: '200',
+    autocomplete: 'organization',
+    placeholder: 'Little Sparrows Playgroup',
+  });
+  organization.addEventListener('input', () => {
+    draft.organizationName = organization.value;
+    touched.add('organizationName');
+  });
+
   const sizeNote = el('p', { class: 'field__note' });
   const activities = el('div', { class: 'choices' });
   const activityNote = el('p', { class: 'field__note' });
@@ -490,6 +510,18 @@ export function createComposer({ announce, onSent, onLeave }) {
         el('label', { class: 'field__label', for: 'letter-size', text: 'Group size' }),
         stepper,
         sizeNote,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', {
+          class: 'field__label',
+          for: 'letter-organization',
+          text: 'Your group or organisation',
+        }),
+        organization,
+        el('p', {
+          class: 'field__note',
+          text: 'Optional — shown to the host as who is asking.',
+        }),
       ]),
       // Not decoration: the terms the request is made under, printed where a
       // form would print them — small, complete, before you send.
@@ -698,6 +730,9 @@ export function createComposer({ announce, onSent, onLeave }) {
   }
 
   function openIdentity() {
+    // The provider has not been chosen yet at this gate, so the event carries
+    // what brought somebody here instead (`analytics.md` — `sso_started`).
+    track('sso_started', { surface: 'apply', trigger: 'send' });
     identity.reset();
     identity.element.hidden = false;
     sheet.classList.add('is-signing');
@@ -715,6 +750,7 @@ export function createComposer({ announce, onSent, onLeave }) {
   }
 
   function openCard() {
+    track('card_step_opened', { reason: 'apply' });
     identity.element.hidden = true;
     card.reset();
     card.element.hidden = false;
@@ -741,7 +777,10 @@ export function createComposer({ announce, onSent, onLeave }) {
     identity.element.setAttribute('inert', '');
     let result;
     try {
-      result = await sendRequest(draft);
+      // The identity step holds the Turnstile widget, so it holds the token the
+      // submit needs; with no site key configured it answers null, which is
+      // what this send has always carried.
+      result = await sendRequest(draft, { turnstileToken: identity.turnstileToken?.() ?? null });
     } finally {
       sending = false;
       send.disabled = false;
@@ -751,6 +790,9 @@ export function createComposer({ announce, onSent, onLeave }) {
 
     if (!result.ok) {
       attempted = true;
+      // A spent check has to be asked again before the next press, or the retry
+      // carries a token steeple has already refused.
+      if (result.refused) identity.resetTurnstile?.();
       // A refusal from the service belongs beside the send, where the request
       // still is — not behind a card the guest has to dismiss first.
       // A sign-in that died between opening this step and pressing send: the
@@ -820,6 +862,9 @@ export function createComposer({ announce, onSent, onLeave }) {
    */
   function open(venueId, roomId) {
     if (!venueId || !roomId) return false;
+    // The top of the apply funnel, and a moment no server ever sees: a sheet
+    // opened and left is still a person who wanted this room.
+    track('application_started', { roomId: `${venueId}/${roomId}` });
     opened = `${venueId}/${roomId}`;
     venue = heldVenue(venueId) ?? null;
     room = effectiveRoom(venueId, roomId) ?? null;
@@ -861,6 +906,7 @@ export function createComposer({ announce, onSent, onLeave }) {
 
     intent.value = draft.intentText;
     size.value = draft.groupSize;
+    organization.value = draft.organizationName ?? '';
     syncStepper();
     week.setRoom(venueId, roomId);
     week.setSchedule(draft);
