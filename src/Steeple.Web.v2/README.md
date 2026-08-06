@@ -147,6 +147,14 @@ does, what the space has, getting in and around). Every touch of it calls
 above them, and which pins stand and which rest. The schedule terms are inert
 against the bundled seed and sent anyway — the live search answers them.
 
+Which is why a search steeple *answered and refused* is never given the seed: the
+seed cannot honour a schedule term, so standing it in for a refused Tuesday-evening
+search would print nine rooms as though every one of them were free on Tuesday
+evening. The column says it has no answer and offers a Try again; the count reads
+"No answer just now"; the pins keep their names and lose their prices. An origin
+with no API behind it at all is the other case entirely, and there the seed still
+answers — see the table under `catalog.js` in `docs/contracts/web.md`.
+
 Where the search is looking is said once, by the control that changes it: with
 no suburb chosen the Where segment carries the geofence's own name for the area.
 There used to be an eyebrow saying it again over the results, which repeated the

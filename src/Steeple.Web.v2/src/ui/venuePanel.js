@@ -232,15 +232,20 @@ export function createVenuePanel() {
 
     // steeple's funnel is room-first and has no venue endpoint (CONTRACT4 §5),
     // so the church's pictures are the pictures of its spaces.
-    searchListings({ suburb: venue.suburb }).then(({ items }) => {
-      if (token !== showing) return;
-      const mine = items.filter((item) => item.venueSlug === venue.id);
-      fallback = mine[0]?.primaryPhotoUrl ?? null;
-      if (settled) paintHero(fallback);
-      for (const item of mine) {
-        banners.get(item.roomSlug)?.show({ url: item.primaryPhotoUrl, name: item.name });
-      }
-    });
+    // Only the pictures are asked for here, so a refused search costs pictures
+    // and nothing else: the cards keep their lettered plates and the sheet is
+    // whole without them.
+    searchListings({ suburb: venue.suburb })
+      .then(({ items }) => {
+        if (token !== showing) return;
+        const mine = items.filter((item) => item.venueSlug === venue.id);
+        fallback = mine[0]?.primaryPhotoUrl ?? null;
+        if (settled) paintHero(fallback);
+        for (const item of mine) {
+          banners.get(item.roomSlug)?.show({ url: item.primaryPhotoUrl, name: item.name });
+        }
+      })
+      .catch(() => {});
 
     if (rooms.length === 0) return;
 

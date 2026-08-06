@@ -24,7 +24,7 @@ function priceText(item) {
   return { text: unit ? `${amount}${unit}` : amount, free };
 }
 
-export function createResults() {
+export function createResults({ onRetry = () => {} } = {}) {
   const rowFor = new Map();
 
   const list = el('ul', { class: 'dm-results', 'aria-label': 'Spaces on this map' });
@@ -33,7 +33,25 @@ export function createResults() {
     text: 'Nothing here answers that yet. Widen the search — a different day, a smaller group, fewer filters.',
     hidden: true,
   });
-  const element = el('div', { class: 'dm-listing' }, [list, empty]);
+
+  // When steeple answered and refused, the column says so and shows nothing.
+  // An empty list under a refusal would read as "nothing matches", which is a
+  // claim about the spaces; the rooms the seed knows would read as an answer to
+  // a question that was never answered. Neither is true, so neither is printed.
+  const troubleSaid = el('p', { class: 'dm-trouble__said' });
+  const troubleAgain = el(
+    'button',
+    // Its own quiet, in map.css: the host desk's `.pill--quiet` is styled in
+    // host.css, which loads after this surface's stylesheet.
+    { type: 'button', class: 'pill dm-trouble__again', onclick: () => onRetry() },
+    'Try again'
+  );
+  const trouble = el('div', { class: 'dm-trouble', role: 'status', hidden: true }, [
+    troubleSaid,
+    troubleAgain,
+  ]);
+
+  const element = el('div', { class: 'dm-listing' }, [list, empty, trouble]);
 
   function warm(venueSlug, roomSlug) {
     if (state.view === 'village' || state.view === 'venue') setHover(venueSlug, roomSlug);
@@ -88,6 +106,7 @@ export function createResults() {
 
   function render(items) {
     const shown = new Set();
+    trouble.hidden = true;
 
     for (const item of items) {
       const row = rowNode(item);
@@ -117,6 +136,19 @@ export function createResults() {
     empty.hidden = items.length > 0;
   }
 
+  /**
+   * The search could not be answered. The rows go, because a previous answer
+   * standing under this sentence is the old answer to a new question.
+   *
+   * @param {{message:string}} failure — data/catalog.js `readFailure`
+   */
+  function showTrouble(failure) {
+    render([]);
+    empty.hidden = true;
+    troubleSaid.textContent = failure.message;
+    trouble.hidden = false;
+  }
+
   function setCurrent(venueId, roomId) {
     for (const { row } of rowFor.values()) {
       const current =
@@ -136,5 +168,5 @@ export function createResults() {
     }
   }
 
-  return { element, render, setCurrent, setHovered };
+  return { element, render, showTrouble, setCurrent, setHovered };
 }

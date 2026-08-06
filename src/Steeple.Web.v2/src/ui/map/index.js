@@ -27,7 +27,9 @@ import { createSearch, resultLine } from './search.js';
 import { createSheet } from './sheet.js';
 
 export function createDiscovery({ announce = () => {} } = {}) {
-  const results = createResults();
+  // `search` is built below, out of this: the way back from a refused search is
+  // to ask it again.
+  const results = createResults({ onRetry: () => search.search() });
 
   // ── head ───────────────────────────────────────────────────────────────────
   //
@@ -56,6 +58,19 @@ export function createDiscovery({ announce = () => {} } = {}) {
       atlas.setMatching(state.matching);
       results.setCurrent(state.venueId, state.roomId);
       // A new question is a new page of answers: read it from the top.
+      list.scrollTop = 0;
+    },
+    // steeple answered the search and refused it. Everything the last answer
+    // put on the surface goes with it: the count, the rows, and the prices over
+    // the pins. A price bubble is a quote against a query, so leaving the
+    // previous one standing over a question that was never answered is the same
+    // false availability in a smaller font. The churches stay pinned and rest
+    // (search.js publishes an empty matching set) — they are still there; what
+    // is not known is which of them can take you.
+    onTrouble: (failure) => {
+      count.textContent = 'No answer just now';
+      results.showTrouble(failure);
+      atlas.setPrices([]);
       list.scrollTop = 0;
     },
   });

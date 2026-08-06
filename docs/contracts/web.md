@@ -113,18 +113,47 @@ translations happen here and only here: **names** (wire `roomName/latitude/longi
 unknown tokens humanized rather than dropped).
 
 Exports: `searchListings`, `getListing`, `getVenueProfile`, `getSuburbs`, `getGeofence`,
-`getRoomAvailability`, `isLive()`. `getListing` additionally carries steeple's own `roomId`
+`getRoomAvailability`, `readFailure(error)`, `isLive()`. `getListing` additionally carries
+steeple's own `roomId`
 (every write and the availability feed are addressed by it), `bookingMode`
 (`instant | manual | null`) and `openHours` translated into the product's `{day, start, end}`
 windows. **`getRoomAvailability(roomId, {from, to})` has no bundled fallback and answers
 `null` when the API cannot** — an invented calendar is the one thing this surface must never
-hand somebody about to commit to a date. Every other call goes live-first and falls back to
-`bundledCatalog.js` (the offline seed,
-same signatures; seed slugs match the bundled ids 1:1). After a failure the catalog goes quiet
-for **30s** so one dead API costs one timeout, not one per keystroke — then retries, so a
-backend started after page load is picked up without a reload. Falling back logs `console.info`,
-never an error: it is a working state. The 3D village is deliberately **not** a consumer — it is
-staged from the bundled seed; the map and list are the truth.
+hand somebody about to commit to a date. The 3D village is deliberately **not** a consumer — it
+is staged from the bundled seed; the map and list are the truth.
+
+**The seed stands in for an absent steeple, never for a refusal** (2026-08-06). The catalog
+sorts a failed read into two cases and they are the contract:
+
+| | statuses | what a read does |
+|---|---|---|
+| **absent** — nothing served `/api/v1` | `0` (dead fetch / 4s timeout), `502`, `503`, `404` | answers from `bundledCatalog.js` (same signatures; seed slugs match the bundled ids 1:1), goes quiet **30s** so one dead API costs one timeout rather than one per keystroke, logs `console.info` **once** — a working state, never an error — and `isLive()` reads `false` |
+| **answered** — steeple said no | `400`, `401`, `403`, `429`, `500`, … | **throws the `ApiError`**; the caller says so |
+
+`502`/`503` sit with *absent* because this page is always served from behind a proxy: vite in
+development and nginx in a container both answer **502** for a dead API, so the browser never
+sees a network error (the same lesson `neverArrived` in `correspondence.js` records — the two
+predicates are deliberately alike and deliberately separate, because a *write* must never read
+a 404 as "steeple is away"). `404` sits with *absent* because no read here has a not-found case
+of its own — the only one that could, a listing by slug, is `null` before it can throw, vouched
+for by the sitemap — so a thrown 404 is an origin that does not serve steeple (a static host, an
+unwired proxy: `tools/surface-test.mjs` §2.5).
+
+Serving the seed for an answered refusal was review issue 4: the seed cannot honour a schedule
+term, so an API that refused a Tuesday-evening search printed nine rooms as though every one of
+them were free on Tuesday evening. Only **429** takes the quiet window with it (re-asking a
+service that refused for pace is the one retry that makes it worse); any other refusal may be
+about the question rather than the service, so the next question is asked.
+
+`readFailure(error)` → `{reach, status, message}`, `reach` ∈ `busy` (429) · `refused` · `absent`,
+with our own calm sentence rather than steeple's `detail` (a read's problem document is written
+for whoever holds the query, and nobody browsing a map is). Consumers: the list shows the
+sentence and a **Try again** in place of rows, the count reads "No answer just now", the pins
+lose their prices and rest (`ui/map/{search,index,results}.js`); the request sheet refuses to
+open on a room steeple would not describe (`ui/guest/composer.js` — no hours means no honest
+calendar at the commitment point); the two property sheets lose only a photograph. Driven by
+`tools/catalog-honesty-test.mjs` (34/34, §1–§6), which needs two dev servers — one proxying a
+live API, one with a dead target — and proves the 502 case against a real proxy.
 
 ## `src/data/store.js` — the mirror, one per person
 
@@ -362,6 +391,12 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   `bookingReminder` rendering as the slip. Same env vars; `STEEPLE_SHOTS=<dir>` additionally
   photographs each surface on the way past (a photograph proves nothing about interactivity —
   it is for looking at what was built).
+- `tools/catalog-honesty-test.mjs` guards the line between an absent steeple and a refusing
+  one (the table under `catalog.js` above). It wants **two** dev servers — `npx vite --port
+  5177` and `STEEPLE_API_ORIGIN=http://localhost:59999 npx vite --port 5179` — because §6 is
+  the one case that cannot be faked in the browser: what the *proxy* answers for a dead API is
+  the whole point (502, not a network error). §2–§5 fake the status with request interception,
+  the way `surface-test.mjs` §2.5 does.
 - **A slip is not "on screen" because it is not `hidden`.** It fades in, and headless GL runs
   app-time ~6× slow, so a check that only asks whether it exists passes on something nobody
   could have read. Wait on computed opacity.

@@ -13,7 +13,7 @@
 // first: you never lose a written request to a key you pressed to dismiss a
 // card.
 
-import { getRoomAvailability, getListing } from '../../data/catalog.js';
+import { getRoomAvailability, getListing, readFailure } from '../../data/catalog.js';
 import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
 import { getVenue } from '../../data/venues.js';
 import { priceParts } from '../copy.js';
@@ -353,7 +353,19 @@ export function createComposer({ announce, onSent, onLeave }) {
    * it lands the week card says it is reading rather than showing an empty week.
    */
   async function loadRoom(venueId, roomId) {
-    const listing = await getListing(venueId, roomId);
+    let listing;
+    try {
+      listing = await getListing(venueId, roomId);
+    } catch (error) {
+      // steeple answered and refused. This sheet is the commitment point, and
+      // its open hours are the whole of what it knows about when this space is
+      // free — a browser that was refused them would take a date on nothing but
+      // the village's scenery. So the sheet says it cannot open rather than
+      // standing there ready to be filled in.
+      if (opened !== `${venueId}/${roomId}`) return;
+      unreachable(readFailure(error).message);
+      return;
+    }
     if (opened !== `${venueId}/${roomId}`) return;
     if (!listing) {
       if (!room) unreachable();
@@ -397,14 +409,9 @@ export function createComposer({ announce, onSent, onLeave }) {
     suburb: listing.suburb,
   });
 
-  function unreachable() {
+  function unreachable(said = 'Steeple could not open this space just now. Try again in a moment.') {
     replaceChildren(head, []);
-    replaceChildren(columns, [
-      el('p', {
-        class: 'prose',
-        text: 'Steeple could not open this space just now. Try again in a moment.',
-      }),
-    ]);
+    replaceChildren(columns, [el('p', { class: 'prose', text: said })]);
     replaceChildren(foot, []);
   }
 
