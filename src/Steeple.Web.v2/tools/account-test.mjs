@@ -167,6 +167,24 @@ const signInThroughPanel = async (who) => {
   await page.keyboard.press('Enter');
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
   await wait(800);
+  // A first sign-in has one thing left to agree to, and the panel stays up to
+  // ask it (v2_migration P4 task 4). This is the moment it is answered — the
+  // panel's business is not finished until it has been, and it does not close
+  // on the session alone any more.
+  const asked = await page.evaluate(() => !!document.querySelector('.signin .identity__legal'));
+  if (asked) {
+    await page.evaluate(() => {
+      const button = [...document.querySelectorAll('.signin .identity .pill--primary')].find((n) =>
+        /Agree and continue/.test(n.textContent)
+      );
+      button?.click();
+    });
+    await page
+      .waitForFunction(() => !document.querySelector('.signin .identity__legal'), { timeout: 20000 })
+      .catch(() => {});
+    await wait(800);
+  }
+  return asked;
 };
 
 console.log(`\n──── the account surface · ${url} ────`);
@@ -213,8 +231,8 @@ eq('and takes no view with it', await page.evaluate('__steeple.state.view'), 'vi
 
 // ── 3. signing in ───────────────────────────────────────────────────────────
 console.log('\n3. signing in through the shelf');
-await signInThroughPanel(FIRST);
-check('the panel closed itself', !(await visible('.signin__layer .identity')));
+check('a first sign-in is asked what it agrees to', await signInThroughPanel(FIRST));
+check('and once it is answered, the panel closes itself', !(await visible('.signin__layer .identity')));
 eq('the chip names the person', await text('.account__who'), 'Ada');
 check('the inbox tab appears', await visible('.letters'));
 check('with nothing waiting', !(await visible('.letters__count')));

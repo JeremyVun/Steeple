@@ -183,6 +183,9 @@ E2E suites mint real accounts/venues/applications on the local API each run:
 guest with a card, a weekly ask, the wire from node, per-IP sign-in pacing, and the one
 `launch()` that puts every headless browser on a pipe). `STEEPLE_API`/`STEEPLE_PSQL`/
 `STEEPLE_DB` configure it; psql stands in only for the operator's first-listing approve.
+**Sign-in is per-IP rated (10/min) and `fixtures.paceAuth` is the budget** — running several
+suites back to back exhausts it, and the 429 arrives looking exactly like a product failure
+(`the run stopped: /auth/sessions answered 429`). Let the window roll between suites.
 
 **Seams (frozen — the day an upstream name changes, one file moves):**
 - `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
@@ -190,13 +193,36 @@ guest with a card, a weekly ask, the wire from node, per-IP sign-in pacing, and 
   fallback when the API is down (seed slugs match the bundled ids 1:1).
 - `src/data/session.js` — identity (httpOnly-cookie refresh token, in-memory access token,
   `withAccess()` 401-retry-once, cross-tab `storage` sync; harnesses read a bearer via
-  `withAccess((t) => Promise.resolve(t))`, never storage). Sign-in = dev SSO
-  (`POST /auth/sessions {provider:"dev", idToken:"email|Name", refreshTransport:"cookie"}`,
-  DevLoginEnabled — Development only); Google/Apple later swap only `signIn()`.
+  `withAccess((t) => Promise.resolve(t))`, never storage). **`signInWithProvider({provider,
+  idToken, nonce, displayName, turnstileToken})` is the one sign-in** — Google, Apple and dev
+  all arrive there; `signIn({email, displayName})` is the dev provider's wrapper
+  (`provider:"dev", idToken:"email|Name"`, DevLoginEnabled — Development only) and is what
+  every harness and `fixtures.signInPage` goes through, so **it must keep working**.
+  `accessToken()` exists for the analytics batcher alone; everything else uses `withAccess`.
+- `src/data/providers.js` — the only file that knows a third party exists (Google Identity
+  Services, Sign in with Apple `code id_token`, per-attempt nonce). **Reading the env var is
+  the whole feature flag:** no `VITE_GOOGLE_CLIENT_ID` / `VITE_APPLE_CLIENT_ID` +
+  `VITE_APPLE_REDIRECT_URI` ⇒ no button, no SDK fetched. Same for
+  `src/data/turnstile.js` and `VITE_TURNSTILE_SITE_KEY` (absent ⇒ no widget, token null; the
+  API fails open without `Turnstile__SecretKey`). Go-live: `docs/runbooks/sso-and-turnstile.md`.
+- `src/data/agreements.js` — the two documents and their versions, against `public/terms.html`
+  and `public/privacy.html`. **Bump a version in the same commit as the words**, or people
+  re-accept text that never moved. The identity panel asks inline before it lets anyone carry
+  on; `ui/index.js` asks **only at boot**, only on the map with nothing layered over it, and
+  steps aside if the person goes elsewhere — a prompt on `REASON.signedIn` lands in the middle
+  of a flow and stalled two suites at a desk it had covered.
+- `src/data/analytics.js` — the client event batcher (`POST /api/v1/events`, ≤25 per batch,
+  `sendBeacon` on `pagehide` so the last batch survives — without a `userId`, the documented
+  cost). `track()` never blocks and a failed batch is dropped. It keeps the API's allowlist so
+  it never sends what would be dropped; `core/intent.js`'s `reportArrival` seam feeds it
+  `arrival_settled` through `watchArrivals` (a subscriber, because intent.js imports nothing).
 - `src/data/correspondence.js` — the wire for everything after a request is written (inbox,
   thread, withdraw, counter response, host decisions, the payments method-on-file). Calls
   `api.js`, mirrors steeple's answer into `store.js`, returns a verdict whose `reach` is
-  `refused | offline | signedOut | unavailable` — never a guess (v2_migration D4/D5).
+  `refused | offline | slow | signedOut | unavailable` — never a guess (v2_migration D4/D5).
+  **`slow` is not `offline`:** writes wait 15s where reads wait 4s, and `ApiError.timedOut`
+  splits "this browser stopped waiting" from "nothing answered" — both wear status 0, and only
+  the second may ever be told "nothing was sent" (D8).
 - `src/data/store.js` — a localStorage **mirror** of what steeple holds, in the product's
   vocabulary (shapes from db/changelog 004/005/009), keyed **per person**
   (`steeple-village-store:{userId}`, `:anon` signed out — D6). It decides nothing; clearing
@@ -241,10 +267,18 @@ card step a press away; the card on file is reachable from the account chip thro
 panel (`ui/cardPanel.js`, brand + last4 only); the payout prompt → mock KYC → connected state
 lives on the desk; booking mode is a setting on Spaces; and `GET /me/notifications` renders as
 **ambience** — one slip on arrival, quiet lines in the inbox, no bell and no new nav tab.
-Driven by `tools/payments-ui-test.mjs` (65/65). Demo — dev provider only, no Turnstile;
-`organizationName` is sent as `null` until Phase 4's input; the card step and the payout screen
-are the mock gateway's own stand-ins. Accounts-consolidation order agreed 2026-08-05: signed-out
-header state (**done**) → inbox onto `/me/applications` (**done**) → real providers.
+Driven by `tools/payments-ui-test.mjs` (65/65). **Real (Phase 4/5, 2026-08-07) — the production
+posture:** Google and Apple sign-in, Turnstile, and the two documents signing in agrees to, each
+gated on its own env key so a build with none of them is the dev panel exactly as it was; the
+group asking is a field on the request sheet (the hardcoded email→organization table is gone);
+writes wait 15s and a timeout is never reported as an absence; the desk reads each room's hours
+from the wire; the client analytics batcher, so nothing user-visible ships dark; and the SEO
+floor — `public/robots.txt`, `GET /api/v1/sitemap.xml` aliased at the edge, site-level OG +
+`WebSite` JSON-LD. Driven by `tools/hardening-test.mjs` (63/63, §1–§8). Demo — the card step and
+the payout screen are the mock gateway's own stand-ins, and no provider/Turnstile keys exist
+yet, so those paths are env-gated-off locally by design. Accounts-consolidation order agreed
+2026-08-05: signed-out header state (**done**) → inbox onto `/me/applications` (**done**) →
+real providers (**done**).
 
 **Hazards found in the waves (unfixed):**
 `.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —

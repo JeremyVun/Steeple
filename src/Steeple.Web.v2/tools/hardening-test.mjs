@@ -35,6 +35,7 @@ import {
   launch,
   mintGuest,
   mintVenue,
+  paceAuth,
   signInPage,
   stamp,
 } from './fixtures.mjs';
@@ -123,33 +124,6 @@ try {
     if (!box) return check(`click ${label}`, false, 'not laid out');
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await wait(500);
-    return true;
-  }
-
-  /**
-   * Accept the documents, if this browser is being asked.
-   *
-   * A first sign-in raises the shelf's panel over everything — which is the
-   * product working — and that layer swallows every press meant for the page
-   * behind it. Anything driving a signed-in surface has to answer the question
-   * first, exactly as a person would.
-   */
-  async function settleAgreements(target) {
-    const asked = await target
-      .waitForFunction(() => !!document.querySelector('.signin .identity__legal'), { timeout: 8000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!asked) return false;
-    await target.evaluate(() => {
-      const button = [...document.querySelectorAll('.signin .identity .pill--primary')].find((n) =>
-        /Agree and continue/.test(n.textContent)
-      );
-      button?.click();
-    });
-    await target
-      .waitForFunction(() => !document.querySelector('.signin .identity__legal'), { timeout: 20000 })
-      .catch(() => {});
-    await wait(600);
     return true;
   }
 
@@ -312,19 +286,35 @@ try {
   await wait(400);
 
   // ── 4. agreements ─────────────────────────────────────────────────────────
+  //
+  // Through the panel, the way a person signs in — which is where the question
+  // is asked and answered. (The programmatic `signInPage` the rest of this suite
+  // uses is a harness door, not a person's, and deliberately raises nothing.)
   console.log('\n4. what signing in agrees to');
-  await signInPage(page, guest.email, guest.name);
+  await click('.account', 'the shelf’s Sign in');
+  await page.waitForSelector('.signin__layer:not([hidden]) .identity', { timeout: 10000 });
+  await wait(500);
+  await page.evaluate(() => {
+    const swap = [...document.querySelectorAll('.signin .linkish')].find((n) =>
+      /use an email/i.test(n.textContent)
+    );
+    swap?.click();
+  });
+  await page.waitForSelector('.signin #identity-email', { timeout: 10000 });
+  await page.click('.signin #identity-email');
+  await page.keyboard.type(guest.email, { delay: 4 });
+  await page.click('.signin #identity-name');
+  await page.keyboard.type(guest.name, { delay: 4 });
+  await paceAuth();
+  await page.keyboard.press('Enter');
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-  // Signing in here does not go through the panel — which is the point: the
-  // question belongs to the session, not to one door onto it, so the panel is
-  // opened to carry it however somebody arrived.
   await page
-    .waitForFunction(() => !!document.querySelector('.identity__legal'), { timeout: 20000 })
+    .waitForFunction(() => !!document.querySelector('.signin .identity__legal'), { timeout: 20000 })
     .catch(() => {});
-  check('a first sign-in is asked to agree', await visible('.identity__legal'));
-  const legal = (await text('.identity__legal')) ?? '';
+  check('a first sign-in is asked to agree', await visible('.signin .identity__legal'));
+  const legal = (await text('.signin .identity__legal')) ?? '';
   check('naming both documents', /Terms & safety/.test(legal) && /Privacy policy/.test(legal), legal);
-  const hrefs = await page.$$eval('.identity__legal a', (nodes) => nodes.map((n) => n.getAttribute('href')));
+  const hrefs = await page.$$eval('.signin .identity__legal a', (nodes) => nodes.map((n) => n.getAttribute('href')));
   check('each one a page you can actually read', hrefs.join(' ') === 'terms.html privacy.html', hrefs.join(' '));
   const pages = await Promise.all(hrefs.map((href) => fetch(new URL(href, url).href).then((r) => r.status)));
   check('and both are served', pages.join(' ') === '200 200', pages.join(' '));
@@ -356,15 +346,38 @@ try {
   );
   check('and the panel is done asking', !(await visible('.signin .identity')));
 
-  // The same person again: asked once, not every time.
+  // The same person again, through the same door: asked once, not every time.
   await page.evaluate('__steeple.session.signOut()');
   await wait(800);
-  await signInPage(page, guest.email, guest.name);
+  await click('.account', 'the shelf’s Sign in');
+  await page.waitForSelector('.signin__layer:not([hidden]) .identity', { timeout: 10000 });
+  await wait(500);
+  await page.evaluate(() => {
+    const swap = [...document.querySelectorAll('.signin .linkish')].find((n) =>
+      /use an email/i.test(n.textContent)
+    );
+    swap?.click();
+  });
+  await page.waitForSelector('.signin #identity-email', { timeout: 10000 });
+  // Typed, not set: the form is the same DOM it was before the sign-out, and if
+  // it still held the last address this would append to it and mint a *second*
+  // account — which is exactly what it did until the session-end cleared it.
+  check(
+    'the box does not keep the last person’s address',
+    (await page.$eval('.signin #identity-email', (n) => n.value)) === '',
+    await page.$eval('.signin #identity-email', (n) => n.value)
+  );
+  await page.click('.signin #identity-email');
+  await page.keyboard.type(guest.email, { delay: 4 });
+  await page.click('.signin #identity-name');
+  await page.keyboard.type(guest.name, { delay: 4 });
+  await paceAuth();
+  await page.keyboard.press('Enter');
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
   await wait(2500);
-  check('a returning account is not asked again', !(await visible('.identity__legal')));
-  await page.keyboard.press('Escape');
-  await wait(300);
+  check('the same account came back', (await bearer()) && (await call('GET', '/me', { token: await bearer() })).body?.id === before.body?.id);
+  check('a returning account is not asked again', !(await visible('.signin .identity__legal')));
+  check('and the panel simply leaves', !(await visible('.signin .identity')));
 
   // ── 5. the group asking ───────────────────────────────────────────────────
   //
@@ -452,7 +465,6 @@ try {
     await second.evaluate('__steeple.roll.set(1)');
     await signInPage(second, waiting.email, waiting.name);
     await second.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-    check('the second guest is asked to agree too', await settleAgreements(second));
 
     await second.evaluate(
       (v, r) => window.__steeple.setView('apply', { venueId: v, roomId: r }),
@@ -531,7 +543,6 @@ try {
   await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
   await signInPage(page, host.email, host.name);
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-  await settleAgreements(page);
   // Everything this browser could know about hours, forgotten. The session
   // stays, so whatever the desk prints next came from steeple.
   await page.evaluate(() => {

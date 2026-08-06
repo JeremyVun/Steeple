@@ -104,22 +104,25 @@ export function createUI(_engine, _world) {
     });
   });
 
-  // The two documents, asked for wherever the session came from.
+  // The two documents, for a session that arrived without being asked.
   //
-  // The identity panel asks whoever signs in through it — which is every sign-in
-  // a person performs — but a session can appear without it: a remembered one on
-  // the next visit, one restored by a deep link, one a sibling tab made. Somebody
-  // who has never accepted the current version must still be asked, so the
-  // question is also put here, at the session rather than at one door onto it
-  // (v2_migration D7).
+  // Every sign-in a *person* performs goes through the identity panel, and the
+  // panel asks inline before it lets them carry on — that is the whole of P4
+  // task 4 and it covers almost everyone. What it cannot cover is the session
+  // this browser was already holding when the words changed: they signed in
+  // months ago, against an older version, and nothing will ask them again until
+  // they next sign in. That is the one case this exists for, so this fires **at
+  // boot and nowhere else**.
   //
-  // **It waits for a quiet moment.** This prompt is a layer over everything, and
-  // everything includes a desk somebody is answering from, a listing half
-  // written, an open letter. Dropping it on top of those interrupts work to ask
-  // a question that has kept for months and can keep a minute longer — so it is
-  // asked on the map, with nothing else layered over it, and until then it is
-  // simply remembered. (Found by tools/correspondence-test.mjs, which stalled at
-  // a desk this panel had covered.)
+  // Deliberately *not* on `REASON.signedIn`: that fires in the middle of
+  // whatever is being done at the time, and a prompt that lands on a desk being
+  // answered from, or a listing half written, interrupts work to ask a question
+  // that has kept for months and can keep a minute longer. (Both
+  // tools/correspondence-test.mjs and tools/payments-ui-test.mjs stalled at a
+  // desk this panel had covered — a harness meeting it exactly as a host would.)
+  //
+  // Even at boot it waits for a quiet moment, and steps aside if the person goes
+  // somewhere before answering.
   let owedAnAcceptance = false;
   /** Whether the panel on screen is one this asked for, rather than the person. */
   let askingHere = false;
@@ -160,11 +163,14 @@ export function createUI(_engine, _world) {
     offerAgreements();
   }
 
-  session.onSessionChange((held, reason) => {
-    if (!held) owedAnAcceptance = false;
-    if (held && reason === session.REASON.signedIn) askAboutAgreements();
+  // A session that goes takes the question with it.
+  session.onSessionChange((held) => {
+    if (!held) {
+      owedAnAcceptance = false;
+      askingHere = false;
+    }
   });
-  // And on the way in, for a session this browser was already holding.
+  // The one trigger: a session this browser was already holding when it opened.
   if (session.isSignedIn()) session.fetchCurrentUser().then(() => askAboutAgreements());
 
   // What steeple wrote while this person was away — ambient, not a tab. It

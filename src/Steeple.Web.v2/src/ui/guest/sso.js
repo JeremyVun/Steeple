@@ -567,7 +567,16 @@ export function createIdentityStep({
     first?.focus();
   }
 
-  session.onSessionChange(() => {
+  session.onSessionChange((held) => {
+    // The form outlives every redraw on purpose (a field disabled mid-submit has
+    // to survive one), which means it also outlives the person who filled it in.
+    // A session ending empties it: the next person at a shared browser must not
+    // find the last one's address sitting in the box — and "sign in as someone
+    // else" that keeps the someone else you were is not the offer it makes.
+    if (!held) {
+      email.value = '';
+      name.value = '';
+    }
     if (!element.hidden) render();
   });
 

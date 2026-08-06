@@ -87,6 +87,12 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
   try {
     response = await fetch(`${BASE}${path}${queryString(params)}`, {
       signal: controller.signal,
+      // An authenticated read is about one person at one moment and must never
+      // come out of a cache. The API sends no cache headers, so a browser is
+      // free to apply its own heuristics — and did: a `GET /me` taken before
+      // somebody accepted the terms was re-served after they had, so the next
+      // sign-in asked them to accept all over again.
+      ...(accessToken ? { cache: 'no-store' } : {}),
       headers: {
         accept: 'application/json',
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
