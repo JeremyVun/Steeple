@@ -21,7 +21,7 @@
 //     waiting for an answer.
 
 import * as api from '../../data/api.js';
-import { neverArrived, problemText, toWireSchedule } from '../../data/correspondence.js';
+import { neverArrived, problemText, timedOut, toWireSchedule } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { mirrorApplication, mirrorBooking } from '../../data/store.js';
 
@@ -59,7 +59,7 @@ export { problemText };
  *
  * @returns {Promise<
  *   {ok:true, application:object, instant:boolean} |
- *   {ok:false, problem:string, signedOut?:boolean, needsCard?:boolean, offline?:boolean, retake?:boolean}
+ *   {ok:false, problem:string, signedOut?:boolean, needsCard?:boolean, offline?:boolean, slow?:boolean, retake?:boolean}
  * >}
  */
 export async function sendRequest(draft) {
@@ -73,7 +73,12 @@ export async function sendRequest(draft) {
       if (roomId) draft.remoteRoomId = roomId;
     }
   } catch (error) {
-    return { ok: false, problem: problemText(error), offline: neverArrived(error?.status) };
+    return {
+      ok: false,
+      problem: problemText(error),
+      offline: !timedOut(error) && neverArrived(error?.status),
+      slow: timedOut(error),
+    };
   }
   if (!roomId) {
     return {
@@ -121,7 +126,11 @@ export async function sendRequest(draft) {
       ok: false,
       problem: problemText(error),
       signedOut: error?.status === 401,
-      offline: neverArrived(error?.status),
+      // A send this browser stopped waiting for is not a send that never
+      // happened: it keeps its key and says so, rather than promising the guest
+      // that nothing left (D8).
+      offline: !timedOut(error) && neverArrived(error?.status),
+      slow: timedOut(error),
     };
   }
 }

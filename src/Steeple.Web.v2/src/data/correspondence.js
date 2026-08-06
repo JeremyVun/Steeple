@@ -12,6 +12,8 @@
 //   'refused'  — steeple answered no, and its own sentence is what to print;
 //   'offline'  — nothing answered at all, so nothing happened, and the surface
 //                says so rather than pretending;
+//   'slow'     — this browser gave up waiting, which is not the same fact: the
+//                write may have landed, so nothing may promise that it did not;
 //   'signedOut'— the session died under the person; the way back is signing in;
 //   'unavailable' — the route is not there (a flag off server-side, CONTRACTS
 //                §5 counter-offers): a feature that is absent, not an error.
@@ -67,7 +69,21 @@ export function toWireSchedule(schedule) {
  */
 export const neverArrived = (status) => status === 0 || status === 502 || status === 503;
 
+/**
+ * Whether this browser stopped waiting rather than failing to reach steeple.
+ *
+ * A timeout wears `status: 0` like a dead connection does, and reads exactly the
+ * same to {@link neverArrived} — but it is the opposite fact. The request may
+ * have landed and may be finishing right now, so the one thing that must never
+ * be said about it is "nothing was sent" (v2_migration D8). It has to be tested
+ * before `neverArrived`, and it is why writes carry an idempotency key.
+ */
+export const timedOut = (error) => error?.timedOut === true;
+
 export function problemText(error) {
+  if (timedOut(error)) {
+    return 'Steeple is taking longer than usual to answer. This may still have gone through — give it a moment before trying again.';
+  }
   if (neverArrived(error?.status)) {
     return 'Steeple could not be reached just now — nothing was sent. Try again in a moment.';
   }
@@ -95,8 +111,15 @@ async function attempt(work) {
     return { ok: true, value: await session.withAccess(work) };
   } catch (error) {
     const status = error?.status ?? 0;
-    const reach =
-      neverArrived(status) ? 'offline' : status === 401 ? 'signedOut' : status === 404 ? 'unavailable' : 'refused';
+    const reach = timedOut(error)
+      ? 'slow'
+      : neverArrived(status)
+        ? 'offline'
+        : status === 401
+          ? 'signedOut'
+          : status === 404
+            ? 'unavailable'
+            : 'refused';
     return { ok: false, reach, status, code: error?.code ?? null, problem: problemText(error) };
   }
 }

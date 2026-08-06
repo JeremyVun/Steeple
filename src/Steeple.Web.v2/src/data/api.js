@@ -22,25 +22,37 @@ const BASE = 'api/v1';
 
 // Long enough for a local API to answer, short enough that a dead one does not
 // hold the surface waiting: the catalog falls back to the bundled seed instead.
-const TIMEOUT_MS = 4000;
+const READ_TIMEOUT_MS = 4000;
+
+// A write is not a read and must not be given up on as quickly. A read that
+// takes too long costs a stale map; a write that takes too long may already
+// have created something, and abandoning it after four seconds is how one venue
+// becomes two (v2_migration D8). Fifteen seconds is past every
+// geocode-and-insert this API does, and short of a person deciding it is dead.
+const WRITE_TIMEOUT_MS = 15000;
 
 /**
  * A request that never arrived, or arrived as a failure.
  *
- * `status` is 0 when nothing answered at all — the one case a caller may treat
- * as "the API is not here" rather than "the API said no". A failure that did
- * arrive carries steeple's RFC 9457 problem document verbatim in `problem`,
- * with its stable `code` lifted out (CONTRACTS §2): the codes are the contract,
- * the prose in `detail` is for people.
+ * `status` is 0 when nothing answered at all — but that alone is two different
+ * facts, and only one of them is safe to promise: a request that could not be
+ * *made* never reached steeple, while one this browser stopped *waiting* for
+ * may well have landed. `timedOut` is what tells them apart, and it is why the
+ * copy over a slow write never says "nothing was sent" (D8).
+ *
+ * A failure that did arrive carries steeple's RFC 9457 problem document
+ * verbatim in `problem`, with its stable `code` lifted out (CONTRACTS §2): the
+ * codes are the contract, the prose in `detail` is for people.
  */
 export class ApiError extends Error {
-  constructor(message, status = 0, problem = null) {
+  constructor(message, status = 0, problem = null, { timedOut = false } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.problem = problem;
     this.code = problem?.code ?? null;
     this.detail = problem?.detail ?? null;
+    this.timedOut = timedOut;
   }
 }
 
@@ -65,7 +77,7 @@ function queryString(params) {
 
 async function get(path, params, { notFoundAsNull = false, accessToken = null, signal = null } = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
   // A caller may withdraw its question — a search superseded by the next
   // keystroke. Its abort and the timeout's are the same signal to fetch and two
   // different things to a caller, so the failure says which one happened.
@@ -86,8 +98,12 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
       withdrawn.aborted = true;
       throw withdrawn;
     }
+    const abort = cause.name === 'AbortError';
     throw new ApiError(
-      cause.name === 'AbortError' ? `${path} timed out after ${TIMEOUT_MS}ms` : `${path} did not answer`
+      abort ? `${path} timed out after ${READ_TIMEOUT_MS}ms` : `${path} did not answer`,
+      0,
+      null,
+      { timedOut: abort }
     );
   } finally {
     clearTimeout(timer);
@@ -107,7 +123,7 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
  * whatever problem document came with it, so callers can tell "group size must
  * be between 1 and 1000" from "nothing answered".
  */
-async function send(method, path, body, { accessToken = null, headers = {}, timeoutMs = TIMEOUT_MS } = {}) {
+async function send(method, path, body, { accessToken = null, headers = {}, timeoutMs = WRITE_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   // `undefined` is a request with nothing to say — a revocation, a delete. It
@@ -128,8 +144,12 @@ async function send(method, path, body, { accessToken = null, headers = {}, time
       ...(carries ? { body: JSON.stringify(body ?? {}) } : {}),
     });
   } catch (cause) {
+    const abort = cause.name === 'AbortError';
     throw new ApiError(
-      cause.name === 'AbortError' ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`
+      abort ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`,
+      0,
+      null,
+      { timedOut: abort }
     );
   } finally {
     clearTimeout(timer);
@@ -164,8 +184,12 @@ async function upload(path, form, { accessToken = null, timeoutMs = 20000 } = {}
       body: form,
     });
   } catch (cause) {
+    const abort = cause.name === 'AbortError';
     throw new ApiError(
-      cause.name === 'AbortError' ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`
+      abort ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`,
+      0,
+      null,
+      { timedOut: abort }
     );
   } finally {
     clearTimeout(timer);

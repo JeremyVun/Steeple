@@ -123,7 +123,13 @@ function refusal(error) {
 /**
  * One call to the API, with the token this browser holds.
  *
- * @returns {Promise<{ok:true,value:object}|{ok:false,reach:'signin'|'offline'|'refused',code?:string,detail:string}>}
+ * `slow` is not `offline`, and the difference is the whole reason writes carry
+ * an idempotency key: a request this browser stopped waiting for may be
+ * finishing at steeple right now, so it must never be answered with "kept here
+ * instead" the way a dead service is (v2_migration D8). The way out of a slow
+ * write is to send it again — the key is what makes that free.
+ *
+ * @returns {Promise<{ok:true,value:object}|{ok:false,reach:'signin'|'offline'|'slow'|'refused',code?:string,detail:string}>}
  */
 async function attempt(work) {
   try {
@@ -131,6 +137,14 @@ async function attempt(work) {
   } catch (error) {
     if (error?.status === 401) {
       return { ok: false, reach: 'signin', detail: 'Sign in to list a space.' };
+    }
+    if (error?.timedOut) {
+      return {
+        ok: false,
+        reach: 'slow',
+        detail:
+          'Steeple is taking a while to answer. Try again — anything that did go through will not be made twice.',
+      };
     }
     if (!error?.status) {
       return { ok: false, reach: 'offline', detail: 'Steeple could not be reached.' };
@@ -147,8 +161,9 @@ async function attempt(work) {
 /**
  * A key that survives a retry of the same logical create — same idiom as
  * `send.js`'s `draft.idempotencyKey`: held across every retry, deleted only
- * once steeple has answered. The 4s client abort can fire after steeple has
- * already committed the row; the wizard's own retry (the host pressing the
+ * once steeple has answered. A write waits fifteen seconds rather than a read's
+ * four (`api.js`), but the abort can still fire after steeple has already
+ * committed the row; the wizard's own retry (the host pressing the
  * same step again, or `withAccess`'s own 401-refresh replay) must land on the
  * request that already happened rather than open a second one. Kept on the
  * draft's own `remote` block — the one thing about this draft that already
