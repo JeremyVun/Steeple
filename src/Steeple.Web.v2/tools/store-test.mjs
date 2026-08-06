@@ -4,6 +4,13 @@
 // declaring done; if you change the store, prove your new guard bites by
 // breaking it once.
 //
+// Run it under three clocks — the calendar assertions are the reason:
+//   TZ=UTC node tools/store-test.mjs
+//   TZ=America/New_York node tools/store-test.mjs
+//   TZ=Australia/Sydney node tools/store-test.mjs
+// All three must be green. A store that only passes in the timezone the author
+// happened to be sitting in is a store that freezes somebody else's browser.
+//
 // What this suite is for changed with v2_migration Phase 2 (D4). The store no
 // longer decides anything: steeple does, and this is the cache of its answers.
 // So the assertions are about **fidelity** — that an ApplicationDto, a
@@ -53,6 +60,7 @@ const {
   nextWeekday,
   store,
   todayIso,
+  weekdayOf,
 } = await import('../src/data/store.js');
 const session = await import('../src/data/session.js');
 
@@ -84,6 +92,110 @@ expect(
   'fixture: open hours are still seeded for the village',
   store.openHoursFor('grace-community-vienna', 'fellowship-hall').length,
   7
+);
+
+// ---- the calendar, which must not care what clock the browser keeps ---------
+//
+// These are venue-local wall-clock dates, not instants. Doing the arithmetic in
+// local time meant that on a backward DST transition — a 25-hour day — adding
+// 86400000ms landed on the *same* calendar date, and `materializeDates` looped
+// on a date that never advanced until the tab died. Run this suite under
+// TZ=UTC, TZ=America/New_York and TZ=Australia/Sydney: all three must agree.
+//
+// 2026-11-01 is when the US falls back; 2026-04-05 is when Sydney does. Both
+// are Sundays, which is also what `weekdayOf` has to keep saying about them.
+
+const US_FALL_BACK = '2026-11-01';
+const AU_FALL_BACK = '2026-04-05';
+
+expect('dates: the day after the US falls back is the next day', addDays(US_FALL_BACK, 1), '2026-11-02');
+expect('dates: and the day after Sydney does', addDays(AU_FALL_BACK, 1), '2026-04-06');
+expect('dates: stepping back over the US transition', addDays('2026-11-02', -1), US_FALL_BACK);
+expect('dates: and back over Sydney’s', addDays('2026-04-06', -1), AU_FALL_BACK);
+// Spring forward is a 23-hour day — the same arithmetic, the other way.
+expect('dates: the day after the US springs forward', addDays('2026-03-08', 1), '2026-03-09');
+expect('dates: and after Sydney does', addDays('2026-10-04', 1), '2026-10-05');
+expect('dates: a week over the US transition', addDays('2026-10-28', 7), '2026-11-04');
+expect('dates: a year of them still lands', addDays('2026-01-01', 365), '2027-01-01');
+
+expect('dates: the US fall-back is a Sunday', weekdayOf(US_FALL_BACK), 0);
+expect('dates: so is Sydney’s', weekdayOf(AU_FALL_BACK), 0);
+expect('dates: the day after each is a Monday', weekdayOf(addDays(US_FALL_BACK, 1)), 1);
+expect('dates: and Sydney’s too', weekdayOf(addDays(AU_FALL_BACK, 1)), 1);
+
+expect('dates: the next Wednesday after the US transition', nextWeekday(US_FALL_BACK, 3), '2026-11-04');
+expect('dates: and after Sydney’s', nextWeekday(AU_FALL_BACK, 3), '2026-04-08');
+expect('dates: a weekday asked for on its own day is that day', nextWeekday(US_FALL_BACK, 0), US_FALL_BACK);
+
+// The loop itself. Weekly on Sundays, straddling each transition: it has to
+// terminate, and land on exactly the three Sundays.
+expect(
+  'dates: a weekly schedule crosses the US fall-back and ends',
+  store
+    .materializeDates({
+      frequency: 'weekly',
+      startDate: '2026-10-25',
+      endDate: '2026-11-08',
+      daysOfWeekMask: daysToMask([0]),
+    })
+    .join(),
+  '2026-10-25,2026-11-01,2026-11-08'
+);
+expect(
+  'dates: and crosses Sydney’s',
+  store
+    .materializeDates({
+      frequency: 'weekly',
+      startDate: '2026-03-29',
+      endDate: '2026-04-12',
+      daysOfWeekMask: daysToMask([0]),
+    })
+    .join(),
+  '2026-03-29,2026-04-05,2026-04-12'
+);
+// Every day of the week, so a skipped or repeated date shows up as a wrong set.
+expect(
+  'dates: no day is skipped or doubled over the US transition',
+  store
+    .materializeDates({
+      frequency: 'weekly',
+      startDate: '2026-10-31',
+      endDate: '2026-11-03',
+      daysOfWeekMask: daysToMask([0, 1, 2, 3, 4, 5, 6]),
+    })
+    .join(),
+  '2026-10-31,2026-11-01,2026-11-02,2026-11-03'
+);
+expect(
+  'dates: nor over Sydney’s',
+  store
+    .materializeDates({
+      frequency: 'weekly',
+      startDate: '2026-04-04',
+      endDate: '2026-04-07',
+      daysOfWeekMask: daysToMask([0, 1, 2, 3, 4, 5, 6]),
+    })
+    .join(),
+  '2026-04-04,2026-04-05,2026-04-06,2026-04-07'
+);
+expect(
+  'dates: a schedule that ends before it starts is no dates at all',
+  store.materializeDates({
+    frequency: 'weekly',
+    startDate: '2026-11-08',
+    endDate: '2026-11-01',
+    daysOfWeekMask: daysToMask([0]),
+  }).length,
+  0
+);
+
+// Today is the one date read off the browser's own clock, on purpose: it is
+// this person's calendar, not a venue's.
+const now = new Date();
+expect(
+  'dates: today is the browser’s own calendar date',
+  todayIso(),
+  `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 );
 
 // ---- validation, which is still this browser's to do live -------------------
@@ -216,7 +328,8 @@ const oneOff = store.mirrorApplication(
 expect('mirror: a one-off has no end', oneOff.endDate, null);
 expect('mirror: and no weekday mask', oneOff.daysOfWeekMask, null);
 
-// The thread arrives with the detail read, and only then.
+// The thread arrives with the detail read, and only then. A message present is
+// its own proof of one: a list read hardcodes `messages: []`.
 store.mirrorApplication(
   dto({
     status: 'needsInfo',
@@ -238,35 +351,54 @@ store.mirrorApplication(dto({ status: 'pending', messageCount: 2, messages: [] }
 expect('mirror: a list read does not empty the thread', store.threadFor(APPLICATION_ID).length, 2);
 
 // The counter-offer, and only the live one — steeple returns no history.
-store.mirrorApplication(
-  dto({
-    status: 'counterOffered',
-    counterOffer: {
-      id: 'c1',
-      schedule: {
-        frequency: 'recurringWeekly',
-        startDate: addDays(monday, 2),
-        endDate: addDays(monday, 30),
-        daysOfWeek: ['wednesday'],
-        startTime: '18:00:00',
-        endTime: '20:00:00',
-      },
-      message: 'Wednesdays suit the room better.',
-      status: 'open',
-      createdAtUtc: '2026-08-03T09:00:00Z',
-      respondedAtUtc: null,
-    },
-  })
-);
+const COUNTER = {
+  id: 'c1',
+  schedule: {
+    frequency: 'recurringWeekly',
+    startDate: addDays(monday, 2),
+    endDate: addDays(monday, 30),
+    daysOfWeek: ['wednesday'],
+    startTime: '18:00:00',
+    endTime: '20:00:00',
+  },
+  message: 'Wednesdays suit the room better.',
+  status: 'open',
+  createdAtUtc: '2026-08-03T09:00:00Z',
+  respondedAtUtc: null,
+};
+
+// A counter can arrive on a detail read of a request nobody has written on:
+// `messages: []`, exactly as a list read looks. Only lists hardcode
+// `counterOffer: null`, so carrying one *is* the proof of a detail read, and
+// the counter must be held whether or not the caller declared itself.
+store.mirrorApplication(dto({ status: 'counterOffered', messageCount: 0, messages: [], counterOffer: COUNTER }));
 const counter = store.openCounterFor(APPLICATION_ID);
 expect('mirror: the open counter is held', counter?.status, COUNTER_STATUS.open);
 expect('mirror: on the weekday steeple named', counter.daysOfWeekMask, daysToMask([3]));
 expect('mirror: with its note', counter.message, 'Wednesdays suit the room better.');
+expect('mirror: an undeclared counter did not cost the held thread', store.threadFor(APPLICATION_ID).length, 2);
 
-// Decided: the counter is gone because steeple stopped sending it.
-store.mirrorApplication(dto({ status: 'approved', bookingId: '44444444-4444-4444-4444-444444444444' }));
+// A list read of the same request — `counterOffer: null` because lists always
+// say null, never because the counter went away. It must erase neither.
+store.mirrorApplication(dto({ status: 'counterOffered', messageCount: 2, messages: [], counterOffer: null }));
+expect(
+  'mirror: a list read does not forget a live counter',
+  store.openCounterFor(APPLICATION_ID)?.status,
+  COUNTER_STATUS.open
+);
+expect('mirror: nor the thread beside it', store.threadFor(APPLICATION_ID).length, 2);
+
+// Decided: the counter is gone because steeple stopped sending it — and this is
+// a detail read saying so, which is the only read allowed to clear one.
+store.mirrorApplication(
+  dto({ status: 'approved', bookingId: '44444444-4444-4444-4444-444444444444' }),
+  { thread: true }
+);
 expect('mirror: a decided request has no live counter', store.openCounterFor(APPLICATION_ID), null);
 expect('mirror: and reads approved', store.getApplication(APPLICATION_ID).status, APP_STATUS.approved);
+// Clearing is the declared read's alone — which is the whole reason `thread`
+// still exists now that a carried thread proves itself.
+expect('mirror: a declared detail read is what empties a thread', store.threadFor(APPLICATION_ID).length, 0);
 
 // The booking, with its payment posture passed through untouched.
 const booking = store.mirrorBooking({
