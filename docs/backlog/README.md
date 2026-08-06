@@ -36,6 +36,11 @@ Recorded, deliberately not built — each needs an owner decision or a gated tri
   the mock gateway refuses to run in Production with `payments.enabled=true`.
 - **Counter-offers stay behind `booking.counter_offers`** (off ⇒ endpoints 404 and the
   desk says "not available here yet" — verified in the closing sweep).
+- **Three small web warts carried from the 2026-08-06 quality round:** `getRoomAvailability`
+  swallows failures to `null`, so a 429 is invisible to the apply week card; an email
+  `?goto=` deep link reads its booking twice (judgment call left open); map/search paging
+  is unbuilt — one page of 100, a venue beyond it has no pin or row (its sheet works by
+  slug). Fix when touching the owning surface.
 - **The booking race can deadlock instead of losing cleanly** (found by the sweep, once,
   under full-suite parallel load; `CounterOfferRaceTests` reproduces it rarely). Two
   simultaneous booking transactions each insert an occurrence and each GiST
