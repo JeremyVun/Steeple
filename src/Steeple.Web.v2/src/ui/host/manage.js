@@ -144,6 +144,21 @@ async function attempt(work) {
   }
 }
 
+/**
+ * A key that survives a retry of the same logical create — same idiom as
+ * `send.js`'s `draft.idempotencyKey`: held across every retry, deleted only
+ * once steeple has answered. The 4s client abort can fire after steeple has
+ * already committed the row; the wizard's own retry (the host pressing the
+ * same step again, or `withAccess`'s own 401-refresh replay) must land on the
+ * request that already happened rather than open a second one. Kept on the
+ * draft's own `remote` block — the one thing about this draft that already
+ * persists — so it outlives the attempt that lost the race with the timeout.
+ * An update never carries one: PATCH has no double-create to guard.
+ */
+const newKey = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+
 /** Create the venue, or update the one this draft already made. */
 export function saveVenue(draft) {
   const body = {
@@ -154,11 +169,16 @@ export function saveVenue(draft) {
     postcode: draft.venue.postcode.trim(),
   };
   const id = draft.remote.venueId;
-  return attempt((token) =>
-    id
-      ? api.updateManagedVenue(id, body, { accessToken: token })
-      : api.createManagedVenue(body, { accessToken: token })
-  );
+  return attempt(async (token) => {
+    if (id) return api.updateManagedVenue(id, body, { accessToken: token });
+    draft.remote.venueIdempotencyKey ??= newKey();
+    const value = await api.createManagedVenue(body, {
+      accessToken: token,
+      idempotencyKey: draft.remote.venueIdempotencyKey,
+    });
+    delete draft.remote.venueIdempotencyKey;
+    return value;
+  });
 }
 
 /** Create the room, or update the one this draft already made. */
@@ -175,11 +195,19 @@ export function saveRoom(draft) {
     accessibility: accessTokens(room.accessibility),
   };
   const id = draft.remote.roomId;
-  return attempt((token) =>
-    id
-      ? api.updateManagedRoom(id, body, { accessToken: token })
-      : api.createManagedRoom(draft.remote.venueId, body, { accessToken: token })
-  );
+  return attempt(async (token) => {
+    if (id) return api.updateManagedRoom(id, body, { accessToken: token });
+    // draft.roomId is always 'main-space' locally (a second room per venue
+    // collides in the store), but the idempotency key is keyed to this
+    // logical create attempt, not to that id, so it does not assume one room.
+    draft.remote.roomIdempotencyKey ??= newKey();
+    const value = await api.createManagedRoom(draft.remote.venueId, body, {
+      accessToken: token,
+      idempotencyKey: draft.remote.roomIdempotencyKey,
+    });
+    delete draft.remote.roomIdempotencyKey;
+    return value;
+  });
 }
 
 /** Send the photograph the room cannot be published without. */
