@@ -31,7 +31,18 @@
 // Timing: headless app-time runs several times slow — every wait here is on
 // state, never on the clock.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5175/?world=off';
 const stamp = Date.now().toString(36);
@@ -53,11 +64,7 @@ const eq = (label, actual, wanted) =>
 
 // pipe:true — a suite killed mid-run must not leave a headless Chrome tree
 // behind; and everything below closes in a finally either way.
-const browser = await puppeteer.launch({
-  headless: true,
-  pipe: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 
 const problems = [];
 
@@ -301,7 +308,7 @@ try {
   failed += 1;
   console.log(` FAIL  the suite fell over: ${error?.stack ?? error}`);
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }
 
 for (const problem of problems) check(`the page stayed quiet — ${problem}`, false);

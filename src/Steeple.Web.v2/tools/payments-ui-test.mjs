@@ -35,19 +35,25 @@
 //
 // Rate limits are per-account, and `auth` is per-IP (10/min): every sign-in
 // here goes through paceAuth().
+//
+// The fixtures — the host who keeps a venue, the guest with a card, the weekly
+// ask — are `tools/fixtures.mjs`, shared with every other wire-era suite.
 
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import puppeteer from 'puppeteer';
-import { writeRoomPhoto } from './host-photo.mjs';
+import {
+  API,
+  apiIsUp,
+  apply,
+  call,
+  closeBrowsers,
+  launch,
+  mintGuest,
+  mintVenue,
+  signInPage as signInAs,
+  sql,
+  stamp,
+} from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5275/?q=low&world=off';
-const API = process.env.STEEPLE_API ?? 'http://localhost:5215/api/v1';
-const PSQL = process.env.STEEPLE_PSQL ?? 'psql';
-const DB = process.env.STEEPLE_DB ?? 'postgresql://steeple:steeple_dev_pw@localhost:5433/steeple';
-
-const stamp = Date.now().toString(36);
-const PHOTO = readFileSync(writeRoomPhoto(`/tmp/steeple-webpay-room-${stamp}.png`));
 
 let checks = 0;
 let failures = 0;
@@ -55,7 +61,7 @@ const problems = [];
 const wireLog = [];
 
 async function lastWords(error) {
-  for (const browser of browsers) await browser.close().catch(() => {});
+  await closeBrowsers();
   console.log(`\nthe run stopped: ${error?.message ?? error}`);
   if (wireLog.length) {
     console.log('\nthe last things steeple was asked, in order:');
@@ -80,214 +86,7 @@ function check(label, ok, detail = '') {
 const eq = (label, actual, wanted) =>
   check(label, actual === wanted, actual === wanted ? '' : `got ${JSON.stringify(actual)}, wanted ${JSON.stringify(wanted)}`);
 
-const sql = (statement) =>
-  execFileSync(PSQL, [DB, '-tAc', statement], { encoding: 'utf8' }).trim();
 
-// ── the wire, from node ──────────────────────────────────────────────────────
-
-async function call(method, path, { token = null, body = undefined, key = null } = {}) {
-  const response = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      accept: 'application/json',
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(key ? { 'Idempotency-Key': key } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const text = await response.text();
-  let document = null;
-  try {
-    document = text ? JSON.parse(text) : null;
-  } catch {
-    document = null;
-  }
-  return { status: response.status, body: document };
-}
-
-// Signing in is per-IP limited (10/min) and deliberately so. A suite that mints
-// a person per scenario exhausts that honestly and waits its turn. This is the
-// one wall-clock wait in the file: it is the server's clock, not the app's.
-const authAt = [];
-const AUTH_PER_MINUTE = 10;
-
-async function paceAuth() {
-  for (;;) {
-    const now = Date.now();
-    while (authAt.length && now - authAt[0] > 60_000) authAt.shift();
-    if (authAt.length < AUTH_PER_MINUTE) break;
-    const waitMs = 60_000 - (now - authAt[0]) + 250;
-    console.log(`  ·     waiting ${Math.ceil(waitMs / 1000)}s for the sign-in window to roll`);
-    await new Promise((r) => setTimeout(r, waitMs));
-  }
-  authAt.push(Date.now());
-}
-
-async function signIn(email, name) {
-  await paceAuth();
-  const answer = await call('POST', '/auth/sessions', {
-    body: { provider: 'dev', idToken: `${email}|${name}`, device: { platform: 'web' } },
-  });
-  if (answer.status !== 200 && answer.status !== 201) {
-    throw new Error(`sign-in for ${email} answered ${answer.status}`);
-  }
-  return answer.body;
-}
-
-const iso = (d) => d.toISOString().slice(0, 10);
-// Calendar arithmetic, not 86_400_000ms: on the day a zone falls back, a fixed-ms
-// step lands on the same local date twice and a "walk to the next weekday" loop
-// can spin forever.
-const addDays = (date, n) =>
-  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + n));
-function nextWeekday(dow, least = 7) {
-  let d = addDays(new Date(), least);
-  while (d.getUTCDay() !== dow) d = addDays(d, 1);
-  return iso(d);
-}
-
-const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-// ── fixtures ─────────────────────────────────────────────────────────────────
-
-async function mintVenue({ email, name, venueName, roomName, bookingMode }) {
-  const host = await signIn(email, name);
-  const token = host.accessToken;
-
-  const venue = await call('POST', '/manage/venues', {
-    token,
-    body: {
-      name: venueName,
-      description: 'A hall kept for the neighbourhood, with tall windows and a good floor.',
-      addressLine: '10 Maple Avenue East',
-      suburb: 'Vienna',
-      postcode: '22180',
-    },
-    key: `venue-${stamp}-${venueName}`,
-  });
-  if (venue.status !== 201 && venue.status !== 200) {
-    throw new Error(`venue create answered ${venue.status} ${JSON.stringify(venue.body)}`);
-  }
-
-  const room = await call('POST', `/manage/venues/${venue.body.id}/rooms`, {
-    token,
-    body: {
-      name: roomName,
-      description: 'A bright room with chairs, tables and a kettle.',
-      capacity: 40,
-      pricePerHour: 20,
-      houseRules: 'Leave it as you found it.',
-      activities: ['community'],
-      amenities: ['chairs', 'tables'],
-      accessibility: ['stepFreeAccess'],
-    },
-    key: `room-${stamp}-${roomName}`,
-  });
-  if (room.status !== 201 && room.status !== 200) {
-    throw new Error(`room create answered ${room.status} ${JSON.stringify(room.body)}`);
-  }
-
-  const form = new FormData();
-  form.append('file', new Blob([PHOTO], { type: 'image/png' }), 'room.png');
-  const photo = await fetch(`${API}/manage/rooms/${room.body.id}/photos`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: form,
-  });
-  if (!photo.ok) throw new Error(`photo upload answered ${photo.status}`);
-
-  await call('PUT', `/manage/rooms/${room.body.id}/availability`, {
-    token,
-    body: {
-      days: DAY_TOKENS.map((dayOfWeek) => ({
-        dayOfWeek,
-        windows: [{ startTime: '08:00', endTime: '21:00' }],
-      })),
-      blackouts: [],
-    },
-  });
-
-  await call('PATCH', `/manage/rooms/${room.body.id}`, { token, body: { status: 'published' } });
-
-  // The operator's one decision on a newly claimed venue's first listing. Admin owns it and
-  // there is no API for it by design, so the harness does what Admin would.
-  sql(
-    `update rooms set "Status" = 1, "FirstPublishedAtUtc" = now(), "PublishRequestedAtUtc" = null where "Id" = '${room.body.id}';`
-  );
-  sql(`update venues set "IsIdentityVerified" = true where "Id" = '${venue.body.id}';`);
-
-  if (bookingMode) {
-    const patched = await call('PATCH', `/manage/venues/${venue.body.id}`, {
-      token,
-      body: { bookingMode },
-    });
-    eq(`fixture: ${venueName} is in ${bookingMode} mode`, patched.body?.bookingMode, bookingMode);
-  }
-
-  const listing = await call('GET', `/listings/by-slug/${venue.body.slug}/${room.body.slug}`);
-  check(`fixture: ${roomName} is published and readable`, listing.status === 200, `status ${listing.status}`);
-
-  return {
-    token,
-    user: host.user,
-    email,
-    name,
-    venueId: venue.body.id,
-    venueSlug: venue.body.slug,
-    roomId: room.body.id,
-    roomSlug: room.body.slug,
-    roomName,
-    venueName,
-  };
-}
-
-/**
- * A person with a card on file. `last4: '0002'` is the mock gateway's decline
- * card: the setup succeeds and every charge against it fails, which is the only
- * honest way to render the failure ladder (docs/contracts/payments.md).
- */
-async function mintGuest({ email, name, last4 = '4242' }) {
-  const person = await signIn(email, name);
-  const token = person.accessToken;
-  const setup = await call('POST', '/me/payments/setup', { token, body: null });
-  if (setup.status !== 200) throw new Error(`setup answered ${setup.status}`);
-  const saved = await call('POST', '/me/payments/setup/mock-confirm', {
-    token,
-    body: { clientSecret: setup.body.clientSecret, brand: 'Visa', last4 },
-  });
-  if (saved.status !== 200) throw new Error(`mock-confirm answered ${saved.status} ${JSON.stringify(saved.body)}`);
-  return { token, user: person.user, email, name, last4 };
-}
-
-/** One weekly ask, three dates out, on a room. */
-async function apply(guest, room, { dow = 3, weeks = 3 } = {}) {
-  const start = nextWeekday(dow, 7);
-  const end = iso(addDays(new Date(`${start}T12:00:00Z`), 7 * (weeks - 1)));
-  const answer = await call('POST', `/listings/${room.roomId}/applications`, {
-    token: guest.token,
-    key: `apply-${stamp}-${guest.email}-${room.roomId}`,
-    body: {
-      activityType: 'community',
-      groupSize: 12,
-      intentText: 'A weekly evening for neighbours who would rather not meet in a kitchen.',
-      organizationName: null,
-      turnstileToken: null,
-      schedule: {
-        frequency: 'recurringWeekly',
-        startDate: start,
-        endDate: end,
-        daysOfWeek: [DAY_TOKENS[dow]],
-        startTime: '18:00',
-        endTime: '20:00',
-      },
-    },
-  });
-  if (answer.status !== 200 && answer.status !== 201) {
-    throw new Error(`apply answered ${answer.status} ${JSON.stringify(answer.body)}`);
-  }
-  return answer.body;
-}
 
 /** Wait for the post-commit charge to land, whichever way it lands. */
 async function settledBooking(bookingId, token, { tries = 30 } = {}) {
@@ -303,17 +102,8 @@ async function settledBooking(bookingId, token, { tries = 30 } = {}) {
 
 // ── the browser ──────────────────────────────────────────────────────────────
 
-const browsers = [];
-
 async function openPage(label) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    // Pipe transport: the browser is a child on a pipe, so it dies when this
-    // process dies — including SIGKILL and an abort mid-suite.
-    pipe: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
-  browsers.push(browser);
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
   page.on('pageerror', (e) => problems.push(`[${label}] ${e.message}`));
@@ -416,8 +206,7 @@ async function boot(page, at = url) {
 }
 
 async function signInPage(page, email, name) {
-  await paceAuth();
-  await page.evaluate((e, n) => window.__steeple.session.signIn({ email: e, displayName: n }), email, name);
+  await signInAs(page, email, name);
   await settle(page);
 }
 
@@ -466,27 +255,42 @@ const textOf = (page, selector) =>
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
-const up = await fetch(`${API}/geofence`).then((r) => r.ok).catch(() => false);
+const up = await apiIsUp();
 if (!up) {
   console.log(`\nThe steeple API is not answering at ${API} — this suite needs it.`);
   process.exit(2);
 }
 
+// `mintVenue` throws when steeple refuses; the two things worth naming as checks
+// are what it hands back — the mode the venue is really in, and that the public
+// can read the room.
+function kept(fixture) {
+  if (fixture.bookingModeAsked) {
+    eq(`fixture: ${fixture.venueName} is in ${fixture.bookingModeAsked} mode`, fixture.bookingMode, fixture.bookingModeAsked);
+  }
+  check(`fixture: ${fixture.roomName} is published and readable`, fixture.listingStatus === 200, `status ${fixture.listingStatus}`);
+  return fixture;
+}
+
 console.log('\nfixtures');
-const instant = await mintVenue({
-  email: `pay-host-i-${stamp}@example.org`,
-  name: 'Owen Marsh',
-  venueName: `Cedar Rooms ${stamp}`,
-  roomName: 'Garden Room',
-  bookingMode: null,
-});
-const manual = await mintVenue({
-  email: `pay-host-m-${stamp}@example.org`,
-  name: 'Ruth Callaghan',
-  venueName: `Saint Bride Hall ${stamp}`,
-  roomName: 'Long Room',
-  bookingMode: 'manual',
-});
+const instant = kept(
+  await mintVenue({
+    email: `pay-host-i-${stamp}@example.org`,
+    name: 'Owen Marsh',
+    venueName: `Cedar Rooms ${stamp}`,
+    roomName: 'Garden Room',
+    bookingMode: null,
+  })
+);
+const manual = kept(
+  await mintVenue({
+    email: `pay-host-m-${stamp}@example.org`,
+    name: 'Ruth Callaghan',
+    venueName: `Saint Bride Hall ${stamp}`,
+    roomName: 'Long Room',
+    bookingMode: 'manual',
+  })
+);
 
 const payer = await mintGuest({ email: `pay-guest-${stamp}@example.org`, name: 'Nadia Prosser' });
 const decliner = await mintGuest({
@@ -983,7 +787,7 @@ eq(
 
 // ── done ─────────────────────────────────────────────────────────────────────
 
-for (const browser of browsers) await browser.close();
+await closeBrowsers();
 
 if (problems.length) {
   console.log('\npage problems:');

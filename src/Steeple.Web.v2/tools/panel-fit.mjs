@@ -10,16 +10,24 @@
 // must keep fitting when the browse surface gives the map more of the page.
 //
 //   node tools/panel-fit.mjs "http://localhost:5322/?q=low" [WxH] [map%]
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5322/?q=low';
 const [w, h] = (process.argv[3] ?? '1440x900').split('x').map(Number);
 const mapShare = process.argv[4] ?? null;
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: w, height: h });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -87,5 +95,5 @@ for (const [label, drive, sel] of CASES) {
 }
 
 console.log(over === 0 ? `\nall sheets fit ${w}×${h}` : `\n${over} sheet(s) scroll at ${w}×${h}`);
-await browser.close();
+await closeBrowsers();
 process.exit(over === 0 ? 0 : 1);

@@ -16,24 +16,23 @@
 // the slug steeple minted the moment the create answers, or the desk's own
 // re-read drops the draft and everything keyed under it.
 //
-// Needs the API on localhost:5200 and the app on the given origin (vite proxies
-// /api/v1). Nothing here is reset or reseeded: each run mints its own venue
-// under its own dev account, so runs never collide.
+// Needs the API (STEEPLE_API, default http://localhost:5200/api/v1) and the app
+// on the given origin with its proxy pointed at that same API. Nothing here is
+// reset or reseeded: each run mints its own venue under its own dev account, so
+// runs never collide.
 //
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low&world=off"
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low" --shots hp
 
-import puppeteer from 'puppeteer';
+import { API, apiIsUp, closeBrowsers, launch, stamp } from './fixtures.mjs';
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?q=low&world=off';
 const shotPrefix = process.argv.includes('--shots')
   ? process.argv[process.argv.indexOf('--shots') + 1]
   : null;
-const API = 'http://localhost:5200/api/v1';
-const PHOTO = writeRoomPhoto('/tmp/steeple-host-room.png');
+const PHOTO = writeRoomPhoto(`/tmp/steeple-host-room-${stamp}.png`);
 
-const stamp = Date.now().toString(36);
 const venueName = `Trinity Hall ${stamp}`;
 const roomName = `Long Room ${stamp}`;
 const hostEmail = `host-${stamp}@example.org`;
@@ -55,17 +54,24 @@ function check(label, ok, detail = '') {
 }
 
 // The API has to be there for this test to mean anything.
-const up = await fetch(`${API}/geofence`).then((r) => r.ok).catch(() => false);
+const up = await apiIsUp();
 if (!up) {
-  console.log('\nThe steeple API is not answering on localhost:5200 — this test needs it.');
-  console.log('(The API-down half of the story is tools/host-offline-test.mjs.)');
+  console.log(`\nThe steeple API is not answering at ${API} — this test needs it.`);
+  console.log('(The wire-cut half of the story is tools/host-offline-test.mjs.)');
   process.exit(2);
 }
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+// A top-level-await script has no `finally` around it; this is the finally.
+async function lastWords(error) {
+  await closeBrowsers();
+  console.log(`\nthe run stopped: ${error?.message ?? error}`);
+  console.log(`${checks - failures}/${checks} checks passed before it stopped`);
+  process.exit(1);
+}
+process.on('uncaughtException', lastWords);
+process.on('unhandledRejection', lastWords);
+
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
@@ -518,5 +524,5 @@ if (problems.length) {
 }
 console.log(`(this run left ${venueName} and ${renamedName} on the API under ${hostEmail})`);
 
-await browser.close();
+await closeBrowsers();
 process.exit(failures || problems.length ? 1 : 0);

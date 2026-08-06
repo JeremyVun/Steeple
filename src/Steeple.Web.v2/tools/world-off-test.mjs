@@ -11,13 +11,21 @@
 // `npm run build:flat` dist. The second is the one that matters: the flag is
 // only worth having if the bundle it produces actually works.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, isEnvironmentNoise, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5321/?q=low&world=off';
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -25,7 +33,12 @@ let failures = 0;
 const errors = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
-  if (m.type() === 'error' && !m.text().includes('GL Driver') && !(m.location()?.url ?? '').includes('/api/v1/')) {
+  // `isEnvironmentNoise` covers software GL and any resource that would not
+  // load — map tiles from an internet a sealed machine has none of, and the
+  // shared dev database's room photographs, whose absolute URLs point at API
+  // ports nobody is listening on any more. The `/api/v1/` exclusion beside it
+  // is this suite's own: it is about the page with no world, not the wire.
+  if (m.type() === 'error' && !isEnvironmentNoise(m) && !(m.location()?.url ?? '').includes('/api/v1/')) {
     errors.push(`[console] ${m.text()}`);
   }
 });
@@ -214,5 +227,5 @@ if (errors.length) {
   for (const e of errors) console.log(e);
 }
 console.log(failures ? `${failures} FAILURES` : 'all clear');
-await browser.close();
+await closeBrowsers();
 process.exit(failures ? 1 : 0);

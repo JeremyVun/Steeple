@@ -13,7 +13,18 @@
 // --css injects a stylesheet before sampling: the A/B that proves which layer
 // the band belongs to, or reinstates an older ambience to compare against.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 import { readFileSync, writeFileSync } from 'node:fs';
 
 const [url, prefix, ...rest] = process.argv.slice(2);
@@ -30,10 +41,7 @@ const kill = cssFile ? readFileSync(cssFile, 'utf8') : opt('--css', null);
 
 const PHASES = [0, 28000, 56000, 84000, 112000];
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -139,4 +147,4 @@ console.log(
   profiles.map((cols) => strip.x + cols.indexOf(Math.min(...cols))).join(' → ')
 );
 
-await browser.close();
+await closeBrowsers();

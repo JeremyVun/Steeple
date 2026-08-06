@@ -3,7 +3,18 @@
 //   node tools/map-shot.mjs <url> <name> [where] [filters] [full]
 // Writes /tmp/steeple-panel-<name>.png clipped to the surface, and with
 // `full` the whole frame beside it.
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const [url, name, ...rest] = process.argv.slice(2);
 if (!url || !name) {
@@ -11,10 +22,7 @@ if (!url || !name) {
   process.exit(2);
 }
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -46,5 +54,5 @@ await page.screenshot({
 });
 if (rest.includes('full')) await page.screenshot({ path: `/tmp/steeple-panel-${name}-full.png` });
 console.log(name, errs.length ? `ERRORS: ${errs.join(' | ')}` : 'clean');
-await browser.close();
+await closeBrowsers();
 process.exit(errs.length ? 1 : 0);

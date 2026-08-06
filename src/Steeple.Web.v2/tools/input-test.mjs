@@ -18,16 +18,70 @@
 //   · board ↔ ledger switches where it stands: no reload, one render
 //   · Esc closes what has focus; Esc never rolls
 //   · the title page still answers to a drag of the world, and to nothing else
+//   · a click inside the desk is the desk's own, and the porch switch still
+//     works with a desk standing over the page
 //   · nothing dead overlays the surface, the map, or the property sheet
 //
 //   node tools/input-test.mjs "http://localhost:5395/?q=low"
-import puppeteer from 'puppeteer';
+//
+// Needs: the API (STEEPLE_API, default http://localhost:5200/api/v1) with
+// Auth:DevLoginEnabled, this app on the given origin with its proxy pointed at
+// that same API, and `psql` reachable at the dev database — §11b and §12 are
+// about a **desk**, and since D4 a desk exists only for somebody
+// `GET /manage/venues` answers for, so this suite mints one (tools/fixtures.mjs).
+//
+// ⚠ Known-flaky, and the count is a load reading, not a verdict.
+//
+// Measured 2026-08-06 at 366fc83 (before Phase 3.6 touched this file) and again
+// after, on the same machine: **0 to 8 reds, all of one family** — a roll that
+// has to **finish on its own momentum** does not always finish under headless
+// GL, and everything downstream of it then reads the title page and fails too
+// ("...and the product is the village — arrival", the "canvas is topmost" hit
+// tests, "hovering a pin warms that church"). A roll that is *scrubbed* — held,
+// turned around mid-flight — reads correctly every single run. On a quiet
+// machine this suite came in at 2 reds; with a second suite running beside it,
+// 8. That is the set build_plan carried as "seven opening reds / map-first
+// drift" through Phase 2: it is neither seven nor drift, it is a completion
+// threshold against a clock that runs six times slow.
+//
+// So: judge the check lines, not the count, and if the opening beats are red
+// while §4 onward is green, the machine was busy. Not this suite's to chase.
+import {
+  apiIsUp,
+  apply,
+  closeBrowsers,
+  isEnvironmentNoise,
+  launch,
+  mintGuest,
+  mintVenue,
+  signInPage,
+  stamp,
+} from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5395/?q=low';
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
+
+if (!(await apiIsUp())) {
+  console.log('\nThe steeple API is not answering — §11b and §12 need it to mint a host.');
+  process.exit(2);
+}
+
+// One host who keeps a venue, and one request waiting on it. The venue is a
+// **manual** one on purpose: the board/ledger switch is offered only where there
+// is a request pile to put in one hand or the other (`desk.js` renderFoot), and
+// an instant venue has no Requests tab at all (Phase 2.5). Minted before the
+// browser opens: everything else here is about pointers, and a fixture that
+// fails should say so before four hundred checks of scenery.
+const host = await mintVenue({
+  email: `input-host-${stamp}@example.org`,
+  name: 'Ruth Ellery',
+  venueName: `Trinity Hall ${stamp}`,
+  roomName: 'Long Room',
+  bookingMode: 'manual',
 });
+const guest = await mintGuest({ email: `input-guest-${stamp}@example.org`, name: 'Nadia Prosser' });
+await apply(guest, host);
+
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -35,7 +89,7 @@ let failures = 0;
 const errors = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
-  if (m.type() === 'error' && !m.text().includes('GL Driver')) errors.push(`[console] ${m.text()}`);
+  if (m.type() === 'error' && !isEnvironmentNoise(m)) errors.push(`[console] ${m.text()}`);
 });
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -386,33 +440,70 @@ await wait(700);
 check('clicking the page behind the inbox puts it down', (await state('view')) === 'village', String(await state('view')));
 check('...and keeps the lens it was read in', (await state('mode')) === 'guest', String(await state('mode')));
 
-// ⚠ Owed, with §12: "the porch switch still works over an open desk" and "a
-// click inside the desk is the desk's own" were desk-specific, and there is no
-// desk for a browser that keeps no venue (D4). Driving them on the inbox instead
-// does not stand in for them — the two sheets sit in different modes, and the
-// substitution asserted the wrong thing. They come back with the shared host
-// fixture described before §12, not before.
+// ── 11b. the desk's own plumbing, on somebody who really keeps a venue ─────
+//
+// Restored 2026-08-06 (v2_migration Phase 3.6 item 3). These two were removed,
+// not fixed, when D4 made a desk somebody's: they are desk-specific, and driving
+// them on the inbox instead asserts the wrong thing, because the two sheets sit
+// in different modes. What they needed was a host — `tools/fixtures.mjs` mints
+// one now, so they are back where they belong.
+await signInPage(page, host.email, host.name);
+await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
+await ready(`${url}#/desk`);
+await page.waitForFunction('!!document.querySelector(".desk")', { timeout: 30000 }).catch(() => {});
+await wait(1200);
+check('a deep link to a desk, as a host who keeps one, opens it', await page.evaluate('!!document.querySelector(".desk")'));
+check('...in the host lens', (await state('mode')) === 'host', String(await state('mode')));
+
+// A click inside the sheet is the sheet's own. Asserted as a hit test and not
+// only as "the view did not change": the desk has no click-away of its own, so
+// a state check here can never fail and a check that cannot fail is worse than
+// no check. What can go wrong is what this suite exists for — something dead
+// laid over the sheet, so that a press meant for the desk lands on the page
+// beneath it. So: what is topmost at the desk's own centre?
+const deskBox = await box('.desk');
+const deskPoint = { x: deskBox.cx, y: Math.min(deskBox.cy, 860) };
+const insideDesk = await stack(deskPoint.x, deskPoint.y);
+check('a click inside the desk is the desk’s own', !/browse|canvas|^body/.test(insideDesk[0] ?? ''), insideDesk.join(' < '));
+await page.mouse.click(deskPoint.x, deskPoint.y);
+await wait(700);
+check('...and does not put the sheet down', (await state('view')) === 'desk' && (await page.evaluate('!!document.querySelector(".desk")')), String(await state('view')));
+
+// The porch switch is chrome, not part of the sheet: it has to keep working
+// with a desk standing over the page.
+const porch = await box('.porchswitch');
+const overPorch = await stack(porch.cx, porch.cy);
+check('the porch switch is reachable over an open desk', overPorch[0].includes('porchswitch'), overPorch.join(' < '));
+await page.mouse.click(porch.cx, porch.cy);
+await wait(1600);
+check('the porch switch still works over an open desk', (await state('mode')) === 'guest', String(await state('mode')));
+check('...leaving the visitor browsing, not on the title page', (await state('view')) === 'village' && (await state('roll')) === 1, `${await state('view')} roll ${await state('roll')}`);
+await page.mouse.click(porch.cx, porch.cy);
+await wait(1600);
+check('...and it is the way back in', (await state('mode')) === 'host', String(await state('mode')));
 
 // ── 12. board ↔ ledger switches where it stands ────────────────────────────
 // The switch used to reload the page with a new query string, which cost two
 // seconds and the visitor's place. A window marker set before the click cannot
 // survive a reload; it must survive this.
 //
-// ⚠ Owed work, not a passing check. Since Phase 2 (D4) a desk exists only for a
-// person `GET /manage/venues` answers for, so this block needs a host fixture —
-// dev SSO → POST venue → room → photo → availability → publish, the sequence
-// `correspondence-test.mjs:mintVenue` already writes. The right fix is to lift
-// that into a shared `tools/fixtures.mjs` and have this suite call it; until
-// then this says so out loud rather than asserting against a desk that is not
-// there (which is how a suite starts reporting the wrong thing).
-await ready(`${url}#/desk`);
+// Driven for real again since Phase 3.6 (item 3): a desk exists only for a
+// person `GET /manage/venues` answers for, and there is one signed in above.
+// The switch lives under the request pile, and the desk opens on Bookings, so
+// the pile has to be the thing on the table before there is a switch to press.
+const requestsTab = await page.evaluate(() => {
+  const tab = [...document.querySelectorAll('.tab')].find((n) => /^Requests/.test(n.textContent.trim()));
+  if (!tab) return null;
+  const b = tab.getBoundingClientRect();
+  return { cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+});
+check('a manual venue’s desk offers its request pile', requestsTab !== null);
+if (requestsTab) await page.mouse.click(requestsTab.cx, requestsTab.cy);
+await wait(1000);
+await page.waitForFunction('!!document.querySelector(".desk__variant")', { timeout: 20000 }).catch(() => {});
 const haveDesk = await page.evaluate('!!document.querySelector(".desk__variant")');
-if (!haveDesk) {
-  console.log(
-    '\nSKIPPED §12 (board ↔ ledger): no desk for a browser that keeps no venue (D4).\n' +
-      '  Needs a host fixture — see the note above. Not a pass, and not a failure of the app.'
-  );
-} else {
+check('the desk offers its two layouts', haveDesk);
+if (haveDesk) {
 await page.evaluate(() => {
   window.__deskMark = performance.now();
   window.__deskNavs = performance.getEntriesByType('navigation').length;
@@ -509,5 +600,5 @@ await page.touchscreen.touchEnd();
 console.log(errors.length ? `\nconsole/page errors:\n${errors.join('\n')}` : '\nno console errors');
 if (errors.length) failures += errors.length;
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
-await browser.close();
+await closeBrowsers();
 process.exit(failures ? 1 : 0);

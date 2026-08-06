@@ -15,7 +15,18 @@
 // Needs the API on localhost:5200 and the app on the given origin.
 //
 //   node tools/host-session-test.mjs "http://localhost:5341/?q=low&world=off"
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?q=low&world=off';
@@ -34,11 +45,7 @@ const check = (label, ok, detail = '') => {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}${detail ? ` — ${detail}` : ''}`);
 };
 
-const browser = await puppeteer.launch({
-  headless: true,
-  pipe: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 try {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
@@ -208,6 +215,6 @@ try {
   if (problems.length) for (const p of [...new Set(problems)]) console.log(`  ${p}`);
   else console.log('zero console errors');
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }
 process.exit(failures ? 1 : 0);

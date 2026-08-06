@@ -1,22 +1,56 @@
 #!/usr/bin/env node
-// THE WHOLE STORY — one request, end to end, in one session.
-//
-// The wave-2 workstreams each prove their own surface; this one proves they
-// are the same conversation. A guest writes a request to a church that has had
-// none yet, sends it, and the world flies it to the door and lights the
-// lantern. The host finds that request waiting, asks a question; the guest
-// answers it from their inbox; the host counter-offers another day; the guest
-// accepts. The booking materializes, the church settles to steady window
-// light, and the room's week ribbon carries the day the church actually agreed
-// to. Then the demo is reset and the village forgets all of it.
-//
-// Everything is driven with real pointer, keyboard and form input. The store is
-// only ever read (and reset) — never used to make the story happen.
+// THE VILLAGE ANSWERS WHAT STEEPLE SAID.
 //
 //   node tools/wave2-test.mjs [baseUrl] [--shots <prefix>]
-//     baseUrl  default http://localhost:5315
+//     baseUrl  default http://localhost:5315   (world ON — the village is the subject)
 //
-import puppeteer from 'puppeteer';
+// Re-baselined 2026-08-06 for v2_migration Phase 3.6 item 2. This suite used to
+// tell the whole wave-2 story out of the demo store — send as a seeded persona,
+// find the request on a desk that opened for anybody, ask, counter-offer,
+// accept, reset. Every part of that except one now belongs to
+// `correspondence-test.mjs`, where it is real wire traffic between two people,
+// and none of it was true any more: since D4 a desk exists only for the venues
+// `GET /manage/venues` names, and `store.js` is a mirror of steeple's answers
+// rather than a status machine of its own.
+//
+// The one part that is nobody else's is why this suite is kept: **the village
+// is the only surface that animates a change rather than drawing a state.**
+// correspondence-test runs `world=off` and world-test never writes anything, so
+// nothing else in the harness can say that a request really posted a letter, or
+// that a booking steeple made really put a ribbon on the room. That coupling —
+// `flows/world/index.js` listening on `store:change` — is what is checked here,
+// and it is driven the only way it can be: a real person, real mouse and
+// keyboard, a real room, and steeple's own answer.
+//
+// The room is a **seeded** one on purpose. The dev geocoder puts every address a
+// host types on the village centre and the village builds its churches from the
+// bundled scenery, so a venue minted by a harness has no building to light —
+// only the five the village stages do. Seed slugs match the bundled ids 1:1.
+//
+// Needs: the API (STEEPLE_API, default http://localhost:5200/api/v1) with
+// Auth:DevLoginEnabled and payments.enabled, and this app on the given origin
+// with its proxy pointed at that same API. No psql: nothing here is minted or
+// moderated, and nothing in the shared database is changed but one new
+// application under this run's own account.
+//
+// Known: the seeded venues are **instant** (the product default), so the letter
+// flies and the booking lands in one answer. `mirrorApplication` reports that
+// single event as `filed`, and the world posts the letter — a door sealing is a
+// second event that only a manual venue can produce, and no seeded venue is one.
+// That beat lives in correspondence-test, off-world, where a manual venue exists.
+
+import { apiIsUp, call, closeBrowsers, launch, mintGuest, signInPage, stamp } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const base = process.argv[2]?.startsWith('http') ? process.argv[2] : 'http://localhost:5315';
 const shotPrefix = process.argv.includes('--shots')
@@ -24,7 +58,7 @@ const shotPrefix = process.argv.includes('--shots')
   : null;
 
 const STYLES = ['diorama', 'atlas'];
-const VENUE = 'merrifield-fellowship'; // nothing seeded here: a clean sheet
+const VENUE = 'merrifield-fellowship'; // one of the five the village builds
 const ROOM = 'main-hall';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -37,15 +71,34 @@ function check(label, ok, detail = '') {
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}${detail ? ` — ${detail}` : ''}`);
 }
 
+if (!(await apiIsUp())) {
+  console.log('\nThe steeple API is not answering — this suite needs it: the letter is a real one.');
+  process.exit(2);
+}
+
+// The room has to be one steeple really publishes, or the composer has no open
+// hours to paint and the whole story is scenery.
+const listing = await call('GET', `/listings/by-slug/${VENUE}/${ROOM}`);
+check(`fixture: ${VENUE}/${ROOM} is published and readable`, listing.status === 200, `status ${listing.status}`);
+if (listing.status !== 200) {
+  console.log('\nThe seeded catalog is not there — reseed before running this.');
+  process.exit(2);
+}
+
 for (const style of STYLES) {
-  console.log(`\n──── the whole story · ${style} · ${base} ────`);
+  console.log(`\n──── the village answers · ${style} · ${base} ────`);
+
+  // A person with a card already on file. The 402 gate is real and is
+  // correspondence-test's subject; here it would only be a detour between the
+  // send and the village's answer to it.
+  const guest = await mintGuest({
+    email: `village-${style}-${stamp}@example.org`,
+    name: 'Maria Alvarez',
+  });
 
   // A browser per style: software GL is slow enough that two villages in one
   // process starve each other's render loop.
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
 
@@ -55,10 +108,12 @@ for (const style of STYLES) {
     if (m.type() !== 'error') return;
     const text = m.text();
     if (text.includes('GL Driver Message') || text.includes('GPU stall')) return;
+    // The shared dev database holds room photographs at absolute URLs on ports
+    // nobody is listening on any more; tiles come from the open internet.
+    if (/Failed to load resource|net::ERR_/.test(text)) return;
     problems.push(`[console.error] ${text}`);
   });
 
-  const url = `${base}/?style=${style}&q=low`;
   const state = (key) => page.evaluate(`__steeple.state.${key}`);
   const store = (expression) => page.evaluate(`__steeple.store.${expression}`);
   const world = (expression) => page.evaluate(`__steeple.world.correspondence.debug.${expression}`);
@@ -112,7 +167,7 @@ for (const style of STYLES) {
    * the same way. Poll the world's own value until it says what we are waiting
    * for, or until it has plainly had long enough.
    */
-  async function eventually(expression, settled, timeout = 12000) {
+  async function eventually(expression, settled, timeout = 20000) {
     const deadline = Date.now() + timeout;
     let value = await world(expression);
     while (!settled(value) && Date.now() < deadline) {
@@ -122,41 +177,38 @@ for (const style of STYLES) {
     return value;
   }
 
-  /** The centre of one week-card square. */
-  async function cell(day, slot) {
-    const handle = await page.$(`.week__cell[data-day="${day}"][data-slot="${slot}"]`);
-    const box = handle && (await handle.boundingBox());
-    return box && { x: box.x + box.width / 2, y: box.y + box.height / 2 };
-  }
-
-  /** A weekday whose 10 am square is genuinely free this week, `except` aside. */
-  const freeWeekday = (except = -1) =>
-    page.evaluate((skip) => {
-      for (const day of [2, 3, 4, 5, 6, 1, 0]) {
-        if (day === skip) continue;
-        const node = document.querySelector(`.week__cell[data-day="${day}"][data-slot="4"]`);
-        if (node && node.getAttribute('aria-disabled') !== 'true') return day;
-      }
-      return null;
-    }, except);
-
-  await ready(`${url}#/browse`);
-  await store('resetDemo()');
-  await wait(600);
-
-  // ── 1. the request, written and sent ───────────────────────────────────────
-  console.log('\n1. a request written to a church with none waiting');
-  await ready(`${url}#/room/${VENUE}/${ROOM}`);
+  // ── 1. the church before anything is asked of it ─────────────────────────
+  console.log('\n1. a church with nothing waiting on it');
+  await ready(`${base}/?style=${style}&q=low#/room/${VENUE}/${ROOM}`);
+  await signInPage(page, guest.email, guest.name);
+  await wait(1200);
+  await ready(`${base}/?style=${style}&q=low#/room/${VENUE}/${ROOM}`);
   const quietBefore = await world(`lantern('${VENUE}')`);
   check(
-    'the church is quiet before any request',
-    quietBefore && quietBefore.waiting < 0.05,
+    'the village has a lantern for this church at all',
+    quietBefore !== null,
     JSON.stringify(quietBefore)
   );
+  check(
+    'and it is quiet before this person asks anything of it',
+    quietBefore && quietBefore.waiting < 0.05 && quietBefore.settled < 0.05,
+    JSON.stringify(quietBefore)
+  );
+  const ribbonBefore = await world(`ribbonMask('${VENUE}','${ROOM}')`);
+  check('the room carries no week ribbon yet', ribbonBefore === 0, `mask ${ribbonBefore}`);
 
-  await clickText('.sheet--room .pill--primary', /Request this space/, 'the room CTA');
+  // ── 2. a request, written and sent with real input ───────────────────────
+  console.log('\n2. a request, written by hand and sent for real');
+  await clickText('.sheet--room .pill--primary', /(Request this space|Book this space|Book )/, 'the room CTA');
   check('the CTA opens the composer', (await state('view')) === 'apply', await state('view'));
-  check('the heading names the room', (await text('.letter__title')) === 'Main Hall');
+  check('the heading names the room', (await text('.letter__title')) === 'Main Hall', await text('.letter__title'));
+
+  // The composer reads the room off the wire; the week card only draws once it
+  // has, so this is a wait on state and never on the clock.
+  await page
+    .waitForFunction('document.querySelectorAll(".week__cell").length > 0', { timeout: 40000 })
+    .catch(() => {});
+  check('the week card drew from the room’s real open hours', (await page.$$('.week__cell')).length > 0);
 
   await page.click('#letter-intent');
   await page.keyboard.type(
@@ -166,178 +218,101 @@ for (const style of STYLES) {
   await page.click('#letter-size');
   await page.keyboard.type('24');
 
-  const day = await freeWeekday();
-  check('the week card offers a free morning', day !== null, `weekday ${day}`);
-  const from = await cell(day, 4);
-  const to = await cell(day, 7);
-  await page.mouse.move(from.x, from.y);
-  await page.mouse.down();
-  await page.mouse.move(to.x, to.y, { steps: 8 });
-  await page.mouse.up();
-  await wait(500);
-  check('the drag paints one band', (await page.$$('.mark--band')).length === 1);
-  await clickText('.choice--segment', /Every week/, 'every week');
-  const until = await page.evaluate(() => document.querySelector('#letter-until')?.value ?? '');
-  check('a weekly request is given an end date', /^\d{4}-\d{2}-\d{2}$/.test(until), until);
+  const painted = await page.evaluate(() => {
+    const cell = [...document.querySelectorAll('.week__cell:not(.is-inert)')][6];
+    if (!cell) return null;
+    const box = cell.getBoundingClientRect();
+    return { day: Number(cell.dataset.day), x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  check('there is a free hour on the card to paint', painted !== null, JSON.stringify(painted));
+  await page.mouse.click(painted.x, painted.y);
+  await wait(700);
   await shot('composer');
 
-  await clickText('.letter__foot .pill--primary', /Send request/, 'send request');
-  check('the identity beat stands at the commitment point', await page.evaluate(
-    () => document.querySelector('.identity')?.hidden === false
-  ));
-  // Wave 6: the step signs in for real against steeple's /auth/sessions, and
-  // "Continue as …" is the send itself.
-  await clickText('.identity__person', /Maria Alvarez/, 'sign in as Maria');
-  await page.waitForFunction('!!document.querySelector(".identity .verified")', { timeout: 15000 }).catch(() => {});
-  await wait(500);
-  check('the trust wording is exact', (await text('.identity .verified')) === 'Identity verified (SSO)');
-  await clickText('.identity__actions .pill--primary', /Continue as Maria Alvarez/, 'continue as Maria');
-  await page.waitForFunction("__steeple.state.view === 'room'", { timeout: 25000 }).catch(() => {});
-  await wait(1200);
+  await clickText('.letter__foot .pill--primary', /Send|Book/, 'send the request');
+  await page
+    .waitForFunction('__steeple.store.guestApplications().length > 0', { timeout: 40000 })
+    .catch(() => {});
 
-  const application = await store('guestApplications()[0]');
-  const id = application?.id;
-  check('a request was filed', Boolean(id), id);
-  check('it went to this room', application?.venueId === VENUE && application?.roomId === ROOM);
-  check('it is pending', application?.status === 'pending', application?.status);
-  check('it carries what was typed', /Little Sparrows/.test(application?.intentText ?? ''));
-  check('and the whole recurrence', application?.frequency === 'weekly' && Boolean(application?.endDate),
-    `${application?.frequency} until ${application?.endDate}`);
-  check('the guest is put back at the room', (await state('view')) === 'room', await state('view'));
+  // The proof that it was a letter and not a rehearsal: steeple's own record.
+  const filed = await call('GET', '/me/applications', { token: guest.token });
+  const application = filed.body?.items?.[0] ?? null;
+  check('steeple holds the request', filed.body?.totalCount === 1, `${filed.body?.totalCount} on file`);
+  check('it went to this room', application?.roomSlug === ROOM && application?.venueSlug === VENUE,
+    `${application?.venueSlug}/${application?.roomSlug}`);
+  check('it carries what was typed', /Little Sparrows/.test(application?.intentText ?? ''), application?.intentText?.slice(0, 40));
+  check('and an instant venue answered it with a booking', application?.status === 'approved' && Boolean(application?.bookingId),
+    `${application?.status} ${application?.bookingId ?? ''}`);
+  check('and the guest’s own page says booked, not sent', (await store('guestApplications()[0].status')) === 'approved', await store('guestApplications()[0].status'));
 
-  // ── 2. the world carries it ────────────────────────────────────────────────
-  console.log('\n2. the world flies it to the door');
+  // ── 3. the village carries it, when the visitor goes back to look ────────
+  //
+  // The engine is fully asleep past the roll — Three.js does no work in-product,
+  // which is the whole point of the roll — so the letter is in the air but
+  // nothing moves it while the reader is standing on the paper. The village's
+  // answer is something you go back up to see, and that is how it is checked:
+  // the wordmark, clicked like a human, wakes the world where it left off.
+  console.log('\n3. the world flies it to the door, once there is a world running');
   await shot('inflight');
-  const flying = await world('envelopeFlying');
-  check('the request is in the air', flying === true, String(flying));
-  const landed = await eventually('envelopeFlying', (v) => v === false, 20000);
-  check('and it lands', landed === false, String(landed));
-  const litAfter = await eventually(`lantern('${VENUE}')`, (v) => v && v.waiting > 0.5);
+  check('the letter is in the air', (await world('envelopeFlying')) === true, String(await world('envelopeFlying')));
+  const wordmark = await page.$('.wordmark');
+  const markBox = wordmark && (await wordmark.boundingBox());
+  check('the wordmark is there to go back up by', Boolean(markBox));
+  if (markBox) await page.mouse.click(markBox.x + markBox.width / 2, markBox.y + markBox.height / 2);
+  await page.waitForFunction('__steeple.state.roll < 0.05', { timeout: 40000 }).catch(() => {});
+  check('the visitor is back at the village', (await state('roll')) < 0.05, String(await state('roll')));
+
+  const landed = await eventually('envelopeFlying', (v) => v === false, 30000);
+  check('and the letter lands', landed === false, String(landed));
+  const litAfter = await eventually(
+    `lantern('${VENUE}')`,
+    (v) => v && (v.waiting > 0.05 || v.settled > 0.05),
+    30000
+  );
   check(
-    'the lantern lights where it landed',
-    litAfter && litAfter.waiting > 0.5,
-    `waiting ${quietBefore?.waiting?.toFixed?.(2)} → ${litAfter?.waiting?.toFixed?.(2)}`
+    'the church is no longer dark',
+    litAfter && (litAfter.waiting > 0.05 || litAfter.settled > 0.05),
+    `${JSON.stringify(quietBefore)} → ${JSON.stringify(litAfter)}`
   );
   await shot('landed');
 
-  // ── 3. the same request, on the church's side ──────────────────────────────
-  console.log('\n3. the church finds it');
-  await click('.porchswitch', 'the mode switch');
-  check('the lens turns to the host', (await state('mode')) === 'host', await state('mode'));
-  check('and lands on the requests', (await state('view')) === 'desk', await state('view'));
-  await page.select('#desk-venue', VENUE);
-  await wait(1000);
-  check('it is the church the request went to', (await store('hostVenueId()')) === VENUE);
-  const card = await text(`[data-application="${id}"]`);
-  check('the new request is on the board', Boolean(card), (card ?? '').slice(0, 48).replace(/\s+/g, ' '));
-  check('it is the guest who wrote it', /Little Sparrows/.test(card ?? ''));
-  await shot('desk');
-  await click(`[data-application="${id}"]`, 'the new request');
-  check('the request opens in the host lens', (await state('view')) === 'letter' && (await state('mode')) === 'host');
-  check('the schedule ribbon is drawn', (await page.$$('.letterpage .lane')).length > 0);
-  await shot('request-host');
-
-  // ── 4. a question, and an answer from the inbox ────────────────────────────
-  console.log('\n4. a question, answered');
-  await click('[data-action="ask"]', 'Ask a question');
-  await page.click('#ask-body');
-  await page.keyboard.type('How many adults will be with the children, and would you like the small tables out?');
-  await click('[data-action="send-question"]', 'Send the question');
-  check('the request now needs information', (await store(`getApplication('${id}').status`)) === 'needsInfo',
-    await store(`getApplication('${id}').status`));
-  check('the question is in the thread', (await store(`threadFor('${id}').length`)) === 1);
-
-  await click('.porchswitch', 'back to browsing');
-  check('the lens turns back to the guest', (await state('mode')) === 'guest', await state('mode'));
-  await clickText('.letters', /Inbox/, 'the porch tab');
-  check('the inbox opens', (await state('view')) === 'journal', await state('view'));
-  const row = await text(`.jrow[data-id="${id}"]`);
-  check('the request is waiting on the guest', /question/i.test(row ?? ''), (row ?? '').slice(0, 60).replace(/\s+/g, ' '));
-  await shot('inbox');
-  await click(`.jrow[data-id="${id}"]`, 'the request in the inbox');
-  await page.click('#letter-reply');
-  await page.keyboard.type('Six adults will be with us, and the small tables would be very welcome. Thank you for asking.');
-  await clickText('.reply .pill', /Send your answer/, 'send the answer');
-  await wait(600);
-  check('answering returns it to the church', (await store(`getApplication('${id}').status`)) === 'pending',
-    await store(`getApplication('${id}').status`));
-  check('both sides of the exchange are kept', (await store(`threadFor('${id}').length`)) === 2);
-
-  // ── 5. the church suggests another day ─────────────────────────────────────
-  console.log('\n5. a counter-offer');
-  await click('.porchswitch', 'back to hosting');
-  await click(`[data-application="${id}"]`, 'the request again');
-  await click('[data-action="counter"]', 'Counter-offer');
-  const other = await freeWeekday(day);
-  await click(`.day[data-day="${day}"]`, 'take the asked-for day off');
-  await click(`.day[data-day="${other}"]`, 'offer another day');
-  await page.click('#counter-message');
-  await page.keyboard.type('That morning is held by our toddler group until the winter. The hall is free and yours on the day below.');
-  await wait(400);
-  check(
-    'their own request is ghosted behind the offer',
-    (await page.$$('.letterpage .lane__ghost')).length >= 1
-  );
-  await shot('counter');
-  await click('[data-action="send-counter"]', 'Send the counter-offer');
-  check('the request is counter-offered', (await store(`getApplication('${id}').status`)) === 'counterOffered',
-    await store(`getApplication('${id}').status`));
-  const counter = await store(`countersFor('${id}').at(-1)`);
-  check('the offer carries the day the church can do', counter?.daysOfWeekMask === 1 << other,
-    `mask ${counter?.daysOfWeekMask} for weekday ${other}`);
-
-  // ── 6. the guest accepts, and the village says so ──────────────────────────
-  console.log('\n6. accepted — and the world keeps the record');
-  await click('.porchswitch', 'back to browsing');
-  await clickText('.letters', /Inbox/, 'the porch tab');
-  await click(`.jrow[data-id="${id}"]`, 'the counter-offered request');
-  check('the counter stands beside the guest’s own time', (await page.$$('.counter__side')).length === 2);
-  await clickText('.counter .pill--primary', /Accept this time/, 'accept this time');
-  await wait(1200);
-  check('the request is approved', (await store(`getApplication('${id}').status`)) === 'approved',
-    await store(`getApplication('${id}').status`));
-  const booking = await store(`bookingFor('${id}')`);
-  check('a booking exists', Boolean(booking), booking?.id);
-  const occurrences = await page.evaluate(
-    `__steeple.store.occurrencesFor(__steeple.store.bookingFor('${id}').id)`
-  );
-  check('its dates were materialized', occurrences.length > 0, `${occurrences.length} dates`);
-  check(
-    'and they fall on the day the church offered',
-    occurrences.every((o) => new Date(`${o.date}T00:00:00`).getDay() === other),
-    occurrences.slice(0, 3).map((o) => o.date).join(', ')
-  );
-  check('the dates are held on the page', (await page.$$('.held__item')).length > 0);
-  await shot('accepted');
-
-  const settled = await eventually(`lantern('${VENUE}')`, (v) => v && v.settled > 0.5);
-  check('the church window burns steady', settled && settled.settled > 0.5, JSON.stringify(settled));
-  const mask = await world(`ribbonMask('${VENUE}','${ROOM}')`);
-  check('the room’s week ribbon carries that weekday', (mask & (1 << other)) !== 0, `mask ${mask}`);
-
-  // ── 7. reset puts the village back ─────────────────────────────────────────
-  console.log('\n7. reset');
-  await ready(`${url}#/browse`);
-  const seeded = await store('resetDemo()');
-  void seeded;
-  await wait(1600);
-  check('the request is gone', (await store(`getApplication('${id}')`)) === null,
-    JSON.stringify(await store(`getApplication('${id}')`)));
-  const afterReset = await eventually(
-    `lantern('${VENUE}')`,
-    (v) => v && v.waiting < 0.05 && v.settled < 0.05
-  );
-  check('and the church is quiet again', afterReset && afterReset.waiting < 0.05 && afterReset.settled < 0.05,
-    JSON.stringify(afterReset));
-  check('and the room keeps no ribbon', (await world(`ribbonMask('${VENUE}','${ROOM}')`)) === 0);
-  await shot('village-after');
-
+  // The world is awake here, so the budget means something. Past the roll it is
+  // one draw call, which proves only that the engine really did stop.
   const calls = await page.evaluate('__steeple.engine.renderer.info.render.calls');
-  check('draw calls at village stay under budget', calls < 300, `${calls} < 300`);
+  check('draw calls with the village awake stay under budget', calls < 300, `${calls} < 300`);
+
+  // ── 4. and the room's week carries the booking steeple made ──────────────
+  console.log('\n4. the room’s week ribbon carries steeple’s own answer');
+  const booked = await call('GET', `/bookings/${application?.bookingId}`, { token: guest.token });
+  const firstDate = booked.body?.occurrences?.[0]?.localDate ?? null;
+  check('steeple materialized the dates', Boolean(firstDate), JSON.stringify(booked.body?.occurrences?.slice(0, 2)));
+  const weekday = firstDate ? new Date(`${firstDate}T00:00:00`).getDay() : null;
+  const mask = await world(`ribbonMask('${VENUE}','${ROOM}')`);
+  check(
+    'the ribbon carries the weekday steeple booked',
+    weekday !== null && (mask & (1 << weekday)) !== 0,
+    `mask ${mask} for weekday ${weekday} (${firstDate})`
+  );
+  check(
+    'and the local mirror agrees with steeple about it',
+    (await store(`guestApplications()[0].status`)) === 'approved',
+    await store('guestApplications()[0].status')
+  );
+
+  // ── 5. and no desk is conjured for somebody who keeps nothing (D4) ───────
+  console.log('\n5. a guest is not a host');
+  await ready(`${base}/?style=${style}&q=low#/browse`);
+  await click('.porchswitch', 'the porch switch');
+  await wait(1600);
+  check('no desk opens for a person who manages no venue',
+    await page.evaluate('!document.querySelector(".desk.is-open")'));
+  check('and no seeded venue chooser is offered', await page.evaluate('!document.querySelector("#desk-venue")'));
+  await shot('no-desk');
+
   check('zero console errors', problems.length === 0, [...new Set(problems)].slice(0, 3).join(' | '));
 
   await page.close();
-  await browser.close();
+  await closeBrowsers();
 }
 
 console.log(`\n${failures ? `${failures} FAILURE(S)` : 'all clear'}: ${checks - failures}/${checks} checks passed\n`);

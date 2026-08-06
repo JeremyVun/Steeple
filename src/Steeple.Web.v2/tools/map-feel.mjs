@@ -10,14 +10,22 @@
 //   zoom   — zoom levels moved per 60px notch of the wheel (pins measured apart)
 //   pan    — map pixels moved per pixel of pointer travel (a pin followed)
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5321/?q=low';
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -100,4 +108,4 @@ console.log('');
 console.log(`zoom  ${mean(zoomRuns).toFixed(3)} levels per ${NOTCH}px notch`);
 console.log(`pan   ${mean(panRuns).toFixed(3)} map px per pointer px (over ${TRAVEL}px)`);
 
-await browser.close();
+await closeBrowsers();

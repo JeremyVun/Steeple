@@ -2,13 +2,21 @@
 // panel, the room rows on the venue sheet, the request CTA (→ apply view) and
 // the scenery switcher, driven with actual mouse and keyboard events.
 //   node tools/ui-test.mjs "http://localhost:5395/?q=low"
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5395/?q=low';
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -105,5 +113,5 @@ const topmost = await page.evaluate(() =>
 check('the live map is the topmost thing in the middle of the page', /leaflet-container/.test(topmost[0]), topmost.join(' | '));
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
-await browser.close();
+await closeBrowsers();
 process.exit(failures ? 1 : 0);

@@ -43,19 +43,22 @@
 // The five-a-minute `apply` rate limit is shared by setup, mock-confirm, submit
 // and messages, so each scenario mints its own account.
 
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import puppeteer from 'puppeteer';
-import { writeRoomPhoto } from './host-photo.mjs';
+import {
+  API,
+  MAILBOX,
+  apiIsUp,
+  call,
+  closeBrowsers,
+  launch,
+  mintVenue,
+  nextWeekday,
+  signIn,
+  signInPage as signInAs,
+  sql,
+  stamp,
+} from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5273/?q=low&world=off';
-const API = process.env.STEEPLE_API ?? 'http://localhost:5200/api/v1';
-const MAILBOX = `${API.replace(/\/api\/v1$/, '')}/dev/mailbox.json`;
-const PSQL = process.env.STEEPLE_PSQL ?? 'psql';
-const DB = process.env.STEEPLE_DB ?? 'postgresql://steeple:steeple_dev_pw@localhost:5433/steeple';
-
-const stamp = Date.now().toString(36);
-const PHOTO = readFileSync(writeRoomPhoto(`/tmp/steeple-webp2-room-${stamp}.png`));
 
 let checks = 0;
 let failures = 0;
@@ -67,7 +70,7 @@ const wireLog = [];
 async function lastWords(error) {
   // Shut the browsers first: whatever else is true, this run is over, and a
   // half-dead suite must not leave a headless Chrome behind for each person.
-  for (const browser of browsers) await browser.close().catch(() => {});
+  await closeBrowsers();
   console.log(`\nthe run stopped: ${error?.message ?? error}`);
   if (wireLog.length) {
     console.log('\nthe last things steeple was asked, in order:');
@@ -92,170 +95,6 @@ function check(label, ok, detail = '') {
 const eq = (label, actual, wanted) =>
   check(label, actual === wanted, actual === wanted ? '' : `got ${JSON.stringify(actual)}, wanted ${JSON.stringify(wanted)}`);
 
-const sql = (statement) =>
-  execFileSync(PSQL, [DB, '-tAc', statement], { encoding: 'utf8' }).trim();
-
-// ── the wire, from node ──────────────────────────────────────────────────────
-
-async function call(method, path, { token = null, body = undefined, key = null } = {}) {
-  const response = await fetch(`${API}${path}`, {
-    method,
-    headers: {
-      accept: 'application/json',
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(key ? { 'Idempotency-Key': key } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
-  const text = await response.text();
-  let document = null;
-  try {
-    document = text ? JSON.parse(text) : null;
-  } catch {
-    document = null;
-  }
-  return { status: response.status, body: document };
-}
-
-// Signing in is per-IP limited (10/min) and deliberately so — it is the one
-// endpoint a stranger can hammer. A suite that mints a fresh person for every
-// scenario will exhaust that honestly, so it waits its turn rather than asking
-// the API to be more permissive than it should be in production. This is the
-// one wall-clock wait in the file: it is the server's clock, not the app's.
-const authAt = [];
-const AUTH_PER_MINUTE = 10;
-
-async function paceAuth() {
-  for (;;) {
-    const now = Date.now();
-    while (authAt.length && now - authAt[0] > 60_000) authAt.shift();
-    if (authAt.length < AUTH_PER_MINUTE) break;
-    const waitMs = 60_000 - (now - authAt[0]) + 250;
-    console.log(`  ·     waiting ${Math.ceil(waitMs / 1000)}s for the sign-in window to roll`);
-    await new Promise((r) => setTimeout(r, waitMs));
-  }
-  authAt.push(Date.now());
-}
-
-async function signIn(email, name) {
-  await paceAuth();
-  const answer = await call('POST', '/auth/sessions', {
-    body: { provider: 'dev', idToken: `${email}|${name}`, device: { platform: 'web' } },
-  });
-  if (answer.status !== 200 && answer.status !== 201) {
-    throw new Error(`sign-in for ${email} answered ${answer.status}`);
-  }
-  return answer.body;
-}
-
-const iso = (d) => d.toISOString().slice(0, 10);
-// Calendar arithmetic, not 86_400_000ms: on the day a zone falls back, a fixed-ms
-// step lands on the same local date twice and a "walk to the next weekday" loop
-// can spin forever.
-const addDays = (date, n) =>
-  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + n));
-/** The next date on weekday `dow` at least `least` days out. */
-function nextWeekday(dow, least = 7) {
-  let d = addDays(new Date(), least);
-  while (d.getUTCDay() !== dow) d = addDays(d, 1);
-  return iso(d);
-}
-
-const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-// ── the fixture: one host, one venue, one published room ─────────────────────
-
-async function mintVenue({ email, name, venueName, roomName, bookingMode }) {
-  const host = await signIn(email, name);
-  const token = host.accessToken;
-
-  const venue = await call('POST', '/manage/venues', {
-    token,
-    body: {
-      name: venueName,
-      description: 'A hall kept for the neighbourhood, with tall windows and a good floor.',
-      addressLine: '10 Maple Avenue East',
-      suburb: 'Vienna',
-      postcode: '22180',
-    },
-    key: `venue-${stamp}-${venueName}`,
-  });
-  if (venue.status !== 201 && venue.status !== 200) {
-    throw new Error(`venue create answered ${venue.status} ${JSON.stringify(venue.body)}`);
-  }
-
-  const room = await call('POST', `/manage/venues/${venue.body.id}/rooms`, {
-    token,
-    body: {
-      name: roomName,
-      description: 'A bright room with chairs, tables and a kettle.',
-      capacity: 40,
-      pricePerHour: 20,
-      houseRules: 'Leave it as you found it.',
-      activities: ['community'],
-      amenities: ['chairs', 'tables'],
-      accessibility: ['stepFreeAccess'],
-    },
-    key: `room-${stamp}-${roomName}`,
-  });
-  if (room.status !== 201 && room.status !== 200) {
-    throw new Error(`room create answered ${room.status} ${JSON.stringify(room.body)}`);
-  }
-
-  // The photograph publishing cannot happen without.
-  const form = new FormData();
-  form.append('file', new Blob([PHOTO], { type: 'image/png' }), 'room.png');
-  const photo = await fetch(`${API}/manage/rooms/${room.body.id}/photos`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}` },
-    body: form,
-  });
-  if (!photo.ok) throw new Error(`photo upload answered ${photo.status}`);
-
-  // Open every day, so the week card always has somewhere to paint.
-  await call('PUT', `/manage/rooms/${room.body.id}/availability`, {
-    token,
-    body: {
-      days: DAY_TOKENS.map((dayOfWeek) => ({
-        dayOfWeek,
-        windows: [{ startTime: '08:00', endTime: '21:00' }],
-      })),
-      blackouts: [],
-    },
-  });
-
-  await call('PATCH', `/manage/rooms/${room.body.id}`, { token, body: { status: 'published' } });
-
-  // The operator's one decision on a newly claimed venue's first listing. There is no API
-  // for it by design (Admin owns it), so the harness does what Admin would.
-  sql(
-    `update rooms set "Status" = 1, "FirstPublishedAtUtc" = now(), "PublishRequestedAtUtc" = null where "Id" = '${room.body.id}';`
-  );
-  sql(`update venues set "IsIdentityVerified" = true where "Id" = '${venue.body.id}';`);
-
-  if (bookingMode) {
-    const patched = await call('PATCH', `/manage/venues/${venue.body.id}`, {
-      token,
-      body: { bookingMode },
-    });
-    eq(`fixture: ${venueName} is in ${bookingMode} mode`, patched.body?.bookingMode, bookingMode);
-  }
-
-  const listing = await call('GET', `/listings/by-slug/${venue.body.slug}/${room.body.slug}`);
-  check(`fixture: ${roomName} is published and readable`, listing.status === 200, `status ${listing.status}`);
-
-  return {
-    token,
-    user: host.user,
-    venueId: venue.body.id,
-    venueSlug: venue.body.slug,
-    roomId: room.body.id,
-    roomSlug: room.body.slug,
-    roomName,
-    venueName,
-  };
-}
 
 // ── the browser ──────────────────────────────────────────────────────────────
 
@@ -264,19 +103,8 @@ async function mintVenue({ email, name, venueName, roomName, bookingMode }) {
 // hard — stalls the other, and a suite that cannot tell those apart is a suite
 // that reports the wrong thing. Separate browsers is also what "two browsers"
 // means in the acceptance script.
-const browsers = [];
-
 async function openPage(label) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    // Pipe transport, not a websocket: the browser is a child on a pipe, so it dies
-    // when this process dies — including SIGKILL and an abort mid-suite. Over the
-    // default transport a headless Chrome outlives its dead node parent and is
-    // reparented to init, and a few aborted runs leave a machine full of them.
-    pipe: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
-  browsers.push(browser);
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
   page.on('pageerror', (e) => problems.push(`[${label}] ${e.message}`));
@@ -310,7 +138,11 @@ const settle = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 20
  * the sliding box has already left behind. This waits on the computed opacity
  * and on the box being in the same place two frames running.
  */
-async function steady(page, selector, timeout = 15000) {
+// 30s, not 15: headless GL runs app-time about six times slow already, and a
+// machine running two suites at once slows it again. Waiting is on the state —
+// the number is only how long the suite is willing to believe the surface is
+// still on its way.
+async function steady(page, selector, timeout = 30000) {
   await page.waitForSelector(selector, { timeout });
   try {
     await page.waitForFunction(
@@ -395,13 +227,7 @@ async function boot(page, at = url) {
 }
 
 async function signInPage(page, email, name) {
-  // A browser's sign-in spends the same per-IP budget as a node one.
-  await paceAuth();
-  await page.evaluate(
-    (e, n) => window.__steeple.session.signIn({ email: e, displayName: n }),
-    email,
-    name
-  );
+  await signInAs(page, email, name);
   await settle(page);
 }
 
@@ -436,27 +262,42 @@ async function until(page, fn, arg = null, timeout = 30000, what = 'the conditio
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
-const up = await fetch(`${API}/geofence`).then((r) => r.ok).catch(() => false);
+const up = await apiIsUp();
 if (!up) {
   console.log(`\nThe steeple API is not answering at ${API} — this suite needs it.`);
   process.exit(2);
 }
 
+// `mintVenue` throws when steeple refuses; the two things worth naming as checks
+// are what it hands back — the mode the venue is really in, and that the public
+// can read the room. A fixture nobody can see is not a fixture.
+function kept(fixture) {
+  if (fixture.bookingModeAsked) {
+    eq(`fixture: ${fixture.venueName} is in ${fixture.bookingModeAsked} mode`, fixture.bookingMode, fixture.bookingModeAsked);
+  }
+  check(`fixture: ${fixture.roomName} is published and readable`, fixture.listingStatus === 200, `status ${fixture.listingStatus}`);
+  return fixture;
+}
+
 console.log('\nfixtures');
-const manual = await mintVenue({
-  email: `host-manual-${stamp}@example.org`,
-  name: 'Ruth Callaghan',
-  venueName: `Saint Bride Hall ${stamp}`,
-  roomName: 'Long Room',
-  bookingMode: 'manual',
-});
-const instant = await mintVenue({
-  email: `host-instant-${stamp}@example.org`,
-  name: 'Owen Marsh',
-  venueName: `Cedar Rooms ${stamp}`,
-  roomName: 'Garden Room',
-  bookingMode: null,
-});
+const manual = kept(
+  await mintVenue({
+    email: `host-manual-${stamp}@example.org`,
+    name: 'Ruth Callaghan',
+    venueName: `Saint Bride Hall ${stamp}`,
+    roomName: 'Long Room',
+    bookingMode: 'manual',
+  })
+);
+const instant = kept(
+  await mintVenue({
+    email: `host-instant-${stamp}@example.org`,
+    name: 'Owen Marsh',
+    venueName: `Cedar Rooms ${stamp}`,
+    roomName: 'Garden Room',
+    bookingMode: null,
+  })
+);
 
 const guest = { email: `guest-${stamp}@example.org`, name: 'Nadia Prosser' };
 const instantGuest = { email: `guest-i-${stamp}@example.org`, name: 'Tom Reddick' };
@@ -1087,7 +928,7 @@ check('a list that really ended still clears what steeple no longer holds', true
 
 // ── done ─────────────────────────────────────────────────────────────────────
 
-for (const browser of browsers) await browser.close();
+await closeBrowsers();
 
 if (problems.length) {
   console.log('\npage problems:');
