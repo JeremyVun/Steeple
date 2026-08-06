@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+using System.Xml.Linq;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Primitives;
@@ -124,6 +127,57 @@ public sealed class ListingsApiController : ControllerBase
     [HttpGet("sitemap")]
     public async Task<ActionResult<IReadOnlyList<SitemapEntry>>> Sitemap(CancellationToken ct) =>
         Ok(await _listings.GetSitemapEntriesAsync(ct));
+
+    /// <summary>
+    /// The same rows as <c>sitemap</c>, rendered as sitemaps.org XML for crawlers (docs/SEO.md
+    /// item 1). Web v2 is a static bundle behind nginx and has no server of its own to render
+    /// this, so the API — the only thing that knows which listings are published — renders it and
+    /// the edge aliases <c>/sitemap.xml</c> onto this route.
+    /// </summary>
+    /// <remarks>
+    /// URLs are absolute and built from the forwarded request, so one API serves whatever public
+    /// origin (and stripped sub-path prefix) it is deployed behind without new configuration.
+    /// </remarks>
+    [HttpGet("sitemap.xml")]
+    [ResponseCache(Duration = 3600)]
+    public async Task<IActionResult> SitemapXml(CancellationToken ct)
+    {
+        var entries = await _listings.GetSitemapEntriesAsync(ct);
+        var baseUrl = PublicBaseUrl();
+
+        XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+        var urls = new List<XElement>
+        {
+            new(ns + "url",
+                new XElement(ns + "loc", $"{baseUrl}/"),
+                new XElement(ns + "changefreq", "daily"),
+                new XElement(ns + "priority", "1.0")),
+        };
+        urls.AddRange(entries.Select(entry => new XElement(ns + "url",
+            new XElement(ns + "loc", $"{baseUrl}/space/{Uri.EscapeDataString(entry.VenueSlug)}/{Uri.EscapeDataString(entry.RoomSlug)}"),
+            new XElement(ns + "lastmod", entry.LastModifiedUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+            new XElement(ns + "changefreq", "weekly"),
+            new XElement(ns + "priority", "0.8"))));
+
+        var document = new XDocument(new XDeclaration("1.0", "utf-8", null), new XElement(ns + "urlset", urls));
+        return Content(document.Declaration + Environment.NewLine + document, "application/xml", Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// The origin this API is being reached at, as the public sees it: the forwarded scheme,
+    /// host and stripped prefix an edge proxy supplies, falling back to the request's own.
+    /// </summary>
+    private string PublicBaseUrl()
+    {
+        var scheme = First(Request.Headers["X-Forwarded-Proto"]) ?? Request.Scheme;
+        var host = First(Request.Headers["X-Forwarded-Host"]) ?? Request.Host.Value;
+        var prefix = (First(Request.Headers["X-Forwarded-Prefix"]) ?? Request.PathBase.Value ?? string.Empty)
+            .TrimEnd('/');
+        return $"{scheme}://{host}{prefix}";
+
+        static string? First(StringValues values) =>
+            values.Count == 0 ? null : values[0]?.Split(',')[0].Trim() is { Length: > 0 } one ? one : null;
+    }
 
     /// <summary>Served-area context (name, center, beachhead box) for framing the map.</summary>
     [HttpGet("geofence")]

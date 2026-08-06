@@ -83,6 +83,16 @@ are excluded. Response:
 
 ### `GET /api/v1/suburbs` ✅ → `["Vienna", …]` · `GET /api/v1/sitemap` ✅ → `[{venueSlug, roomSlug, lastModifiedUtc}]` · `GET /api/v1/geofence` ✅ → `{areaName, center, beachhead}`
 
+### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07 — `v2_migration` D9)*
+The same rows as `sitemap`, as sitemaps.org XML (`application/xml`, `Cache-Control` 1h): the home
+page plus every published listing's `/space/{venueSlug}/{roomSlug}` URL with `lastmod`,
+`changefreq` and `priority`. The only endpoint here that answers XML — web v2 is a static bundle
+with no server of its own, so the API renders the one document a crawler must be handed.
+Absolute URLs are derived from the forwarded request (`X-Forwarded-Proto` / `-Host` / `-Prefix`,
+falling back to the request's own scheme/host/`PathBase`), so one API serves whatever public
+origin and stripped prefix it sits behind with no added configuration. The edge aliases
+`/sitemap.xml` onto this route — that is where `robots.txt` points (`docs/SEO.md`).
+
 Anonymous guest availability reads for a listing (`GET /listings/{roomId}/availability`,
 `POST /listings/{roomId}/availability/check`) are specified in `manage.md` alongside the rules
 that produce them.

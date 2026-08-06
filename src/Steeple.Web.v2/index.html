@@ -8,6 +8,47 @@
       content="Steeple — rent affordable halls, studios and gyms by the hour from Northern Virginia venues. Five real listings, explored as one continuous scene."
     />
     <title>Steeple — Community space to rent in Northern Virginia</title>
+
+    <!--
+      The share card and the crawler's first read (docs/SEO.md items 4–6).
+
+      This is the app's *one* set of tags: every route here is a hash route over
+      the same document, so nothing below can be per-listing without the
+      rendering layer D9 defers (docs/backlog/seo-crawlable-listings.md). What it
+      does buy is that a link to Steeple unfurls as Steeple rather than as a bare
+      URL, and that a crawler which runs no JavaScript still learns what this is.
+
+      No og:image and no og:url on purpose: the image would be one listing's
+      photograph standing for all of them, and the URL is not knowable in a
+      bundle deployable at either / or a stripped prefix.
+
+      The ld+json block below is not an inline script the CSP has to allow: a
+      <script> whose type is not a JavaScript type is a *data block*, which the
+      HTML spec never prepares for execution, so script-src never sees it. That
+      is why this may be inline while src/core/intent.js may not.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Steeple" />
+    <meta property="og:title" content="Steeple — community space to rent in Northern Virginia" />
+    <meta
+      property="og:description"
+      content="Halls, studios and rooms in Northern Virginia venues, by the hour. Find one near you, see when it is open, and book it."
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Steeple — community space to rent in Northern Virginia" />
+    <meta
+      name="twitter:description"
+      content="Halls, studios and rooms in Northern Virginia venues, by the hour. Find one near you, see when it is open, and book it."
+    />
+    <meta name="theme-color" content="#fbf7f0" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Steeple",
+        "description": "Halls, studios and rooms in Northern Virginia venues, rented by the hour."
+      }
+    </script>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z' fill='%23C0623F'/%3E%3C/svg%3E"
