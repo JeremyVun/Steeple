@@ -336,15 +336,24 @@ export async function closeBrowsers() {
 }
 
 /**
- * Console noise a suite counting page errors must not count.
+ * Console noise a suite that counts page errors must not count.
  *
- * Two of them are the open internet, which a sealed machine has none of; the
- * third is the shared dev database's own history — room photos are stored as
- * **absolute** URLs from `Media:PublicBaseUrl`, so rows written by another
- * agent's API instance point at a port nobody is listening on any more, and the
- * browser logs a failed image load for each. That is the environment talking,
- * not the app.
+ * Two sources, neither of them the app. Software GL narrates itself. And a
+ * resource that would not load: map tiles and stock photographs come from the
+ * open internet, which a sealed machine has none of, while room photographs in
+ * the shared dev database carry **absolute** URLs baked in from
+ * `Media:PublicBaseUrl` — so rows written by another agent's API instance point
+ * at a port nobody is listening on any more, and every one of them logs a failed
+ * image load. Suites went red on that alone with every check line green.
+ *
+ * What is deliberately still counted: a failed call to `/api/v1`. That is the
+ * app talking to steeple, and if it could not, the suite should say so.
+ *
+ * @param {import('puppeteer').ConsoleMessage} message
  */
-export const isEnvironmentNoise = (text) =>
-  /GL Driver Message|GPU stall/.test(text) ||
-  /Failed to load resource|net::ERR_|ERR_CONNECTION_REFUSED/.test(text);
+export function isEnvironmentNoise(message) {
+  const text = message.text();
+  if (/GL Driver Message|GPU stall/.test(text)) return true;
+  if (!/Failed to load resource|net::ERR_/.test(text)) return false;
+  return !(message.location?.().url ?? '').includes('/api/v1');
+}

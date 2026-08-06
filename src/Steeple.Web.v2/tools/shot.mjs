@@ -14,7 +14,18 @@
 //   node tools/shot.mjs "http://localhost:5301/?q=low" /tmp/steeple3d-world-village.png \
 //     --eval "__steeple.setView('village')" --wait 2500
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const [url, out, ...rest] = process.argv.slice(2);
 if (!url || !out) {
@@ -30,10 +41,7 @@ const evalJs = opt('--eval', null);
 const settle = Number(opt('--wait', 1200));
 const [w, h] = opt('--size', '1440x900').split('x').map(Number);
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 
 let hadError = false;
 try {
@@ -82,6 +90,6 @@ try {
   await page.screenshot({ path: out });
   console.log(`[harness] wrote ${out}${hadError ? '  (WITH ERRORS — see above)' : ''}`);
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }
 process.exit(hadError ? 1 : 0);

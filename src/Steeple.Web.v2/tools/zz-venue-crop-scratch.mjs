@@ -1,12 +1,20 @@
 // One-off: the lower half of the venue sheet at 2x, to judge the marks at size.
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2];
 const out = process.argv[3];
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
 await page.goto(url, { waitUntil: 'networkidle0' });
@@ -19,4 +27,4 @@ const box = await page.evaluate(() => {
 });
 await page.screenshot({ path: out, clip: box });
 console.log('wrote', out);
-await browser.close();
+await closeBrowsers();

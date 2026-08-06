@@ -5,15 +5,23 @@
 // not a sheet.
 //
 //   node tools/map-narrow.mjs "http://localhost:5322/?q=low" 390x844
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5322/?q=low';
 const [w, h] = (process.argv[3] ?? '390x844').split('x').map(Number);
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: w, height: h, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
 
@@ -208,5 +216,5 @@ check('the sheet still answers after a listing closes', (await detent()) === 'mi
 console.log(errors.length ? `\nconsole/page errors:\n${errors.join('\n')}` : '\nno console errors');
 if (errors.length) failures += errors.length;
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');
-await browser.close();
+await closeBrowsers();
 process.exit(failures ? 1 : 0);

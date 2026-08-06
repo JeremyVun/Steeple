@@ -11,13 +11,21 @@
 // `npm run build:flat` dist. The second is the one that matters: the flag is
 // only worth having if the bundle it produces actually works.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5321/?q=low&world=off';
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -214,5 +222,5 @@ if (errors.length) {
   for (const e of errors) console.log(e);
 }
 console.log(failures ? `${failures} FAILURES` : 'all clear');
-await browser.close();
+await closeBrowsers();
 process.exit(failures ? 1 : 0);

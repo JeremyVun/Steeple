@@ -10,7 +10,18 @@
 //
 //   node tools/describe-shot.mjs "http://localhost:5332/?world=off" d1
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?world=off';
@@ -19,11 +30,7 @@ const PHOTO = writeRoomPhoto('/tmp/steeple-describe-room.png');
 const stamp = Date.now().toString(36);
 const hostEmail = `look-${stamp}@example.org`;
 
-const browser = await puppeteer.launch({
-  headless: true,
-  pipe: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 
 try {
   const page = await browser.newPage();
@@ -138,5 +145,5 @@ try {
 
   console.log(`shots: /tmp/${prefix}-*.png`);
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }

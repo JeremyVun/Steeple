@@ -16,17 +16,25 @@
 //   5. a second account on the same browser inherits none of the first's state
 //   6. an expired session says so instead of vanishing
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5173/?q=low';
 // The wire is checked from here too — same origin as the page, so the vite
 // proxy forwards it to the API exactly as the browser's own calls are.
 const origin = new URL(url).origin;
 
-const browser = await puppeteer.launch({
-  headless: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 
@@ -391,5 +399,5 @@ check('which opens the panel', await waitVisible('.signin__layer .identity'));
 console.log(`\n──── ${checks - failed}/${checks} checks passed · ${problems.length} console problems ────`);
 for (const problem of problems.slice(0, 8)) console.log(`      ${problem}`);
 console.log('');
-await browser.close();
+await closeBrowsers();
 process.exit(failed || problems.length ? 1 : 0);

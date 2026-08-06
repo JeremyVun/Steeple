@@ -27,7 +27,18 @@
 // `import('/src/data/catalog.js')` from this page is not reliably the instance
 // the app is running once vite has hot-reloaded.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const url = process.argv[2] ?? 'http://localhost:5180/?q=low&world=off';
 const API = 'http://localhost:5200/api/v1';
@@ -73,11 +84,7 @@ if (!liveVenue) {
 }
 console.log(`\nliving venue under test: ${liveVenue}/${liveRoom}`);
 
-const browser = await puppeteer.launch({
-  headless: true,
-  pipe: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -474,7 +481,7 @@ try {
   console.log(`\n${problems.length} console problems`);
   for (const p of problems.slice(0, 12)) console.log(`   ${p}`);
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }
 
 console.log(`\n${checks - failures}/${checks} checks`);

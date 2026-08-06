@@ -16,7 +16,18 @@
 //   node tools/wave2-test.mjs [baseUrl] [--shots <prefix>]
 //     baseUrl  default http://localhost:5315
 //
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const base = process.argv[2]?.startsWith('http') ? process.argv[2] : 'http://localhost:5315';
 const shotPrefix = process.argv.includes('--shots')
@@ -42,10 +53,7 @@ for (const style of STYLES) {
 
   // A browser per style: software GL is slow enough that two villages in one
   // process starve each other's render loop.
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
 
@@ -337,7 +345,7 @@ for (const style of STYLES) {
   check('zero console errors', problems.length === 0, [...new Set(problems)].slice(0, 3).join(' | '));
 
   await page.close();
-  await browser.close();
+  await closeBrowsers();
 }
 
 console.log(`\n${failures ? `${failures} FAILURE(S)` : 'all clear'}: ${checks - failures}/${checks} checks passed\n`);

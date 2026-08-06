@@ -38,7 +38,18 @@
 // the seed and nothing else (the local database carries far more), and the
 // one-time `console.info` is the catalog's own account of the fallback.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const live = process.argv[2] ?? 'http://localhost:5177/?world=off';
 const absent = process.argv[3] ?? 'http://localhost:5179/?world=off';
@@ -46,11 +57,7 @@ const absent = process.argv[3] ?? 'http://localhost:5179/?world=off';
 const REFUSED = 'Steeple could not answer just now. Try again in a moment.';
 const BUSY = 'Steeple is answering a great many questions just now. Try again shortly.';
 
-const browser = await puppeteer.launch({
-  headless: true,
-  pipe: true,
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-});
+const browser = await launch();
 
 let failures = 0;
 const check = (label, ok, detail = '') => {
@@ -262,7 +269,7 @@ try {
 
   console.log(`\n${failures === 0 ? 'all good' : `${failures} FAILED`}`);
 } finally {
-  await browser.close();
+  await closeBrowsers();
 }
 
 process.exit(failures === 0 ? 0 : 1);

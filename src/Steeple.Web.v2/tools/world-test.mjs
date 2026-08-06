@@ -12,7 +12,18 @@
 //
 // Screenshots land in /tmp/wld-test-<style>-*.png; look at them.
 
-import puppeteer from 'puppeteer';
+import { closeBrowsers, launch } from './fixtures.mjs';
+
+// A top-level-await script has no `finally` around it, so this is the finally:
+// whatever kills the run, the browsers it opened go with it. (The pipe transport
+// covers the ungraceful deaths — v2_migration Phase 3.6 item 7.)
+for (const fatal of ['uncaughtException', 'unhandledRejection']) {
+  process.on(fatal, async (error) => {
+    await closeBrowsers();
+    console.log(`\nthe run stopped: ${error?.message ?? error}`);
+    process.exit(1);
+  });
+}
 
 const base = process.argv[2] ?? 'http://localhost:5314';
 const styles = ['diorama', 'atlas'];
@@ -30,10 +41,7 @@ for (const style of styles) {
   log(`\n── ${style} ─────────────────────────────────────────────`);
   // A browser per style: software GL takes its time building a village, and a
   // second page in the same process starves the first one's render loop.
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
   const errors = [];
@@ -252,7 +260,7 @@ for (const style of styles) {
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   await page.close();
-  await browser.close();
+  await closeBrowsers();
 }
 
 // ── reduced motion ──────────────────────────────────────────────────────────
@@ -260,10 +268,7 @@ for (const style of styles) {
 // drift, and the camera cuts through paper instead of flying.
 {
   log('\n── reduced motion (diorama) ─────────────────────────────');
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--no-sandbox'],
-  });
+  const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
   const errors = [];
@@ -314,7 +319,7 @@ for (const style of styles) {
   );
   check('the church still shows its answer', settled && settled.settled > 0.4, JSON.stringify(settled));
   check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
-  await browser.close();
+  await closeBrowsers();
 }
 
 log(`\n${failures === 0 ? 'all good' : `${failures} FAILURE(S)`}`);
