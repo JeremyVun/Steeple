@@ -30,17 +30,29 @@ async function ready() {
   await wait(2600);
 }
 
-/** The map's scale as a visitor sees it: how far apart two pins stand. */
+/**
+ * The map's scale as a visitor sees it: how far apart two pins stand.
+ *
+ * Two *named* pins. The map draws every venue the catalog answers with, and the
+ * dev geocoder puts every host-typed address on the village centre, so the first
+ * and last pins on the page can be the same point — a ruler that reads zero at
+ * every zoom cannot show the pace it is here to measure.
+ */
 const pinSpread = () =>
   page.evaluate(() => {
-    const pins = [...document.querySelectorAll('.dm-pin')].map((n) => n.getBoundingClientRect());
-    return Math.hypot(pins[0].x - pins.at(-1).x, pins[0].y - pins.at(-1).y);
+    const at = (v) => document.querySelector(`.dm-pin[data-venue="${v}"]`)?.getBoundingClientRect();
+    const a = at('grace-community-vienna');
+    const b = at('oakton-baptist');
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   });
 
 /** Where one pin stands on the page — the ground itself, followed. */
 const pinAt = () =>
   page.evaluate(() => {
-    const r = document.querySelector('.dm-pin').getBoundingClientRect();
+    const r = document
+      .querySelector('.dm-pin[data-venue="grace-community-vienna"]')
+      .getBoundingClientRect();
     return { x: r.x, y: r.y };
   });
 

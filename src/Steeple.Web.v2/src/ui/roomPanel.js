@@ -1,10 +1,12 @@
 // Room sheet — the listing itself, set like a page from a catalogue.
 // Every field comes from the data: nothing summarised away, nothing added.
 //
-// The picture is the one thing here that arrives late: the words are on the
-// page the instant the sheet opens, and the photograph fills in behind them
-// when the catalog answers. A room with no photograph gets its own lettered
-// plate rather than a hole in the page.
+// What arrives late is whatever the search answer could not carry. A summary
+// names the space, prices it, sizes it and lists what it has; the listing adds
+// the photograph, the description and the house rules. The head is on the page
+// in the same frame as the press that opened it, and the rest fills in behind.
+// A room with no photograph gets its own lettered plate rather than a hole in
+// the page, and a paragraph that has not arrived is absent rather than empty.
 
 import { setView } from '../core/bus.js';
 import { getListing } from '../data/catalog.js';
@@ -12,6 +14,10 @@ import { priceParts, seatsText } from './copy.js';
 import { chipList, el, replaceChildren } from './dom.js';
 import { createBanner } from './map/banner.js';
 import { createPutDown } from './rail.js';
+
+/** The fields a source actually answered for — the rest are somebody else's. */
+const said = (values) =>
+  Object.fromEntries(Object.entries(values).filter(([, v]) => v !== null && v !== undefined));
 
 export function createRoomPanel({ onRequest }) {
   const hero = createBanner('dm-banner dm-banner--hero');
@@ -41,9 +47,28 @@ export function createRoomPanel({ onRequest }) {
   function show(venue, room) {
     up = () => setView('venue', { venueId: venue.id });
     handle.setAttribute('aria-label', `Put this down — back to ${venue.shortName}`);
-    const { amount, unit, free } = priceParts(room);
     const token = (showing += 1);
-    hero.show({ url: null, name: room.name });
+    hero.show({ url: room.primaryPhotoUrl ?? null, name: room.name });
+    paint(venue, room);
+
+    // The listing is the whole of the space, and the search summary that opened
+    // this sheet is a part of it. A refused read leaves the part standing —
+    // better a page with no photograph on it than somebody else's.
+    getListing(venue.id, room.id)
+      .catch(() => null)
+      .then((listing) => {
+        if (token !== showing || !listing) return;
+        hero.show({ url: listing.primaryPhotoUrl ?? null, name: room.name });
+        // The listing fills the gaps and settles nothing that was already
+        // known: a host's own unpublished edit is what this browser is holding
+        // about the space, and steeple has not been told about it yet.
+        paint(venue, { ...listing, ...said(room), id: room.id });
+      });
+  }
+
+  function paint(venue, room) {
+    const { amount, unit, free } = priceParts(room);
+    const held = body.scrollTop;
 
     replaceChildren(head, [
       hero.element,
@@ -62,48 +87,48 @@ export function createRoomPanel({ onRequest }) {
       ]),
     ]);
 
-    // A refused read leaves the lettered plate standing: the photograph is the
-    // one thing on this sheet the catalog owns, and a room whose picture cannot
-    // be read is better set as its own initial than as somebody else's picture.
-    getListing(venue.id, room.id)
-      .catch(() => null)
-      .then((listing) => {
-        if (token !== showing) return;
-        hero.show({ url: listing?.primaryPhotoUrl ?? null, name: room.name });
-      });
+    const access = room.accessibility ?? [];
+    const amenities = room.amenities ?? [];
+    const activities = room.activities ?? [];
 
     replaceChildren(body, [
-      el('p', { class: 'prose', text: room.description }),
+      room.description && el('p', { class: 'prose', text: room.description }),
 
-      el('section', { class: 'block block--access' }, [
-        el('h2', { class: 'eyebrow', text: 'Accessibility' }),
-        el(
-          'ul',
-          { class: 'ticks' },
-          room.accessibility.map((feature) =>
-            el('li', { class: 'ticks__item' }, [
-              el('span', { class: 'ticks__mark', 'aria-hidden': 'true' }),
-              feature,
-            ])
-          )
-        ),
-      ]),
+      access.length > 0 &&
+        el('section', { class: 'block block--access' }, [
+          el('h2', { class: 'eyebrow', text: 'Accessibility' }),
+          el(
+            'ul',
+            { class: 'ticks' },
+            access.map((feature) =>
+              el('li', { class: 'ticks__item' }, [
+                el('span', { class: 'ticks__mark', 'aria-hidden': 'true' }),
+                feature,
+              ])
+            )
+          ),
+        ]),
 
-      el('section', { class: 'block' }, [
-        el('h2', { class: 'eyebrow', text: 'Amenities' }),
-        chipList(room.amenities),
-      ]),
+      amenities.length > 0 &&
+        el('section', { class: 'block' }, [
+          el('h2', { class: 'eyebrow', text: 'Amenities' }),
+          chipList(amenities),
+        ]),
 
-      el('section', { class: 'block' }, [
-        el('h2', { class: 'eyebrow', text: 'Welcomes' }),
-        chipList(room.activities, 'chip chip--activity'),
-      ]),
+      activities.length > 0 &&
+        el('section', { class: 'block' }, [
+          el('h2', { class: 'eyebrow', text: 'Welcomes' }),
+          chipList(activities, 'chip chip--activity'),
+        ]),
 
-      el('section', { class: 'block block--rules' }, [
-        el('h2', { class: 'eyebrow', text: 'House rules' }),
-        el('p', { class: 'prose prose--sm', text: room.houseRules }),
-      ]),
+      room.houseRules &&
+        el('section', { class: 'block block--rules' }, [
+          el('h2', { class: 'eyebrow', text: 'House rules' }),
+          el('p', { class: 'prose prose--sm', text: room.houseRules }),
+        ]),
     ]);
+
+    body.scrollTop = held;
   }
 
   let wasOpen = false;

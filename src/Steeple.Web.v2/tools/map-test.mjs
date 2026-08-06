@@ -73,12 +73,23 @@ async function realClick(selector) {
   await wait(700);
 }
 
-/** The map's own scale, measured the way a visitor sees it: pins moving apart. */
+/**
+ * The map's own scale, measured the way a visitor sees it: pins moving apart.
+ *
+ * Between two named pins, not the first and the last on the page. The map draws
+ * every venue the catalog answers with now, and the dev geocoder sends every
+ * address a host types to the village centre (StubGeocodingGateway) — so the
+ * first and last pins can be the same point, the spread is zero, and every zoom
+ * measurement taken from it is NaN. A ruler that reads zero however far the map
+ * is zoomed cannot show the failure it is there to catch.
+ */
 async function pinSpread() {
   return page.evaluate(() => {
-    const pins = [...document.querySelectorAll('.dm-pin')].map((n) => n.getBoundingClientRect());
-    if (pins.length < 2) return 0;
-    return Math.hypot(pins[0].x - pins.at(-1).x, pins[0].y - pins.at(-1).y);
+    const at = (v) => document.querySelector(`.dm-pin[data-venue="${v}"]`)?.getBoundingClientRect();
+    const a = at('grace-community-vienna');
+    const b = at('oakton-baptist');
+    if (!a || !b) return 0;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   });
 }
 

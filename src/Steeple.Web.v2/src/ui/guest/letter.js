@@ -15,7 +15,7 @@ import {
   threadFor,
   todayIso,
 } from '../../data/store.js';
-import { getVenue } from '../../data/venues.js';
+import { heldVenue } from '../../data/catalog.js';
 import { priceParts } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import {
@@ -154,7 +154,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
 
   /** The venue as this page prints it, with or without scenery to draw on. */
   function venueOf(app) {
-    const scenery = getVenue(app.venueId);
+    const scenery = heldVenue(app.venueId);
     if (scenery) return scenery;
     const name = app.venueName ?? app.venueId;
     return { name, shortName: name, suburb: '' };

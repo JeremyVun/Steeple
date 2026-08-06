@@ -14,7 +14,7 @@
 // waits for a photograph before it says anything is broken on a slow line.
 
 import { setView, setHover } from '../core/bus.js';
-import { getListing, searchListings } from '../data/catalog.js';
+import { readVenue } from '../data/catalog.js';
 import { draftRooms, HOME_LABEL, priceParts, publishedRooms, seatsText, VERIFIED_LABEL } from './copy.js';
 import { el, replaceChildren } from './dom.js';
 import { createBanner } from './map/banner.js';
@@ -44,7 +44,10 @@ const TICK_ICON =
  * under the button say which of the two happened.
  */
 function addressLine(venue) {
-  const text = el('p', { class: 'sheet__address', text: venue.address });
+  // Until the venue has been read in full, the suburb is the whole of what a
+  // search answer knows about where it is. It is a true, smaller answer.
+  const address = venue.address ?? `${venue.suburb}, Virginia`;
+  const text = el('p', { class: 'sheet__address', text: address });
   // role=status rather than a live region on the button: the confirmation is a
   // state of the page, and it must not re-announce the button's own name.
   const said = el('span', { class: 'copyaddr__said', role: 'status' });
@@ -53,7 +56,7 @@ function addressLine(venue) {
     type: 'button',
     class: 'copyaddr',
     title: 'Copy the address',
-    'aria-label': `Copy the address — ${venue.address}`,
+    'aria-label': `Copy the address — ${address}`,
   });
   button.innerHTML = COPY_ICON;
 
@@ -81,7 +84,7 @@ function addressLine(venue) {
 
   button.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(venue.address);
+      await navigator.clipboard.writeText(address);
       confirm('Address copied', true);
     } catch {
       select();
@@ -144,9 +147,38 @@ export function createVenuePanel() {
   const { handle } = createPutDown({ element, onBack: back, spoken: HOME_LABEL.toLowerCase() });
   element.prepend(handle);
 
-  function show(venue) {
+  // Banners are kept for as long as the sheet is about the same venue. The
+  // catalog answers a venue in two instalments (data/catalog.js — a search
+  // summary, then the room details), and a card whose photograph is torn down
+  // and remade between them blinks for no reason a visitor could name.
+  let banners = new Map();
+  let showingVenue = null;
+  let heroUrl = null;
+
+  function bannerFor(room) {
+    let held = banners.get(room.id);
+    if (!held) {
+      held = createBanner('dm-banner spacecard__photo');
+      banners.set(room.id, held);
+    }
+    held.show({ url: room.primaryPhotoUrl ?? null, name: room.name });
+    return held;
+  }
+
+  /**
+   * The sheet, from whatever the catalog holds about this venue now.
+   *
+   * A venue arrives in two instalments and this runs for each: a search answer
+   * names it, says where it is and lists the spaces that matched; the full read
+   * adds the address, the description, how to park, how to arrive, and the
+   * spaces that did not match the search in hand. For the seed's venues the
+   * bundled record is already whole, so the second paint changes nothing and is
+   * invisible — which is the point.
+   */
+  function paint(venue) {
     const token = (showing += 1);
-    hero.show({ url: null, name: venue.shortName });
+    // Reading down a sheet is not interrupted by the rest of it arriving.
+    const held = body.scrollTop;
 
     replaceChildren(head, [
       hero.element,
@@ -165,19 +197,23 @@ export function createVenuePanel() {
       // height belongs to the rooms below. The verified mark is a fact about
       // the church, not an award — it is set as a footnote in the same key as
       // the address rather than as a filled badge shouting beside it.
+      // The mark is a fact steeple holds about this venue, not decoration on
+      // every sheet. It was printed unconditionally while the only venues that
+      // could be opened were the seed's, every one of which is verified; the
+      // first venue a host listed would have worn it without having earned it.
       el('div', { class: 'standing' }, [
         addressLine(venue),
-        el('p', { class: 'verified verified--quiet' }, [
-          el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
-          VERIFIED_LABEL,
-        ]),
+        venue.verified &&
+          el('p', { class: 'verified verified--quiet' }, [
+            el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
+            VERIFIED_LABEL,
+          ]),
       ]),
     ]);
 
     const drafts = draftRooms(venue);
     const rooms = publishedRooms(venue);
-    const banners = new Map(rooms.map((room) => [room.id, createBanner('dm-banner spacecard__photo')]));
-    for (const room of rooms) banners.get(room.id).show({ url: null, name: room.name });
+    const cardFor = new Map(rooms.map((room) => [room.id, bannerFor(room)]));
 
     replaceChildren(body, [
       el('section', { class: 'spaces' }, [
@@ -188,7 +224,7 @@ export function createVenuePanel() {
         el(
           'ul',
           { class: `spaces__grid${rooms.length === 1 ? ' spaces__grid--one' : ''}` },
-          rooms.map((room) => spaceCard(venue, room, banners.get(room.id)))
+          rooms.map((room) => spaceCard(venue, room, cardFor.get(room.id)))
         ),
         drafts.length > 0 &&
           el('p', {
@@ -196,68 +232,57 @@ export function createVenuePanel() {
             text: `${drafts.map((room) => room.name.replace(/\s*\(coming soon\)$/, '')).join(', ')} is being prepared and is not listed yet.`,
           }),
       ]),
-      el('p', { class: 'prose prose--sm', text: venue.description }),
-      el('dl', { class: 'facts facts--pair' }, [
-        el('div', { class: 'facts__pair' }, [
-          el('dt', { class: 'eyebrow', text: 'Parking' }),
-          el('dd', { text: venue.parking }),
+      venue.description && el('p', { class: 'prose prose--sm', text: venue.description }),
+      (venue.parking || venue.transit) &&
+        el('dl', { class: 'facts facts--pair' }, [
+          venue.parking &&
+            el('div', { class: 'facts__pair' }, [
+              el('dt', { class: 'eyebrow', text: 'Parking' }),
+              el('dd', { text: venue.parking }),
+            ]),
+          venue.transit &&
+            el('div', { class: 'facts__pair' }, [
+              el('dt', { class: 'eyebrow', text: 'Getting there' }),
+              el('dd', { text: venue.transit }),
+            ]),
         ]),
-        el('div', { class: 'facts__pair' }, [
-          el('dt', { class: 'eyebrow', text: 'Getting there' }),
-          el('dd', { text: venue.transit }),
-        ]),
-      ]),
     ]);
 
-    // The head's photograph and the cards' come from two calls, and the head
-    // waits for its own: a picture that lands and is then replaced by a better
-    // one is a page that flickers. If the room detail cannot answer, the search
-    // row's picture stands in — the sheet is never left with a hole in it.
-    // A church with nothing published has no room detail to ask, so the search
-    // row is all there is and it may paint the moment it lands.
-    let settled = rooms.length === 0;
-    let fallback = null;
-    let painted = false;
+    body.scrollTop = held;
 
-    // Whichever call can answer with a picture paints, and only the first of
-    // them does: the two land in whatever order the network gives them, and a
-    // head that takes the row's photograph after the detail's has arrived is
-    // both a flicker and the wrong frame — the same one the first card below is
-    // already showing.
-    const paintHero = (url) => {
-      if (!url || painted || token !== showing) return;
-      painted = true;
+    // The venue has no photograph of its own — steeple photographs rooms, not
+    // buildings — so the head borrows the *second* view of the first space,
+    // which is a header that does not repeat the card directly under it. Only
+    // the first picture to arrive is painted: a plate that lands and is then
+    // replaced by a better one is a page that flickers.
+    const first = rooms[0];
+    const second = first?.photos?.[1];
+    const url = second?.cardUrl ?? second?.url ?? first?.primaryPhotoUrl ?? null;
+    if (url && url !== heroUrl && token === showing) {
+      heroUrl = url;
       hero.show({ url, name: venue.shortName });
-    };
+    }
+  }
 
-    // steeple's funnel is room-first and has no venue endpoint (CONTRACT4 §5),
-    // so the church's pictures are the pictures of its spaces.
-    // Only the pictures are asked for here, so a refused search costs pictures
-    // and nothing else: the cards keep their lettered plates and the sheet is
-    // whole without them.
-    searchListings({ suburb: venue.suburb })
-      .then(({ items }) => {
-        if (token !== showing) return;
-        const mine = items.filter((item) => item.venueSlug === venue.id);
-        fallback = mine[0]?.primaryPhotoUrl ?? null;
-        if (settled) paintHero(fallback);
-        for (const item of mine) {
-          banners.get(item.roomSlug)?.show({ url: item.primaryPhotoUrl, name: item.name });
-        }
+  /**
+   * Open the sheet on a venue, and finish it when the catalog has read the
+   * whole of it. `readVenue` answers from what it is already holding when it
+   * can, so a venue opened twice costs one read (data/catalog.js).
+   */
+  function show(venue) {
+    if (showingVenue !== venue.id) {
+      showingVenue = venue.id;
+      banners = new Map();
+      heroUrl = null;
+      hero.show({ url: null, name: venue.shortName });
+    }
+    const opened = venue.id;
+    paint(venue);
+    readVenue(opened)
+      .then((whole) => {
+        if (whole && showingVenue === opened) paint(whole);
       })
       .catch(() => {});
-
-    if (rooms.length === 0) return;
-
-    getListing(venue.id, rooms[0].id)
-      .catch(() => null)
-      .then((listing) => {
-        settled = true;
-        if (token !== showing) return;
-        const second = listing?.photos?.[1];
-        // The card crop, not the full plate: this is a band 160px high.
-        paintHero(second?.cardUrl ?? second?.url ?? listing?.primaryPhotoUrl ?? fallback);
-      });
   }
 
   let wasOpen = false;

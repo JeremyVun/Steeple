@@ -30,8 +30,6 @@
 //   'quality:change' ({ tier })
 //   'store:change'   ({ type, ... }) — emitted by data/store.js on every mutation
 
-import { venuesMatching } from '../data/venues.js';
-
 const listeners = new Map();
 
 export const bus = {
@@ -52,7 +50,11 @@ export const state = {
   applicationId: null,
   mode: 'guest', // 'guest' | 'host' — which lens the correspondence views use
   filters: new Set(),
-  matching: venuesMatching([]),
+  // Which venues answer the search in hand. Only the search knows, and it
+  // publishes the set with every answer (ui/map/search.js). It used to be
+  // derived from the bundled scenery here, which was a guess about venues the
+  // scenery had never heard of.
+  matching: new Set(),
   hoverVenueId: null,
   hoverRoomId: null,
   reducedMotion:
@@ -176,7 +178,9 @@ export function setView(view, { venueId = null, roomId = null, applicationId = n
 
 export function setFilters(filters) {
   state.filters = new Set(filters);
-  state.matching = venuesMatching(state.filters);
+  // The matching set is not recomputed here: the pill adopts these filters, asks
+  // steeple, and publishes the venues that actually answered. Until then the
+  // last real answer stands, which is a stale truth rather than a fresh guess.
   bus.emit('filters:change', { filters: state.filters, matching: state.matching });
 }
 

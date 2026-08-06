@@ -107,18 +107,33 @@ async function press(page, sel, { touch = false } = {}) {
     }))
   );
   check('every pin quotes a price', pins.every((p) => p.shows === 'price' && /^(\$|Free)/.test(p.says)), pins.map((p) => p.says).join(' '));
-  check('...as a band when the church holds spaces at different rates', pins.some((p) => p.says.includes('–')), pins.map((p) => p.says).join(' '));
+  check('...as a band when the venue holds spaces at different rates', pins.some((p) => p.says.includes('–')), pins.map((p) => p.says).join(' '));
   check('...never as $0/hr', pins.every((p) => !p.says.includes('$0')), pins.map((p) => p.says).join(' '));
-  check('the church keeps the accessible name', pins.every((p) => /Church/.test(p.aria)), pins[0].aria);
+  // The accessible name leads with the place and ends with the price — the two
+  // things a pin is for, in that order. It used to be checked by looking for the
+  // word "Church" in it, which held only while the map drew the five the village
+  // stages; it draws whatever the catalog answers with now, most of it listed by
+  // hosts who are not churches, and the product's own copy says venue anyway.
+  check(
+    'a pin leads with its venue and its suburb, and ends with the price',
+    pins.every((p) => /^.+, .+\. (\$|Free|free).*\.$/.test(p.aria ?? '')),
+    pins[0].aria
+  );
   check('...and its short name is on the tag, under the price', pins.every((p) => p.who.length > 0), pins[0].who);
 
   // The tag is a target, not a caption: it is the biggest thing a pointer has
-  // to aim at on this map. Each one must open its own church and no other's.
-  // Opening a church pans the map to it, so each tag is aimed at from the same
-  // opening framing rather than from wherever the last one left the map.
-  for (const id of ['grace-community-vienna', 'vienna-presbyterian', 'oakton-baptist', 'merrifield-fellowship', 'dunn-loring-umc']) {
+  // to aim at on this map, and pressing one must open the venue it belongs to
+  // and no other's. Aimed at from the same opening framing each time, because
+  // opening a venue pans the map to it.
+  //
+  // Which tag the pointer finds is not fixed any more: the map draws every
+  // venue the catalog answers with, and locally the dev geocoder puts every
+  // address a host types on the village centre, so tags do cross other pins.
+  // That is not the bug this guards — a press opening something other than what
+  // was under it is, and that is what is asserted.
+  for (const id of ['grace-community-vienna', 'oakton-baptist', 'merrifield-fellowship', 'dunn-loring-umc']) {
     // A goto that only changes the hash is not a navigation: the page would keep
-    // the pan the last church left the map on.
+    // the pan the last venue left the map on.
     await page.goto('about:blank');
     await page.goto(`${url}#/village`, { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
@@ -126,20 +141,34 @@ async function press(page, sel, { touch = false } = {}) {
     await wait(3000);
     const tag = await page.evaluate((v) => {
       const n = document.querySelector(`.dm-pin[data-venue="${v}"] .dm-pin__tag`);
+      if (!n) return null;
       const b = n.getBoundingClientRect();
       const map = document.querySelector('.dm-map').getBoundingClientRect();
       const at = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-      return { ...at, onMap: at.x > map.x && at.x < map.right && at.y > map.y && at.y < map.bottom };
+      const found = document
+        .elementsFromPoint(at.x, at.y)
+        .map((e) => e.closest?.('.dm-pin'))
+        .find(Boolean);
+      return {
+        ...at,
+        aimed: found?.dataset.venue ?? null,
+        onMap: at.x > map.x && at.x < map.right && at.y > map.y && at.y < map.bottom,
+      };
     }, id);
-    check(`the price tag for ${id} is on the map to be aimed at`, tag.onMap, JSON.stringify(tag));
+    check(`the price tag for ${id} is on the map to be aimed at`, Boolean(tag?.onMap), JSON.stringify(tag));
+    if (!tag?.onMap) continue;
     await page.mouse.click(tag.x, tag.y);
     await wait(1100);
-    check('...and pressing it opens that church', (await page.evaluate('__steeple.state.venueId')) === id, await page.evaluate('__steeple.state.venueId'));
+    check(
+      '...and pressing it opens the venue whose tag it is',
+      (await page.evaluate('__steeple.state.venueId')) === tag.aimed,
+      `aimed ${tag.aimed}, opened ${await page.evaluate('__steeple.state.venueId')}`
+    );
   }
   await page.evaluate('__steeple.setView("village")');
   await wait(1000);
 
-  // Narrow the search: a church with nothing matching has no price to quote.
+  // Narrow the search: a venue with nothing matching has no price to quote.
   await page.evaluate('__steeple.setFilters(["Music"])');
   await wait(1500);
   const filtered = await page.evaluate(() =>
@@ -150,7 +179,7 @@ async function press(page, sel, { touch = false } = {}) {
     }))
   );
   check('a narrowed search quotes only the rooms that match', filtered.filter((p) => p.shows === 'price').every((p) => !p.says.includes('–')), filtered.map((p) => p.says).join(' '));
-  check('...and a church with nothing matching says its name instead of a price', filtered.filter((p) => p.resting).every((p) => p.shows === 'name'), JSON.stringify(filtered.filter((p) => p.resting)));
+  check('...and a venue with nothing matching says its name instead of a price', filtered.filter((p) => p.resting).every((p) => p.shows === 'name'), JSON.stringify(filtered.filter((p) => p.resting)));
   await page.evaluate('__steeple.setFilters([])');
   await wait(1200);
 

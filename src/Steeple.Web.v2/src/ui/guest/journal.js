@@ -9,7 +9,7 @@ import {
   guestApplications,
   occurrencesFor,
 } from '../../data/store.js';
-import { getVenue } from '../../data/venues.js';
+import { heldVenue } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
 import { lineFor } from '../notifications.js';
 import { verifiedChip } from './sso.js';
@@ -40,10 +40,10 @@ export function createJournal({ announce, onOpen, onBrowse, ambientRows }) {
   // The names on a request are the request's own — steeple sends them with it,
   // and a venue this browser has never had in its scenery still reads properly.
   const roomNameOf = (app) => app.roomName ?? effectiveRoom(app.venueId, app.roomId)?.name ?? app.roomId;
-  const venueNameOf = (app) => getVenue(app.venueId)?.shortName ?? app.venueName ?? app.venueId;
+  const venueNameOf = (app) => heldVenue(app.venueId)?.shortName ?? app.venueName ?? app.venueId;
 
   function letterRow(app) {
-    const venue = getVenue(app.venueId);
+    const venue = heldVenue(app.venueId);
     const booking = app.status === 'approved' ? bookingFor(app.id) : null;
     const dates = booking ? occurrencesFor(booking.id).length : 0;
 

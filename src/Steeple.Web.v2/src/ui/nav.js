@@ -6,7 +6,7 @@
 // rather than a secret. Getting back to all the spaces is the breadcrumb's job.
 
 import { state, setView, rollTo } from '../core/bus.js';
-import { getVenue, getRoom } from '../data/venues.js';
+import { heldRoom, heldVenue } from '../data/catalog.js';
 import { HOME_LABEL } from './copy.js';
 import { el, replaceChildren, steepleMark } from './dom.js';
 
@@ -49,8 +49,8 @@ export function createNav() {
     const { view, venueId, roomId } = state;
     if (view === 'arrival') return;
 
-    const venue = venueId ? getVenue(venueId) : null;
-    const room = venue && roomId ? getRoom(venueId, roomId) : null;
+    const venue = venueId ? heldVenue(venueId) : null;
+    const room = venue && roomId ? heldRoom(venueId, roomId) : null;
     const items = [crumb(HOME_LABEL, () => setView('village'), view === 'village')];
 
     if (view === 'journal') {

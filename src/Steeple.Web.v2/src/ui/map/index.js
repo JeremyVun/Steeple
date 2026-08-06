@@ -19,11 +19,13 @@
 // from the pointer: still the page, but not answering for it.
 
 import { bus, CORRESPONDENCE_VIEWS, state } from '../../core/bus.js';
+import { forgetVenues, knownVenues } from '../../data/catalog.js';
+import { resultLine } from '../copy.js';
 import { el } from '../dom.js';
 import { SHEET_BAND } from '../rail.js';
 import { createAtlas } from './atlas.js';
 import { createResults } from './results.js';
-import { createSearch, resultLine } from './search.js';
+import { createSearch } from './search.js';
 import { createSheet } from './sheet.js';
 
 export function createDiscovery({ announce = () => {} } = {}) {
@@ -54,6 +56,10 @@ export function createDiscovery({ announce = () => {} } = {}) {
     onResults: (items) => {
       count.textContent = resultLine(items);
       results.render(items);
+      // Pins first: an answer may be the first sight of a venue — one a host
+      // listed this morning, one beyond the last page of results — and it has
+      // to be on the map before it can be priced or rested.
+      atlas.setVenues(knownVenues());
       atlas.setPrices(items);
       atlas.setMatching(state.matching);
       results.setCurrent(state.venueId, state.roomId);
@@ -161,7 +167,11 @@ export function createDiscovery({ announce = () => {} } = {}) {
   // place a church or publish a room while this surface is on the page.
   bus.on('store:change', ({ type }) => {
     if (type === 'venue-placed' || type === 'reset') atlas.renderPlaced();
-    if (type === 'room-edit' || type === 'reset') search.search();
+    if (type !== 'room-edit' && type !== 'reset') return;
+    // Publishing or editing a space is the one moment a venue the catalog is
+    // holding stops being true, so it is read again rather than remembered.
+    forgetVenues();
+    search.search();
   });
 
   syncView();

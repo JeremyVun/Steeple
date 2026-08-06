@@ -106,6 +106,69 @@ export async function getListing(venueSlug, roomSlug) {
  * Flagged in CONTRACT4 §5 as a candidate API addition.
  */
 export async function getVenueProfile(venueSlug) {
+  return venueProfile(venueSlug);
+}
+
+/** Every venue the seed carries, by slug — the roster the map opens on. */
+export function venueSlugs() {
+  return VENUES.map((venue) => venue.id);
+}
+
+/** The frame the map opens on, before the geofence has named itself. */
+export const AREA_CENTER = { lat: CENTER.lat, lng: CENTER.lng };
+
+/**
+ * The seed's whole venue, in the record shape catalog.js assembles from the
+ * wire — the same fields in the same words, so a venue steeple has never heard
+ * of and a venue the seed carries are the same kind of thing to every sheet
+ * that prints one.
+ *
+ * Rooms are included whatever their status: a Draft is not a listing, but the
+ * venue sheet says in one line that a space is being prepared, and that line is
+ * the seed's to lend. The live catalog never sees a Draft — only Published
+ * rooms leave the API — so it never contradicts this; it only adds.
+ */
+export function getVenueRecord(venueSlug) {
+  const venue = VENUES.find((v) => v.id === venueSlug);
+  if (!venue) return null;
+  return {
+    id: venue.id,
+    slug: venue.id,
+    name: venue.name,
+    shortName: venue.shortName,
+    suburb: venue.suburb,
+    lat: venue.lat,
+    lng: venue.lng,
+    address: venue.address,
+    description: venue.description,
+    parking: venue.parking,
+    transit: venue.transit,
+    contactEmail: venue.contactEmail,
+    verified: venue.verified,
+    rooms: venue.rooms.map((room) => roomRecord(venue.id, room)),
+  };
+}
+
+function roomRecord(venueId, room) {
+  const live = effectiveRoom(venueId, room.id) ?? room;
+  return {
+    id: live.id,
+    name: live.name,
+    description: live.description,
+    capacity: live.capacity,
+    pricePerHour: live.pricePerHour,
+    currency: CURRENCY,
+    houseRules: live.houseRules,
+    status: live.status,
+    activities: live.activities,
+    amenities: live.amenities,
+    accessibility: live.accessibility,
+    primaryPhotoUrl: coverUrl(live),
+    photos: photos(live),
+  };
+}
+
+function venueProfile(venueSlug) {
   const venue = VENUES.find((v) => v.id === venueSlug);
   if (!venue) return null;
   return {
