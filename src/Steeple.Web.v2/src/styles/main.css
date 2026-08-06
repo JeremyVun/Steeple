@@ -574,7 +574,12 @@ body {
 
 /* ── Buttons & chips ────────────────────────────────────────────────────── */
 
+/* Worn by <button> and, on the printed title page, by the two <a> that are real
+   links to the routes they mean (index.html, src/core/intent.js): the shape is
+   the pill's either way. */
 .pill {
+  display: inline-block;
+  text-decoration: none;
   font-family: var(--sans);
   font-size: 13px;
   font-weight: 550;
@@ -819,6 +824,27 @@ body {
 
 .arrival__scroll:hover .arrival__chevron {
   border-color: var(--terracotta);
+}
+
+/* A press that landed before the product did. It is not an error and not a
+   wait anybody asked about, so it is one slow breath on the control that was
+   pressed — enough that the page has plainly heard, quiet enough that it reads
+   as the page opening rather than as something going wrong. Set by
+   src/core/intent.js from the frame of the press; the roll takes the sheet away
+   a moment later. */
+.arrival [data-working='on'] {
+  cursor: progress;
+  animation: arrival-working 1.15s var(--ease) infinite;
+}
+
+@keyframes arrival-working {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* ── Wordmark + breadcrumb ──────────────────────────────────────────────── */
@@ -1384,6 +1410,13 @@ body {
 
   .arrival__scroll {
     animation: none;
+  }
+
+  /* The blanket rule below would run a breath at 1ms and strobe it: a press
+     that is still being answered dims and holds instead. */
+  .arrival [data-working='on'] {
+    animation: none;
+    opacity: 0.62;
   }
 
   #ui *,

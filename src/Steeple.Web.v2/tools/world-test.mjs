@@ -279,10 +279,14 @@ for (const style of styles) {
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   // `#/desk/...` would land in the village now — hosting is somebody's, and
   // this page is nobody (D4). The village is where this half of the story is.
-  await page.goto(`${base}/?style=diorama&q=low#/browse`, {
-    waitUntil: 'networkidle0',
-  });
+  //
+  // Loaded with no hash at all, and put past the roll afterwards: a cold hash
+  // is a product-first boot since build_plan Phase 3.5 — no engine, no world,
+  // nothing for a world suite to ask about — while the village's own arrival
+  // still raises one. Same place, through the door this suite is about.
+  await page.goto(`${base}/?style=diorama&q=low`, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
+  await page.evaluate('__steeple.roll.set(1)');
   await wait(2500);
   check('reduced motion is honoured', (await page.evaluate('__steeple.state.reducedMotion')) === true);
   await page.mouse.click(720, 500); // a real gesture, so only the setting can silence the bell
