@@ -127,8 +127,23 @@ for (const style of STYLES) {
   }
 
   async function ready(target) {
-    await page.goto(target, { waitUntil: 'networkidle0' });
+    // A cold *hash* is a product-first flat boot now (build_plan P3.5): main.js
+    // reads `location.hash` before anything else and, for somebody who has
+    // already chosen a place, never fetches a village behind their back. This
+    // suite is the village's own suite — `__steeple.world` is its whole
+    // subject — so it arrives the way a visitor with a village does: bare
+    // first, then the route. And a goto that only changes the hash is not a
+    // navigation, so the page would keep the previous section's roll and tab;
+    // go away first.
+    const [origin, route] = target.split('#');
+    await page.goto('about:blank');
+    await page.goto(origin, { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
+    if (route) {
+      await page.evaluate((r) => { window.location.hash = r; }, `#${route}`);
+      await page.evaluate('__steeple.roll.set(1)');
+      await wait(400);
+    }
     await wait(2400);
   }
 
