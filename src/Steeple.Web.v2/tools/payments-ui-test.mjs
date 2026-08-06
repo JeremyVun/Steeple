@@ -734,21 +734,64 @@ sql(
 
 const visitor = await openPage('reminded');
 await boot(visitor);
+// The slip is a **transient**, and the harness must not have to catch it live.
+//
+// It is shown the moment the notifications read answers — which is the moment
+// the session changes, before any wait this suite could start — it fades in
+// over 220ms, and `ui/notice.js` takes it away again twelve seconds later. A
+// check that samples the live element is therefore racing a compositor: on a
+// loaded machine the fade is stretched five-fold and more, and a poll that
+// lands either side of the readable window reads 0 both times and calls a slip
+// that really was on screen a slip that never came. That is a measurement, not
+// a defect, and it cost this suite two red runs.
+//
+// So the page keeps its own record from before the sign-in, and the assertion
+// reads the record. It is the stricter instrument, not the looser one: it
+// cannot miss a window it was watching the whole time, and it still says
+// nothing about a slip that only ever existed at opacity 0.
+await visitor.evaluate(() => {
+  const slip = document.querySelector('.slip');
+  window.__slipTrace = [];
+  const note = (why) =>
+    window.__slipTrace.push({
+      at: Math.round(performance.now()),
+      why,
+      hidden: slip.hidden,
+      open: slip.classList.contains('is-open'),
+      opacity: Number(getComputedStyle(slip).opacity),
+      line: slip.querySelector('.slip__line')?.textContent ?? '',
+    });
+  note('installed');
+  new MutationObserver(() => note('attribute')).observe(slip, { attributes: true });
+  for (const type of ['transitionend', 'transitioncancel']) {
+    slip.addEventListener(type, (event) => {
+      if (event.propertyName === 'opacity') note(type);
+    });
+  }
+  // The fade itself moves no attribute and fires nothing until it is over, so
+  // the peak is sampled while it is open. 100ms is well inside the 12s linger
+  // even when the machine stretches the fade many times over.
+  setInterval(() => {
+    if (!slip.hidden) note('sample');
+  }, 100);
+});
 await signInPage(visitor, decliner.email, decliner.name);
 await arrive(visitor);
-// Not merely un-hidden: **on screen**. The slip fades in, and headless GL runs
-// app-time about six times slow, so a check that only asks whether it exists
-// passes on a slip nobody could have read (opacity 0.0 for a second or more).
-await until(
-  visitor,
-  () => {
-    const slip = document.querySelector('.slip');
-    return Boolean(slip) && !slip.hidden && Number(getComputedStyle(slip).opacity) > 0.9;
-  },
-  null,
-  30000,
-  'a slip appeared, and finished appearing, for a visitor with a booking tomorrow'
-);
+// Not merely un-hidden: **on screen**. A slip nobody could have read — opacity
+// 0.0 for its whole life — is not a slip that appeared.
+try {
+  await until(
+    visitor,
+    () => (window.__slipTrace ?? []).some((seen) => !seen.hidden && seen.opacity > 0.9),
+    null,
+    30000,
+    'a slip appeared, and finished appearing, for a visitor with a booking tomorrow'
+  );
+} catch (error) {
+  const trace = await visitor.evaluate(() => window.__slipTrace ?? []);
+  console.log(`  slip trace: ${JSON.stringify(trace)}`);
+  throw error;
+}
 const slip = await visitor.evaluate(() => ({
   line: document.querySelector('.slip__line')?.textContent ?? '',
   action: document.querySelector('.slip__actions button')?.textContent ?? null,
