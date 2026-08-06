@@ -106,24 +106,62 @@ export function createUI(_engine, _world) {
 
   // The two documents, asked for wherever the session came from.
   //
-  // The identity panel asks whoever signs in through it, but a session can
-  // appear without it: a remembered one on the next visit, one restored by a
-  // deep link. Somebody who has never accepted the current terms must still be
-  // asked, so the question is put here — at the session, not at one door onto
-  // it (v2_migration D7). A panel already on screen owns its own prompt and is
-  // left to it; otherwise the shelf's panel is opened to carry it.
-  async function askAboutAgreements() {
-    if (!session.isSignedIn()) return;
-    const owed = await outstandingAgreements();
-    if (!owed.length || !session.isSignedIn()) return;
-    const asking = [...document.querySelectorAll('#ui .identity')].some((node) =>
+  // The identity panel asks whoever signs in through it — which is every sign-in
+  // a person performs — but a session can appear without it: a remembered one on
+  // the next visit, one restored by a deep link, one a sibling tab made. Somebody
+  // who has never accepted the current version must still be asked, so the
+  // question is also put here, at the session rather than at one door onto it
+  // (v2_migration D7).
+  //
+  // **It waits for a quiet moment.** This prompt is a layer over everything, and
+  // everything includes a desk somebody is answering from, a listing half
+  // written, an open letter. Dropping it on top of those interrupts work to ask
+  // a question that has kept for months and can keep a minute longer — so it is
+  // asked on the map, with nothing else layered over it, and until then it is
+  // simply remembered. (Found by tools/correspondence-test.mjs, which stalled at
+  // a desk this panel had covered.)
+  let owedAnAcceptance = false;
+  /** Whether the panel on screen is one this asked for, rather than the person. */
+  let askingHere = false;
+
+  const nothingElseIsAsking = () =>
+    state.view === 'village' &&
+    ![...document.querySelectorAll('#ui .modal__layer, #ui .listing__layer')].some(
+      (node) => !node.hidden
+    ) &&
+    ![...document.querySelectorAll('#ui .identity')].some((node) =>
       node.checkVisibility ? node.checkVisibility() : !node.hidden
     );
-    if (asking) return;
+
+  function offerAgreements() {
+    if (!owedAnAcceptance || !session.isSignedIn() || !nothingElseIsAsking()) return;
+    owedAnAcceptance = false;
+    askingHere = true;
     signIn.open(null, { trigger: 'agreements' });
   }
 
+  /**
+   * Somebody who has gone somewhere else has answered this prompt the way people
+   * answer prompts they did not ask for: by leaving. It gets out of the way and
+   * waits for the next quiet moment rather than sitting over a desk or a letter
+   * — a panel nobody opened must never be a panel somebody has to dismiss.
+   */
+  function withdrawAgreements() {
+    if (!askingHere) return;
+    askingHere = false;
+    if (signIn.isOpen()) signIn.close();
+    owedAnAcceptance = true;
+  }
+
+  async function askAboutAgreements() {
+    if (!session.isSignedIn()) return;
+    const owed = await outstandingAgreements();
+    owedAnAcceptance = Boolean(owed.length) && session.isSignedIn();
+    offerAgreements();
+  }
+
   session.onSessionChange((held, reason) => {
+    if (!held) owedAnAcceptance = false;
     if (held && reason === session.REASON.signedIn) askAboutAgreements();
   });
   // And on the way in, for a session this browser was already holding.
@@ -261,9 +299,18 @@ export function createUI(_engine, _world) {
     if (view !== previous?.view && (view === 'journal' || view === 'desk')) {
       track('inbox_opened', { surface: view === 'desk' ? 'host' : 'guest' });
     }
+    // Back on the map with nothing over it: the moment an acceptance that has
+    // been waiting may be asked for without interrupting anything. Anywhere
+    // else, a prompt already up steps aside.
+    if (view === 'village') offerAgreements();
+    else withdrawAgreements();
   });
 
-  bus.on('mode:change', () => render());
+  bus.on('mode:change', () => {
+    render();
+    // Entering hosting is going somewhere, even when the view has not moved yet.
+    if (state.mode !== 'guest') withdrawAgreements();
+  });
 
   bus.on('roll:change', () => {
     render();
