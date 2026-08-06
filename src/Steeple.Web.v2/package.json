@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:flat": "VITE_WORLD=off vite build --outDir dist-flat",
     "preview": "vite preview",
-    "shot": "node tools/shot.mjs"
+    "shot": "node tools/shot.mjs",
+    "test": "node tools/store-test.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

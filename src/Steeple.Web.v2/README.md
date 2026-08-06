@@ -44,7 +44,8 @@ npm run build:flat # → dist-flat/, the product with no village in it
 
 `build:flat` sets `VITE_WORLD=off`, and the engine, the world and the journey
 are behind a dynamic import, so that build does not contain three.js at all —
-310 kB against 988 kB — and never asks for a WebGL context. It opens on the
+373 kB against 1.05 MB of JS raw (116 kB against 301 kB gzipped) — and never
+asks for a WebGL context. It opens on the
 browse surface instead of the title page; every route, the property sheets and
 the booking flow work exactly as they do with the village behind them. The
 wordmark still rolls up to the title page, which without a village is paper.

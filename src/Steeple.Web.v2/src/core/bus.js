@@ -141,10 +141,6 @@ export function setDesk(desk) {
   bus.emit('desk:change', { desk });
 }
 
-export function setLantern(lantern) {
-  if (lantern !== state.lantern) reloadWith('lantern', lantern);
-}
-
 export function setMode(mode) {
   if (mode === state.mode) return;
   state.mode = mode;
