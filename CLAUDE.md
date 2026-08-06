@@ -206,7 +206,7 @@ calendar reads `RoomDetail.openHours` + `GET /listings/{id}/availability`, so a 
 can file a request. A `402 payment_method_required` opens a minimal mock-card step and the
 send resumes itself; instant venues answer the submit with the booking and say so. Email CTA
 deep links (`?goto=`) are followed at boot. All of it is **driven end to end** by
-`tools/correspondence-test.mjs` (62/62, §0–§7), two people in two browsers against real rows,
+`tools/correspondence-test.mjs` (69/69, §0–§9), two people in two browsers against real rows,
 including D5's honest-offline send. **Real (Phase 2.5, 2026-08-05) — the money, both sides:**
 the desk is **Bookings · Requests · Spaces** and opens on Bookings (Requests renders only for a
 manual venue, or one still owing answers after leaving manual); a confirmed booking carries the

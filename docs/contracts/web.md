@@ -81,7 +81,7 @@ answer to `store.js`'s mirror, and returns a verdict — never a guess.
 
 - Reads: `refreshMine()` (`GET /me/applications`), `refreshManaged(venueSlugs)`
   (`GET /manage/applications`), `openApplication(id)` (`GET /applications/{id}`, the thread),
-  `managedVenues()` (`GET /manage/venues` + a detail read each).
+  `managedVenues()` (`GET /manage/venues` + a detail read each, five in flight).
 - Guest writes: `sendMessage`, `withdraw`, `respondToCounter(id, accept)`.
 - Host writes: `decide(id, 'approve'|'decline', message?)`, `ask` (= `sendMessage`),
   `counterOffer(id, schedule, message)`.
@@ -93,6 +93,25 @@ answer to `store.js`'s mirror, and returns a verdict — never a guess.
   from that booking's own detail read. Both refreshers therefore mirror the page and then re-read
   each booking in full, bounded by `limit`. Same rule, same reason as the counter-offer eraser
   below.
+- **Reads that do not depend on one another go together, five in flight** (`together()`), and
+  a **pass** (2026-08-06) makes the several reads that open one surface count as one act:
+  within a pass a booking's detail is read at most **once**, so the applications page and the
+  bookings page — which name the same bookings — no longer fetch every one of them twice. A
+  pass opens with the first refresh and closes a *timer tick* after the last settles, which is
+  precisely what makes `await refreshManaged(); await refreshManagedBookings();` one pass (a
+  resumed `await` is a microtask; microtasks all drain before any timer) and two refreshes
+  separated by real work two. **Nothing survives a pass — this is not a cache**, and
+  `openBooking(id)` is deliberately outside every pass because it is somebody's own act.
+  Ordering inside a refresh is a guarantee, not luck: the whole page is mirrored
+  *synchronously* before the first detail read is asked for, so no thin page row can land on
+  top of a detail answer. Held to it by `correspondence-test.mjs` §8.
+- **A page is not a list.** `mirrorApplications({scope})` deletes every held row the answer did
+  not carry, so reading one page of 100 and calling it the list silently erased somebody's
+  hundred-and-first request. Every list read now **walks its pages to the end**
+  (`readAllPages`, 100 a page, hard cap 10 pages, page one first because page one carries
+  `totalCount`, then the rest together). When the cap cuts the walk short, or a later page
+  never arrives, the pass **upserts only and deletes nothing** — an incomplete list has no
+  standing to say what does not exist. Held to it by `correspondence-test.mjs` §9.
 - Payouts (host): `venuePayments(venueId)`, `startPayouts(venueId)`, `finishMockPayouts(venueId)`.
 - Notifications: `notifications({pageSize})`, `markNotificationsRead(ids)`.
 - Venue settings: `setBookingMode(venueId, 'instant'|'manual')` (`PATCH /manage/venues/{id}`).
@@ -203,7 +222,7 @@ it is contained by construction: its letters are written under the seed's own id
   `402 payment_method_required` opens a minimal mock-card step (`ui/guest/payment.js`) and
   the send picks up by itself; instant venues answer the submit with the booking and the copy
   says so (`Book this space`, "Booked."). `?goto=` deep links from email CTAs are followed at
-  boot (`ui/deepLink.js`). **Driven end to end** by `tools/correspondence-test.mjs` §§0–7 —
+  boot (`ui/deepLink.js`). **Driven end to end** by `tools/correspondence-test.mjs` §§0–9 —
   two people, two browsers, real rows, localStorage cleared twice mid-flow.
 - **Three seams the driving corrected (2026-08-05), worth knowing before touching them:**
   - a **counter-offer rides the detail read only**. The API omits `counterOffer` from list
@@ -319,7 +338,10 @@ gated to dev).
   loop, with localStorage cleared on both sides mid-flow, the dev mailbox's CTA followed, and
   every state read back from the database. It mints its own venues per run and uses `psql`
   for exactly one thing — the operator's approve on a new host's first listing, which has no
-  API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets.
+  API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets. §8 counts
+  the desk's `GET /bookings/{id}` requests (one per booking, never two) and §9 answers for
+  steeple with a fabricated page of a hundred whose `totalCount` says twenty-five, proving the
+  truncated walk erases nothing it did not see — 69 checks in all.
 - `tools/payments-ui-test.mjs` is Phase 2.5's: the desk's IA per booking mode, the guest's
   booking view (including a `0002`-card failure — the mock gateway's decline card), the payout
   prompt through mock onboarding to connected, the mode toggle changing the public apply UX,

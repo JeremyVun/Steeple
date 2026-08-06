@@ -1053,7 +1053,7 @@ await guestPage.evaluate(() => window.__steeple.setView('village'));
 await guestPage.evaluate(() => window.__steeple.setView('journal'));
 await until(
   guestPage,
-  () => window.__steeple.store.guestApplications().length > 100,
+  () => window.__steeple.store.guestApplications().length >= 100,
   null,
   40000,
   'the truncated walk mirrored what it did read'
