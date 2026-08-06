@@ -25,7 +25,7 @@
 // Reduced motion gets neither: a short crossfade between the two acts, and no
 // camera choreography at all.
 
-import { bus, state, setRoll, setView } from '../core/bus.js';
+import { bus, state, setRoll, setView, drainRollRequest } from '../core/bus.js';
 import { clamp, easeInOutCubic, easeOutCubic, easeOutQuint } from './easing.js';
 
 /** Gesture travel that carries the whole roll, never more than two thirds of a page. */
@@ -209,6 +209,9 @@ export function createRoll(engine) {
     setRoll(1);
     engine.stop();
   }
+
+  // Anything that asked for a roll while this file was still being fetched.
+  drainRollRequest();
 
   return {
     /** 0..1 — where the roll stands. */

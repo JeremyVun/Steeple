@@ -24,6 +24,7 @@
 //   'hover:change'   ({ venueId|null, roomId|null })
 //   'roll:change'    ({ roll })   — the roll moved
 //   'roll:request'   ({ target, land })  — someone asked for the cinematic
+//                    (held, one deep, while journey/roll.js is still arriving)
 //   'roll:scrub'     ({ pixels, done })  — someone is dragging it by hand
 //   'desk:change'    ({ desk })   — the host's desk changed instrument
 //   'letter:change'  ({ letter }) — the correspondence changed instrument
@@ -192,9 +193,30 @@ export function setRoll(p) {
   bus.emit('roll:change', { roll: next });
 }
 
-/** Ask the journey to roll there properly. `land` runs once it has arrived. */
+/**
+ * Ask the journey to roll there properly. `land` runs once it has arrived.
+ *
+ * The one request on this bus that is held rather than dropped when nobody is
+ * listening: journey/roll.js is the only subscriber and it may still be on its
+ * way, and a roll asked for and silently thrown away is a press the page ate
+ * (build_plan Phase 3.5, task 3). One deep — the last thing asked for is what
+ * was wanted — and drained the moment the roll subscribes.
+ */
+let held = null;
+
 export function rollTo(target, { land = null } = {}) {
+  if (!listeners.get('roll:request')?.size) {
+    held = { target, land };
+    return;
+  }
   bus.emit('roll:request', { target, land });
+}
+
+/** journey/roll.js, once it is listening. Nothing else may call this. */
+export function drainRollRequest() {
+  const request = held;
+  held = null;
+  if (request) bus.emit('roll:request', request);
 }
 
 /**

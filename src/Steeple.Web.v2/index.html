@@ -48,7 +48,13 @@
            byte of JavaScript has arrived. ui/arrival.js adopts this markup and
            wires the buttons rather than rebuilding it; its shape and words are
            the build path in that file and ui/copy.js ARRIVAL — change all three
-           together. -->
+           together.
+
+           Every control here is a real link to the hash route it means, so a
+           press lands somewhere even if no script ever arrives: the URL is the
+           recovery truth. `data-intent` is what src/core/intent.js reads, and
+           once the roll is live the native navigation is prevented and the
+           cinematic runs instead (build_plan Phase 3.5). -->
       <div id="arrival" class="arrival is-open">
         <div class="arrival__sheet">
           <p class="eyebrow arrival__eyebrow">Community space in Northern Virginia</p>
@@ -66,18 +72,29 @@
             for playgroups, classes, rehearsals and clubs.
           </p>
           <div class="arrival__actions">
-            <button type="button" class="pill pill--primary arrival__cta">Find a space</button>
-            <button type="button" class="pill arrival__host">Host a space</button>
+            <a class="pill pill--primary arrival__cta" href="#/browse" data-intent="village">Find a space</a>
+            <a class="pill arrival__host" href="#/desk" data-intent="desk">Host a space</a>
           </div>
           <p class="arrival__hint">Or scroll to browse the spaces nearby.</p>
-          <button type="button" class="arrival__scroll" aria-label="Scroll down to the spaces nearby">
+          <a
+            class="arrival__scroll"
+            href="#/browse"
+            data-intent="village"
+            aria-label="Scroll down to the spaces nearby"
+          >
             <span class="arrival__thread" aria-hidden="true"></span>
             <span class="arrival__chevron" aria-hidden="true"></span>
-          </button>
+          </a>
         </div>
       </div>
     </div>
     <div id="a11y" class="visually-hidden" aria-live="polite"></div>
+    <!-- One module entry. The arrival intent controller (src/core/intent.js) is
+         the entry's first static import and imports nothing itself, so it is
+         armed before main.js's own body runs and long before the interface
+         chunk — which is what lets the printed page above answer a press. A
+         second <script> here would not buy it a frame: Vite folds every extra
+         html entry back into this one as a static import. -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

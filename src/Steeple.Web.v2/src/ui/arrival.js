@@ -7,8 +7,14 @@
 // script has arrived (the first paint must not wait on this module); this file
 // adopts that DOM and wires it. The build path below is the same markup for any
 // page that lacks it — keep the two, and ui/copy.js ARRIVAL, saying one thing.
+//
+// The presses themselves have been answered since before this module existed:
+// the controls are real links to their hash routes and core/intent.js has been
+// recording what was asked for. This file says only what a press *means* once
+// there is a roll to mean it with; main.js decides when that is (releaseArrival).
 
 import { bus, rollTo, setView, state } from '../core/bus.js';
+import { reportArrival, setArrivalHandler } from '../core/intent.js';
 import { ARRIVAL } from './copy.js';
 import { el, steepleMark } from './dom.js';
 
@@ -24,18 +30,34 @@ function build() {
       el('div', { class: 'arrival__mark' }, steepleMark(34)),
       el('h1', { class: 'arrival__wordmark', text: ARRIVAL.wordmark }),
       el('p', { class: 'arrival__line', text: ARRIVAL.line }),
+      // Links, not buttons, and the same links index.html prints: a press must
+      // record its destination in the address bar even on a page where no
+      // handler has arrived (core/intent.js).
       el('div', { class: 'arrival__actions' }, [
-        el('button', { type: 'button', class: 'pill pill--primary arrival__cta' }, ARRIVAL.cta),
-        el('button', { type: 'button', class: 'pill arrival__host' }, ARRIVAL.ctaHost),
+        el(
+          'a',
+          { class: 'pill pill--primary arrival__cta', href: '#/browse', 'data-intent': 'village' },
+          ARRIVAL.cta
+        ),
+        el('a', { class: 'pill arrival__host', href: '#/desk', 'data-intent': 'desk' }, ARRIVAL.ctaHost),
       ]),
       el('p', { class: 'arrival__hint', text: ARRIVAL.hint }),
       // The invitation to scroll, drawn rather than written: a thread down off
       // the page and the smallest chevron. It answers to a click for anyone who
       // would rather ask than scroll.
-      el('button', { type: 'button', class: 'arrival__scroll', 'aria-label': ARRIVAL.scroll }, [
-        el('span', { class: 'arrival__thread', 'aria-hidden': 'true' }),
-        el('span', { class: 'arrival__chevron', 'aria-hidden': 'true' }),
-      ]),
+      el(
+        'a',
+        {
+          class: 'arrival__scroll',
+          href: '#/browse',
+          'data-intent': 'village',
+          'aria-label': ARRIVAL.scroll,
+        },
+        [
+          el('span', { class: 'arrival__thread', 'aria-hidden': 'true' }),
+          el('span', { class: 'arrival__chevron', 'aria-hidden': 'true' }),
+        ]
+      ),
     ]),
   ]);
 }
@@ -43,11 +65,14 @@ function build() {
 export function createArrival() {
   const element = document.getElementById('arrival') ?? build();
 
-  // Property assignment, not addEventListener: adopting the same page twice
-  // (a village boot that fell back to flat) must not double the handlers.
-  element.querySelector('.arrival__cta').onclick = () => roll();
-  element.querySelector('.arrival__host').onclick = () => roll(() => setView('desk'));
-  element.querySelector('.arrival__scroll').onclick = () => roll();
+  // One handler for all three controls, held by core/intent.js and used only
+  // once main.js has released the page to the roll. Handing it over rather than
+  // attaching our own is what keeps a press answered exactly once: the same
+  // press must not both jump the hash and run the cinematic.
+  setArrivalHandler((destination) => {
+    reportArrival(destination, 'cinematic');
+    roll(destination === 'desk' ? () => setView('desk') : null);
+  });
 
   // Once the roll is under way the sheet's fade *is* the roll — the published
   // --roll-title, followed frame by frame, not a transition of its own.
