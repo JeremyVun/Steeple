@@ -7,12 +7,35 @@
 
 | Doc | Owns |
 |---|---|
-| `v2_migration/` | **ACTIVE — this is the current build priority.** Web v2 prototype → production: `design.md` holds the adopted decisions **D1–D9** (2026-08-05), `build_plan.md` the six execution phases. Covers production SSO/Turnstile/agreements, correspondence onto the real API, the single-gate moderation model + Admin reduction, manage-create idempotency, and SPA hardening/SEO honesty |
+| `v2_migration/` | **COMPLETE 2026-08-05 → 2026-08-07.** Web v2 prototype → production: `design.md` holds the adopted decisions **D1–D9** (keep — they are still the rationale of record); `build_plan.md` is pruned to a phase-history stub. Shipped: signed-out truth + per-person store, correspondence and payments on the wire, single-gate moderation + Admin reduction, product-first boot, harness consolidation, env-gated Google/Apple/Turnstile + agreements, idempotent manage creates, SPA hardening + the SEO floor, and the closing sweep (owner's five-step E2E driven, full suite pass green). Keyed provider runs await the owner's client IDs (`docs/runbooks/sso-and-turnstile.md`) |
 | `phase-6-reputation-and-launch.md` | Ratings & reviews, provider responsiveness, one-tap rebook, expiry tuning, SEO completion, beachhead swap + the full launch/ops checklist. **Exit = public launch.** Still the launch gate — but its *web* items (production SSO, moving web v2 off its demo store, SEO on a client-rendered surface) are **superseded in mechanism** by `v2_migration/`, which owns them; phase 6 just checks they're done |
 | `phase-7-growth-seams.md` | Trigger-gated growth items: verified badges (delegated identity verification), vouching, Area #2, phone OTP step-up, insurance/safeguarding research — plus the small-deferred-items index |
 | `seo-crawlable-listings.md` | The half of `docs/SEO.md` the v2 migration's floor left undone: per-listing metadata, OG cards, `Place` JSON-LD, canonicals, 301s and real 404s — all of which need HTML that differs per URL. Carries D9's recommended shape (render `/space/{venue}/{room}` from the API) and the alternatives it beat |
 | `payments.md` | The standalone payments design: Stripe Connect (inbound + outbound), per-occurrence charging for recurring bookings, refund & cancellation policy. **Rails built 2026-08-05 on a mock gateway** (`docs/contracts/payments.md` = as-built truth); the Stripe adapter + webhooks + legal/policy work stay gated on the Phase 7 paid-bookings trigger |
 | `booking-modes.md` | Instant book (default) vs manual approval per venue, rescind semantics, charge timing — **implemented 2026-08-05** (behind `payments.enabled`); **deferred:** chronic-rescinder nudge to manual, per-user booking caps (adopted 2026-08-05, partially supersedes `payments.md` §5) |
+
+## Open decisions & recorded gaps (from the v2 migration's closing sweep, 2026-08-07)
+
+Recorded, deliberately not built — each needs an owner decision or a gated trigger first:
+
+- **Media base URL is load-bearing and final-before-photos.** Room photo URLs are stored
+  **absolute** from `Media:PublicBaseUrl` at upload time (dev `http://localhost:5200`;
+  compose default `http://localhost:8081`; production = `MEDIA_PUBLIC_BASE_URL`). Renaming
+  the media host orphans every photo already written. Decide the permanent origin (Spaces/
+  CDN name) **before** real hosts upload photos, and add it to web nginx CSP `img-src`
+  *and* `Admin:MediaImageOrigins` in the same change. (Local compose corollary: uploaded
+  photos live on `:8081` while web CSP is `:8080`-relative and Admin's default CSP is
+  https-only, so locally-uploaded photos render blocked in both — seeded Unsplash rows are
+  unaffected. Cosmetic locally; the reason the decision matters in production.)
+- **Mobile has no card UI.** `payments.enabled` stays **off** in production configuration
+  until it exists — that flag is the guard, not an oversight.
+- **`GET /me/applications` list-vs-detail contract:** list rows omit `counterOffer` and
+  thread messages by design; clients must merge, never replace, detail state from list
+  reads (web's mirror does — `docs/contracts/applications.md` is the wire truth).
+- **Stripe adapter + webhooks + legal review** — phase-7 gated (`payments.md` rollout);
+  the mock gateway refuses to run in Production with `payments.enabled=true`.
+- **Counter-offers stay behind `booking.counter_offers`** (off ⇒ endpoints 404 and the
+  desk says "not available here yet" — verified in the closing sweep).
 
 ## Phase history (decoder for "Phase N" stamps in code and docs)
 

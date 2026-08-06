@@ -6,8 +6,10 @@ organizers. Instant-book by default with per-venue manual-approve opt-in (2026-0
 (free listings removed 2026-07-07), one NoVA beachhead.
 .NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL + Flutter mobile
 (`/mobile`, Phase 4). The v1 HTMX web funnel is deprecated and retained only as reference.
-The API/mobile and v1 reference implement the full discovery → SSO → apply → approve →
-booking loop; v2's real-API integration is still incomplete. Solo-operated; lean
+The API, web v2, and mobile implement the full discovery → SSO → apply/instant-book →
+booking → payments (mock-gateway era) loop; web v2's real-API migration **completed
+2026-08-07** — production Google/Apple/Turnstile are shipped, env-gated, and go live by
+configuration alone (`docs/runbooks/sso-and-turnstile.md`). Solo-operated; lean
 (~$100 AUD/mo ceiling).
 
 ## Read this first — document map
@@ -22,7 +24,7 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/ARCHITECTURE.md` | **As-built** state | What exists today: modules, domain model + invariants, ports, deployment |
 | `docs/contracts/` | Seam index: every wire contract, port, and client seam, one small file each | **START HERE for any interface question** — load only the file you need |
 | `docs/CONTRACTS.md` | The §-number index into `docs/contracts/` (change rules + where each § now lives) | Resolving a "CONTRACTS §n" citation to its seam file |
-| `docs/backlog/` | Implementation plans for what's next (README = index + phase history) | What to build next and what's deliberately deferred. **`backlog/v2_migration/` is the active plan** (web v2 → production; decisions D1–D9) |
+| `docs/backlog/` | Implementation plans for what's next (README = index + phase history + **open decisions & recorded gaps**) | What to build next and what's deliberately deferred. `v2_migration/` completed 2026-08-07 (its `design.md` D1–D9 remain the rationale of record); **`phase-6-reputation-and-launch.md` is what's next** |
 | `docs/MOBILE_DESIGN.md` | Flutter app design | Anything under `/mobile` |
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
@@ -91,6 +93,9 @@ dotnet run --project src/Steeple.Admin
 docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
 ```
 
+- Compose needs `AUTH_JWT_SIGNING_KEY` (env or `.env`) and **refuses the repository dev
+  key** — its containers run Production and the security-round guard fails closed
+  (api crash-loops). Generate one: `openssl rand -base64 48`.
 - Emails sent locally are captured at http://localhost:5200/dev/mailbox (`.json` for
   harnesses) — Development only, and their CTAs are real links into the SPA.
 - Razor views hot-reload in Development; C# changes need restart.
@@ -155,171 +160,122 @@ section in Api appsettings.
   per tab; concurrent tabs survive by the API's rotation reuse-grace
   (`docs/contracts/identity.md`). Never write a token to storage.
 - Compose runs server containers in **Production** and serves web v2 from nginx. Only
-  web/admin publish general host ports; api is compose-internal apart from dev media loopback.
+## Steeple.Web.v2 — the active frontend (real-API migration complete, 2026-08-07)
 
-## Steeple.Web.v2 — the active frontend (integration in progress)
+Built 2026-08-03→05 as the `animated-web` experiment ("Steeple — The Village"),
+consolidated here 2026-08-05, and carried onto the real API by `docs/backlog/v2_migration`
+(D1–D9, closed 2026-08-07). Map-first product surface (Leaflet ~58% + list/filters +
+panels) under a Three.js village splash joined by a scroll-scrubbed "roll" (`state.roll`
+0→1; the engine fully pauses at roll=1 — Three.js does zero work in-product). Its own
+`README.md` and `docs/CONTRACT2–6.md` (the historical wave briefs) live inside the
+project; code comments citing "CONTRACT4 §5" etc. mean those files, while "CONTRACTS §n"
+means this repo's `docs/CONTRACTS.md`.
 
-Built 2026-08-03→05 as the `animated-web` experiment ("Steeple — The Village"); the
-direction succeeded and it was consolidated here 2026-08-05. Map-first product surface
-(Leaflet ~58% + list/filters + panels) under a Three.js village splash joined by a
-scroll-scrubbed "roll" (`state.roll` 0→1; the engine fully pauses at roll=1 — Three.js
-does zero work in-product). Its own `README.md` and `docs/CONTRACT2–6.md` (the historical
-wave briefs) live inside the project; code comments citing "CONTRACT4 §5" etc. mean those
-files, while "CONTRACTS §n" means this repo's `docs/CONTRACTS.md`.
+**Boot is a three-state machine** (P3.5): printed arrival (the title CTAs are real links
+in `index.html` — a press is answered from the first frame), product-first **flat boot**
+(any intent or deep link before the village is ready opens the product with no engine,
+world, or Three fetch for the rest of that visit — a cold `#/…` hash is always a flat
+boot), and the live-village boot (poster → canvas crossfade, cinematic roll). Product
+reads never wait on 3D; ⚠ never defer Leaflet's tile layer (NaN-zoom boot-killer,
+`ui/map/atlas.js`).
 
 **Run/verify:** `npm run dev` (vite :5173, proxies `/api` → API :5200 — the API serves no
-CORS by design, the proxy is the missing BFF); `npm run build:flat` = no-Three build
-(~373kB vs ~1.05MB raw; 116kB vs 301kB gzipped) for A/B; `build:debug`/`build:flat:debug`
-keep `window.__steeple` for suites that drive a built bundle (production builds drop it). Harnesses in `tools/*.mjs` drive real browser events; each
-documents its own flags/env in its header (some are world-ON, some world-OFF —
-**inverting a suite's documented flags produces convincing, meaningless failures**).
-Headless GL runs app-time ~6× slow: tests wait on state, never wall-clock. Known-stale
-failure sets that predate wave 7: guest-test 3, world-test 12 (wave2-test's 6 retired
-2026-08-06 with its rebaseline); input-test's opening beats are **load-flaky, 0–8 reds
-of one family** — a roll that must finish on its own momentum, plus everything
-downstream of it — so judge its check lines, not its count.
-E2E suites mint real accounts/venues/applications on the local API each run:
-**`tools/fixtures.mjs`** is the shared way to ask for one (a host who keeps a venue, a
-guest with a card, a weekly ask, the wire from node, per-IP sign-in pacing, and the one
-`launch()` that puts every headless browser on a pipe). `STEEPLE_API`/`STEEPLE_PSQL`/
-`STEEPLE_DB` configure it; psql stands in only for the operator's first-listing approve.
-`STEEPLE_API` and the vite proxy's target **must be the same API instance** — a mismatch
-spends two rate-limit budgets and the 429s read as hangs. A **cold hash is a flat boot**
-since P3.5 (no engine, no `__steeple.world`), so a suite whose subject is the village
-loads bare and *then* sets the hash (`input-test`, `wave2-test` both do). And a transient
-the product takes away on a timer (the ambient slip's 12s linger) must be asserted from a
-**record the page keeps**, never a live sample: a loaded machine stretches a 220ms fade
-five-fold and more, and a poll landing either side of the readable window reports a
-defect that never happened (`payments-ui-test` §6).
-**Sign-in is per-IP rated (10/min) and `fixtures.paceAuth` is the budget** — running several
-suites back to back exhausts it, and the 429 arrives looking exactly like a product failure
-(`the run stopped: /auth/sessions answered 429`). Let the window roll between suites.
+CORS by design, the proxy is the missing BFF; `STEEPLE_API_ORIGIN` moves the target);
+`npm run build:flat` = no-Three build for A/B; `build:debug`/`build:flat:debug` keep
+`window.__steeple` for suites that drive a built bundle (production builds drop it, and an
+unkeyed production bundle honestly refuses sign-in — the dev email form is dev-build-only).
+Harnesses in `tools/*.mjs` drive real browser events; **each documents its own flags/env in
+its header — inverting them produces convincing, meaningless failures.** Headless GL runs
+app-time ~6× slow: suites wait on state, never wall-clock.
 
 **Seams (frozen — the day an upstream name changes, one file moves):**
-- `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request.
+- `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request; reads
+  time out at 4s, writes at 15s, and a timeout classifies as *unknown*, never unreachable.
 - `src/data/catalog.js` — product vocabulary over the wire, with `bundledCatalog.js`
   fallback when the API is down (seed slugs match the bundled ids 1:1).
 - `src/data/session.js` — identity (httpOnly-cookie refresh token, in-memory access token,
   `withAccess()` 401-retry-once, cross-tab `storage` sync; harnesses read a bearer via
-  `withAccess((t) => Promise.resolve(t))`, never storage). **`signInWithProvider({provider,
-  idToken, nonce, displayName, turnstileToken})` is the one sign-in** — Google, Apple and dev
-  all arrive there; `signIn({email, displayName})` is the dev provider's wrapper
-  (`provider:"dev", idToken:"email|Name"`, DevLoginEnabled — Development only) and is what
-  every harness and `fixtures.signInPage` goes through, so **it must keep working**.
-  `accessToken()` exists for the analytics batcher alone; everything else uses `withAccess`.
-- `src/data/providers.js` — the only file that knows a third party exists (Google Identity
-  Services, Sign in with Apple `code id_token`, per-attempt nonce). **Reading the env var is
-  the whole feature flag:** no `VITE_GOOGLE_CLIENT_ID` / `VITE_APPLE_CLIENT_ID` +
-  `VITE_APPLE_REDIRECT_URI` ⇒ no button, no SDK fetched. Same for
-  `src/data/turnstile.js` and `VITE_TURNSTILE_SITE_KEY` (absent ⇒ no widget, token null; the
-  API fails open without `Turnstile__SecretKey`). Go-live: `docs/runbooks/sso-and-turnstile.md`.
-- `src/data/agreements.js` — the two documents and their versions, against `public/terms.html`
-  and `public/privacy.html`. **Bump a version in the same commit as the words**, or people
-  re-accept text that never moved. The identity panel asks inline before it lets anyone carry
-  on; `ui/index.js` asks **only at boot**, only on the map with nothing layered over it, and
-  steps aside if the person goes elsewhere — a prompt on `REASON.signedIn` lands in the middle
-  of a flow and stalled two suites at a desk it had covered.
-- `src/data/analytics.js` — the client event batcher (`POST /api/v1/events`, ≤25 per batch,
-  `sendBeacon` on `pagehide` so the last batch survives — without a `userId`, the documented
-  cost). `track()` never blocks and a failed batch is dropped. It keeps the API's allowlist so
-  it never sends what would be dropped; `core/intent.js`'s `reportArrival` seam feeds it
-  `arrival_settled` through `watchArrivals` (a subscriber, because intent.js imports nothing).
+  `withAccess((t) => Promise.resolve(t))`, never storage). Dev sign-in
+  (`provider:"dev"`, Development-only) and the real providers share one `signIn()` seam.
+- `src/data/providers.js` — Google/Apple, the only file that knows a third party exists; a
+  provider with no `VITE_*` client id is not offered at all, SDKs load on first attempt.
+- `src/data/turnstile.js` — the widget; no `VITE_TURNSTILE_SITE_KEY` ⇒ no widget and null
+  tokens (the API fails open without a secret — key both sides or neither).
+- `src/data/agreements.js` — the two legal documents at shipping versions; a first *panel*
+  sign-in is asked to agree (the ask waits for a quiet moment); bump versions with the page.
 - `src/data/correspondence.js` — the wire for everything after a request is written (inbox,
-  thread, withdraw, counter response, host decisions, the payments method-on-file). Calls
-  `api.js`, mirrors steeple's answer into `store.js`, returns a verdict whose `reach` is
-  `refused | offline | slow | signedOut | unavailable` — never a guess (v2_migration D4/D5).
-  **`slow` is not `offline`:** writes wait 15s where reads wait 4s, and `ApiError.timedOut`
-  splits "this browser stopped waiting" from "nothing answered" — both wear status 0, and only
-  the second may ever be told "nothing was sent" (D8).
-- `src/data/store.js` — a localStorage **mirror** of what steeple holds, in the product's
-  vocabulary (shapes from db/changelog 004/005/009), keyed **per person**
+  thread, withdraw, counter response, host decisions, method-on-file). Verdicts' `reach` is
+  `refused | offline | signedOut | unavailable` — never a guess (D4/D5).
+- `src/data/store.js` — a localStorage **mirror** of what steeple holds, keyed per person
   (`steeple-village-store:{userId}`, `:anon` signed out — D6). It decides nothing; clearing
-  it costs a reload, never a fact. The demo fixture loads only outside production builds and
-  is scenery for the 3D village alone.
+  it costs a reload, never a fact. The demo fixture is dev-build village scenery only.
+- `src/data/analytics.js` — the interaction batcher to `POST /api/v1/events` (CONTRACTS
+  §7); nothing user-visible ships dark.
 
-**Real vs demo (the integration work):** Real — catalog reads, auth sessions (sign-in **and
-sign-out**, `DELETE /auth/sessions` best-effort), application submit (`Idempotency-Key`,
-mirrors into local store), the whole hosting chain (dev SSO → POST venue → room → photo
-upload → PUT availability → PATCH published; publish requires a photo; an unverified venue's
-first publish answers `draft` + `publishRequestedAtUtc`, while later rooms at that verified
-venue answer `published` outright). The listing wizard is **Place → Describe → Availability →
-Publish** for a new venue and **Describe → Availability → Publish** for a space at one already
-held (2026-08-06: the Verify step is gone — hosting is entered through a session, so the only
-thing it still did was catch one dying mid-draft, which is now the Publish step's own blocker
-opening `signIn`; Publish's facts carry a "Listed by" row instead). The desk offers **Add a
-space** (the current venue) beside a quiet **List another venue**, and **Edit venue details**
-over `PATCH /manage/venues/{id}`. A local record takes the slug steeple minted the moment a
-create answers (`adoptVenueSlug`/`adoptRoomSlug` in `store.js`) — a guessed slug left in place
-is dropped by the desk's own re-read, taking the draft's rooms, hours and closed days with it.
-And the account surface — a "Sign in" chip on the porch when signed out, chip +
-card when signed in, inbox/badge/journal/letters and every "Identity verified (SSO)" chip
-gated on fact (v2_migration Phase 1), **and the whole correspondence** (Phase 2, D4/D5): the
-guest inbox is `GET /me/applications`, the thread `GET /applications/{id}`, and withdraw /
-counter accept-decline / messages / all four host decisions are wire writes that re-mirror
-the answer. The host desk exists only when `GET /manage/venues` is non-empty and is scoped
-to those venues; `409 slot_taken` on approve renders as the product moment it is. The apply
-calendar reads `RoomDetail.openHours` + `GET /listings/{id}/availability`, so a built bundle
-can file a request. A `402 payment_method_required` opens a minimal mock-card step and the
-send resumes itself; instant venues answer the submit with the booking and say so. Email CTA
-deep links (`?goto=`) are followed at boot. All of it is **driven end to end** by
-`tools/correspondence-test.mjs` (69/69, §0–§9), two people in two browsers against real rows,
-including D5's honest-offline send. The hosting side is `tools/host-publish-test.mjs`
-(134/134, §1–§9 — the whole journey, then the abandoned venue, a second space, and the venue
-editor) and `tools/host-session-test.mjs` (24/24 — a session killed mid-draft). **Real (Phase 2.5, 2026-08-05) — the money, both sides:**
-the desk is **Bookings · Requests · Spaces** and opens on Bookings (Requests renders only for a
-manual venue, or one still owing answers after leaving manual); a confirmed booking carries the
-frozen per-session price, the next charge, each date's `paymentStatus`, and the host's cancel
-behind a two-press warning (it frees every remaining date and refunds everything charged); the
-guest's letter prints the same truth and, on a failed charge, steeple's own ladder with the
-card step a press away; the card on file is reachable from the account chip through one shared
-panel (`ui/cardPanel.js`, brand + last4 only); the payout prompt → mock KYC → connected state
-lives on the desk; booking mode is a setting on Spaces; and `GET /me/notifications` renders as
-**ambience** — one slip on arrival, quiet lines in the inbox, no bell and no new nav tab.
-Driven by `tools/payments-ui-test.mjs` (65/65). **Real (Phase 4/5, 2026-08-07) — the production
-posture:** Google and Apple sign-in, Turnstile, and the two documents signing in agrees to, each
-gated on its own env key so a build with none of them is the dev panel exactly as it was; the
-group asking is a field on the request sheet (the hardcoded email→organization table is gone);
-writes wait 15s and a timeout is never reported as an absence; the desk reads each room's hours
-from the wire; the client analytics batcher, so nothing user-visible ships dark; and the SEO
-floor — `public/robots.txt`, `GET /api/v1/sitemap.xml` aliased at the edge, site-level OG +
-`WebSite` JSON-LD. Driven by `tools/hardening-test.mjs` (65/65, §1–§8). Demo — the card step and
-the payout screen are the mock gateway's own stand-ins, and no provider/Turnstile keys exist
-yet, so those paths are env-gated-off locally by design. Accounts-consolidation order agreed
-2026-08-05: signed-out header state (**done**) → inbox onto `/me/applications` (**done**) →
-real providers (**done**).
+**Everything is real.** Catalog, sign-in/out, agreements, the apply calendar
+(`openHours` + availability), submit (`Idempotency-Key`, org-name input, 402 → mock card
+step → the send resumes itself), instant book, inbox/threads/withdraw/counters, all four
+host decisions (`409 slot_taken` renders as the product moment — "Already taken", steeple
+declined it as it happened), the desk (only when `GET /manage/venues` answers; Bookings ·
+Requests · Spaces, Requests only for manual venues or live leftovers; hours are steeple's),
+the hosting chain (venue → room → photo → hours → publish; first listing → Admin review,
+later rooms self-serve), payments truth both sides (frozen price, per-date charge state,
+failure ladder + card panel, rescind → auto-refund, mock payout onboarding),
+`GET /me/notifications` as ambience (one slip + quiet inbox lines, no bell), and `?goto=`
+email CTAs at boot. Counter-offers behind a server flag render "not available here yet"
+when off, never an error. Mock-era residue: the dev provider locally, the mock card step
+and payout screen (gateway stand-ins), no Turnstile until keyed.
 
-**Hazards found in the waves (unfixed):**
-`.choice*` is the request sheet's class in `styles/guest.css`, which loads after `host.css` —
-host surfaces must not reuse it (the booking-mode radios are `.mode*` for exactly this reason;
-`.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own);
-room photo URLs are stored **absolute** from `Media:PublicBaseUrl`, so moving the media host
-orphans every photo already written (and, locally, rows from other agents' API ports 404 or
-refuse outright — `fixtures.mjs:isEnvironmentNoise` is what a console-error-counting suite
-should filter with, and it still counts a failed `/api/v1` call;
-also add any new media origin to nginx.conf's CSP `img-src` or photos silently stop loading);
-`guest-test.mjs`'s stale set is wider than "test 3": §3–§4 (the week card's painted bands) and
-§11–§12 (the `#/browse` hash, the map surface over the world) fail too, all predating this
-round;
-signing out mid-listing swaps the store to `:anon` (D6), so the draft's own open hours read as
-missing until the same person signs back in — the Publish step names them, honestly, while
-they cannot be seen;
-dev geocoding = `StubGeocodingGateway` (every address → village centre, so geofence-rejection
-paths are locally unreachable, and every locally host-listed venue stacks on one map point —
-harnesses drive pins by keyboard or assert "aimed === opened", never a pointer at a named pin);
-search reads one page of 100, so a venue beyond it has no pin or row until a narrower search
-reaches it (its sheet works by slug either way; paging the map is unbuilt);
-the **village animates a change, not a state** (`flows/world/index.js` on `store:change`), and
-the engine sleeps past the roll — a posted letter hangs in the air until the visitor rolls
-back up, which is what `wave2-test.mjs` drives; a *seal* at the door needs a second event, so
-only a manual venue can produce one and no seeded venue is manual.
-Retired 2026-08-06 (Phase 3.6): `host-offline-test.mjs` (rewritten signed-in-then-offline),
-`surface-test.mjs` §5's `outBox.cx` crash, and `draft.roomId === 'main-space'` — a room has
-taken steeple's own minted slug since 366fc83, proven by `host-publish-test.mjs` §7–§8.
-Retired 2026-08-07 (Phase 4/5): the Spaces tab's **local** open hours — the desk now reads
-`GET /manage/rooms/{id}/availability` per room and mirrors it (`store.mirrorRoomAvailability`),
-so a room whose hours only ever existed at steeple prints them instead of "No open hours set".
-API gaps compiled for steeple: v2 `docs/CONTRACT4.md` §5
-(CORS, venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint…).
+**Harness truths (paid for; keep):**
+- ONE API per run: export `STEEPLE_API` **and** point the vite proxy (`STEEPLE_API_ORIGIN`)
+  at the same instance. `host-input-test`/`host-session-test` hardcode :5200 — bind the one
+  dev API to both ports (`--urls "http://localhost:5218;http://localhost:5200"`), never run
+  a second API. `boot-priority-test` drives `build:debug` via `vite preview --outDir
+  dist-debug`, never the dev graph; `world-off-test`'s built-bundle half needs
+  `build:flat:debug` (plain `build:flat` has no `__steeple`).
+- Sign-in is 10/min per-IP: `fixtures.paceAuth` paces within a process; give back-to-back
+  auth-heavy suites breathing room.
+- **The P4 agreements ask interrupts real-input suites**: a fixture account that never
+  agreed gets the quiet-moment ask mid-run and the panel swallows a pointer beat. Call
+  `fixtures.agreeCurrent(token)` on minted accounts (versions are read from
+  `src/data/agreements.js`, no drift) — except in `hardening-test` §4, whose subject is the
+  un-agreed state.
+- Slips are **transients** (fade in, gone in 12s): record from before sign-in and assert
+  the record, never sample the live element (`payments-ui-test` §6 shows the pattern).
+- `map-test` asserts seed venue counts — green only after a DB reset; every other suite
+  mints its own rows and never collides.
+- Console-noise discipline: dead-port media 404s and GL narration are environmental —
+  `fixtures.isEnvironmentNoise` is the shared filter; judge the check lines.
+- Known-stale sets (documented in the suites' own headers): `guest-test` 31/42 (map-first
+  roll drift) · `world-test` exactly 12, symmetric per style — asymmetry is real.
+  `input-test`'s opening roll beats are a **load reading** (headless GL under load), not a
+  verdict.
+- All suites launch Chrome on a **pipe** and close in `finally` — a SIGKILL mid-run leaves
+  zero orphaned "Chrome for Testing" processes (verified in the P6 sweep).
+
+**Hazards (each verified against code, 2026-08-07):**
+- Guest CSS classes never on host surfaces: `.choice*` is the request sheet's
+  (`guest.css` loads after `host.css` — the booking-mode radios are `.mode*` for exactly
+  this reason); `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style
+  their own.
+- Room photo URLs are stored **absolute** from `Media:PublicBaseUrl` — moving the media
+  host orphans every photo written (open decision: `docs/backlog/README.md`); any new media
+  origin must be added to web nginx CSP `img-src` **and** `Admin:MediaImageOrigins`, or
+  photos/queue thumbnails silently stop loading. Locally, rows from other agents' dead API
+  ports 404 as console noise.
+- Dev geocoding = `StubGeocodingGateway`: every address → village centre, so
+  geofence-rejection paths are locally unreachable and locally-listed venues stack on one
+  map point — harnesses drive pins by keyboard or assert "aimed === opened", never a
+  pointer at a named pin.
+- Search reads one page of 100: a venue beyond it has no pin or row until a narrower
+  search reaches it (its sheet works by slug; paging the map is unbuilt).
+- Behind a proxy, a dead API answers **502** (nginx may answer **504** on a stopped
+  upstream); `neverArrived()` covers 0/502/503 and deliberately not 504 — a timeout may
+  have committed.
+- The compose stack runs Production and **refuses the repository dev JWT key**
+  (security-round guard): set `AUTH_JWT_SIGNING_KEY` to `openssl rand -base64 48` output
+  or the api container crash-loops. Dev SSO and the dev mailbox exist only on a
+  Development API — compose (:8080) cannot sign anybody in until the owner keys a provider.
 
 **Design taste (Jeremy):** calm, sophisticated, professional — never childish or tacky;
 A/B alternatives ship behind query params (`?style= ?map= ?desk= ?letter= ?world=off`),

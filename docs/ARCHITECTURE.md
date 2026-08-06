@@ -5,14 +5,17 @@
 > over `docs/contracts/` (one file per seam — load only the seam you need). What's next:
 > `docs/backlog/`. Flutter app design: `MOBILE_DESIGN.md`.
 
-## Current state — ROADMAP Phases 0–5 complete (code); ratings + availability landed 2026-07-05; web v2 became the active web surface 2026-08-05
+## Current state — ROADMAP Phases 0–5 complete (code); ratings + availability landed 2026-07-05; web v2 became the active web surface 2026-08-05 and finished its real-API migration 2026-08-07
 
-The API, mobile app, and deprecated web v1 reference implement the full two-sided loop:
-geo-fenced discovery → SSO → apply → provider decision → booking with DB-enforced
-no-double-booking, notifications, cancellation, and no-show handling. Active web v2 uses
-the real API for catalog, application submit, and provider listing creation, but its inbox,
-request decisions, and production SSO are still integration work. Admin moderates the first
-listing at each newly claimed venue; later rooms at that venue publish themselves.
+The API, web v2, and mobile app implement the full two-sided loop: geo-fenced discovery →
+SSO → apply (or instant book) → decision → booking with DB-enforced no-double-booking,
+payments (mock-gateway era), notifications, reminders, cancellation with auto-refund, and
+no-show handling. Web v2's `v2_migration` completed 2026-08-07: identity, correspondence,
+payments, hosting and moderation all run on the wire; the only demo data left is the 3D
+village's scenery in dev builds. Google/Apple/Turnstile code paths are shipped and
+env-gated — a build with no client id offers no button — and go live by configuration
+alone (`docs/runbooks/sso-and-turnstile.md`). Admin moderates the first listing at each
+newly claimed venue; later rooms at that venue publish themselves.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
 screen, FCM push, and the analytics/flags client proxies. The deprecated web v1 source still
@@ -29,10 +32,11 @@ Admin gained a moderation panel.
 wiring (config-backed `IFeatureFlags` interim, in Api/Admin), mobile client-side Turnstile
 (apply sends an empty token; only enforced where a secret is configured), mobile `manage`
 screens (data layer + contracts exist; screens are the in-progress fast-follow — ROADMAP
-Phase 5), **web analytics** (the `IWebAnalytics` server-side emitter belonged to v1; web v2
-posts no events to `/api/v1/events` at all), and the `/.well-known` deep-link files on v2.
-*(Search day/time availability filters are built — `AvailabilityFilter` +
-`WhenFilterBinder`; the old "not built" note predated the 2026-07-05 availability work.)*
+Phase 5), mobile card UI (`payments.enabled` stays off in production until it exists), a
+real payment gateway (Stripe adapter + webhooks + legal review — phase-7 gated,
+`docs/contracts/payments.md` rollout), and the `/.well-known` deep-link files on v2.
+*(Web analytics landed 2026-08-07 — `src/data/analytics.js` batches interaction events to
+`POST /api/v1/events`; the old gap note predated it.)*
 
 ## Solution layout
 
@@ -248,17 +252,54 @@ Deployment). `RoomPhotoDto` carries `id`/`thumbUrl`/`cardUrl` alongside the lega
 edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/min/account) —
 10 MB cap enforced by Kestrel before the pipeline runs.
 
-**Web SPA** — `Steeple.Web.v2` is the deployed web surface. Vite produces static assets and
-the nginx host serves them while proxying same-origin `/api` requests to the API container;
-the API still emits no CORS headers. Hash routes own navigation. `src/data/api.js` is the
-wire seam and `src/data/session.js` owns identity: the refresh token is an **httpOnly cookie**
-the API sets (`refreshTransport: "cookie"`), the access token lives in module memory, and
-localStorage holds only the person and why their session last changed — which is also how
-sibling tabs learn about a sign-in or sign-out (`storage` event). Refresh is single-flight per
-tab with one 401 retry; simultaneous tabs are made safe by the API's rotation grace, not by the
-client (`contracts/identity.md`, SYSTEM_DESIGN §17, 2026-08-06). Catalog reads, application submit, and the host
-venue/room/photo/publish chain use the real API. Sign-in is still the Development-only dev
-provider; guest inbox/letters and host request decisions still use the local demo store.
+**Web SPA** — `Steeple.Web.v2` is the deployed web surface; its real-API migration
+completed 2026-08-07 (`docs/backlog/v2_migration/design.md`, D1–D9). Vite produces static
+assets and the nginx host serves them while proxying same-origin `/api` requests to the API
+container; the API still emits no CORS headers. Hash routes own navigation, and are also
+the no-JavaScript fallback: the title page's CTAs are printed in `index.html` as real links.
+
+*Boot* is a three-state machine (P3.5; `core/intent.js` + `main.js`): **printed arrival**
+(markup only — a press records its destination natively), **product-first flat boot** (any
+intent or deep link before the village is ready opens the map/desk directly; no engine,
+world, or Three chunk is fetched for the rest of that visit), and **live-village boot** (no
+early intent — poster → canvas crossfade, the cinematic roll). Product reads never wait on
+3D; the tile layer always ships with the map (a grid-layer-less Leaflet map settles NaN
+zoom and dies on the next `invalidateSize`).
+
+*Seams* (`src/data/`): `api.js` — the wire, `/api/v1` names verbatim, read timeout 4s,
+writes 15s, and a timeout is classified as "unknown", never "unreachable". `session.js` —
+identity: the refresh token is an **httpOnly cookie** the API sets
+(`refreshTransport: "cookie"`), the access token lives in module memory, localStorage holds
+only `{user, reason, stamp}` for cross-tab `storage` sync; refresh is single-flight per tab
+with one 401 retry, simultaneous tabs are made safe by the API's rotation grace
+(`contracts/identity.md`). `providers.js` — Google/Apple, the only file that knows a third
+party exists; a provider with no `VITE_*` client id is not offered, SDKs load on first
+sign-in attempt, nonces bind tokens per attempt. `turnstile.js` — the widget, off without
+`VITE_TURNSTILE_SITE_KEY`; both token-carrying writes send null when unkeyed.
+`agreements.js` — the two legal documents at shipping versions; a first panel sign-in is
+asked to agree (the ask waits for a quiet moment), `POST /me/agreements` records it.
+`catalog.js` — product vocabulary over the wire with a bundled fallback when the API is
+away. `correspondence.js` — everything after a request is written; every failure is a
+verdict (`refused | offline | signedOut | unavailable`), never a guess.
+`store.js` — a per-person localStorage **mirror** of steeple's answers
+(`steeple-village-store:{userId}`); it decides nothing. `analytics.js` — the interaction
+batcher to `POST /api/v1/events` (CONTRACTS §7); nothing user-visible ships dark.
+
+*On the wire, end to end:* catalog, sign-in/out, agreements, the apply calendar
+(`openHours` + availability), submit with `Idempotency-Key` through the 402 card step,
+instant book, the guest inbox (`GET /me/applications`, paged walk that deletes only what a
+finished list did not carry), threads/withdraw/counter offers, all four host decisions
+(`409 slot_taken` rendered as the product moment), the desk (exists only when
+`GET /manage/venues` answers; Bookings · Requests · Spaces; one read per booking per
+opening), the whole hosting chain (venue → room → photo → hours → publish; first listing →
+review, later rooms self-serve), payments truth on both sides (frozen price, per-date
+charge state, failure ladder, rescind + refund, mock payout onboarding), reminders as
+ambience (one slip + quiet inbox lines; no bell), and `?goto=` email CTAs at boot. The
+demo fixture survives only as dev-build village scenery, contained by construction.
+
+*SEO floor* (D9): `public/robots.txt`, nginx aliases `/sitemap.xml` to the API's, index
+meta/OG tags; `public/terms.html` + `privacy.html` are real pages (founder's preview text —
+legal review is a launch gate). Deeper crawler rendering is its own backlog entry.
 The deprecated v1 BFF remains in source for reference but is excluded from the solution,
 Compose, and Bake builds.
 
@@ -448,15 +489,18 @@ The SPA has no server of its own, so its host sets everything a static host must
   They are repeated in each app `location` because nginx's `add_header` does not merge:
   a location with any `add_header` of its own inherits none from the server block. The
   policy text itself is written once into `$csp`.
-- **CSP** — `default-src 'self'` with four deliberate exceptions, all of them images:
-  `https://*.tile.openstreetmap.org` (map tiles), `https://images.unsplash.com` (room
-  photography, absolute in the DB per `db/changelog/012`), `data:` (favicon + SVG drawn in
-  CSS) and `blob:` (a host previewing their own photo before it is sent). `style-src`
-  carries `'unsafe-inline'` — the request sheet's week card sets grid geometry as a `style`
-  attribute (`ui/guest/weekCard.js`), which raises `style-src-attr blocked inline` without
-  it. `script-src 'self'` needs no exception: the bundle contains no inline `<script>`.
+- **CSP** — `default-src 'self'`, with image exceptions
+  (`https://*.tile.openstreetmap.org` map tiles, `https://images.unsplash.com` seeded room
+  photography per `db/changelog/012`, `https://*.googleusercontent.com` reserved for
+  provider avatars, `data:`, `blob:` for a host's local photo preview) and, since P5.3
+  (2026-08-07), the three sign-in/bot-check origins written in ahead of go-live:
+  `accounts.google.com`, `appleid.cdn-apple.com` and `challenges.cloudflare.com` in
+  `script-src`/`frame-src` (+ `connect-src`/`form-action` where each flow needs it), so
+  keying the providers needs no policy edit on the day. `style-src` carries
+  `'unsafe-inline'` — the week card sets grid geometry as a `style` attribute.
   No directive names a path, so the policy is unchanged behind a stripped sub-path prefix.
-  `/api/` adds no headers at all — the API answers for its own responses.
+  `/api/` adds no headers at all — the API answers for its own responses. nginx also
+  aliases `/sitemap.xml` to the API's `GET /api/v1/sitemap.xml` (exact-match location).
 - **Proxy abuse controls** — real-IP/proto input is trusted only from private Docker peers;
   nginx emits one canonical `X-Forwarded-For` value and caps `/api/` at 5 req/s (burst 30).
   The API independently applies 300/min total per account/IP and 120/min/IP to discovery.
