@@ -13,7 +13,7 @@ public class RoomPhoto
     /// <summary>Navigation to the owning room.</summary>
     public Room? Room { get; set; }
 
-    /// <summary>Full-size image URL (legacy external URLs for seeded rows; the 1600w variant for uploads).</summary>
+    /// <summary>Full-size image URL/path (legacy external URLs; the 1600w variant for uploads).</summary>
     public string Url { get; set; } = "";
 
     /// <summary>
@@ -22,10 +22,10 @@ public class RoomPhoto
     /// </summary>
     public string? StorageKey { get; set; }
 
-    /// <summary>400w variant URL (card thumbnails); null for legacy rows — fall back to <see cref="Url"/>.</summary>
+    /// <summary>400w variant URL/path (card thumbnails); null for legacy rows — fall back to <see cref="Url"/>.</summary>
     public string? ThumbUrl { get; set; }
 
-    /// <summary>800w variant URL (galleries); null for legacy rows — fall back to <see cref="Url"/>.</summary>
+    /// <summary>800w variant URL/path (galleries); null for legacy rows — fall back to <see cref="Url"/>.</summary>
     public string? CardUrl { get; set; }
 
     /// <summary>Upload timestamp (UTC). Pre-pipeline rows default to the migration time.</summary>

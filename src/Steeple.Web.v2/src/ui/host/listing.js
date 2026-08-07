@@ -21,7 +21,7 @@
 // blocker, which opens the one sign-in panel there is (`askToSignIn`). The
 // host's name is public on the listing, so Publish says whose it will be.
 //
-// Two rules run through the whole file.
+// Three rules run through the whole file.
 //
 // Nothing is offered that the rules forbid. Publishing needs open hours, a
 // photograph, an hourly price and a session; while any of those is missing the
@@ -34,6 +34,13 @@
 // gate holds back comes back from the API as a draft with a publish request
 // against it, and that is what the host reads: with a moderator, not live, and
 // not pretended live either.
+//
+// Nothing is asked for twice. Reopened, a listing already published or already
+// with a moderator reads as a statement and its button is the way out — it
+// carries anything typed since and asks for nothing, and a stage with nothing
+// new to say never touches the wire. Until 2026-08-07 the footer went on
+// offering "Publish this space" under "has been sent for review", and the press
+// re-sent hours, room and ask that steeple already held.
 
 import {
   addBlackout,
@@ -50,7 +57,17 @@ import {
   upsertPlacedVenue,
 } from '../../data/store.js';
 import { track } from '../../data/analytics.js';
-import { ACTIVITY_TYPES, CENTER, VENUES } from '../../data/venues.js';
+import { prepareRoomPhoto } from '../../data/photo.js';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+import { ACTIVITY_TYPES, CENTER } from '../../data/venues.js';
+import {
+  ACCESS_LABELS,
+  ACTIVITY_LABELS,
+  AMENITY_LABELS,
+  toLabels,
+} from '../../data/vocabulary.js';
 import { VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import * as manage from './manage.js';
@@ -83,7 +100,11 @@ const FLOWS = {
 // because "a space" on its own is the one thing this step must not be vague
 // about \u2014 the host has one venue in mind and the flow is bound to it.
 const HEAD = {
-  venue: { eyebrow: 'List a space', title: () => 'A space with room to spare' },
+  venue: {
+    eyebrow: 'List a space',
+    title: (venue, _rooms, at = 'place') =>
+      at === 'place' ? 'Tell us about the venue' : `Add a space at ${venue}`,
+  },
   'add-room': {
     eyebrow: 'Add a space',
     title: (venue, rooms) =>
@@ -92,27 +113,6 @@ const HEAD = {
   room: { eyebrow: 'Edit this listing', title: (venue) => `A space at ${venue}` },
   'venue-edit': { eyebrow: 'Venue details', title: (venue) => venue },
 };
-
-// The square of village ground the confirmation is drawn on: honest to lat/lng,
-// wide enough to hold the five churches with room around them.
-const HALF_LAT = 0.0326;
-const HALF_LNG = 0.042;
-const toPlan = (lat, lng) => ({
-  x: 0.5 + (lng - CENTER.lng) / (2 * HALF_LNG),
-  y: 0.5 - (lat - CENTER.lat) / (2 * HALF_LAT),
-});
-
-const COMPASS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
-
-function bearingLine(lat, lng) {
-  const dNorth = (lat - CENTER.lat) * 111.32;
-  const dEast = (lng - CENTER.lng) * 111.32 * Math.cos((CENTER.lat * Math.PI) / 180);
-  const km = Math.hypot(dNorth, dEast);
-  if (km < 0.15) return 'in the middle of the village';
-  const angle = (Math.atan2(dEast, dNorth) * 180) / Math.PI;
-  const point = COMPASS[Math.round(((angle + 360) % 360) / 45) % 8];
-  return `${km.toFixed(1)} km ${point} of the village centre`;
-}
 
 const slugify = (text) =>
   String(text)
@@ -143,6 +143,37 @@ function splitAddress(address = '', suburb = '') {
     postcode: zip,
   };
 }
+
+/**
+ * '400 S Maple Ave, Falls Church, VA, United States' read for the API's three
+ * fields: the street is the first segment, the locality the second, and a ZIP
+ * is taken from anywhere in the label when one is printed there.
+ */
+function partsFromLabel(label) {
+  const bits = String(label)
+    .split(',')
+    .map((bit) => bit.trim())
+    .filter(Boolean);
+  return {
+    addressLine: bits[0] ?? String(label).trim(),
+    suburb: (bits[1] ?? '').replace(/\b\d{5}(?:-\d{4})?\b/, '').trim(),
+    postcode: /\b(\d{5})(?:-\d{4})?\b/.exec(String(label))?.[1] ?? '',
+  };
+}
+
+// The teardrop of the design system, at minimap size: the marker on the real
+// map, and — faint — the ghost that holds the map's ground before there is one.
+const PIN_SVG =
+  '<svg viewBox="0 0 30 38" width="30" height="38" aria-hidden="true" focusable="false">' +
+  '<path class="minimap__pin-body" d="M15 37.4C15 37.4 27.6 21.9 27.6 13.4 27.6 6.5 22 1 15 1S2.4 6.5 2.4 13.4C2.4 21.9 15 37.4 15 37.4Z"/>' +
+  '<circle class="minimap__pin-eye" cx="15" cy="13.3" r="4.6"/></svg>';
+
+/** The empty frame's own mark: a picture, drawn in the line the paper uses. */
+const PHOTO_SVG =
+  '<svg viewBox="0 0 44 32" width="44" height="32" aria-hidden="true" focusable="false">' +
+  '<rect class="shotpick__mark-line" x="1" y="1" width="42" height="30" rx="4.5"/>' +
+  '<circle class="shotpick__mark-line" cx="13" cy="11" r="3.4"/>' +
+  '<path class="shotpick__mark-line" d="M3.5 27.5 16 15.5l7.5 7 6-5 11 10"/></svg>';
 
 const oneLineAddress = (venue) =>
   [venue.addressLine, [venue.suburb, venue.postcode].filter(Boolean).join(' ')]
@@ -256,6 +287,21 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
   /** True while this listing can only ever be local: one of the village's own. */
   const localOnly = () => draft.localOnly;
 
+  /**
+   * Whether there is anything to carry. `draft.sent` is what steeple last
+   * answered with (a read that landed, or a save it accepted); with no answer to
+   * measure against, an edit cannot be ruled out and the write goes as it always
+   * did. `draft.sentHours` is the same fact about the hours.
+   */
+  const roomChanged = () =>
+    !draft.sent || JSON.stringify(seedSnapshot(draft.room)) !== JSON.stringify(draft.sent);
+  const unsentPhoto = () => Boolean(draft.room?.photo?.file && !draft.room.photo.sent);
+  const hoursSnapshot = () =>
+    JSON.stringify([
+      openHoursFor(draft.venueId, draft.roomId),
+      blackoutsFor(draft.venueId, draft.roomId),
+    ]);
+
   /** Whether steeple is a party to this listing at all, right now. */
   const withSteeple = () => !draft.localOnly && draft.offline !== true;
 
@@ -349,6 +395,15 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     // steeple stamps those (ProviderEditedAtUtc).
     if (!steps().includes('place') && draft.remote.venueId) return { ok: true, skipped: true };
     const fresh = !draft.remote.venueId;
+    // An address typed by hand rather than picked carries its locality inside
+    // the one line; the parts steeple keeps are read from it rather than asked
+    // for again — the form stopped asking for suburb and ZIP (2026-08-07).
+    if (!draft.venue.suburb.trim()) {
+      const parts = splitAddress(draft.venue.addressLine);
+      draft.venue.addressLine = parts.addressLine;
+      draft.venue.suburb = parts.suburb;
+      draft.venue.postcode = draft.venue.postcode.trim() || parts.postcode;
+    }
     const answer = await manage.saveVenue(draft);
     if (answer.ok) {
       draft.remote.venueId = answer.value.id;
@@ -365,10 +420,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       // The pin is gone because this is the answer to it: steeple read the
       // address and put the venue somewhere, and the host is told where.
       if (fresh) {
-        say(
-          `${answer.value.name} is on the map, ${bearingLine(answer.value.latitude, answer.value.longitude)}.`,
-          'quiet'
-        );
+        say(`${answer.value.name} is on the map.`, 'quiet');
       }
     }
     return answer;
@@ -381,9 +433,25 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     // room before there is a price only collects a refusal on a step that did
     // not ask the question, which is a wall rather than a rule.
     if (!hasPrice(draft.room.pricePerHour)) return { ok: true, skipped: true };
+    // An edit nobody made is still an edit at steeple: a live listing PATCHed
+    // with what it already says is stamped for the operator's review feed
+    // (ProviderEditedAtUtc). The same rule pushVenue keeps for a flow with no
+    // Place step. Unknown counts as changed — only a proven no-op is skipped.
+    if (draft.remote.roomId && !roomChanged() && !unsentPhoto()) {
+      return { ok: true, skipped: true };
+    }
+    // Never PATCH an existing room from the summary's blanks: the full room
+    // must have been read (and folded into this draft) at least once, or the
+    // save would send fabricated empties back as if the host had cleared them.
+    if (draft.remote.roomId && !draft.hydrated) {
+      const primed = await hydrateRoom();
+      if (!primed.ok) return primed;
+    }
     const answer = await manage.saveRoom(draft);
     if (!answer.ok) return answer;
     draft.remote.roomId = answer.value.id;
+    draft.hydrated = true; // the answer is the full room — nothing left unread
+    draft.sent = seedSnapshot(draft.room); // what steeple now holds, to measure the next edit by
     if (adoptRoomSlug(draft.venueId, draft.roomId, answer.value.slug).ok) {
       draft.roomId = answer.value.slug ?? draft.roomId;
     }
@@ -399,14 +467,21 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     return answer;
   }
 
-  function pushHours() {
-    if (localOnly() || !draft.remote.roomId) return Promise.resolve({ ok: true, skipped: true });
-    return manage.saveHours(
+  async function pushHours() {
+    if (localOnly() || !draft.remote.roomId) return { ok: true, skipped: true };
+    // This stage is a replace-all, so hours nobody painted are not re-sent: the
+    // press that leaves an already-listed space would otherwise write the same
+    // rules over themselves, and fail on a session that has quietly gone.
+    const painted = hoursSnapshot();
+    if (painted === draft.sentHours) return { ok: true, skipped: true };
+    const answer = await manage.saveHours(
       draft,
       openHoursFor(draft.venueId, draft.roomId),
       blackoutsFor(draft.venueId, draft.roomId),
       todayIso()
     );
+    if (answer.ok) draft.sentHours = painted;
+    return answer;
   }
 
   /**
@@ -475,8 +550,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     const description = el('textarea', {
       class: 'input input--area',
       id: 'place-description',
-      rows: '3',
-      placeholder: 'A parish hall and two meeting rooms, a short walk from the shops.',
+      rows: '4',
+      placeholder: 'A hall with two meeting rooms, a short walk from the shops.',
       oninput: (event) => {
         draft.venue.description = event.target.value;
         renderFoot();
@@ -488,7 +563,16 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     // the address field's own question, so it must not cost the host the caret
     // they are typing with — only this much of the step is drawn again.
     const mark = el('div', { class: 'place__mark' });
-    const drawMark = () => replaceChildren(mark, [placedBlock(placeMark())].filter(Boolean));
+    // The map alone, as big as the column: it is the confirmation, and needs
+    // no caption to say so. Its ground is reserved from the first frame — a
+    // quiet framed slot with a ghost of the pin — so the sheet never changes
+    // size and no field moves when the real map arrives.
+    const drawMark = () => {
+      const at = placeMark();
+      replaceChildren(mark, [
+        at ? miniMap(at.at) : ghostSlot(),
+      ]);
+    };
     drawMark();
 
     // The street address suggests as it is typed. Steeple asks once the input
@@ -568,14 +652,32 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
         input.setAttribute('aria-busy', String(on));
       }
 
+      // The list is fixed to the viewport rather than laid into the sheet: an
+      // absolutely-positioned box still counts toward a scroll ancestor's
+      // scrollable overflow, so laying it in would grow the sheet's scrollbar
+      // the moment suggestions appear. A scroll anywhere would desync a fixed
+      // box from its field, so it closes the list instead.
+      function place() {
+        const at = input.getBoundingClientRect();
+        list.style.top = `${at.bottom + 4}px`;
+        list.style.left = `${at.left}px`;
+        list.style.width = `${at.width}px`;
+      }
+
+      const onScroll = (event) => {
+        if (!list.contains(event.target)) close();
+      };
+
       function draw() {
         const opening = list.hidden && items.length > 0;
+        const closing = !list.hidden && items.length === 0;
         list.hidden = items.length === 0;
         input.setAttribute('aria-expanded', String(!list.hidden));
-        // The sheet body scrolls; a list opening near its bottom edge would be
-        // clipped until the host scrolled by hand. Once, on opening — never on
-        // the redraws that follow arrow keys.
-        if (opening) requestAnimationFrame(() => list.scrollIntoView({ block: 'nearest' }));
+        if (opening) {
+          place();
+          window.addEventListener('scroll', onScroll, true);
+        }
+        if (closing) window.removeEventListener('scroll', onScroll, true);
         replaceChildren(
           list,
           items.map((s, i) =>
@@ -597,14 +699,17 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       }
 
       function pick(s) {
-        draft.venue.addressLine = s.addressLine ?? s.label;
-        if (s.suburb) draft.venue.suburb = s.suburb;
-        if (s.postcode) draft.venue.postcode = s.postcode;
-        input.value = draft.venue.addressLine;
-        const suburb = document.getElementById('place-suburb');
-        const postcode = document.getElementById('place-postcode');
-        if (suburb) suburb.value = draft.venue.suburb;
-        if (postcode) postcode.value = draft.venue.postcode;
+        // The provider breaks the address into parts when it can; when it only
+        // gives the label, the label is read for them. Either way the host is
+        // never asked to retype what they just picked.
+        const parts = partsFromLabel(s.label);
+        draft.venue.addressLine = s.addressLine ?? parts.addressLine;
+        draft.venue.suburb = s.suburb ?? parts.suburb;
+        draft.venue.postcode = s.postcode ?? parts.postcode;
+        // The field keeps the whole label that was picked: a line cut to the
+        // street alone reads as information thrown away, and no longer says
+        // *which* Maple Avenue was chosen.
+        input.value = s.label;
         // The provider resolved this suggestion to a coordinate before offering
         // it, so where the address falls can be shown at once. It is the
         // provider's reading and not steeple's answer — `placeMark` keeps the
@@ -655,7 +760,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
           ? // The rename that cannot break a link: steeple derives a listing's
             // address from the name once, when it is created, and never again.
             'What groups read about the venue. Renaming it never changes its web address, and a new street address is put back on the map.'
-          : 'Steeple puts the venue on the map from its address, so groups can see how far it is before they ask.',
+          : 'A venue is the building or location where your spaces are. Add its details and address first; next, you’ll describe the room or space groups can hire.',
       }),
       noticeBlock(),
       // Two kinds of question, so two columns — the same reading as Describe.
@@ -665,16 +770,10 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       el('div', { class: 'place' }, [
         el('div', { class: 'place__words' }, [
           field('place-name', 'name', 'Venue name', 'St Andrew’s Church'),
+          addressField(),
           labelled('About the venue', description),
         ]),
-        el('div', { class: 'place__where' }, [
-          addressField(),
-          el('div', { class: 'field__pair' }, [
-            field('place-suburb', 'suburb', 'Suburb or town', 'Vienna'),
-            field('place-postcode', 'postcode', 'ZIP code', '22180'),
-          ]),
-          mark,
-        ]),
+        el('div', { class: 'place__where' }, [mark]),
       ]),
     ];
   }
@@ -692,37 +791,69 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
    */
   const placeMark = () => savedMark() ?? (draft.picked ? { at: draft.picked, sure: false } : null);
 
+  /**
+   * The real map, small: the same OpenStreetMap tiles the discovery surface
+   * runs, framed on the coordinate, with the teardrop of the design system on
+   * the spot. Still — it confirms a place, it is not for browsing. Leaflet can
+   * only size itself once the element is laid out, so the map is raised a frame
+   * after the block lands in the document.
+   */
+  /** The map's reserved ground before an address has been picked. */
+  function ghostSlot() {
+    const ghost = el('span', { class: 'minimap__ghost' });
+    ghost.innerHTML = PIN_SVG; // static markup, no data in it
+    return el('div', { class: 'minimap minimap--waiting', 'aria-hidden': 'true' }, [ghost]);
+  }
+
+  function miniMap(at) {
+    const element = el('div', { class: 'minimap', 'aria-hidden': 'true' });
+    requestAnimationFrame(() => {
+      if (!element.isConnected) return;
+      const map = L.map(element, {
+        zoomControl: false,
+        attributionControl: true,
+        dragging: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
+        boxZoom: false,
+        keyboard: false,
+        touchZoom: false,
+        inertia: false,
+      });
+      map.attributionControl.setPrefix('');
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors',
+        className: 'minimap__tiles',
+      }).addTo(map);
+      map.setView([at.lat, at.lng], 15);
+      L.marker([at.lat, at.lng], {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: 'minimap__pin',
+          html: PIN_SVG,
+          iconSize: [30, 38],
+          iconAnchor: [15, 38],
+        }),
+      }).addTo(map);
+    });
+    return element;
+  }
+
   /** Where the venue stands, once somebody can say. Quiet, and only then. */
   function placedBlock(mark = savedMark()) {
     if (!mark) return null;
     const { at, sure } = mark;
-    const plan = el('div', { class: 'plan plan--still', 'aria-hidden': 'true' });
-    for (const venue of VENUES) {
-      const spot = toPlan(venue.lat, venue.lng);
-      const dot = el('span', { class: 'plan__known', title: venue.shortName });
-      dot.style.left = `${spot.x * 100}%`;
-      dot.style.top = `${spot.y * 100}%`;
-      plan.append(dot);
-    }
-    const here = toPlan(at.lat, at.lng);
-    const pin = el('span', { class: 'plan__pin' });
-    pin.style.left = `${Math.min(100, Math.max(0, here.x * 100))}%`;
-    pin.style.top = `${Math.min(100, Math.max(0, here.y * 100))}%`;
-    plan.append(el('span', { class: 'plan__north', text: 'N' }), pin);
-
     return el('section', { class: `placed${sure ? '' : ' placed--soft'}` }, [
-      plan,
+      miniMap(at),
       el('div', { class: 'placed__words' }, [
-        el('p', { class: 'eyebrow', text: sure ? 'On the map' : 'About here' }),
+        el('p', { class: 'eyebrow', text: 'On the map' }),
         el('p', {
           class: 'prose prose--sm',
           text: sure
-            ? `Steeple found the address ${bearingLine(at.lat, at.lng)}. Everyone browsing sees it there.`
-            : `From the address you picked, ${bearingLine(at.lat, at.lng)}. Steeple confirms the exact spot when the venue is saved.`,
-        }),
-        el('p', {
-          class: 'field__hint',
-          text: `${at.lat.toFixed(4)}, ${at.lng.toFixed(4)}`,
+            ? 'This is where groups browsing the map will find the venue.'
+            : 'Where the address you picked sits. Check the pin looks right before you continue.',
         }),
       ]),
     ]);
@@ -847,12 +978,15 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
 
   /**
    * The photograph steeple will not publish a space without — shown as the one
-   * thing it is, a picture of the room. The tile is the control: the file input
-   * lies over it, so a click anywhere opens the picker and a chosen photograph
-   * fills the frame it will be seen in rather than being named in a filename.
+   * thing it is, a picture of the room, at the size a picture deserves. The
+   * frame is the control: the file input lies over it, so a click anywhere
+   * opens the picker and a chosen photograph fills the frame it will be seen
+   * in rather than being named in a filename. It is also the step's give — the
+   * frame takes whatever height the written column leaves, so the picture is as
+   * large as the step can afford and nothing stands empty under it.
    */
   function photoField() {
-    const tile = el('label', { class: 'shotpick__tile', for: 'room-photo' });
+    const tile = el('label', { class: 'shotpick', for: 'room-photo' });
     const input = el('input', {
       class: 'shotpick__input',
       id: 'room-photo',
@@ -860,47 +994,115 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       // The tile is a picture once it holds one, so the field says its own name.
       'aria-label': 'Photograph of the room',
       accept: 'image/jpeg,image/png,image/webp',
-      onchange: (event) => {
+      onchange: async (event) => {
         const file = event.target.files?.[0];
         if (!file) return;
-        draft.room.photo = { file, url: URL.createObjectURL(file), name: file.name, sent: false };
+        // A photograph is sized here, before it is sent (data/photo.js): what
+        // the frame shows from this moment is the file steeple will be given,
+        // not the twelve-megapixel one this browser was handed.
+        const mine = (picking += 1);
+        refused = null;
+        working = true;
+        drawPreview();
+        const prepared = await prepareRoomPhoto(file);
+        if (mine !== picking) return; // a second choice overtook this one
+        working = false;
+        if (!prepared.ok) {
+          takeAway();
+          refused = prepared.detail;
+          drawPreview();
+          announce?.(prepared.detail);
+          return;
+        }
+        hold({ file: prepared.file, url: URL.createObjectURL(prepared.file), name: file.name, sent: false });
         drawPreview();
         renderFoot();
         announce?.(`${file.name} attached.`);
       },
     });
 
+    // The picked file is read and re-encoded off the main path, so two quick
+    // choices can be in flight at once: only the last one may land.
+    let picking = 0;
+    let working = false;
+    let refused = null;
+
+    /** Hold a prepared photograph, and let go of the last one's object URL. */
+    function hold(photo) {
+      const stale = draft.room.photo?.url;
+      draft.room.photo = photo;
+      if (stale && stale !== photo?.url && stale.startsWith('blob:')) URL.revokeObjectURL(stale);
+    }
+
+    function takeAway() {
+      hold(null);
+      working = false;
+      input.value = '';
+      renderFoot();
+    }
+
     const remove = el(
       'button',
       {
         type: 'button',
-        class: 'linkish shotpick__remove',
-        onclick: () => {
-          draft.room.photo = null;
-          input.value = '';
+        class: 'shotpick__remove',
+        // The button stands inside the label that opens the picker: taking the
+        // photograph away must not ask for another one in the same click.
+        onclick: (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          refused = null;
+          takeAway();
           drawPreview();
-          renderFoot();
         },
       },
       'Remove'
     );
 
+    /**
+     * What an empty frame says: the one thing it wants, and how to frame it —
+     * or, when the last file could not be used, why, in the place the host is
+     * already looking. A refusal is never a wall: the frame is still the picker.
+     */
+    function invitation() {
+      const mark = el('span', { class: 'shotpick__mark' });
+      mark.innerHTML = PHOTO_SVG; // static markup, no data in it
+      return el('span', { class: 'shotpick__empty' }, [
+        mark,
+        el('span', { class: 'shotpick__prompt', text: refused ? 'Try another photograph' : 'Add a photograph' }),
+        el('span', {
+          class: `shotpick__hint${refused ? ' shotpick__hint--refused' : ''}`,
+          text: refused ?? 'One wide shot of the whole space.',
+        }),
+      ]);
+    }
+
+    /** The moment a picked file is being read and sized down, said plainly. */
+    const preparing = () =>
+      el('span', { class: 'shotpick__empty' }, [
+        el('span', { class: 'shotpick__prompt', text: 'Preparing the photograph…' }),
+      ]);
+
     function drawPreview() {
       const photo = draft.room.photo;
+      const busy = working && !photo;
       replaceChildren(tile, [
         input,
-        photo
-          ? el('img', { class: 'shotpick__thumb', src: photo.url ?? photo.remoteUrl, alt: '' })
-          : el('span', { class: 'shotpick__prompt', text: 'Add a photograph' }),
+        ...(photo
+          ? [
+              el('img', { class: 'shotpick__thumb', src: photo.url ?? photo.remoteUrl, alt: '' }),
+              el('span', { class: 'shotpick__veil', 'aria-hidden': 'true', text: 'Replace photograph' }),
+              remove,
+            ]
+          : [busy ? preparing() : invitation()]),
       ]);
-      remove.hidden = !photo;
+      tile.classList.toggle('is-filled', Boolean(photo));
+      tile.classList.toggle('is-refused', Boolean(refused));
+      tile.setAttribute('aria-busy', busy ? 'true' : 'false');
     }
     drawPreview();
 
-    return el('div', { class: 'field shotpick' }, [
-      el('p', { class: 'eyebrow', text: 'Photograph' }),
-      el('div', { class: 'shotpick__row' }, [tile, remove]),
-    ]);
+    return tile;
   }
 
   /**
@@ -1132,9 +1334,50 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     return list;
   }
 
+  /**
+   * Publish reads in the same two columns Place does: the ledger at the left,
+   * where the venue stands at the right. Stacked, the map sat below the fold
+   * of a long summary and read as an afterthought rather than a confirmation.
+   */
+  function publishLayout(words) {
+    const where = placedBlock();
+    if (!where) return words;
+    return [
+      el('div', { class: 'publish' }, [
+        el('div', { class: 'publish__words' }, words),
+        el('div', { class: 'publish__where' }, [where]),
+      ]),
+    ];
+  }
+
+  /**
+   * Where the space stands at steeple, in the Publish step's one word — with the
+   * village's own record read first, because a room published here while steeple
+   * was away is live in this browser and unknown to the service, and the two
+   * must not be blurred (the desk marks it "On this device").
+   */
+  const standing = () => {
+    const room = effectiveRoom(draft.venueId, draft.roomId);
+    if (room?.keptLocally === true) return 'kept';
+    return manage.publishState(room ?? draft.room);
+  };
+
+  /**
+   * A listing steeple has already answered — on the map, or sitting with a
+   * moderator. There is nothing left to ask for, so Publish reads as a statement
+   * and its button is the way out. Until 2026-08-07 the footer went on offering
+   * "Publish this space" under "has been sent for review": the flow asking a
+   * second time for what it had already been given.
+   */
+  function settled() {
+    if (outcome || !draft?.room) return null;
+    const state = standing();
+    return state === 'published' || state === 'review' ? state : null;
+  }
+
   function publishStep() {
     const room = effectiveRoom(draft.venueId, draft.roomId) ?? draft.room;
-    const state = outcome?.state ?? manage.publishState(room);
+    const state = outcome?.state ?? standing();
 
     const summary = el('dl', { class: 'facts' }, [
       el('dt', { class: 'eyebrow', text: 'Space' }),
@@ -1166,25 +1409,25 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     ]);
 
     if (state === 'published') {
-      return [
+      return publishLayout([
         el('p', { class: 'prose', text: `${room.name} is published. Groups can find it and send you a request.` }),
+        noticeBlock(),
         summary,
-        placedBlock(),
-      ];
+      ]);
     }
 
     if (state === 'review') {
-      return [
+      return publishLayout([
         el('section', { class: 'guide guide--review' }, [
-          el('h3', { class: 'eyebrow', text: 'With Steeple' }),
+          el('h3', { class: 'eyebrow', text: 'In review' }),
           el('p', {
             class: 'prose',
             text: `${room.name} has been sent for review. Steeple reads a new listing before it goes on the map; nothing more is needed from you.`,
           }),
         ]),
+        noticeBlock(),
         summary,
-        placedBlock(),
-      ];
+      ]);
     }
 
     if (state === 'kept') {
@@ -1196,6 +1439,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
             text: `Steeple could not be reached, so ${room.name} is held on this device with everything you wrote. Open it again when Steeple is back and publish from here.`,
           }),
         ]),
+        noticeBlock(),
         summary,
       ];
     }
@@ -1230,7 +1474,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       ];
     }
 
-    return [
+    return publishLayout([
       el('p', {
         class: 'prose',
         text: withSteeple()
@@ -1239,8 +1483,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       }),
       noticeBlock(),
       summary,
-      placedBlock(),
-    ];
+    ]);
   }
 
   /**
@@ -1351,13 +1594,14 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
   function canAdvance() {
     if (busy) return false;
     if (outcome) return true;
+    // Leaving a listing steeple already holds is never blocked by what a new one
+    // would still need — a session that went while this was open included.
+    if (step === 'publish' && settled()) return true;
     if (step === 'place')
       return (
         draft.venue.name.trim().length > 1 &&
         draft.venue.description.trim().length > 0 &&
-        draft.venue.addressLine.trim().length > 4 &&
-        draft.venue.suburb.trim().length > 1 &&
-        draft.venue.postcode.trim().length > 2
+        draft.venue.addressLine.trim().length > 4
       );
     if (step === 'describe')
       return (
@@ -1375,7 +1619,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     if (outcome) return 'Done';
     if (step === 'place') return draft.entry === 'venue-edit' ? 'Save changes' : 'Continue';
     if (step === 'describe') return 'Set availability';
-    if (step === 'availability') return 'Review and publish';
+    if (step === 'availability') return settled() ? 'Review the listing' : 'Review and publish';
+    if (settled()) return 'Done';
     return 'Publish this space';
   }
 
@@ -1524,6 +1769,11 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       close();
       return;
     }
+    if (step === 'publish' && settled()) {
+      if (await leaveSettled()) close();
+      else renderStep();
+      return;
+    }
     const at = step;
     busy = true;
     say('');
@@ -1561,16 +1811,31 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     }
   }
 
+  /**
+   * The way out of a listing steeple has already answered. Whatever was typed
+   * since still goes — the rail may be jumped, and a step reached that way has
+   * written to this browser's record and nowhere else — but nothing is asked for
+   * a second time, and a stage with nothing to carry never touches the wire.
+   */
+  async function leaveSettled() {
+    busy = true;
+    say('');
+    renderFoot();
+    try {
+      const carried = await pushEverything();
+      if (carried.ok) return true;
+      reportProblem(carried);
+      announce?.(carried.detail);
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
+
   /** The venue editor's ending — steeple agreed, and there is nowhere to go. */
   function settleEdit() {
     outcome = { state: 'saved' };
-    const at = draft.remote.position;
-    say(
-      at
-        ? `${draft.venue.name} is saved, ${bearingLine(at.lat, at.lng)}.`
-        : `${draft.venue.name} is saved.`,
-      'quiet'
-    );
+    say(`${draft.venue.name} is saved.`, 'quiet');
     announce?.(`${draft.venue.name} is saved.`);
   }
 
@@ -1588,6 +1853,13 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
    * about the session — but must not take the focus off whatever asked for it.
    */
   function renderBody() {
+    const head = HEAD[draft.entry];
+    eyebrow.textContent = head.eyebrow;
+    title.textContent = head.title(
+      draft.venue.name,
+      roomsHere(draft.venueId).length,
+      step
+    );
     const build = {
       place: placeStep,
       describe: describeStep,
@@ -1642,6 +1914,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     notice = null;
     outcome = null;
     busy = false;
+    hydration = null; // a read in flight for a previous draft answers only that draft
 
     if (venue) {
       const address = splitAddress(venue.address, venue.suburb);
@@ -1692,6 +1965,15 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
             : blankRoom(''),
       };
       if (venue.lat != null) draft.remote.position = { lat: venue.lat, lng: venue.lng };
+      // A room steeple already holds opened from the store's mirror, which a
+      // fresh browser only carries as the venue-detail summary — so the full
+      // room is read before any of it may be sent back (hydrateRoom).
+      draft.hydrated = !draft.remote.roomId;
+      draft.seededRoom = draft.hydrated || !draft.room ? null : seedSnapshot(draft.room);
+      // Nothing has been sent from here yet, and the hours in this browser's
+      // record are taken as steeple's until the host paints over them.
+      draft.sent = null;
+      draft.sentHours = room ? hoursSnapshot() : null;
       step = editing ? 'place' : (at ?? 'describe');
     } else {
       draft = {
@@ -1705,16 +1987,88 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
         picked: null,
         venue: { name: '', description: '', addressLine: '', suburb: '', postcode: '' },
         room: blankRoom(),
+        hydrated: true,
+        seededRoom: null,
+        sent: null,
+        sentHours: null,
       };
       step = 'place';
     }
 
-    const head = HEAD[draft.entry];
-    eyebrow.textContent = head.eyebrow;
-    title.textContent = head.title(draft.venue.name, roomsHere(draft.venueId).length);
     element.hidden = false;
     renderStep();
+    if (!draft.hydrated) hydrateRoom();
     return true;
+  }
+
+  /** The editable fields as open() seeded them — "untouched" is measured against this. */
+  const seedSnapshot = (room) => ({
+    name: room.name,
+    description: room.description,
+    capacity: room.capacity,
+    pricePerHour: room.pricePerHour,
+    houseRules: room.houseRules,
+    amenities: [...room.amenities],
+    accessibility: [...room.accessibility],
+    activities: [...room.activities],
+  });
+
+  /**
+   * Read the full room as steeple holds it, mirror it, and fold it into this
+   * draft. The venue-detail summary the mirror starts from omits description,
+   * rules and the three vocabularies — open() seeded those as blanks, and a
+   * blank sent back over PATCH means "the host cleared this". Folding replaces
+   * only the fields the host has not touched since open(); pushRoom refuses to
+   * PATCH until one read has landed. One read in flight at a time; a failed
+   * read reports as the usual verdict and may be retried by the next caller.
+   */
+  let hydration = null;
+  function hydrateRoom() {
+    if (draft.hydrated) return Promise.resolve({ ok: true });
+    hydration ??= (async () => {
+      const mine = draft;
+      const answer = await manage.readRoom(mine.remote.roomId);
+      hydration = null;
+      if (!answer.ok || draft !== mine) return answer;
+      editRoom(mine.venueId, mine.roomId, {}, answer.value);
+      foldServerRoom(answer.value);
+      mine.hydrated = true;
+      if (!element.hidden && !busy && !outcome && draft === mine) {
+        // Redraw so the folded fields are visible, without stealing the caret.
+        const focused = document.activeElement?.id;
+        renderBody();
+        if (focused) element.querySelector(`#${CSS.escape(focused)}`)?.focus();
+      }
+      return { ok: true };
+    })();
+    return hydration;
+  }
+
+  /** steeple's full room over the draft, everywhere the host has not written since open(). */
+  function foldServerRoom(dto) {
+    const truth = {
+      name: withoutDraftNote(dto.name),
+      description: withoutDraftNote(dto.description ?? ''),
+      capacity: dto.capacity,
+      pricePerHour: dto.pricePerHour ?? 0,
+      houseRules: dto.houseRules ?? '',
+      amenities: toLabels(dto.amenities, AMENITY_LABELS),
+      accessibility: toLabels(dto.accessibility, ACCESS_LABELS),
+      activities: toLabels(dto.activities, ACTIVITY_LABELS),
+    };
+    const seeded = draft.seededRoom ?? {};
+    const untouched = (key) => JSON.stringify(draft.room[key] ?? null) === JSON.stringify(seeded[key] ?? null);
+    for (const [key, value] of Object.entries(truth)) {
+      if (untouched(key)) draft.room[key] = value;
+    }
+    // What steeple holds, whatever the host has written over it here: the answer
+    // an edit is measured against, so a save nobody asked for is never sent.
+    draft.sent = seedSnapshot(truth);
+    draft.room.welcomeAll = draft.room.activities.length === ACTIVITY_TYPES.length;
+    if (!draft.room.photo) {
+      const url = dto.photos?.find((p) => p.isPrimary)?.cardUrl ?? dto.photos?.[0]?.cardUrl ?? null;
+      if (url) draft.room.photo = { remoteUrl: url, url, name: 'Photograph', sent: true };
+    }
   }
 
   function close() {

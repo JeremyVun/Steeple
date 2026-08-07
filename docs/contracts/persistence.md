@@ -3,7 +3,7 @@
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–017` and `src/Steeple.Persistence/` (2026-08-06).
+> Verified against `db/changelog/001–018` and `src/Steeple.Persistence/` (2026-08-07).
 
 ## Ownership rule (non-negotiable)
 

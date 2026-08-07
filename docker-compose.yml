@@ -72,11 +72,9 @@ services:
       Geocoding__ApplePrivateKey: "${APPLE_MAPS_PRIVATE_KEY:-}"
       # ISO country codes suggestions/geocoding are limited to; empty = worldwide.
       Geocoding__LimitToCountries: "${GEOCODING_LIMIT_COUNTRIES:-US}"
-      # Media (ROADMAP Phase 5): without Spaces settings (MEDIA_* below) uploads land on the
-      # local-disk store and the API serves them itself at /media — which is why the api
-      # publishes a loopback port here (browsers must reach the photo URLs). Production
-      # supplies the Spaces/CDN settings and needs no published api port.
-      Media__PublicBaseUrl: "${MEDIA_PUBLIC_BASE_URL:-http://localhost:8081}"
+      # Media (ROADMAP Phase 5): local-disk uploads return origin-independent media/... paths;
+      # the web/Admin proxy them to this API. Object storage uses this as its public CDN base.
+      Media__PublicBaseUrl: "${MEDIA_PUBLIC_BASE_URL:-}"
       Media__ServiceUrl: "${MEDIA_SERVICE_URL:-}"
       Media__Bucket: "${MEDIA_BUCKET:-}"
       Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
@@ -89,7 +87,7 @@ services:
       # Must be on whenever web.availability_picker is on (below) — the picker's calendar,
       # free windows, and live check all read this API surface (off → 404 → all-closed grid).
       Flags__listing.availability: "${LISTING_AVAILABILITY:-true}"
-    # Loopback-only, for the local-disk media loop above; compose-internal otherwise.
+    # Loopback-only for mobile/direct API development; browser media goes through web/Admin.
     ports:
       - "127.0.0.1:${API_PORT:-8081}:8080"
     volumes:

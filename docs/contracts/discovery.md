@@ -66,7 +66,8 @@ photos[{url, caption?, isPrimary, sortOrder}]`, `venue{name, slug, venueType, ad
 suburb, postcode, contactEmail?, parkingInfo, transitInfo, isIdentityVerified, latitude,
 longitude}`, `rating?{averageStars, count}`. 404 (ProblemDetails) when unknown, **not
 Published** (Draft/Unlisted never leak via direct URL), or **outside the geofence**
-(defense in depth).
+(defense in depth). Photo values may be absolute CDN URLs or document-relative `media/...`
+paths in local-disk mode; clients resolve relative paths against their API/web base.
 
 The exact address/coordinates, venue-supplied public contact email, revealed reviewer display
 name, and free-time windows are deliberate public marketplace data: maps, visits, reviews, and

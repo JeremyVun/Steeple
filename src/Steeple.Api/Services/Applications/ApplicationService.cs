@@ -102,6 +102,16 @@ public sealed class ApplicationService : IApplicationService
                 ApplicationErrorCodes.RoomNotBookable, "This space isn't taking requests.");
         }
 
+        // Past-date guard on the venue's own wall clock (the calendar the schedule speaks, same as
+        // the Availability check endpoint): a valid same-evening request from a Virginia organizer
+        // must not be rejected just because UTC has already crossed midnight. Needs the room, so it
+        // can't live in ValidateSubmission.
+        if (request.Schedule!.StartDate < VenueLocalToday(room.Venue.Timezone))
+        {
+            return ApplicationResult<SubmitOutcome>.Fail(
+                ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
+        }
+
         // Submit-time hard block (CONTRACTS §6): when the flag is on, reject a schedule that lands
         // outside open hours / on a blackout / on already-booked time. Rooms with no availability
         // rules report available and pass. Reuses the same materialization + classification math as
@@ -148,12 +158,24 @@ public sealed class ApplicationService : IApplicationService
             ExpiresAtUtc = now + ExpiryWindow,
         };
 
-        if (instant)
+        try
         {
-            return await ConfirmInstantAsync(application, room, now, ct).ConfigureAwait(false);
-        }
+            if (instant)
+            {
+                return await ConfirmInstantAsync(application, room, now, ct).ConfigureAwait(false);
+            }
 
-        await _repository.AddAsync(application, ct).ConfigureAwait(false);
+            await _repository.AddAsync(application, ct).ConfigureAwait(false);
+        }
+        catch (DuplicateIdempotencyKeyException)
+        {
+            // A concurrent retry with the same key won the insert race after the replay lookup
+            // above missed. The winner is the application this submit means — answer the replay.
+            // (The filtered unique index only fires when a key was supplied.)
+            var winner = await _repository.FindByIdempotencyKeyAsync(organizerId, idempotencyKey!.Value, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The idempotent application vanished between conflict and read-back.");
+            return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(winner.ToDto(includeThread: true), Created: false));
+        }
 
         // Re-load for the display graph (room/venue/organizer) the DTO and notifications need.
         var created = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false)
@@ -302,7 +324,7 @@ public sealed class ApplicationService : IApplicationService
 
         (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
-            .GetForOrganizerAsync(organizerId, statusFilter, page, pageSize, ct)
+            .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
 
         await SweepExpiredAsync(items, ct).ConfigureAwait(false);
@@ -330,7 +352,7 @@ public sealed class ApplicationService : IApplicationService
 
         (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
-            .GetForVenuesAsync(venueIds, statusFilter, page, pageSize, ct)
+            .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
 
         await SweepExpiredAsync(items, ct).ConfigureAwait(false);
@@ -441,8 +463,12 @@ public sealed class ApplicationService : IApplicationService
         .ToList();
 
     /// <inheritdoc />
-    public async Task<ApplicationResult<ApplicationDto>> AddMessageAsync(
-        Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct = default)
+    public Task<ApplicationResult<ApplicationDto>> AddMessageAsync(
+        Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct = default) =>
+        GuardTransitionAsync(() => AddMessageCoreAsync(applicationId, callerId, request, ct));
+
+    private async Task<ApplicationResult<ApplicationDto>> AddMessageCoreAsync(
+        Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct)
     {
         var body = request.Body?.Trim();
         if (string.IsNullOrEmpty(body) || body.Length > MaxTextLength)
@@ -514,8 +540,12 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <inheritdoc />
-    public async Task<ApplicationResult<ApplicationDto>> DecideAsync(
-        Guid applicationId, Guid callerId, ApplicationDecisionRequest request, CancellationToken ct = default)
+    public Task<ApplicationResult<ApplicationDto>> DecideAsync(
+        Guid applicationId, Guid callerId, ApplicationDecisionRequest request, CancellationToken ct = default) =>
+        GuardTransitionAsync(() => DecideCoreAsync(applicationId, callerId, request, ct));
+
+    private async Task<ApplicationResult<ApplicationDto>> DecideCoreAsync(
+        Guid applicationId, Guid callerId, ApplicationDecisionRequest request, CancellationToken ct)
     {
         var approve = string.Equals(request.Decision, "approve", StringComparison.OrdinalIgnoreCase);
         if (!approve && !string.Equals(request.Decision, "decline", StringComparison.OrdinalIgnoreCase))
@@ -638,7 +668,10 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <inheritdoc />
-    public async Task<ApplicationResult<ApplicationDto>> WithdrawAsync(Guid applicationId, Guid organizerId, CancellationToken ct = default)
+    public Task<ApplicationResult<ApplicationDto>> WithdrawAsync(Guid applicationId, Guid organizerId, CancellationToken ct = default) =>
+        GuardTransitionAsync(() => WithdrawCoreAsync(applicationId, organizerId, ct));
+
+    private async Task<ApplicationResult<ApplicationDto>> WithdrawCoreAsync(Guid applicationId, Guid organizerId, CancellationToken ct)
     {
         var (application, error) = await LoadScopedAsync(applicationId, organizerId, ct).ConfigureAwait(false);
         if (error is not null)
@@ -668,8 +701,12 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <inheritdoc />
-    public async Task<ApplicationResult<ApplicationDto>> CounterOfferAsync(
-        Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct = default)
+    public Task<ApplicationResult<ApplicationDto>> CounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct = default) =>
+        GuardTransitionAsync(() => CounterOfferCoreAsync(applicationId, callerId, request, ct));
+
+    private async Task<ApplicationResult<ApplicationDto>> CounterOfferCoreAsync(
+        Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct)
     {
         // Flag off → indistinguishable from an unknown route (404), like listing.availability's endpoints.
         if (!_flags.IsEnabled(CounterOffersFlag))
@@ -705,6 +742,13 @@ public sealed class ApplicationService : IApplicationService
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
+        }
+
+        // Same venue-local past-date guard as submit — the proposed time speaks the venue's calendar.
+        if (request.Schedule!.StartDate < VenueLocalToday(application.Room!.Venue!.Timezone))
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
         }
 
         // Same submit-time availability hard block against the room's rules + confirmed bookings.
@@ -779,8 +823,12 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <inheritdoc />
-    public async Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferAsync(
-        Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct = default)
+    public Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferAsync(
+        Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct = default) =>
+        GuardTransitionAsync(() => RespondToCounterOfferCoreAsync(applicationId, callerId, request, ct));
+
+    private async Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferCoreAsync(
+        Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct)
     {
         if (!_flags.IsEnabled(CounterOffersFlag))
         {
@@ -937,6 +985,32 @@ public sealed class ApplicationService : IApplicationService
         status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo;
 
     /// <summary>
+    /// Runs a state transition, answering an optimistic-concurrency loss as the domain fact it is:
+    /// somebody else's transition committed first, so this one reads as a state conflict (409)
+    /// rather than overwriting the winner — approve-vs-withdraw races leave exactly one decision
+    /// and a booking that agrees with it.
+    /// </summary>
+    private static async Task<ApplicationResult<ApplicationDto>> GuardTransitionAsync(
+        Func<Task<ApplicationResult<ApplicationDto>>> transition)
+    {
+        try
+        {
+            return await transition().ConfigureAwait(false);
+        }
+        catch (ConcurrentUpdateException)
+        {
+            return ApplicationResult<ApplicationDto>.Fail(
+                ApplicationErrorCodes.InvalidState,
+                "This application changed while the request was in flight — reload to see where it stands.");
+        }
+    }
+
+    /// <summary>"Today" on the venue's own wall clock — the calendar every schedule speaks.</summary>
+    private DateOnly VenueLocalToday(string timezone) =>
+        DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(timezone)).DateTime);
+
+    /// <summary>
     /// Expirable for the lazy sweep: the two undecided states plus CounterOffered — a counter left
     /// unanswered lapses on the same 14-day clock (CONTRACTS §5).
     /// </summary>
@@ -1021,7 +1095,16 @@ public sealed class ApplicationService : IApplicationService
             application.Status = ApplicationStatus.Expired;
         }
 
-        await _repository.SaveAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _repository.SaveAsync(ct).ConfigureAwait(false);
+        }
+        catch (ConcurrentUpdateException)
+        {
+            // A concurrent transition beat the sweep's flip — theirs is the truth, and the next
+            // read re-judges expiry against it. A read must not fail over this; a mutation
+            // following this sweep conflicts again on its own save and answers there.
+        }
     }
 
     // ----- Validation & wire-token parsing ------------------------------------------------------
@@ -1080,11 +1163,8 @@ public sealed class ApplicationService : IApplicationService
             return "The end time must be after the start time.";
         }
 
-        if (schedule.StartDate < DateOnly.FromDateTime(_clock.GetUtcNow().UtcDateTime.Date))
-        {
-            return "The start date can't be in the past.";
-        }
-
+        // No past-date rule here on purpose: "today" belongs to the venue's timezone, so the
+        // callers check it against VenueLocalToday once the room (and its venue) is in hand.
         if (frequency == ScheduleFrequency.RecurringWeekly)
         {
             if (schedule.EndDate is not { } endDate)
@@ -1116,6 +1196,13 @@ public sealed class ApplicationService : IApplicationService
             if (days == Weekdays.None)
             {
                 return "A recurring schedule needs at least one day of the week.";
+            }
+
+            // A term whose selected weekdays never occur would materialize into a booking with
+            // zero occurrences — confirmed, holding nothing, and instantly "completed".
+            if (!ScheduleMaterializer.WeekdaysOccurBetween(days, schedule.StartDate, endDate))
+            {
+                return "None of the selected days fall between the start and end dates.";
             }
         }
         else if (schedule.EndDate is { } endDate && endDate != schedule.StartDate)

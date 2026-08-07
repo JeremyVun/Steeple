@@ -25,6 +25,12 @@
 
 import * as api from './api.js';
 import * as bundled from './bundledCatalog.js';
+import {
+  ACCESS_LABELS as ACCESSIBILITY,
+  ACTIVITY_LABELS as ACTIVITIES,
+  AMENITY_LABELS as AMENITIES,
+  toLabels as labels,
+} from './vocabulary.js';
 
 const PAGE_SIZE = 100;
 
@@ -138,50 +144,10 @@ export function readFailure(error) {
 }
 
 // ─── vocabulary ──────────────────────────────────────────────────────────────
-// The token registry from steeple's CONTRACTS §2.1, paired with the labels the
-// product has always printed (venues.js decoded the same bitmasks by hand).
-
-const ACTIVITIES = {
-  children: 'Children',
-  sports: 'Sports',
-  community: 'Community',
-  religious: 'Religious',
-  arts: 'Arts',
-  education: 'Education',
-  music: 'Music',
-};
-
-const AMENITIES = {
-  parking: 'Parking',
-  kitchen: 'Kitchen',
-  restrooms: 'Restrooms',
-  wifi: 'Wi-Fi',
-  audioVisual: 'Audio/visual',
-  tables: 'Tables',
-  chairs: 'Chairs',
-  heating: 'Heating',
-  airConditioning: 'Air conditioning',
-  stage: 'Stage',
-  piano: 'Piano',
-};
-
-const ACCESSIBILITY = {
-  stepFreeAccess: 'Step-free access',
-  accessibleRestroom: 'Accessible restroom',
-  accessibleParking: 'Accessible parking',
-  hearingLoop: 'Hearing loop',
-  liftAccess: 'Lift access',
-};
+// The reading half of the shared vocabulary (data/vocabulary.js, imported
+// above): steeple's CONTRACTS §2.1 tokens as the labels this product prints.
 
 const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-const humanize = (token) =>
-  token
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .toLowerCase()
-    .replace(/^./, (c) => c.toUpperCase());
-
-const labels = (tokens, registry) => (tokens ?? []).map((t) => registry[t] ?? humanize(t));
 
 const tokenIndex = (registry) =>
   new Map(Object.entries(registry).map(([token, label]) => [label.toLowerCase(), token]));

@@ -6,7 +6,7 @@ namespace Steeple.Api.Services.Media;
 /// </summary>
 public interface IMediaStore
 {
-    /// <summary>Stores one object publicly and returns its absolute public URL.</summary>
+    /// <summary>Stores one object publicly and returns its public URL or first-party relative path.</summary>
     Task<string> PutAsync(string key, byte[] bytes, string contentType, CancellationToken ct = default);
 
     /// <summary>Deletes objects; missing keys are not an error (delete is idempotent).</summary>

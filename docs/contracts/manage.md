@@ -55,8 +55,10 @@ geofence on the venue's address). Then:
   the host's stored choice (the public read emits the effective mode, `discovery.md`) */}`.
   `verificationStatus` ∈ `unverified | pending | verified |
   declined` and summarizes the latest host verification request plus the venue's verified flag.
-- `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address/suburb/postcode
-  required on create); the caller becomes the first `venue_manager`. Address is geocoded
+- `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address required on
+  create; suburb/postcode optional since 2026-08-07 — the web form stopped asking and derives
+  them from the picked suggestion, falling back to parsing its label); the caller becomes the
+  first `venue_manager`. Address is geocoded
   server-side (`IGeocodingGateway`) and geofence-checked → `400 geofence_rejected` outside the
   beachhead. `201` with the created `ManagedVenueDetailDto`.
 - `GET /api/v1/manage/address-suggestions?q=` ✅ *(additive 2026-08-07)* — address typeahead
@@ -196,7 +198,9 @@ never crossing midnight.
   invalid_image`). It identifies headers before decoding and rejects animation, dimensions over
   12,000px, or more than 30 MP; processing is capped at two concurrent images. Accepted images
   auto-orient from EXIF, strip **all** metadata (EXIF/XMP/IPTC — GPS included), encode JPEG variants at 400/800/1600px (no upscaling smaller sources), and key
-  them by a SHA-256 content hash. `201 RoomPhotoDto`.
+  them by a SHA-256 content hash. `201 RoomPhotoDto`. Web v2 sends an already-prepared
+  1600px JPEG (`docs/contracts/web.md` → `data/photo.js`); the cap and every check above are
+  still the gate, because no client's word about its own bytes is worth anything.
 - `PATCH /api/v1/manage/photos/{photoId}` ✅ — `UpdatePhotoRequest {caption?, isPrimary?,
   sortOrder?}`; setting `isPrimary` demotes the previous cover. `400 invalid_photo`.
 - `DELETE /api/v1/manage/photos/{photoId}` ✅ — deletes the row first, then best-effort deletes
@@ -204,7 +208,9 @@ never crossing midnight.
 - `RoomPhotoDto` ✅: `{id, url, thumbUrl?, cardUrl?, caption?, isPrimary, sortOrder}` — `id`,
   `thumbUrl`, `cardUrl` are additive (`conventions.md` §1 rule); `url` stays the full-size image
   for both new and legacy (seeded) rows. Cards prefer `cardUrl`, falling back to `url` when
-  unset.
+  unset. Object-store/legacy URLs are absolute. Local-disk uploads use origin-independent
+  document-relative `media/...` paths: web and Admin proxy that path to the API; mobile resolves
+  it against its configured API base URL.
 
 Concierge (Admin) uses the same Manage/Media endpoints for onboarding — one pipeline, no
 seeded-URL side door — except for the moderation decision itself, which is Admin-only (Admin

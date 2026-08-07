@@ -12,6 +12,14 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
 
         builder.HasKey(a => a.Id);
 
+        // Postgres's xmin system column as an optimistic concurrency token: every state-machine
+        // transition (approve/decline/withdraw/counter/expire) saves through it, so two callers
+        // mutating the same application can't silently overwrite each other's decision — the
+        // loser's save raises a concurrency conflict instead (no schema change; xmin always exists).
+        builder.Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .IsRowVersion();
+
         builder.Property(a => a.IntentText).IsRequired().HasMaxLength(2000);
         builder.Property(a => a.OrganizationName).HasMaxLength(200);
 

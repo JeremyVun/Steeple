@@ -615,6 +615,13 @@ public sealed class AvailabilityService : IAvailabilityService
                 return (default, "A recurring schedule needs at least one day of the week.");
             }
 
+            // Matches submit: a term whose selected weekdays never occur materializes to nothing,
+            // and "zero occurrences, all free" would be a misleading yes.
+            if (!ScheduleMaterializer.WeekdaysOccurBetween(days, schedule.StartDate, endDate))
+            {
+                return (default, "None of the selected days fall between the start and end dates.");
+            }
+
             return (new ParsedSchedule(frequency, schedule.StartDate, endDate, days, start, end), null);
         }
 

@@ -134,10 +134,10 @@ public class EfApplicationRepositoryTests
         await using var db = CreateContext();
         var repository = new EfApplicationRepository(db);
 
-        var (allItems, allTotal) = await repository.GetForOrganizerAsync(organizer.Id, status: null, page: 1, pageSize: 24);
-        var (pendingItems, pendingTotal) = await repository.GetForOrganizerAsync(organizer.Id, ApplicationStatus.Pending, page: 1, pageSize: 24);
-        var (page1, _) = await repository.GetForOrganizerAsync(organizer.Id, status: null, page: 1, pageSize: 2);
-        var (page2, _) = await repository.GetForOrganizerAsync(organizer.Id, status: null, page: 2, pageSize: 2);
+        var (allItems, allTotal) = await repository.GetForOrganizerAsync(organizer.Id, status: null, FixedNow, page: 1, pageSize: 24);
+        var (pendingItems, pendingTotal) = await repository.GetForOrganizerAsync(organizer.Id, ApplicationStatus.Pending, FixedNow, page: 1, pageSize: 24);
+        var (page1, _) = await repository.GetForOrganizerAsync(organizer.Id, status: null, FixedNow, page: 1, pageSize: 2);
+        var (page2, _) = await repository.GetForOrganizerAsync(organizer.Id, status: null, FixedNow, page: 2, pageSize: 2);
 
         Assert.Equal(3, allTotal);
         Assert.Equal(3, allItems.Count);
@@ -172,8 +172,8 @@ public class EfApplicationRepositoryTests
         var repository = new EfApplicationRepository(db);
         var venueId = Guid.Parse("11111111-1111-1111-1111-111111111111");
 
-        var (matching, matchingTotal) = await repository.GetForVenuesAsync([venueId], status: null, page: 1, pageSize: 24);
-        var (both, bothTotal) = await repository.GetForVenuesAsync([venueId, otherVenueId], status: null, page: 1, pageSize: 24);
+        var (matching, matchingTotal) = await repository.GetForVenuesAsync([venueId], status: null, FixedNow, page: 1, pageSize: 24);
+        var (both, bothTotal) = await repository.GetForVenuesAsync([venueId, otherVenueId], status: null, FixedNow, page: 1, pageSize: 24);
 
         Assert.Contains(matching, a => a.Id == inVenue.Id);
         Assert.DoesNotContain(matching, a => a.Id == inOtherVenue.Id);

@@ -15,7 +15,7 @@
 //   node tools/host-input-test.mjs "http://localhost:5333/?q=low&world=off"
 //   node tools/host-input-test.mjs "http://localhost:5333/?q=low" --shots hv
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { agreeCurrent, closeBrowsers, launch, signIn } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -27,7 +27,8 @@ for (const fatal of ['uncaughtException', 'unhandledRejection']) {
     process.exit(1);
   });
 }
-import { writeRoomPhoto } from './host-photo.mjs';
+import { statSync, writeFileSync } from 'node:fs';
+import { writeOversizedRoomPhoto, writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5333/?q=low&world=off';
 const shotPrefix = process.argv.includes('--shots')
@@ -35,6 +36,10 @@ const shotPrefix = process.argv.includes('--shots')
   : null;
 const API = 'http://localhost:5200/api/v1';
 const PHOTO = writeRoomPhoto('/tmp/w7v-room.png');
+// The two files a host actually has on their phone: one that is not a picture
+// at all, and one straight off a 12-megapixel camera.
+const NOT_A_PHOTO = '/tmp/w7v-not-a-photo.jpg';
+const BIG_PHOTO = writeOversizedRoomPhoto('/tmp/w7v-big-room.png');
 
 const stamp = Date.now().toString(36);
 const venueName = `Bell Hall ${stamp}`;
@@ -78,6 +83,27 @@ page.on('request', (r) => {
   if (r.method() === 'GET' || !r.url().includes('/api/v1/')) return;
   writes.push(`${r.method()} ${new URL(r.url()).pathname}`);
 });
+
+// Every photograph that leaves, with the bytes it weighed on the wire — the
+// only place the client's own preparation can be read as a fact. Weighed in the
+// page, at the body handed to fetch: Chrome does not report a content-length
+// for a multipart upload, so reading one off the request headers measured 0 for
+// every photograph ever sent and could not have failed (instrument fixed
+// 2026-08-07 — the check was blind, not passing).
+await page.evaluateOnNewDocument(() => {
+  window.__photoBytes = [];
+  const wire = window.fetch;
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input?.url ?? '';
+    if (/\/photos$/.test(url) && init.body instanceof FormData) {
+      for (const part of init.body.values()) {
+        if (part instanceof Blob) window.__photoBytes.push(part.size);
+      }
+    }
+    return wire(input, init);
+  };
+});
+const photoBytes = () => page.evaluate(() => window.__photoBytes ?? []);
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const store = (expression) => page.evaluate(`__steeple.store.${expression}`);
@@ -208,9 +234,12 @@ await page.evaluate('localStorage.removeItem("steeple-village-session")');
 // *to this flow* instead of to an empty board, which is the way in this suite
 // should be attacking. So: be somebody, ask for hosting, and the flow opens
 // itself.
-await page.evaluate(
-  `__steeple.session.signIn({email:'host-input-${Date.now().toString(36)}@demo.steeple.test',displayName:'Ada Newcomer'})`
-);
+// Minted and agreed first (the shared inoculation from the P6 sweep): an
+// un-agreed account meets the agreements ask over the sheet, and dismissing
+// it signs the account out.
+const adaEmail = `host-input-${Date.now().toString(36)}@demo.steeple.test`;
+await agreeCurrent((await signIn(adaEmail, 'Ada Newcomer')).accessToken);
+await page.evaluate(`__steeple.session.signIn({email:'${adaEmail}',displayName:'Ada Newcomer'})`);
 await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
 await page.evaluate('__steeple.setMode("host")');
 await page
@@ -226,16 +255,12 @@ check('an empty draft cannot continue', (await disabled('[data-action="advance"]
 await type('#place-name', '   ');
 await type('#place-description', '   ');
 await type('#place-address', '        ');
-await type('#place-suburb', '   ');
-await type('#place-postcode', '     ');
 check('whitespace is not an address', (await disabled('[data-action="advance"]')) === true, await hint());
 
 const XSS = '<script>window.__pwned = true</script>';
 await type('#place-name', `${XSS} ${venueName}`, { clear: true });
 await type('#place-description', 'A stone hall behind the church, used by the parish.', { clear: true });
-await type('#place-address', '18 Church Street', { clear: true });
-await type('#place-suburb', 'Vienna', { clear: true });
-await type('#place-postcode', '22180', { clear: true });
+await type('#place-address', '18 Church Street, Vienna 22180', { clear: true });
 check('markup does not run', (await page.evaluate('window.__pwned')) === undefined);
 check('and nothing was injected into the sheet', (await page.$$('.listing script')).length === 0);
 await shot('01-place');
@@ -279,9 +304,31 @@ check('half a seat is not a seat', (await disabled('[data-action="advance"]')) =
 check('and the host is told why', (await hint()) === 'Seats are counted in whole numbers.', await hint());
 await type('#room-capacity', '60', { clear: true });
 
-const chooser = await page.$('#room-photo');
-await chooser.uploadFile(PHOTO);
-await wait(500);
+// ── 3b. The photograph: a file that is not one, and one that is far too big ─
+console.log('\n3b. the photograph — refused where it is chosen, or sized before it is sent');
+writeFileSync(NOT_A_PHOTO, 'this is not a photograph, whatever its name says\n');
+await (await page.$('#room-photo')).uploadFile(NOT_A_PHOTO);
+await wait(700);
+check(
+  'a file that is not a photograph is refused where it was chosen',
+  /isn’t a photo Steeple can read/.test((await text('.shotpick__hint')) ?? ''),
+  await text('.shotpick__hint')
+);
+check('the frame holds no picture', (await page.$('.shotpick__thumb')) === null);
+check('and it is still the picker, not a wall', (await page.$('.shotpick__input')) !== null);
+check('nothing was sent to steeple over it', (await photoBytes()).length === 0, JSON.stringify(await photoBytes()));
+
+// The phone's own photograph: 12 MB and 2400px wide, which the API would refuse
+// whole (MaxUploadBytes is 10 MB). The browser prepares it before it is sent.
+const onDisk = statSync(BIG_PHOTO).size;
+await (await page.$('#room-photo')).uploadFile(BIG_PHOTO);
+await page.waitForSelector('.shotpick.is-filled', { timeout: 30000 }).catch(() => {});
+check(
+  `a ${(onDisk / 1048576).toFixed(1)} MB photograph is taken, not refused`,
+  (await page.$('.shotpick__thumb')) !== null,
+  await text('.shotpick__hint')
+);
+await wait(300);
 
 // The price belongs to Publish, which says so. Describe must not turn the
 // service's "set an hourly price" into a wall on a step that never asked.
@@ -445,14 +492,30 @@ await page.evaluate(() => {
   button.click();
 });
 await wait(4500);
-// One press carries everything steeple has not been told and then asks: the
-// availability replace-all runs exactly once inside that sequence, so a second
-// run of it is the signature of a second press getting through.
-const runs = writes.filter((w) => w.endsWith('/availability')).length;
-check('one press, one run of the sequence', runs === 1, writes.join(' · ') || 'no writes');
+// One press carries everything steeple has not been told and then asks. The ask
+// itself is the write that always leaves, so two of them is the signature of a
+// second press getting through. It used to be counted on the availability
+// replace-all, which no longer runs here: since 2026-08-07 a stage with nothing
+// new to say is silent, and the hours were sent when Availability was left.
+const asks = writes.filter((w) => /^PATCH \/api\/v1\/manage\/rooms\/[^/]+$/.test(w)).length;
+check('one press, one ask', asks === 1, writes.join(' · ') || 'no writes');
+check('and nothing already sent was sent again', !writes.some((w) => w.endsWith('/availability')), writes.join(' · '));
 const answer = await api(`/manage/rooms/${roomId}`, tokenNow);
 check('steeple recorded the request', Boolean(answer.publishRequestedAtUtc), answer.publishRequestedAtUtc);
 check('and the host reads what the service said', /sent for review|is published/.test((await text('.listing__body')) ?? ''), (await text('.listing__body'))?.slice(0, 80));
+
+// The photograph chosen in §3b, weighed where it actually costs somebody: on
+// the wire. Whole, it is 12 MB and the API refuses it at 10; prepared, it is a
+// 1600px JPEG and the upload is a moment rather than a minute.
+const weighed = await photoBytes();
+const sent = weighed.at(0) ?? 0;
+check(
+  'the 12 MB photograph crossed the wire prepared, not whole',
+  sent > 0 && sent < 3 * 1024 * 1024,
+  `${(onDisk / 1048576).toFixed(1)} MB chosen → ${(sent / 1024).toFixed(0)} KB sent`
+);
+check('exactly one photograph was sent', weighed.length === 1, JSON.stringify(weighed));
+check('and steeple holds it', (answer.photos ?? []).length === 1, JSON.stringify(answer.photos?.map((p) => p.cardUrl)));
 await shot('06-published');
 
 // ── 7. Two spaces, one name ───────────────────────────────────────────────
@@ -466,9 +529,7 @@ for (const address of ['2 Windmill Lane', '77 Orchard Way']) {
   await clickText('.desk button', /^List another venue$/, 'List another venue');
   await type('#place-name', `Bell Hall ${stamp} twin`, { clear: true });
   await type('#place-description', 'A parish hall behind the church.', { clear: true });
-  await type('#place-address', address, { clear: true });
-  await type('#place-suburb', 'Vienna', { clear: true });
-  await type('#place-postcode', '22180', { clear: true });
+  await type('#place-address', `${address}, Vienna 22180`, { clear: true });
   await click('[data-action="advance"]', `Continue with ${address}`);
   await wait(2600);
   await clickText('.listing__buttons .linkish', /^Close$/, 'Close');

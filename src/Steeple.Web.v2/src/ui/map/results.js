@@ -28,11 +28,12 @@ export function createResults({ onRetry = () => {} } = {}) {
   const rowFor = new Map();
 
   const list = el('ul', { class: 'dm-results', 'aria-label': 'Spaces on this map' });
-  const empty = el('p', {
-    class: 'dm-empty',
-    text: 'Nothing here answers that yet. Widen the search — a different day, a smaller group, fewer filters.',
-    hidden: true,
-  });
+  // What an empty list means depends on who emptied it: the search itself, or
+  // the map being zoomed past everything the search found (ui/map/index.js
+  // passes the second sentence). The default is the search's.
+  const WIDEN =
+    'Nothing here answers that yet. Widen the search — a different day, a smaller group, fewer filters.';
+  const empty = el('p', { class: 'dm-empty', text: WIDEN, hidden: true });
 
   // When steeple answered and refused, the column says so and shows nothing.
   // An empty list under a refusal would read as "nothing matches", which is a
@@ -104,9 +105,10 @@ export function createResults({ onRetry = () => {} } = {}) {
     return made;
   }
 
-  function render(items) {
+  function render(items, { emptyText = WIDEN } = {}) {
     const shown = new Set();
     trouble.hidden = true;
+    empty.textContent = emptyText;
 
     for (const item of items) {
       const row = rowNode(item);

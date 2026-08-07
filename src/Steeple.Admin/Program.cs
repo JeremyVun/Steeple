@@ -28,6 +28,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 builder.Services.AddDbContext<SteepleDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("SteepleDb")));
 builder.Services.AddSingleton<IAdminWorkspace, PostgresAdminWorkspace>();
+builder.Services.AddHttpClient("media", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Admin:MediaProxyOrigin"] ?? "http://api:8080");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 var app = builder.Build();
 
@@ -70,6 +75,31 @@ app.UseRouting();
 
 // Lightweight liveness probe (matches api/flags); independent of the DB-backed dashboard page.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Local-disk photo rows carry a relative media/... path. Admin reads those rows directly from
+// Postgres, so give its browser the same first-party path and fetch the bytes from the API.
+// CDN-backed rows remain absolute and never hit this endpoint.
+app.MapGet("/media/{**mediaPath}", async (
+    string mediaPath,
+    IHttpClientFactory clients,
+    CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(mediaPath) || mediaPath.Contains("..", StringComparison.Ordinal))
+    {
+        return Results.BadRequest();
+    }
+
+    using var response = await clients.CreateClient("media")
+        .GetAsync($"media/{mediaPath}", HttpCompletionOption.ResponseHeadersRead, ct);
+    if (!response.IsSuccessStatusCode)
+    {
+        return Results.StatusCode((int)response.StatusCode);
+    }
+
+    var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+    var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+    return Results.File(bytes, contentType);
+});
 
 app.MapControllerRoute(
     name: "default",

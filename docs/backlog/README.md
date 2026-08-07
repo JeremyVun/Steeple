@@ -18,15 +18,10 @@
 
 Recorded, deliberately not built — each needs an owner decision or a gated trigger first:
 
-- **Media base URL is load-bearing and final-before-photos.** Room photo URLs are stored
-  **absolute** from `Media:PublicBaseUrl` at upload time (dev `http://localhost:5200`;
-  compose default `http://localhost:8081`; production = `MEDIA_PUBLIC_BASE_URL`). Renaming
-  the media host orphans every photo already written. Decide the permanent origin (Spaces/
-  CDN name) **before** real hosts upload photos, and add it to web nginx CSP `img-src`
-  *and* `Admin:MediaImageOrigins` in the same change. (Local compose corollary: uploaded
-  photos live on `:8081` while web CSP is `:8080`-relative and Admin's default CSP is
-  https-only, so locally-uploaded photos render blocked in both — seeded Unsplash rows are
-  unaffected. Cosmetic locally; the reason the decision matters in production.)
+- **Permanent media CDN origin.** Local-disk media is now origin-independent (`media/...`) and
+  same-origin proxied, so changing local ports no longer orphans rows or trips CSP. Production
+  object-store URLs remain absolute by design: choose the permanent Spaces/CDN name before real
+  uploads, then add that origin to web nginx and Admin `img-src` in the same deployment.
 - **Mobile has no card UI.** `payments.enabled` stays **off** in production configuration
   until it exists — that flag is the guard, not an oversight.
 - **`GET /me/applications` list-vs-detail contract:** list rows omit `counterOffer` and
@@ -36,6 +31,21 @@ Recorded, deliberately not built — each needs an owner decision or a gated tri
   the mock gateway refuses to run in Production with `payments.enabled=true`.
 - **Counter-offers stay behind `booking.counter_offers`** (off ⇒ endpoints 404 and the
   desk says "not available here yet" — verified in the closing sweep).
+- **Per-user localStorage mirrors retain correspondence indefinitely (2026-08-07 audit).**
+  `store.js` keeps request text, thread bodies, organizer details and payment state on disk
+  per person, and sign-out deliberately leaves previous users' keys (D6: the mirror also
+  holds locally-kept listings, which have no server copy — clearing on sign-out would lose
+  them). Not a cross-account UI leak (keys are per-user id), but shared-browser/XSS surface.
+  An owner decision is needed to split "kept-here work" from "server-mirrored
+  correspondence" so the latter can be dropped on sign-out; until then this is a known,
+  accepted trade.
+- **Audit-recommended refactors, deferred (2026-08-07):** purpose-built list read models
+  (booking lists eager-load occurrences the DTO omits; web then re-fetches detail per row);
+  splitting `store.js`/`listing.js` and `ApplicationService`/`IAvailabilityService`;
+  finishing vocabulary/transport centralization (a shared `data/vocabulary.js` now exists —
+  catalog, store and the hosting chain read it; `model.js`/`venues.js` label lists and the
+  weekday maps still have their own copies). Structural, not behavioral — schedule with the
+  owning surface's next round.
 - **Three small web warts carried from the 2026-08-06 quality round:** `getRoomAvailability`
   swallows failures to `null`, so a 429 is invisible to the apply week card; an email
   `?goto=` deep link reads its booking twice (judgment call left open); map/search paging

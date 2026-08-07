@@ -7,19 +7,21 @@ namespace Steeple.Api.Proxies.Notifications;
 /// §17 decision log). Sends FCM **data messages only** (CONTRACTS §9): no notification block, so
 /// the client always renders from the inbox row. An unregistered/invalid token deletes that device
 /// row (best-effort) so the registry stops sending to a dead device; every failure is logged, never
-/// thrown — callers fire-and-forget this gateway.
+/// thrown. Registered as a <b>singleton</b>: the dispatcher fire-and-forgets sends past the end of
+/// the request, so the gateway must not capture anything request-scoped — dead-token cleanup opens
+/// its own service scope for a fresh device registry instead.
 /// </summary>
 public sealed class FcmPushGateway : IPushGateway
 {
     private readonly FirebaseMessaging _messaging;
-    private readonly IDeviceRegistry _devices;
+    private readonly IServiceScopeFactory _scopes;
     private readonly ILogger<FcmPushGateway> _logger;
 
     /// <summary>Creates the gateway over an already-initialized <see cref="FirebaseAdmin.FirebaseApp"/>.</summary>
-    public FcmPushGateway(FirebaseAdmin.FirebaseApp app, IDeviceRegistry devices, ILogger<FcmPushGateway> logger)
+    public FcmPushGateway(FirebaseAdmin.FirebaseApp app, IServiceScopeFactory scopes, ILogger<FcmPushGateway> logger)
     {
         _messaging = FirebaseMessaging.GetMessaging(app);
-        _devices = devices;
+        _scopes = scopes;
         _logger = logger;
     }
 
@@ -61,7 +63,11 @@ public sealed class FcmPushGateway : IPushGateway
     {
         try
         {
-            await _devices.DeleteByTokenAsync(token, CancellationToken.None).ConfigureAwait(false);
+            // A fresh scope, not a captured registry: this runs on a fire-and-forget path that may
+            // outlive the request whose scoped DbContext a captured registry would be holding.
+            await using var scope = _scopes.CreateAsyncScope();
+            var devices = scope.ServiceProvider.GetRequiredService<IDeviceRegistry>();
+            await devices.DeleteByTokenAsync(token, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

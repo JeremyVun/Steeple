@@ -110,8 +110,8 @@ async function openPage(label) {
   page.on('console', (msg) => {
     if (msg.type() !== 'error') return;
     const text = msg.text();
-    // Photographs in the shared dev database carry absolute URLs against API
-    // ports that are no longer listening — environmental, not this suite's.
+    // Shared-database photo bytes may live in another worktree's media-store —
+    // environmental, not this suite's.
     if (/Failed to load resource|402|409|ERR_/.test(text)) return;
     problems.push(`[${label}] ${text}`);
   });
@@ -584,11 +584,13 @@ await until(manualHostPage, () => Boolean(document.querySelector('.settings')), 
 const modeBefore = await manualHostPage.evaluate(() => ({
   on: document.querySelector('.mode.is-on .mode__label')?.textContent ?? null,
   choices: [...document.querySelectorAll('.mode__label')].map((c) => c.textContent),
-  note: document.querySelector('.settings__note')?.textContent ?? '',
+  blurbs: [...document.querySelectorAll('.mode__blurb')].map((c) => c.textContent),
 }));
 eq('the venue reads as manual', modeBefore.on, 'I approve each request');
 check('both modes are offered, each with its own sentence', modeBefore.choices.length === 2, JSON.stringify(modeBefore.choices));
-check('and the change is honestly scoped', /new asks only/i.test(modeBefore.note), modeBefore.note);
+// The scope of a mode change is told when it is made (the slip below), not in a
+// standing paragraph under the choice.
+check('and each sentence is one short sentence', modeBefore.blurbs.every((b) => b.length < 90 && b.split('.').length <= 2), JSON.stringify(modeBefore.blurbs));
 await shot(manualHostPage, '5-booking-mode');
 
 const guestBeforeFlip = await openPage('mode-guest');

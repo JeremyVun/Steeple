@@ -79,6 +79,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Approves or declines (venue managers only).</summary>
     [HttpPost("applications/{id:guid}/decision")]
+    [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> Decide(
         Guid id, [FromBody] ApplicationDecisionRequest request, CancellationToken ct)
     {
@@ -88,6 +89,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Withdraws the application (organizer only).</summary>
     [HttpPost("applications/{id:guid}/withdraw")]
+    [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> Withdraw(Guid id, CancellationToken ct)
     {
         var result = await _applications.WithdrawAsync(id, User.GetUserId(), ct);

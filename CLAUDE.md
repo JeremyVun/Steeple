@@ -56,7 +56,7 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   auth **by design** — authelia gates it at the edge proxy in the deployed environment.
   Four screens only (2026-08-05, D3): overview, `/admin/review` (first-listing decisions +
   rating hide/unhide), `/admin/listings` (Unlist takedown), `/admin/venue-managers`.
-- `/db/changelog` — Liquibase formatted SQL (`001…005-*.sql` + master manifest).
+- `/db/changelog` — Liquibase formatted SQL (`001…018-*.sql` + master manifest).
   **Owns the schema; no application ever migrates.**
 - `/tests` — `Steeple.Api.Tests` (xUnit unit: geofence, geo math, listing visibility,
   `ScheduleMaterializer` DST) + `Steeple.Integration.Tests` (Testcontainers Postgres,
@@ -214,6 +214,11 @@ app-time ~6× slow: suites wait on state, never wall-clock.
   it costs a reload, never a fact. The demo fixture is dev-build village scenery only.
 - `src/data/analytics.js` — the interaction batcher to `POST /api/v1/events` (CONTRACTS
   §7); nothing user-visible ships dark.
+- `src/data/photo.js` — a picked file made into the file that is sent: EXIF orientation
+  applied, drawn to 1600px (the widest variant steeple keeps, never upscaled), re-encoded
+  JPEG, so GPS never leaves the device and a 12 MP photo does not spend 12 MB of somebody's
+  uplink to be thrown away on arrival. The server remains the gate. `tools/photo-prepare-test.mjs`
+  drives it with no API at all — Chrome is only the runtime (`createImageBitmap`/canvas).
 
 **Everything is real.** Catalog, sign-in/out, agreements, the apply calendar
 (`openHours` + availability), submit (`Idempotency-Key`, org-name input, 402 → mock card
@@ -270,11 +275,11 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   and the host's opened letter is `.letterpage__*` (2026-08-07 — its `.letter__sheet` rule
   had bled `overflow:hidden` onto the guest request sheet and made it unscrollable);
   `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own.
-- Room photo URLs are stored **absolute** from `Media:PublicBaseUrl` — moving the media
-  host orphans every photo written (open decision: `docs/backlog/README.md`); any new media
-  origin must be added to web nginx CSP `img-src` **and** `Admin:MediaImageOrigins`, or
-  photos/queue thumbnails silently stop loading. Locally, rows from other agents' dead API
-  ports 404 as console noise.
+- Local-disk room photos store origin-independent `media/...` paths; Vite/web nginx/Admin proxy
+  them and mobile resolves them against its API base. Object-storage photos remain absolute at
+  the permanent CDN origin, which must be added to web nginx CSP `img-src` and
+  `Admin:MediaImageOrigins` before enabling the adapter. Shared-database rows whose bytes live
+  in another worktree's media-store can still 404 as local console noise.
 - Dev geocoding = `StubGeocodingGateway`: every address → village centre, so
   geofence-rejection paths are locally unreachable and locally-listed venues stack on one
   map point — harnesses drive pins by keyboard or assert "aimed === opened", never a

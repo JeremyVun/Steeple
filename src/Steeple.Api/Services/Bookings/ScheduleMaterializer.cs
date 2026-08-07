@@ -43,6 +43,26 @@ public static class ScheduleMaterializer
     /// <summary>The bit <see cref="Weekdays"/> uses for a date's weekday (Sunday = bit 0).</summary>
     public static Weekdays WeekdayBit(DateOnly date) => (Weekdays)(1 << (int)date.DayOfWeek);
 
+    /// <summary>
+    /// Whether any of the selected weekdays actually falls between <paramref name="startDate"/>
+    /// and <paramref name="endDate"/> inclusive — the guard that keeps a short term from
+    /// materializing into <b>zero</b> occurrences (a Tuesday selected on a Monday-only range).
+    /// Any range of seven days or more contains every weekday, so the scan is bounded.
+    /// </summary>
+    public static bool WeekdaysOccurBetween(Weekdays daysOfWeek, DateOnly startDate, DateOnly endDate)
+    {
+        var lastDayNumber = Math.Min(endDate.DayNumber, startDate.DayNumber + 6);
+        for (var date = startDate; date.DayNumber <= lastDayNumber; date = date.AddDays(1))
+        {
+            if (daysOfWeek.HasFlag(WeekdayBit(date)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static IEnumerable<DateOnly> WeeklyDates(DateOnly startDate, DateOnly endDate, Weekdays daysOfWeek)
     {
         // Day-by-day scan (≤ 366 iterations — terms are bounded) keeps multi-weekday output

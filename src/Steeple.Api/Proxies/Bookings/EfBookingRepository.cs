@@ -46,15 +46,45 @@ public class EfBookingRepository : IBookingRepository
 
             // Slot already held. Nothing was written; detach the stillborn booking so the
             // caller's follow-up save (auto-decline) doesn't retry the same insert.
-            // (Snapshot the list first — detaching triggers EF fixup that mutates the navigation.)
-            foreach (var occurrence in booking.Occurrences.ToList())
-            {
-                _db.Entry(occurrence).State = EntityState.Detached;
-            }
-
-            _db.Entry(booking).State = EntityState.Detached;
+            DetachStillborn(booking);
             return false;
         }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // The application's Approved flip rides in this save; its xmin token says another
+            // request (withdraw, decline, another decision) committed a transition after the
+            // caller loaded the row. The transaction aborted whole — nothing was booked.
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            DetachStillborn(booking);
+            throw new ConcurrentUpdateException(ex);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: EfApplicationRepository.OrganizerIdempotencyIndex,
+            })
+        {
+            // Instant-book submit racing its own retry: the application insert riding this save
+            // lost to a concurrent request with the same idempotency key. Nothing was written —
+            // the caller resolves the winner and answers the replay.
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            DetachStillborn(booking);
+            throw new DuplicateIdempotencyKeyException(ex);
+        }
+    }
+
+    /// <summary>
+    /// Detaches a booking whose save aborted so nothing retries the insert later in the request
+    /// scope. (Snapshot the list first — detaching triggers EF fixup that mutates the navigation.)
+    /// </summary>
+    private void DetachStillborn(Booking booking)
+    {
+        foreach (var occurrence in booking.Occurrences.ToList())
+        {
+            _db.Entry(occurrence).State = EntityState.Detached;
+        }
+
+        _db.Entry(booking).State = EntityState.Detached;
     }
 
     private static bool HasSqlState(Exception exception, string sqlState)
@@ -84,13 +114,13 @@ public class EfBookingRepository : IBookingRepository
 
     /// <inheritdoc />
     public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForOrganizerAsync(
-        Guid organizerId, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-        PageAsync(Graph().Where(b => b.OrganizerId == organizerId), status, page, pageSize, ct);
+        Guid organizerId, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+        PageAsync(Graph().Where(b => b.OrganizerId == organizerId), status, now, page, pageSize, ct);
 
     /// <inheritdoc />
     public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForVenuesAsync(
-        IReadOnlyList<Guid> venueIds, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-        PageAsync(Graph().Where(b => venueIds.Contains(b.Room!.VenueId)), status, page, pageSize, ct);
+        IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+        PageAsync(Graph().Where(b => venueIds.Contains(b.Room!.VenueId)), status, now, page, pageSize, ct);
 
     /// <inheritdoc />
     public Task SaveAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
@@ -101,12 +131,28 @@ public class EfBookingRepository : IBookingRepository
             .Include(b => b.Organizer)
             .Include(b => b.Occurrences);
 
+    /// <summary>
+    /// Status filters match the status the row is <b>about to have</b>, not just the stored one:
+    /// the lazy sweep only completes bookings a read touches, so a confirmed booking with no
+    /// scheduled time left ahead is already effectively completed — filtering (and counting) on
+    /// the stored value alone returned it under <c>?status=confirmed</c> with a wrong total.
+    /// </summary>
     private static async Task<(IReadOnlyList<Booking> Items, int TotalCount)> PageAsync(
-        IQueryable<Booking> query, BookingStatus? status, int page, int pageSize, CancellationToken ct)
+        IQueryable<Booking> query, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct)
     {
         if (status is { } s)
         {
-            query = query.Where(b => b.Status == s);
+            query = s switch
+            {
+                BookingStatus.Confirmed => query.Where(b =>
+                    b.Status == BookingStatus.Confirmed
+                    && b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now)),
+                BookingStatus.Completed => query.Where(b =>
+                    b.Status == BookingStatus.Completed
+                    || (b.Status == BookingStatus.Confirmed
+                        && !b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now))),
+                _ => query.Where(b => b.Status == s),
+            };
         }
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);

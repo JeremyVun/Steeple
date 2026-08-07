@@ -64,6 +64,16 @@ export function resultLine(items) {
   return `${plural(items.length, 'space', 'spaces')} across ${plural(venues, 'venue', 'venues')}`;
 }
 
+/**
+ * The same answer, clipped by where the map is looking: once a visitor has
+ * panned or zoomed, the list says what is on the sheet in front of them, and
+ * the head says so in the map's own terms rather than the search's.
+ */
+export function inViewLine(items) {
+  if (items.length === 0) return 'No spaces in view';
+  return `${plural(items.length, 'space', 'spaces')} in view`;
+}
+
 export function filterSummary(filters) {
   const chosen = [...filters];
   if (chosen.length === 0) return 'every activity';

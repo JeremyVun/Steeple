@@ -300,6 +300,29 @@ public class BookingServiceTests
         Assert.Equal(confirmed.Id, item.Id);
     }
 
+    [Fact]
+    public async Task GetForOrganizerAsync_ConfirmedFilter_TreatsFinishedTermsAsCompleted()
+    {
+        // A confirmed booking whose only occurrence is already past is effectively completed —
+        // it must page (and count) under ?status=completed, not linger under ?status=confirmed
+        // just because no read has swept it yet.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var upcoming = NewBooking(room, organizer, occurrenceOffsets: [TimeSpan.FromHours(240)]);
+        var finished = NewBooking(room, organizer, occurrenceOffsets: [TimeSpan.FromHours(-240)]);
+        repo.Bookings.Add(upcoming);
+        repo.Bookings.Add(finished);
+        var service = CreateService(repo, managers, out _, out _);
+
+        var confirmed = await service.GetForOrganizerAsync(organizer.Id, "confirmed", 1, 24);
+        var completed = await service.GetForOrganizerAsync(organizer.Id, "completed", 1, 24);
+
+        Assert.Equal(upcoming.Id, Assert.Single(confirmed.Value!.Items).Id);
+        Assert.Equal(1, confirmed.Value.TotalCount);
+        var completedItem = Assert.Single(completed.Value!.Items);
+        Assert.Equal(finished.Id, completedItem.Id);
+        Assert.Equal("completed", completedItem.Status); // the page it landed on was also swept
+    }
+
     // ----- Payments rails: refund-policy table + price snapshot (booking-modes.md) --------------
 
     [Fact]
@@ -679,12 +702,12 @@ public class BookingServiceTests
             Task.FromResult(Bookings.SelectMany(b => b.Occurrences).FirstOrDefault(o => o.Id == occurrenceId));
 
         public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForOrganizerAsync(
-            Guid organizerId, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-            Page(Bookings.Where(b => b.OrganizerId == organizerId), status, page, pageSize);
+            Guid organizerId, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+            Page(Bookings.Where(b => b.OrganizerId == organizerId), status, now, page, pageSize);
 
         public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForVenuesAsync(
-            IReadOnlyList<Guid> venueIds, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-            Page(Bookings.Where(b => venueIds.Contains(b.Room!.VenueId)), status, page, pageSize);
+            IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+            Page(Bookings.Where(b => venueIds.Contains(b.Room!.VenueId)), status, now, page, pageSize);
 
         public Task SaveAsync(CancellationToken ct = default)
         {
@@ -693,11 +716,23 @@ public class BookingServiceTests
         }
 
         private static Task<(IReadOnlyList<Booking> Items, int TotalCount)> Page(
-            IEnumerable<Booking> query, BookingStatus? status, int page, int pageSize)
+            IEnumerable<Booking> query, BookingStatus? status, DateTimeOffset now, int page, int pageSize)
         {
             if (status is { } s)
             {
-                query = query.Where(b => b.Status == s);
+                // Effective status at `now`, mirroring the EF adapter: a confirmed booking with no
+                // scheduled time left ahead already counts as completed.
+                query = s switch
+                {
+                    BookingStatus.Confirmed => query.Where(b =>
+                        b.Status == BookingStatus.Confirmed
+                        && b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now)),
+                    BookingStatus.Completed => query.Where(b =>
+                        b.Status == BookingStatus.Completed
+                        || (b.Status == BookingStatus.Confirmed
+                            && !b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now))),
+                    _ => query.Where(b => b.Status == s),
+                };
             }
 
             var all = query.OrderByDescending(b => b.CreatedAtUtc).ThenByDescending(b => b.Id).ToList();

@@ -672,8 +672,10 @@ public sealed class ManageService : IManageService
         if (name.Length is 0 or > 200) return "Give the venue a name (up to 200 characters).";
         if (description.Length is 0 or > 4000) return "Describe the venue (up to 4000 characters).";
         if (addressLine.Length is 0 or > 300) return "Enter the street address.";
-        if (suburb.Length is 0 or > 200) return "Enter the suburb or town.";
-        if (postcode.Length is 0 or > 20) return "Enter the ZIP code.";
+        // Optional since 2026-08-07: the form derives both from the picked address
+        // suggestion, and geocoding works from the street address alone.
+        if (suburb.Length > 200) return "Suburb or town is limited to 200 characters.";
+        if (postcode.Length > 20) return "ZIP code is limited to 20 characters.";
         if (request.ContactEmail is { Length: > 0 } email && (email.Length > 320 || !email.Contains('@')))
             return "That contact email doesn't look right.";
         if (request.ParkingInfo is { Length: > 1000 }) return "Parking notes are limited to 1000 characters.";

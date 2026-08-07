@@ -463,11 +463,11 @@ public class RatingServiceTests
             throw new NotSupportedException();
 
         public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForOrganizerAsync(
-            Guid organizerId, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
+            Guid organizerId, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForVenuesAsync(
-            IReadOnlyList<Guid> venueIds, BookingStatus? status, int page, int pageSize, CancellationToken ct = default) =>
+            IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
         public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;

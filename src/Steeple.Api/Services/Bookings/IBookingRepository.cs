@@ -12,6 +12,9 @@ public interface IBookingRepository
     /// changes, e.g. the application's Approved flip, commit with it). Returns <c>false</c> when
     /// the no-overlap exclusion constraint rejects it — the booking and its occurrences are then
     /// detached and nothing was written, but other pending changes remain tracked and unsaved.
+    /// Throws <see cref="ConcurrentUpdateException"/> when a tracked application riding along lost
+    /// its optimistic-concurrency race, and <see cref="DuplicateIdempotencyKeyException"/> when an
+    /// instant-book application insert lost the idempotency race — in both cases nothing was written.
     /// </summary>
     Task<bool> TrySaveNewAsync(Booking booking, CancellationToken ct = default);
 
@@ -21,13 +24,17 @@ public interface IBookingRepository
     /// <summary>The occurrence with its booking's full graph. Null when unknown.</summary>
     Task<BookingOccurrence?> GetOccurrenceAsync(Guid occurrenceId, CancellationToken ct = default);
 
-    /// <summary>The organizer's bookings (full graph), newest first, paginated.</summary>
+    /// <summary>
+    /// The organizer's bookings (full graph), newest first, paginated. A status filter matches the
+    /// <b>effective</b> status at <paramref name="now"/>: a confirmed booking with no scheduled
+    /// time left ahead counts as completed even before the lazy sweep persists the flip.
+    /// </summary>
     Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForOrganizerAsync(
-        Guid organizerId, BookingStatus? status, int page, int pageSize, CancellationToken ct = default);
+        Guid organizerId, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
-    /// <summary>Bookings for rooms of the given venues (full graph), newest first, paginated.</summary>
+    /// <summary>Bookings for rooms of the given venues (full graph), newest first, paginated — same effective-status filtering.</summary>
     Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForVenuesAsync(
-        IReadOnlyList<Guid> venueIds, BookingStatus? status, int page, int pageSize, CancellationToken ct = default);
+        IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
     /// <summary>Flushes mutations made to already-loaded bookings/occurrences (sweeps, cancels, no-shows).</summary>
     Task SaveAsync(CancellationToken ct = default);

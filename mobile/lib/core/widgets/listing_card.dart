@@ -1,9 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/env_config.dart';
 import '../../app/theme/theme.dart';
 import '../models/models.dart';
 import '../utils/dates.dart';
+import '../utils/media_url.dart';
 import 'badges.dart';
 import 'chips.dart';
 
@@ -165,18 +168,19 @@ class ListingCard extends StatelessWidget {
 
 /// Photo with the brand placeholder: sage-tint→paper-deep gradient behind a
 /// serif initial (§8.5) — shown while loading and when a listing has no photo.
-class _ListingPhoto extends StatelessWidget {
+class _ListingPhoto extends ConsumerWidget {
   const _ListingPhoto({required this.summary});
 
   final RoomSummary summary;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final url = summary.primaryPhotoUrl;
     if (url == null || url.isEmpty) return _placeholder(context);
+    final resolvedUrl = resolveMediaUrl(ref.watch(envProvider).apiBaseUrl, url);
     return LayoutBuilder(
       builder: (context, constraints) => CachedNetworkImage(
-        imageUrl: url,
+        imageUrl: resolvedUrl,
         fit: BoxFit.cover,
         // Decode at layout size so decode cost matches pixels on screen
         // (MOBILE_DESIGN §4 rule 2).

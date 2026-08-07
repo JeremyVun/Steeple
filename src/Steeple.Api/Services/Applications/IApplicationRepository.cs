@@ -14,7 +14,11 @@ public interface IApplicationRepository
     /// <summary>An earlier application created with this (organizer, idempotency key), if any.</summary>
     Task<Application?> FindByIdempotencyKeyAsync(Guid organizerId, Guid idempotencyKey, CancellationToken ct = default);
 
-    /// <summary>Persists a new application.</summary>
+    /// <summary>
+    /// Persists a new application. Throws <see cref="DuplicateIdempotencyKeyException"/> when a
+    /// concurrent submit with the same (organizer, idempotency key) committed first — the
+    /// pre-insert lookup alone cannot close that race window.
+    /// </summary>
     Task AddAsync(Application application, CancellationToken ct = default);
 
     /// <summary>
@@ -30,13 +34,17 @@ public interface IApplicationRepository
     /// <summary>The application with its full graph. Null when unknown.</summary>
     Task<Application?> GetAsync(Guid applicationId, CancellationToken ct = default);
 
-    /// <summary>The organizer's applications (full graph), newest first, paginated.</summary>
+    /// <summary>
+    /// The organizer's applications (full graph), newest first, paginated. A status filter matches
+    /// the <b>effective</b> status at <paramref name="now"/>: an undecided row past its expiry
+    /// counts as expired even before the lazy sweep persists the flip.
+    /// </summary>
     Task<(IReadOnlyList<Application> Items, int TotalCount)> GetForOrganizerAsync(
-        Guid organizerId, ApplicationStatus? status, int page, int pageSize, CancellationToken ct = default);
+        Guid organizerId, ApplicationStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
-    /// <summary>Applications for rooms of the given venues (full graph), newest first, paginated.</summary>
+    /// <summary>Applications for rooms of the given venues (full graph), newest first, paginated — same effective-status filtering.</summary>
     Task<(IReadOnlyList<Application> Items, int TotalCount)> GetForVenuesAsync(
-        IReadOnlyList<Guid> venueIds, ApplicationStatus? status, int page, int pageSize, CancellationToken ct = default);
+        IReadOnlyList<Guid> venueIds, ApplicationStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
     /// <summary>
     /// The other undecided (<c>Pending|NeedsInfo</c>) applications on a room, excluding one, each
@@ -56,6 +64,10 @@ public interface IApplicationRepository
     /// </summary>
     void AddCounterOffer(ApplicationCounterOffer counter);
 
-    /// <summary>Flushes mutations made to already-loaded applications (status flips, decisions, expiry).</summary>
+    /// <summary>
+    /// Flushes mutations made to already-loaded applications (status flips, decisions, expiry).
+    /// Throws <see cref="ConcurrentUpdateException"/> when another request committed a transition
+    /// to the same application after this one loaded it (optimistic concurrency).
+    /// </summary>
     Task SaveAsync(CancellationToken ct = default);
 }

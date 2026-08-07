@@ -9,13 +9,11 @@ namespace Steeple.Api.Proxies.Media;
 public sealed class LocalDiskMediaStore : IMediaStore
 {
     private readonly string _root;
-    private readonly string _publicBaseUrl;
 
-    /// <summary>Resolves the storage root and public prefix from options + environment.</summary>
+    /// <summary>Resolves the storage root from options + environment.</summary>
     public LocalDiskMediaStore(IOptions<MediaOptions> options, IHostEnvironment environment)
     {
         _root = Path.Combine(environment.ContentRootPath, options.Value.LocalRoot);
-        _publicBaseUrl = options.Value.PublicBaseUrl.TrimEnd('/');
     }
 
     /// <inheritdoc />
@@ -24,7 +22,10 @@ public sealed class LocalDiskMediaStore : IMediaStore
         var path = SafePath(key);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllBytesAsync(path, bytes, ct).ConfigureAwait(false);
-        return $"{_publicBaseUrl}/media/{key}";
+        // Local media belongs to whichever first-party origin is serving the client. Keeping the
+        // path relative lets Vite/nginx proxy it without baking a transient API port into every
+        // database row. Object-storage URLs remain absolute in S3MediaStore.
+        return $"media/{key}";
     }
 
     /// <inheritdoc />

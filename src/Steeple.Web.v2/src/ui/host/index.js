@@ -293,7 +293,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
 
   function renderSwitch() {
     const host = state.mode === 'host';
-    switchButton.textContent = host ? 'Back to browsing' : 'I have space to share';
+    switchButton.textContent = host ? 'Back to browsing' : 'Host a space';
     switchButton.classList.toggle('is-host', host);
     switchButton.setAttribute(
       'aria-label',

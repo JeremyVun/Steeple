@@ -472,6 +472,8 @@ availability client-side; the card always renders exactly what the server return
   "center". Sentence case everywhere — headings, buttons, tabs. No exclamation marks.
 - Warm, plain, concrete. Say "space" or "hall", not "listing"/"inventory"/"asset". Name
   the church: "Ask St. Andrew's", not "Contact host".
+- Keep the hosting hierarchy explicit: Place describes the venue (the building or
+  location); Describe and later steps describe a space within that named venue.
 - Buttons are verb phrases: "Ask to book", "Send answer", "Cancel booking".
 - Trust copy is precise and modest (§1.5). The apply gate explains *why*:
   "Sign in so St. Andrew's knows who's asking."

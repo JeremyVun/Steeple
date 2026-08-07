@@ -173,7 +173,7 @@ public sealed class BookingService : IBookingService
 
         (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
-            .GetForOrganizerAsync(organizerId, statusFilter, page, pageSize, ct)
+            .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
 
         var now = await SweepAsync(items, ct).ConfigureAwait(false);
@@ -201,7 +201,7 @@ public sealed class BookingService : IBookingService
 
         (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
-            .GetForVenuesAsync(venueIds, statusFilter, page, pageSize, ct)
+            .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
 
         var now = await SweepAsync(items, ct).ConfigureAwait(false);

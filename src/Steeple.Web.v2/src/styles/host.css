@@ -93,6 +93,28 @@
   color: var(--line-strong);
 }
 
+/* The venue is corrected where it is read. Quiet at rest — it sits inside a
+   line of address text and must not read as an action the head is asking for. */
+.deskedit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.deskedit:hover {
+  color: var(--terracotta-deep);
+  border-color: var(--terracotta);
+}
+
 .verified--sm {
   margin: 0;
   padding: 3px 10px 3px 8px;
@@ -532,12 +554,14 @@
   flex: none;
 }
 
+/* A state, not a section heading. Uppercase micro-type is this screen's eyebrow
+   costume (.eyebrow in main.css), and a tag wearing it reads as a label for
+   whatever sits beside it rather than as a fact about the row it is on. */
 .tag {
-  font-size: 9.5px;
-  font-weight: 650;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  padding: 4px 10px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--line-strong);
   color: var(--ink-faint);
@@ -836,12 +860,6 @@
   font-size: 12.5px;
   line-height: 1.55;
   color: var(--ink-soft);
-}
-
-.settings__note {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--ink-faint);
 }
 
 /* ── the mock payout screen ─────────────────────────────────────────────── */
@@ -1492,6 +1510,14 @@
   width: 100%;
 }
 
+/* Chrome paints remembered values its own blue; the field keeps its paper. */
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  -webkit-box-shadow: inset 0 0 0 1000px var(--card);
+  -webkit-text-fill-color: var(--ink);
+}
+
 .input:focus {
   border-color: var(--sage);
   outline: none;
@@ -1513,17 +1539,16 @@
   color: var(--ink-faint);
 }
 
-/* Address typeahead: the list sits on the street-address field, over whatever
-   follows, and never reflows the form while somebody is typing into it. */
+/* Address typeahead: the list is fixed to the viewport (placed by script from
+   the field's rect), so it overlays whatever follows without ever growing the
+   sheet body's scrollable overflow — laid in absolutely it would add a
+   scrollbar to the step the moment suggestions appeared. */
 .suggest__anchor {
   position: relative;
 }
 
 .suggest {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  position: fixed;
   z-index: 30;
   margin: 0;
   padding: 4px;
@@ -2102,28 +2127,45 @@
   gap: 15px;
 }
 
-/* A suburb is a word and a ZIP is five digits: the pair says so. */
-.place__where .field__pair {
-  grid-template-columns: minmax(0, 1fr) 118px;
-}
-
 /* Nothing at all until somebody can say where the venue stands — and no gap
    held open for it either. */
 .place__mark:empty {
   display: none;
 }
 
-/* Beside the address rather than under the whole sheet, so the plan is smaller
-   than the one the Publish step reviews. */
-.place__mark .placed {
-  grid-template-columns: 112px minmax(0, 1fr);
-  padding: 12px 14px;
-  gap: 14px;
+/* On Place the map is the whole right column: the confirmation, uncaptioned.
+   Its height is fixed — the same frame holds the waiting slot and the live
+   map, so the sheet never grows and no field moves when the map arrives. */
+.place__mark .minimap {
+  height: 322px;
+  aspect-ratio: auto;
+  border-radius: 8px;
+}
+
+/* Before an address is picked the frame waits with a ghost of the pin. */
+.minimap--waiting {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  background: var(--paper-sheet);
+}
+
+.minimap--waiting .minimap__ghost svg {
+  display: block;
+}
+
+.minimap--waiting .minimap__pin-body {
+  fill: color-mix(in srgb, var(--ink-faint) 18%, transparent);
+  stroke: none;
+}
+
+.minimap--waiting .minimap__pin-eye {
+  fill: var(--paper-sheet);
 }
 
 .placed {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: 148px minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   padding: 14px 16px;
@@ -2141,79 +2183,103 @@
   margin: 0;
 }
 
-.plan {
-  position: relative;
+/* The confirmation map: real tiles, toned toward the paper palette the same
+   way the discovery map is, held inside its own stacking context so Leaflet's
+   panes can never rise over the sheet or the address list. */
+.minimap {
   width: 100%;
   aspect-ratio: 1;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background-color: color-mix(in srgb, var(--sage) 17%, var(--paper));
-  background-image: repeating-linear-gradient(90deg, var(--hair) 0 1px, transparent 1px 25%),
-    repeating-linear-gradient(0deg, var(--hair) 0 1px, transparent 1px 25%);
-  cursor: crosshair;
-  touch-action: none;
   overflow: hidden;
+  isolation: isolate;
+  background: var(--paper-deep);
 }
 
-/* The plan is a confirmation now, not a control: nothing here is dragged. */
-.plan--still {
-  cursor: default;
+.minimap .leaflet-tile-pane {
+  filter: saturate(0.56) sepia(0.22) hue-rotate(-6deg) brightness(1.06) contrast(0.92);
 }
 
-.plan__north {
-  position: absolute;
-  top: 7px;
-  right: 9px;
-  font-size: 9.5px;
-  font-weight: 650;
-  letter-spacing: 0.12em;
+.minimap .minimap__tiles {
+  opacity: 0.93;
+}
+
+.minimap .leaflet-control-attribution {
+  padding: 0 5px;
+  border-radius: 4px 0 0 0;
+  font-size: 8px;
+  background: color-mix(in srgb, var(--paper) 80%, transparent);
   color: var(--ink-faint);
 }
 
-.plan__known {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--sage-deep);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--paper) 70%, transparent);
-  transform: translate(-50%, -50%);
+.minimap__pin svg {
+  display: block;
 }
 
-.plan__pin {
-  position: absolute;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: var(--terracotta);
-  border: 2px solid var(--paper);
-  box-shadow: 0 4px 10px -4px rgba(42, 38, 32, 0.7);
-  transform: translate(-50%, -50%);
+.minimap__pin-body {
+  fill: var(--terracotta);
+  stroke: var(--paper);
+  stroke-width: 1.5;
+}
+
+.minimap__pin-eye {
+  fill: #fff;
+}
+
+/* Publish reads in Place's two columns: the ledger at the left, where the venue
+   stands at the right. In one stack the map sat under a long summary, so the
+   confirmation arrived after the decision it confirms. */
+.publish {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 28px;
+}
+
+.publish__words {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+/* In a column of its own the map takes the full width and its words read
+   beneath it, as they do nowhere else — the block is a strip elsewhere. */
+.publish__where .placed {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.publish__where .minimap {
+  height: 250px;
+  aspect-ratio: auto;
+  border-radius: 8px;
 }
 
 /* A preview of where the picked address falls, which steeple has not been told
-   about yet: the block is held lighter than the settled one and the pin is a
-   ring rather than a mark, so the difference is visible as well as said. */
+   about yet: held lighter than the settled one, and its pin a ring rather than
+   a mark, so the difference is visible as well as said. */
 .placed--soft {
   background: var(--paper);
 }
 
-.placed--soft .plan__pin {
-  background: color-mix(in srgb, var(--terracotta) 20%, var(--paper));
-  border-color: var(--terracotta);
-  box-shadow: none;
+.placed--soft .minimap__pin-body {
+  fill: color-mix(in srgb, var(--terracotta) 22%, var(--paper));
+  stroke: var(--terracotta);
+}
+
+.placed--soft .minimap__pin-eye {
+  fill: var(--terracotta);
 }
 
 /* ── describing the room ────────────────────────────────────────────────── */
 
-/* What the host writes, beside what steeple needs to show it. */
+/* What the host writes, beside what steeple needs to show it — two columns of
+   one width, standing to the same foot. */
 .describe {
-  /* The photograph's frame, said once: the column it sits in is exactly as wide,
-     so an empty tile and a filled one are the same size and nothing jumps. */
-  --tile: 212px;
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
   gap: 16px 28px;
 }
 
@@ -2223,19 +2289,29 @@
   gap: 15px;
 }
 
-/* The picture, and the two numbers, side by side: neither is tall enough to
-   deserve a row of its own, and stacked they left the column half empty. */
+/* The picture is the column, and the two numbers stand under it on one line.
+   The frame takes every pixel the written column leaves — the step is as tall
+   as its longest side either way, so a small picture bought nothing but a
+   hand's depth of empty paper under it. */
 .describe__facts {
   display: grid;
-  grid-template-columns: var(--tile) minmax(0, 1fr);
-  align-items: start;
-  gap: 15px 22px;
+  grid-template-rows: minmax(96px, 1fr) auto;
+  gap: 15px;
 }
 
+/* Seats are a two-digit answer; the price keeps the rest of the line, because
+   "$ … per hour" is a sentence and folds into a stack when it is squeezed. */
 .describe__nums {
   display: grid;
-  align-content: start;
-  gap: 15px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: start;
+  gap: 15px 20px;
+}
+
+/* Side by side, guest.css's separation between stacked fields is not space
+   between them — it is the price dropped half a line below the seats. */
+.describe__nums > .field + .field {
+  margin-top: 0;
 }
 
 /* The three vocabularies, as one ledger: names down the left, choices beside. */
@@ -2264,39 +2340,37 @@
 
 /* ── the photograph ─────────────────────────────────────────────────────── */
 
-.shotpick__row {
-  display: grid;
-  justify-items: start;
-  gap: 7px;
-}
-
-/* The tile is the control: the input covers it, invisible, so the whole frame
-   opens the picker and keyboard focus still lands somewhere that shows it. */
-.shotpick__tile {
+/* The frame is the control: the input covers it, invisible, so the whole panel
+   opens the picker and keyboard focus still lands somewhere that shows it.
+   Beside the words it is *given* its height — asking for a proportion here
+   would make the picture, not the writing, decide how tall the step is, and
+   the step has exactly one window's worth of room. Standing alone in a single
+   column it takes the proportion a hall is photographed in (below). */
+.shotpick {
   position: relative;
   display: grid;
   place-items: center;
-  width: var(--tile, 212px);
-  max-width: 100%;
-  aspect-ratio: 3 / 2;
+  min-height: 0;
   border: 1px dashed var(--line-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--paper-sheet);
   cursor: pointer;
   overflow: hidden;
-  transition: border-color 150ms var(--ease), color 150ms var(--ease);
+  transition: border-color 150ms var(--ease), background 150ms var(--ease);
 }
 
-.shotpick__tile:hover {
+.shotpick:hover {
   border-color: var(--terracotta);
+  background: var(--paper-deep);
 }
 
-.shotpick__tile:has(.shotpick__thumb) {
+.shotpick.is-filled {
   border-style: solid;
   border-color: var(--line);
+  background: var(--paper-deep);
 }
 
-.shotpick__tile:has(.shotpick__input:focus-visible) {
+.shotpick:has(.shotpick__input:focus-visible) {
   border-color: var(--sage);
   box-shadow: 0 0 0 3px var(--sage-tint);
 }
@@ -2308,24 +2382,112 @@
   cursor: pointer;
 }
 
+/* The empty frame asks for one thing, in the middle of the space it will fill. */
+.shotpick__empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 14px;
+  text-align: center;
+}
+
+.shotpick__mark svg {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.shotpick__mark-line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .shotpick__prompt {
-  font-size: 12px;
-  letter-spacing: 0.01em;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.shotpick__hint {
+  font-size: 11.5px;
+  line-height: 1.5;
+  max-width: 34ch;
   color: var(--ink-faint);
 }
 
-.shotpick__tile:hover .shotpick__prompt {
+/* A file steeple cannot use is said inside the frame that asked for it — the
+   frame is still the picker, so the way out of the sentence is a click on it. */
+.shotpick.is-refused {
+  border-color: var(--terracotta);
+  background: var(--paper-deep);
+}
+
+.shotpick__hint--refused {
   color: var(--terracotta-deep);
 }
 
+.shotpick:hover .shotpick__prompt {
+  color: var(--terracotta-deep);
+}
+
+.shotpick:hover .shotpick__mark-line {
+  stroke: var(--terracotta);
+}
+
+/* Laid over the frame rather than inside it: a photograph in the flow would
+   report its own height to the grid, and the picture would decide how tall the
+   step is — which is the writing column's job. */
 .shotpick__thumb {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* The same pull toward the paper the listing cards give a photograph: the
+     host sees the room in steeple's tones, which is where it is going. */
+  filter: saturate(0.88) sepia(0.08) contrast(0.97);
 }
 
-.shotpick__remove[hidden] {
-  display: none;
+/* Over a picture, the way back to the picker is said rather than guessed at. */
+.shotpick__veil {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  background: color-mix(in srgb, var(--ink) 40%, transparent);
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+}
+
+.shotpick.is-filled:hover .shotpick__veil,
+.shotpick:has(.shotpick__input:focus-visible) .shotpick__veil {
+  opacity: 1;
+}
+
+/* Small, and on the paper's side of the picture, so it reads over any room. */
+.shotpick__remove {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.shotpick__remove:hover {
+  color: var(--terracotta-deep);
+  border-color: var(--terracotta);
 }
 
 /* Signed out of the choice, the chips are gone — and so is the gap above them. */
@@ -2506,8 +2668,15 @@
   /* Two columns and a label at the left both need width to be worth having. */
   .describe,
   .place,
+  .publish,
   .chosen {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One column leaves the picture nothing to take, so it asks for the
+     proportion a hall is photographed in. */
+  .shotpick {
+    aspect-ratio: 16 / 10;
   }
 
   .chosen__label {

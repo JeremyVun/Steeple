@@ -99,8 +99,8 @@ page.on('console', (msg) => {
   if (msg.type() !== 'error') return;
   const text = msg.text();
   if (text.includes('GL Driver Message') || text.includes('GPU stall')) return;
-  // The shared dev database holds room photographs at absolute URLs on ports
-  // nobody is listening on any more; tiles come from the open internet.
+  // A shared dev DB can reference media stored in another worktree; tiles
+  // come from the open internet.
   if (/Failed to load resource|net::ERR_/.test(text)) return;
   problems.push(`[console.error] ${text}`);
 });

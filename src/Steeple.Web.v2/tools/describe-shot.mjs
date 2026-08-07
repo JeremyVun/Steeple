@@ -3,14 +3,20 @@
 // Signs a host in, writes the venue, walks to Describe, fills it the way a host
 // would, and shoots the step at a few window sizes. It reports how tall the
 // step's body is against the room it was given, which is the question this step
-// kept failing: whether a host can finish it without scrolling. A measurement,
-// not a suite — the checks live in host-publish-test.mjs.
+// kept failing: whether a host can finish it without scrolling. It also reports
+// the picture's own size and what stands empty under either column — the step's
+// second failing, a stamp-sized photograph with a hand's depth of nothing under
+// it. A measurement, not a suite — the checks live in host-publish-test.mjs.
 //
-// Needs the API on localhost:5200 and the app on the given origin.
+// Needs the API (STEEPLE_API, default http://localhost:5200/api/v1) and the app
+// on the given origin with its proxy pointed at that same API. DESCRIBE_PHOTO
+// puts a real room in the frame instead of the generated fixture, which is the
+// only way to judge the proportion the picture is held at.
 //
 //   node tools/describe-shot.mjs "http://localhost:5332/?world=off" d1
+//   DESCRIBE_PHOTO=/tmp/hall.jpg node tools/describe-shot.mjs "http://localhost:5332/?world=off" d2
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { agreeCurrent, closeBrowsers, launch, signIn } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -26,7 +32,9 @@ import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?world=off';
 const prefix = process.argv[3] ?? 'describe';
-const PHOTO = writeRoomPhoto('/tmp/steeple-describe-room.png');
+// The generated fixture proves the plumbing; a real room proves the frame. Point
+// DESCRIBE_PHOTO at any image on disk to see the step hold a photograph.
+const PHOTO = process.env.DESCRIBE_PHOTO ?? writeRoomPhoto('/tmp/steeple-describe-room.png');
 const stamp = Date.now().toString(36);
 const hostEmail = `look-${stamp}@example.org`;
 
@@ -64,6 +72,9 @@ try {
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   await page.evaluate('__steeple.roll.set(1)');
   await page.evaluate('localStorage.removeItem("steeple-village-session")');
+  // Minted and agreed first: an un-agreed account meets the agreements ask over
+  // the sheet, and dismissing it signs the account out.
+  await agreeCurrent((await signIn(hostEmail, 'Ruth Ellery')).accessToken);
   await page.evaluate(`__steeple.session.signIn({email:'${hostEmail}',displayName:'Ruth Ellery'})`);
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
   await page.evaluate('__steeple.setMode("host")');
@@ -72,9 +83,7 @@ try {
 
   await type('#place-name', `Trinity Hall ${stamp}`);
   await type('#place-description', 'A stone hall behind the church, used by the parish through the week.');
-  await type('#place-address', '18 Church Street');
-  await type('#place-suburb', 'Vienna');
-  await type('#place-postcode', '22180');
+  await type('#place-address', '18 Church Street, Vienna 22180');
   await page.click('[data-action="advance"]');
   await wait(900);
   await clickText('.listing .identity__actions .pill--primary', /^Continue as/);
@@ -90,6 +99,33 @@ try {
   await wait(600);
   await clickText('.toggles .chip--toggle', /^Kitchen$/);
   await clickText('.toggles .chip--toggle', /^Step-free access$/);
+
+  // The picture with a pointer on it: the way back to the picker is a veil over
+  // the photograph, so it only exists in a hovered shot.
+  const picture = await (await page.$('.shotpick')).boundingBox();
+  await page.mouse.move(picture.x + picture.width / 2, picture.y + picture.height / 2);
+  await wait(400);
+  await page.screenshot({ path: `/tmp/${prefix}-hovered.png` });
+  await page.mouse.move(4, 4);
+  await wait(300);
+
+  // The two columns against each other: how big the photograph actually is, and
+  // how much of either column is standing empty under its last field. A hole
+  // under the picture is the shape of that number, so the number is printed.
+  const columns = await page.evaluate(() => {
+    const box = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { w: Math.round(rect.width), h: Math.round(rect.height), bottom: Math.round(rect.bottom) };
+    };
+    return { grid: box('.describe'), words: box('.describe__words'), facts: box('.describe__facts'), tile: box('.shotpick') };
+  });
+  console.log(
+    `photograph ${columns.tile?.w}×${columns.tile?.h}px · row ${columns.grid?.h}px ` +
+      `· empty under the words ${columns.grid.bottom - columns.words.bottom}px ` +
+      `· empty under the picture ${columns.grid.bottom - columns.facts.bottom}px`
+  );
 
   // How the step stands at a few window heights, filled in.
   for (const height of [760, 900, 1050]) {

@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/env_config.dart';
 import '../../../app/theme/theme.dart';
 import '../../../core/flags/flags_service.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
+import '../../../core/utils/media_url.dart';
 import '../../../core/widgets/widgets.dart';
 import '../providers.dart';
 
@@ -280,13 +282,13 @@ class _Detail extends ConsumerWidget {
   }
 }
 
-class _PhotoGallery extends StatelessWidget {
+class _PhotoGallery extends ConsumerWidget {
   const _PhotoGallery({required this.room});
 
   final RoomDetail room;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.steepleColors;
     final photos = room.photos;
     if (photos.isEmpty) {
@@ -322,7 +324,10 @@ class _PhotoGallery extends StatelessWidget {
             image: true,
             label: photo.caption ?? '${room.roomName} photo ${index + 1}',
             child: CachedNetworkImage(
-              imageUrl: photo.url,
+              imageUrl: resolveMediaUrl(
+                ref.watch(envProvider).apiBaseUrl,
+                photo.url,
+              ),
               fit: BoxFit.cover,
               placeholder: (context, _) => ColoredBox(color: colors.surface),
               errorWidget: (context, _, _) => ColoredBox(color: colors.surface),

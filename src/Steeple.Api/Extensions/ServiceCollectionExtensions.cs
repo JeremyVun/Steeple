@@ -285,7 +285,10 @@ public static class ServiceCollectionExtensions
                     : GoogleCredential.FromFile(push.ServiceAccountJsonPath);
                 return FirebaseApp.Create(new AppOptions { Credential = credential });
             });
-            services.AddScoped<IPushGateway, FcmPushGateway>();
+            // Singleton on purpose: NotificationDispatcher fire-and-forgets sends past the end of
+            // the request, so the gateway must never capture request-scoped services (it opens its
+            // own scope for dead-token cleanup).
+            services.AddSingleton<IPushGateway, FcmPushGateway>();
         }
         else
         {

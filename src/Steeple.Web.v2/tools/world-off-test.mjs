@@ -35,8 +35,8 @@ page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
   // `isEnvironmentNoise` covers software GL and any resource that would not
   // load — map tiles from an internet a sealed machine has none of, and the
-  // shared dev database's room photographs, whose absolute URLs point at API
-  // ports nobody is listening on any more. The `/api/v1/` exclusion beside it
+  // shared dev database's room photographs, whose bytes may live in another
+  // worktree's media-store. The `/api/v1/` exclusion beside it
   // is this suite's own: it is about the page with no world, not the wire.
   if (m.type() === 'error' && !isEnvironmentNoise(m) && !(m.location()?.url ?? '').includes('/api/v1/')) {
     errors.push(`[console] ${m.text()}`);

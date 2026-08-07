@@ -24,8 +24,12 @@ clients)*: array of weekday tokens (`"sunday"`…`"saturday"` — `conventions.m
 `recurringWeekly`, must be null/absent for `oneOff`. Multi-day = one application/booking
 (e.g. Tue+Thu weekly is a single request materializing occurrences on both days).
 
-→ `201 Application` (an `Idempotency-Key` replay returns the original as `200`). Errors:
-`400 invalid_application` (bad token / malformed or unbounded schedule / past start date),
+→ `201 Application` (an `Idempotency-Key` replay returns the original as `200` — including a
+replay that raced a concurrent identical submit: the unique index resolves the winner and the
+loser answers with it, 2026-08-07). Errors:
+`400 invalid_application` (bad token / malformed or unbounded schedule / past start date —
+judged against the **venue's local** today, not UTC's (2026-08-07) / a recurring term none of
+whose selected weekdays occur between its dates — it would materialize zero occurrences),
 `402 payment_method_required` *(additive 2026-08-05, while `payments.enabled` — save a method
 via `payments.md` first; applies to every room, instant or manual)*,
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer
@@ -87,17 +91,29 @@ At most one counter is ever `open` (DB partial unique index); history rows stay 
 
 - `GET /api/v1/me/applications` ✅ (organizer) · `GET /api/v1/manage/applications` ✅ (provider
   inbox; empty list — not an error — for non-managers) — pagination per `conventions.md`,
-  filter by `status`.
+  filter by `status`. The filter (and `totalCount`) matches **effective** status (2026-08-07):
+  an undecided application past `expiresAtUtc` already counts as `expired` even before a read
+  has persisted the lazy sweep's flip — `?status=pending` can never return an expired row.
 - `GET /api/v1/applications/{id}` ✅ — full `Application` incl. `messages` (party-scoped: organizer or a `venue_manager` of the room's venue; others 404). The thread screen's fetch.
 - `POST /api/v1/applications/{id}/messages` ✅ — `{body}` (either party; the "ask" thread). A
   provider message on `pending` → `needsInfo`; the organizer's answer → back to `pending`.
   Errors: `409 invalid_state` once decided, `400 invalid_application`, `429 rate_limited`.
-- `POST /api/v1/applications/{id}/decision` ✅ (provider) — `{decision: "approve"|"decline", message?}`.
+- `POST /api/v1/applications/{id}/decision` ✅ (provider, `apply` limit since 2026-08-07) —
+  `{decision: "approve"|"decline", message?}`.
   `403 not_venue_manager` · `409 invalid_state` once decided. ✅ Phase 3: **approve is the
   booking transaction** (status flip + booking + occurrences commit atomically); when the
   exclusion constraint fires → `409 slot_taken` and the application is **auto-declined**
   with the organizer notified.
-- `POST /api/v1/applications/{id}/withdraw` ✅ (organizer). `409 invalid_state` once decided.
+- `POST /api/v1/applications/{id}/withdraw` ✅ (organizer, `apply` limit since 2026-08-07).
+  `409 invalid_state` once decided.
+
+**Transitions are serialized (2026-08-07):** every state-changing write (decision, withdraw,
+message status flips, counter-offer, counter response, expiry sweep) saves through the
+application row's concurrency token (Postgres `xmin` — no schema change), so two callers
+racing on one application leave exactly one winner and a booking that agrees with it; the
+loser answers `409 invalid_state` ("changed while the request was in flight") instead of
+silently overwriting. Approve-vs-withdraw in either order is proven by
+`ApplicationConcurrencyTests` alongside `BookingIntegrityTests`.
 
 Manager detail reads of undecided applications additionally carry an additive `conflicts?`
 digest (host-only) — specified with the availability engine in `manage.md`.
@@ -126,7 +142,9 @@ no background worker.
 
 - `GET /api/v1/me/bookings` ✅ · `GET /api/v1/manage/bookings` ✅ (empty list for
   non-managers) · `GET /api/v1/bookings/{id}` ✅ (party-scoped; others 404) — pagination per
-  `conventions.md`, filter by `status`.
+  `conventions.md`, filter by `status`. The filter (and `totalCount`) matches **effective**
+  status (2026-08-07): a confirmed booking with no scheduled time left ahead already counts as
+  `completed` before the sweep persists it — `?status=confirmed` never returns finished terms.
 - `POST /api/v1/bookings/{id}/cancel` ✅ — `{reason?}` (≤500 chars), either party.
   **Asymmetric since 2026-08-05 (booking-modes.md refund table — SYSTEM_DESIGN §17):**
   a **guest** cancel frees occurrences beyond the 48h notice window (nearer ones stand,

@@ -21,57 +21,22 @@
 // one. The last is when the flow keeps the listing locally instead.
 
 import * as api from '../../data/api.js';
+import { neverArrived } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
-
-// steeple's token registries (CONTRACTS §2.1) against the labels this product
-// has always printed. The catalog keeps the same pairs for the reading half of
-// the wire; the writing half needs them in the other direction.
-const ACTIVITIES = {
-  Children: 'children',
-  Sports: 'sports',
-  Community: 'community',
-  Religious: 'religious',
-  Arts: 'arts',
-  Education: 'education',
-  Music: 'music',
-};
-
-const AMENITIES = {
-  Parking: 'parking',
-  Kitchen: 'kitchen',
-  Restrooms: 'restrooms',
-  'Wi-Fi': 'wifi',
-  'Audio/visual': 'audioVisual',
-  Tables: 'tables',
-  Chairs: 'chairs',
-  Heating: 'heating',
-  'Air conditioning': 'airConditioning',
-  Stage: 'stage',
-  Piano: 'piano',
-};
-
-const ACCESSIBILITY = {
-  'Step-free access': 'stepFreeAccess',
-  'Accessible restroom': 'accessibleRestroom',
-  'Accessible parking': 'accessibleParking',
-  'Hearing loop': 'hearingLoop',
-  'Lift access': 'liftAccess',
-};
+import {
+  ACCESS_LABELS,
+  ACTIVITY_LABELS,
+  AMENITY_LABELS,
+  toTokens,
+} from '../../data/vocabulary.js';
 
 const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 
-/** A label the product prints as the token steeple stores. Unknown stays as-is. */
-const tokenize = (values, registry) =>
-  [...new Set((values ?? []).map((value) => registry[value] ?? camel(value)))];
-
-const camel = (label) =>
-  String(label)
-    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase())
-    .replace(/^./, (c) => c.toLowerCase());
-
-export const activityTokens = (labels) => tokenize(labels, ACTIVITIES);
-export const amenityTokens = (labels) => tokenize(labels, AMENITIES);
-export const accessTokens = (labels) => tokenize(labels, ACCESSIBILITY);
+// The writing half of the shared vocabulary (data/vocabulary.js): the labels
+// this product prints as the tokens steeple stores.
+export const activityTokens = (labels) => toTokens(labels, ACTIVITY_LABELS);
+export const amenityTokens = (labels) => toTokens(labels, AMENITY_LABELS);
+export const accessTokens = (labels) => toTokens(labels, ACCESS_LABELS);
 
 /** The painter's windows as the availability contract wants them, Sunday first. */
 export function availabilityBody(windows, blackouts, today) {
@@ -146,7 +111,11 @@ async function attempt(work) {
           'Steeple is taking a while to answer. Try again — anything that did go through will not be made twice.',
       };
     }
-    if (!error?.status) {
+    // The same reading correspondence.js uses: this app always sits behind a proxy (vite in
+    // development, nginx in a container), so a dead API answers 502/503 — a page that treats
+    // only a status-less fetch as "away" dresses the one outage people actually meet as a
+    // refusal, and the flow's kept-here fallback never fires.
+    if (neverArrived(error?.status ?? 0)) {
       return { ok: false, reach: 'offline', detail: 'Steeple could not be reached.' };
     }
     return {
@@ -236,6 +205,16 @@ export function saveRoom(draft) {
     delete draft.remote.roomIdempotencyKey;
     return value;
   });
+}
+
+/**
+ * The full room as steeple holds it — description, rules and the three
+ * vocabularies included, which the venue-detail summary omits. The listing flow
+ * reads this before it lets an edit PATCH an existing room: a form seeded from
+ * the summary's blanks would otherwise send those blanks back as the truth.
+ */
+export function readRoom(roomId) {
+  return attempt((token) => api.getManagedRoom(roomId, token));
 }
 
 /** Send the photograph the room cannot be published without. */

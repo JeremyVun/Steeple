@@ -49,7 +49,10 @@
                         <div class="admin-preview-photos">
                             @foreach (var thumb in request.PhotoThumbUrls)
                             {
-                                <img src="@thumb" alt="" loading="lazy" />
+                                var photoSource = thumb.StartsWith("media/", StringComparison.Ordinal)
+                                    ? Url.Content($"~/{thumb}")
+                                    : thumb;
+                                <img src="@photoSource" alt="" loading="lazy" />
                             }
                         </div>
                     }

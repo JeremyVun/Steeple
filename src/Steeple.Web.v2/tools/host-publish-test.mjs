@@ -16,6 +16,10 @@
 // the slug steeple minted the moment the create answers, or the desk's own
 // re-read drops the draft and everything keyed under it.
 //
+// §10 is the third half: a listing already with a moderator, opened again. Its
+// Publish step is a statement, so its button is a way out — and looking at a
+// listing must write nothing to steeple (2026-08-07).
+//
 // Needs the API (STEEPLE_API, default http://localhost:5200/api/v1) and the app
 // on the given origin with its proxy pointed at that same API. Nothing here is
 // reset or reseeded: each run mints its own venue under its own dev account, so
@@ -24,7 +28,7 @@
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low&world=off"
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low" --shots hp
 
-import { API, apiIsUp, closeBrowsers, launch, stamp } from './fixtures.mjs';
+import { API, agreeCurrent, apiIsUp, closeBrowsers, launch, signIn, stamp } from './fixtures.mjs';
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?q=low&world=off';
@@ -188,6 +192,10 @@ await page.evaluate('localStorage.removeItem("steeple-village-session")');
 // is no desk without a managed venue now, and no way into hosting without a
 // session — so the order the product actually has is: be somebody, ask for
 // hosting, and the flow opens itself because you keep no venue yet.
+// Minted and agreed first (the shared inoculation from the P6 sweep): an
+// un-agreed account meets the agreements ask over the sheet, and dismissing
+// it signs the account out.
+await agreeCurrent((await signIn(hostEmail, 'Ruth Ellery')).accessToken);
 await page.evaluate(`__steeple.session.signIn({email:'${hostEmail}',displayName:'Ruth Ellery'})`);
 await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
 await page.evaluate('__steeple.setMode("host")');
@@ -199,20 +207,20 @@ await wait(1400);
 // ── 1. Place: address fields, no pin ──────────────────────────────────────
 console.log('\n1. Place — the address, and no pin to drop');
 check('a host who keeps no venue is taken straight to the flow', (await text('.steps__step.is-on')) === '1Place');
+check('Place is framed as venue setup', (await text('#listing-title')) === 'Tell us about the venue');
+check('the intro explains the venue and space hierarchy', /venue is the building or location[\s\S]*room or space groups can hire/.test((await text('.listing__body')) ?? ''));
+check('About the venue has four lines of writing room', (await page.$eval('#place-description', (n) => n.rows)) === 4);
 check('the flow is four steps, not five', (await page.$$eval('.steps__step', (n) => n.length)) === 4, await page.$$eval('.steps__step', (n) => n.map((s) => s.textContent).join(' ')));
 check('and none of them is Verify', !/Verify/.test((await text('.steps')) ?? ''));
 check('the pin picker is gone', !(await page.$('.plan[role="application"]')), 'no draggable plan');
 check('there is nowhere to drop a pin', (await page.$$('.place__pin')).length === 0);
 check('the step asks for an address', await visible('#place-address'));
-check('and for the parts the API requires', (await page.$('#place-suburb')) && (await page.$('#place-postcode')) !== null);
+check('suburb and ZIP are no longer asked for', !(await page.$('#place-suburb')) && !(await page.$('#place-postcode')));
 check('cannot continue while it is empty', await disabled('[data-action="advance"]'));
 
 await type('#place-name', venueName);
 await type('#place-description', 'A stone hall behind the church, used by the parish through the week.');
-await type('#place-address', '18 Church Street');
-await type('#place-suburb', 'Vienna');
-check('still not enough without a ZIP', await disabled('[data-action="advance"]'));
-await type('#place-postcode', '22180');
+await type('#place-address', '18 Church Street, Vienna 22180');
 check('the whole address earns the way forward', !(await disabled('[data-action="advance"]')));
 await shot('01-place');
 await click('[data-action="advance"]', 'Continue');
@@ -222,6 +230,7 @@ await wait(2500);
 // wait for, because there is no way into hosting without a session. Where it
 // stands is steeple's answer to the address, which is the pin's replacement.
 check('Describe is next', (await text('.steps__step.is-on')) === '2Describe', await text('.steps__step.is-on'));
+check('Describe is framed as a space within the venue', (await text('#listing-title')) === `Add a space at ${venueName}`);
 const placedNote = await text('.notice__text');
 check('the host is told the venue is on the map', /on the map/.test(placedNote ?? ''), placedNote);
 const signedIn = await page.evaluate('__steeple.session.currentUser()');
@@ -269,10 +278,32 @@ check('and says what steeple cannot do with it', /by the hour/.test((await text(
 await type('#room-price', '30', { clear: true });
 check('a real price clears the note', (await page.$('.listing .price--free')) === null);
 
+check('an empty frame asks for the one thing it wants', await visible('.shotpick__empty'));
 const chooser = await page.$('#room-photo');
 await chooser.uploadFile(PHOTO);
 await wait(400);
 check('the photograph shows as chosen', await visible('.shotpick__thumb'));
+
+// Remove stands inside the label that opens the picker: taking the photograph
+// away must not ask for another one in the same click.
+const askedAgain = page
+  .waitForFileChooser({ timeout: 1200 })
+  .then(() => true)
+  .catch(() => false);
+await page.click('.shotpick__remove');
+await wait(300);
+check('removing it does not reopen the picker', (await askedAgain) === false);
+check('and the frame is asking again', !(await page.$('.shotpick__thumb')) && (await visible('.shotpick__empty')));
+await (await page.$('#room-photo')).uploadFile(PHOTO);
+await wait(400);
+check('and it takes a photograph back', await visible('.shotpick__thumb'));
+
+// The frame says "Replace photograph" under the pointer; the picture had better
+// be the control it says it is, with a photograph already in it.
+const picker = page.waitForFileChooser({ timeout: 1500 });
+await page.click('.shotpick');
+const opensPicker = await picker.then((chooser) => chooser.cancel() ?? true).catch(() => false);
+check('the picture itself is the way to replace it', opensPicker !== false);
 
 await clickText('.welcome .segment', /Some activities only/, 'narrow to some activities');
 const chips = await page.$$eval('.welcome__chips .chip--toggle.is-on', (n) => n.length);
@@ -336,7 +367,7 @@ check('and the closed day', rules.blackouts?.some((b) => b.date === closedDay), 
 console.log('\n4. Publish — and the service’s own answer to it');
 check('nothing is missing, so publishing is offered', !(await disabled('[data-action="advance"]')));
 check('the button says what it does', (await text('[data-action="advance"]')) === 'Publish this space');
-check('the review shows where steeple put it', await visible('.placed .plan'));
+check('the review shows where steeple put it', await visible('.placed .minimap'));
 // The one disclosure the Verify step used to make, in the place it belongs: the
 // host's name goes out with the listing, and the mark is a fact about the
 // session rather than a decoration.
@@ -357,7 +388,9 @@ check('and not told it is live', !/is published/.test(said));
 check('no exclamation marks anywhere on the step', !/!/.test((await text('.listing')) ?? ''));
 const localRoom = await store(`effectiveRoom('${mirrored.id}','${roomSlug}')`);
 check('the local mirror carries the server’s state', localRoom?.status === 'draft' && Boolean(localRoom?.publishRequestedAt), JSON.stringify({ status: localRoom?.status, requested: localRoom?.publishRequestedAt }));
-check('and the server’s photograph', typeof localRoom?.photo === 'string' && localRoom.photo.includes('/media/'), localRoom?.photo);
+// The path is origin-independent now ('media/rooms/…', no leading slash), so
+// that web, Admin and mobile each resolve it against their own base.
+check('and the server’s photograph', typeof localRoom?.photo === 'string' && localRoom.photo.includes('media/'), localRoom?.photo);
 
 // ── 5. the way out, and the desk afterwards ───────────────────────────────
 console.log('\n5. the way out, and the desk it leads to');
@@ -368,7 +401,9 @@ check('the flow closed', !(await visible('.listing')));
 check('the desk is back', await visible('.desk'));
 await clickText('.tab', /^Spaces/, 'Spaces tab');
 check('the new venue is the one being kept', /Trinity Hall/.test((await text('.desk .desk__head')) ?? ''), await text('.desk .desk__head'));
-check('and its space reads as with steeple, not as a draft', /With Steeple/.test((await text('.desk .spaces')) ?? ''), (await text('.desk .spaces'))?.slice(0, 80));
+check('and its space reads as in review, not as a draft', /In review/.test((await text('.desk .spaces')) ?? ''), (await text('.desk .spaces'))?.slice(0, 80));
+check('the count above the rows says the same thing', /in review/.test((await text('.desk .desk__count')) ?? ''), await text('.desk .desk__count'));
+check('and never calls a moderator’s room a draft', !/draft/i.test((await text('.desk .desk__count')) ?? ''));
 await shot('07-desk');
 
 // ── 6. the desk's two ways on ─────────────────────────────────────────────
@@ -379,7 +414,10 @@ console.log('\n6. the desk offers a space and a venue, and they are different th
 check('the primary way on is another space here', await visible('[data-action="add-space"]'));
 check('and it says so', (await text('[data-action="add-space"]')) === 'Add a space');
 check('a whole new venue is offered quietly beside it', (await text('[data-action="new-venue"]')) === 'List another venue');
-check('the venue itself can be corrected from Spaces', await visible('[data-action="edit-venue"]'));
+// The venue is corrected beside the address it is read at, in the head — so it
+// is reachable from every tab, and the address is printed once.
+check('the venue itself can be corrected where it is read', await visible('.desk__head [data-action="edit-venue"]'));
+check('and the address is printed once, not twice', ((await text('.desk')) ?? '').split('18 Church Street').length <= 2, await text('.desk .desk__head'));
 
 // ── 7. the trap: a venue registered and abandoned before its first space ───
 console.log('\n7. a venue abandoned at Place — the desk still has a way on');
@@ -388,9 +426,7 @@ await wait(900);
 check('it opens on Place, the whole four steps', (await text('.steps__step.is-on')) === '1Place', await text('.steps__step.is-on'));
 await type('#place-name', strandedName);
 await type('#place-description', 'A yard behind the chapel with two rooms off it.');
-await type('#place-address', '9 Yard Lane');
-await type('#place-suburb', 'Vienna');
-await type('#place-postcode', '22180');
+await type('#place-address', '9 Yard Lane, Vienna 22180');
 await click('[data-action="advance"]', 'Continue');
 await wait(2600);
 const stranded = (await api('/manage/venues', token)).find((v) => v.name === strandedName);
@@ -501,6 +537,35 @@ await click('[data-action="advance"]', 'Done');
 await wait(2600);
 check('the desk agrees', new RegExp(renamedName).test((await text('.desk .desk__head')) ?? ''), await text('.desk .desk__head'));
 await shot('12-renamed');
+
+// ── 10. a listing steeple has already answered, opened again ──────────────
+//
+// The Publish step reads as a statement for a space already with a moderator.
+// Its footer went on offering "Publish this space" under "has been sent for
+// review" until 2026-08-07 — the flow asking a second time for what it had
+// already been given, and the one press on the step that must not be a write.
+console.log('\n10. reopening a listing already with Steeple');
+const reviewed = bothRooms.rooms?.find((r) => r.name === firstSpace);
+const keptRooms = (await store('placedVenues()')).find((v) => v.id === stranded.slug)?.rooms ?? [];
+const reviewedId = keptRooms.find((r) => r.name === firstSpace)?.id;
+const beforeReopen = await api(`/manage/rooms/${reviewed.id}`, token);
+await clickText('.tab', /^Spaces/, 'Spaces tab');
+await click(`button[data-room="${reviewedId}"][data-action="edit"]`, `Edit ${firstSpace}`);
+await wait(1600);
+await click('.steps__step[data-step="publish"]', 'the Publish step');
+await wait(1600);
+const standing = (await text('.listing .guide')) ?? '';
+check('the step says where the listing stands', /sent for review/.test(standing), standing.slice(0, 70));
+check('and the button does not ask to publish it again', (await text('[data-action="advance"]')) !== 'Publish this space', await text('[data-action="advance"]'));
+check('it is the way out instead', (await text('[data-action="advance"]')) === 'Done');
+check('with the way back to the fields still there', await visible('[data-action="back"]'));
+await shot('13-already-with-steeple');
+await click('[data-action="advance"]', 'Done');
+await wait(2600);
+check('the flow closed', !(await visible('.listing')));
+const afterReopen = await api(`/manage/rooms/${reviewed.id}`, token);
+check('and looking at it wrote nothing to steeple', afterReopen.updatedAtUtc === beforeReopen.updatedAtUtc, `${beforeReopen.updatedAtUtc} → ${afterReopen.updatedAtUtc}`);
+check('it is still with the moderator, not published by the press', afterReopen.status === 'draft' && Boolean(afterReopen.publishRequestedAtUtc), afterReopen.status);
 
 // Nothing invisible left over the surface.
 const audit = await page.evaluate(() => {

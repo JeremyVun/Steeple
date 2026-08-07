@@ -21,9 +21,9 @@ public class MediaOptions
     public string SecretKey { get; set; } = "";
 
     /// <summary>
-    /// Public base URL photos are served from — the Spaces CDN edge in production
-    /// (e.g. <c>https://steeple-media.syd1.cdn.digitaloceanspaces.com</c>), or the API's own
-    /// origin in dev (local-disk mode appends <c>/media/&lt;key&gt;</c>).
+    /// Public base URL for object-storage photos — the Spaces CDN edge in production
+    /// (e.g. <c>https://steeple-media.syd1.cdn.digitaloceanspaces.com</c>). Local-disk mode
+    /// deliberately ignores this value and stores document-relative <c>media/&lt;key&gt;</c> paths.
     /// </summary>
     public string PublicBaseUrl { get; set; } = "";
 

@@ -15,7 +15,7 @@
 // Needs the API on localhost:5200 and the app on the given origin.
 //
 //   node tools/host-session-test.mjs "http://localhost:5341/?q=low&world=off"
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { agreeCurrent, closeBrowsers, launch, signIn } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -106,6 +106,10 @@ try {
   await page.evaluate('__steeple.store.resetDemo()');
   await page.evaluate('__steeple.roll.set(1)');
   await wait(300);
+  // Minted and agreed first: since the migration closed, even a seam sign-in
+  // that owes an acceptance is gated at boot, and dismissing the gate signs the
+  // account out (the ask itself is agreement-gate-test's subject).
+  await agreeCurrent((await signIn(hostEmail, 'Nell Baird')).accessToken);
   await page.evaluate(`__steeple.session.signIn({email:'${hostEmail}',displayName:'Nell Baird'})`);
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 25000 });
   await page.evaluate('__steeple.setMode("host")');
@@ -115,9 +119,7 @@ try {
   // A whole listing, right up to the press.
   await type('#place-name', venueName);
   await type('#place-description', 'A hall off the lane, lit late, used most evenings.');
-  await type('#place-address', '4 Lantern Lane');
-  await type('#place-suburb', 'Vienna');
-  await type('#place-postcode', '22180');
+  await type('#place-address', '4 Lantern Lane, Vienna 22180');
   await click('[data-action="advance"]', 'Continue');
   await wait(2600);
   await type('#room-name', `Lantern Room ${stamp}`, { clear: true });
@@ -190,40 +192,13 @@ try {
     await wait(3000);
   }
   check('signed back in', Boolean(await page.evaluate('__steeple.session.currentUser()')));
-  // A first *panel* sign-in is asked to agree to the two documents (P4). This
-  // account's opening sign-in went through the harness seam, which deliberately
-  // raises nothing — so the ask lands here, inside the panel, and the panel is
-  // right to stay until it is answered.
-  await page
-    .waitForFunction(
-      () =>
-        [...document.querySelectorAll('.signin .pill--primary')].some((n) =>
-          /Agree and continue/.test(n.textContent)
-        ),
-      { timeout: 10000 }
-    )
-    .catch(() => {});
+  // The P4 ask is agreement-gate-test's subject; this account agreed at mint,
+  // so the panel must let it straight through with no second ask.
+  await wait(1500);
   const askedToAgree = await page.evaluate(() =>
     [...document.querySelectorAll('.signin .pill--primary')].some((n) => /Agree and continue/.test(n.textContent))
   );
-  check('a first panel sign-in is asked to agree before it goes', askedToAgree);
-  if (askedToAgree) {
-    await page.evaluate(() => {
-      const button = [...document.querySelectorAll('.signin .pill--primary')].find((n) =>
-        /Agree and continue/.test(n.textContent)
-      );
-      button?.scrollIntoView({ block: 'center', behavior: 'instant' });
-    });
-    await wait(200);
-    const agreeBox = await (async () => {
-      for (const handle of await page.$$('.signin .pill--primary')) {
-        if (/Agree and continue/.test(await handle.evaluate((n) => n.textContent))) return handle.boundingBox();
-      }
-      return null;
-    })();
-    if (agreeBox) await page.mouse.click(agreeBox.x + agreeBox.width / 2, agreeBox.y + agreeBox.height / 2);
-    await wait(1500);
-  }
+  check('an account that has agreed is not asked again', !askedToAgree);
   check('the sign-in panel let itself out', !(await visible('.signin')));
   check('and the draft is still where it was left', await visible('.listing'));
   check('still on Publish', (await text('.steps__step.is-on')) === '4Publish', await text('.steps__step.is-on'));

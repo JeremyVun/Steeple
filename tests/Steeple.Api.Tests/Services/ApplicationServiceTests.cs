@@ -101,9 +101,91 @@ public class ApplicationServiceTests
             schedule: NewSchedule(startTime: "11:00", endTime: "11:00")));
 
     [Fact]
-    public async Task SubmitAsync_StartDateInThePast_ReturnsInvalidApplication() =>
+    public async Task SubmitAsync_StartDateInThePast_ReturnsInvalidApplication()
+    {
+        // The past-date rule speaks the venue's calendar, so it runs after the room (and its
+        // timezone) is in hand — a real room, unlike the shape-error cases above.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.SubmitAsync(
+            room.Id, organizer.Id,
+            NewSubmitRequest(schedule: NewSchedule(startDate: Today().AddDays(-1))),
+            idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_StartDateIsVenueLocalToday_AcceptedEvenAfterUtcMidnight()
+    {
+        // 02:00Z on Jul 5 is still the evening of Jul 4 at an America/New_York venue: a request
+        // for "today" on the venue's own calendar must not read as "in the past" just because
+        // UTC has already crossed midnight.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _,
+            now: new DateTimeOffset(2026, 7, 5, 2, 0, 0, TimeSpan.Zero));
+
+        var result = await service.SubmitAsync(
+            room.Id, organizer.Id,
+            NewSubmitRequest(schedule: NewSchedule(startDate: new DateOnly(2026, 7, 4), startTime: "20:00", endTime: "22:00")),
+            idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Single(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_StartDateBeforeVenueLocalToday_ReturnsInvalidApplication()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _,
+            now: new DateTimeOffset(2026, 7, 5, 2, 0, 0, TimeSpan.Zero)); // venue-local Jul 4
+
+        var result = await service.SubmitAsync(
+            room.Id, organizer.Id,
+            NewSubmitRequest(schedule: NewSchedule(startDate: new DateOnly(2026, 7, 3))),
+            idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_RecurringWhoseWeekdaysNeverOccur_ReturnsInvalidApplication()
+    {
+        // Today() (Jul 4, 2026) + 2 = Monday Jul 6; a one-day Monday "term" selecting Tuesday
+        // would materialize into a confirmed booking holding zero occurrences.
+        var monday = Today().AddDays(2);
+        Assert.Equal(DayOfWeek.Monday, monday.DayOfWeek);
+
         await AssertInvalidSubmissionAsync(NewSubmitRequest(
-            schedule: NewSchedule(startDate: Today().AddDays(-1))));
+            schedule: NewSchedule(
+                frequency: "recurringWeekly", startDate: monday, endDate: monday, daysOfWeek: ["tuesday"])));
+    }
+
+    [Fact]
+    public async Task SubmitAsync_IdempotencyInsertRaceLost_ReturnsTheWinnerAsReplay()
+    {
+        // Both retries miss the pre-insert lookup; the loser's insert hits the unique index and
+        // must answer with the winner's application, not a 500.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var key = Guid.NewGuid();
+        var winner = NewApplication(room, organizer);
+        winner.IdempotencyKey = key;
+        repo.IdempotencyRaceWinner = winner;
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), key, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.False(result.Value!.Created);
+        Assert.Equal(winner.Id, result.Value.Application.Id);
+        Assert.Single(repo.Applications); // only the winner persists
+    }
 
     [Fact]
     public async Task SubmitAsync_OneOffWithDifferentEndDate_ReturnsInvalidApplication() =>
@@ -1058,6 +1140,23 @@ public class ApplicationServiceTests
     }
 
     [Fact]
+    public async Task WithdrawAsync_LosesConcurrencyRace_AnswersInvalidStateInsteadOfOverwriting()
+    {
+        // Approve-vs-withdraw: the loser's save conflicts on the application's concurrency token
+        // and must read as a state conflict (409), never overwrite the winner's decision.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        repo.NextSaveLosesConcurrencyRace = true;
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.WithdrawAsync(application.Id, organizer.Id);
+
+        Assert.Null(result.Value);
+        Assert.Equal(ApplicationErrorCodes.InvalidState, result.Error!.Code);
+    }
+
+    [Fact]
     public async Task DecideAsync_Approve_KicksThePostCommitCharge()
     {
         var (repo, managers, _, room, organizer, manager) = NewScenario();
@@ -1214,7 +1313,8 @@ public class ApplicationServiceTests
         FakeBookingService? bookings = null,
         FakeAvailabilityService? availability = null,
         FakeFeatureFlags? flags = null,
-        StubPaymentService? payments = null)
+        StubPaymentService? payments = null,
+        DateTimeOffset? now = null)
     {
         notifications = new FakeNotificationDispatcher();
         turnstile = new FakeTurnstileVerifier();
@@ -1224,7 +1324,7 @@ public class ApplicationServiceTests
             availability ?? new FakeAvailabilityService(), payments ?? new StubPaymentService(),
             flags ?? new FakeFeatureFlags(),
             notifications, turnstile, analytics,
-            new FixedTimeProvider(FixedNow));
+            new FixedTimeProvider(now ?? FixedNow));
     }
 
     /// <summary>
@@ -1495,8 +1595,22 @@ public class ApplicationServiceTests
             return Task.FromResult(application);
         }
 
+        /// <summary>
+        /// When set, the next <see cref="AddAsync"/> loses the idempotency race to this winner:
+        /// the winner lands in <see cref="Applications"/> (the concurrent commit) and the add
+        /// throws, the way the EF adapter translates the unique-index violation.
+        /// </summary>
+        public Application? IdempotencyRaceWinner { get; set; }
+
         public Task AddAsync(Application application, CancellationToken ct = default)
         {
+            if (IdempotencyRaceWinner is { } winner)
+            {
+                IdempotencyRaceWinner = null;
+                Applications.Add(winner);
+                throw new DuplicateIdempotencyKeyException(new InvalidOperationException("unique index"));
+            }
+
             Applications.Add(application);
             return Task.CompletedTask;
         }
@@ -1518,12 +1632,12 @@ public class ApplicationServiceTests
         }
 
         public Task<(IReadOnlyList<Application> Items, int TotalCount)> GetForOrganizerAsync(
-            Guid organizerId, ApplicationStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-            Page(Applications.Where(a => a.OrganizerId == organizerId), status, page, pageSize);
+            Guid organizerId, ApplicationStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+            Page(Applications.Where(a => a.OrganizerId == organizerId), status, now, page, pageSize);
 
         public Task<(IReadOnlyList<Application> Items, int TotalCount)> GetForVenuesAsync(
-            IReadOnlyList<Guid> venueIds, ApplicationStatus? status, int page, int pageSize, CancellationToken ct = default) =>
-            Page(Applications.Where(a => venueIds.Contains((a.Room ?? Rooms.First(r => r.Id == a.RoomId)).VenueId)), status, page, pageSize);
+            IReadOnlyList<Guid> venueIds, ApplicationStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
+            Page(Applications.Where(a => venueIds.Contains((a.Room ?? Rooms.First(r => r.Id == a.RoomId)).VenueId)), status, now, page, pageSize);
 
         public Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
             Guid roomId, Guid excludeApplicationId, CancellationToken ct = default)
@@ -1551,7 +1665,19 @@ public class ApplicationServiceTests
 
         public void AddCounterOffer(ApplicationCounterOffer counter) { }
 
-        public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
+        /// <summary>When set, the next <see cref="SaveAsync"/> loses the optimistic-concurrency race.</summary>
+        public bool NextSaveLosesConcurrencyRace { get; set; }
+
+        public Task SaveAsync(CancellationToken ct = default)
+        {
+            if (NextSaveLosesConcurrencyRace)
+            {
+                NextSaveLosesConcurrencyRace = false;
+                throw new ConcurrentUpdateException(new InvalidOperationException("xmin moved"));
+            }
+
+            return Task.CompletedTask;
+        }
 
         private void Attach(Application application)
         {
@@ -1560,7 +1686,7 @@ public class ApplicationServiceTests
         }
 
         private Task<(IReadOnlyList<Application> Items, int TotalCount)> Page(
-            IEnumerable<Application> query, ApplicationStatus? status, int page, int pageSize)
+            IEnumerable<Application> query, ApplicationStatus? status, DateTimeOffset now, int page, int pageSize)
         {
             foreach (var application in query)
             {
@@ -1569,7 +1695,18 @@ public class ApplicationServiceTests
 
             if (status is { } s)
             {
-                query = query.Where(a => a.Status == s);
+                // Effective status at `now`, mirroring the EF adapter: an undecided row past its
+                // expiry already counts as expired even before the lazy sweep persists the flip.
+                query = s switch
+                {
+                    ApplicationStatus.Pending or ApplicationStatus.NeedsInfo or ApplicationStatus.CounterOffered =>
+                        query.Where(a => a.Status == s && a.ExpiresAtUtc > now),
+                    ApplicationStatus.Expired => query.Where(a =>
+                        a.Status == ApplicationStatus.Expired
+                        || (a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo or ApplicationStatus.CounterOffered
+                            && a.ExpiresAtUtc <= now)),
+                    _ => query.Where(a => a.Status == s),
+                };
             }
 
             var all = query.OrderByDescending(a => a.CreatedAtUtc).ThenByDescending(a => a.Id).ToList();

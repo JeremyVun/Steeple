@@ -13,8 +13,9 @@
 // no Requests tab at all: a tab that can only ever be empty is a tab that
 // teaches the wrong model of the product.
 //
-// **Spaces** is the rooms, and the venue's own settings — how it takes bookings,
-// and where its money goes.
+// **Spaces** is the rooms, and how the venue takes bookings. The venue's own
+// name and address are corrected where they are read — the pencil beside the
+// address in the head — rather than in a second copy of them further down.
 //
 // Two rendering languages share the request pile (?desk=board | ledger): the
 // board sets each request as a card, the ledger sets the same week as a day-book
@@ -53,24 +54,46 @@ import {
   scheduleOf,
   venueOf,
 } from './model.js';
+import { publishState } from './manage.js';
 import { createRibbon } from './ribbon.js';
 
 const VERIFIED_LABEL = 'Identity verified (SSO)';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-// How a venue takes bookings, in one honest sentence each. The host is choosing
+// How a venue takes bookings, in one short sentence each. The host is choosing
 // between "the calendar answers for me" and "I answer" — nothing else.
 const MODE_WORDS = {
   instant: {
     label: 'Books instantly',
-    blurb:
-      'A group that fits your open hours and has a card on file is booked on the spot, and you are told. You can cancel any booking, any time — the group is refunded in full.',
+    blurb: 'A group that fits your open hours books on the spot, and you are told.',
   },
   manual: {
     label: 'I approve each request',
-    blurb:
-      'Every ask waits for your yes. You can question it, offer another time, or decline. Nothing is charged and no time is held until you approve.',
+    blurb: 'Nothing is booked or charged until you say yes.',
   },
+};
+
+const PENCIL_ICON =
+  '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">' +
+  '<path d="M1.6 14.4 2.4 11.3 10.9 2.8a1.9 1.9 0 0 1 2.7 2.7l-8.5 8.5Z" fill="none" ' +
+  'stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>' +
+  '<path d="M10.2 3.5 12.9 6.2" fill="none" stroke="currentColor" stroke-width="1.4" ' +
+  'stroke-linecap="round"/></svg>';
+
+/**
+ * One reading of where a room stands, for the tag on its row and the line that
+ * counts them — which used to call a room whose publish request steeple has
+ * recorded "still in draft", the one thing it is not. `kept` is the room this
+ * browser published while steeple was away: live here, unknown to the service.
+ */
+const roomState = (room) =>
+  room.status === 'published' && room.keptLocally === true ? 'kept' : publishState(room);
+
+const STATE_WORDS = {
+  published: { tag: 'Published', tone: 'published', counted: 'published' },
+  review: { tag: 'In review', tone: 'review', counted: 'in review' },
+  draft: { tag: 'Draft', tone: 'draft', counted: 'in draft' },
+  kept: { tag: 'On this device', tone: 'review', counted: 'on this device only' },
 };
 
 function verifiedChip(text = VERIFIED_LABEL, className = 'verified verified--sm') {
@@ -480,47 +503,57 @@ export function createDesk({
           ])
         )
       ),
-      el('p', {
-        class: 'settings__note',
-        text: 'Changing this affects new asks only — anything already booked or already waiting on you stands as it is.',
-      }),
     ]);
   }
 
   /**
    * The venue itself, as a thing that can be corrected. A name typed in a hurry
-   * and an address that has changed are both ordinary, and until now the only
-   * screen that could take either was the one that registers a new venue.
+   * and an address that has changed are both ordinary, and this sits beside the
+   * address in the head rather than under a second printing of it lower down.
    */
-  function venueSettings(venue) {
-    if (!venue) return null;
-    return el('section', { class: 'settings', 'aria-label': 'The venue itself' }, [
-      el('p', { class: 'eyebrow', text: 'The venue' }),
-      el('p', {
-        class: 'prose prose--sm',
-        text: `${venue.address ?? 'This venue'} — the name and address groups read, and where the map puts you.`,
-      }),
-      el(
-        'button',
-        {
-          type: 'button',
-          class: 'linkish',
-          dataset: { action: 'edit-venue' },
-          onclick: () => onListing({ venueId, entry: 'venue-edit' }),
-        },
-        'Edit venue details'
-      ),
-    ]);
+  function editVenue() {
+    const button = el('button', {
+      type: 'button',
+      class: 'deskedit',
+      dataset: { action: 'edit-venue' },
+      'aria-label': 'Edit venue details',
+      title: 'Edit venue details',
+      onclick: () => onListing({ venueId, entry: 'venue-edit' }),
+    });
+    button.innerHTML = PENCIL_ICON; // hand-written markup, never data
+    return button;
+  }
+
+  /**
+   * Where this venue's spaces stand, counted the way the rows are tagged.
+   *
+   * "0 spaces are published" is true and useless — the answer to a question
+   * nobody asked, on the one screen that owes the host what to do next. A venue
+   * registered and abandoned before its first space lands exactly there. And a
+   * space a moderator is reading was counted as one the host had left in draft,
+   * which asks them for work that is not theirs to do.
+   */
+  function countLine(rooms) {
+    if (!rooms.length) return 'No spaces here yet. Add one and Steeple will put it on the map.';
+    const tally = new Map();
+    for (const room of rooms) {
+      const state = roomState(room);
+      tally.set(state, (tally.get(state) ?? 0) + 1);
+    }
+    // Only the first part carries the noun: "1 space published, 1 in review."
+    const said = ['published', 'review', 'draft', 'kept']
+      .filter((state) => tally.has(state))
+      .map((state, at) => {
+        const n = tally.get(state);
+        const counted = STATE_WORDS[state].counted;
+        return at === 0 ? `${plural(n, 'space', 'spaces')} ${counted}` : `${n} ${counted}`;
+      });
+    return `${said.join(', ')}.`;
   }
 
   function spaceRow(room) {
-    const published = room.status === 'published';
-    // A room whose publish request steeple has recorded is not a draft the host
-    // forgot: it is with a moderator, and nothing more is asked of them.
-    const review = !published && Boolean(room.publishRequestedAt);
-    // Published in this browser's record while steeple was away: live here,
-    // unknown to the service, and the desk should not blur the two.
-    const kept = published && room.keptLocally === true;
+    const state = roomState(room);
+    const words = STATE_WORDS[state];
     const hours = hoursSummary(venueId, room.id);
     return el('li', { class: 'space' }, [
       el('div', { class: 'space__main' }, [
@@ -535,29 +568,19 @@ export function createDesk({
         el('span', { class: `space__hours${hours.startsWith('No open') ? ' is-missing' : ''}`, text: hours }),
       ]),
       el('div', { class: 'space__side' }, [
-        el('span', {
-          class: `tag tag--${kept || review ? 'review' : published ? 'published' : 'draft'}`,
-          text: kept ? 'On this device' : published ? 'Published' : review ? 'With Steeple' : 'Draft',
-        }),
+        el('span', { class: `tag tag--${words.tone}`, text: words.tag }),
+        // One button, and the open hours are a step along the rail it opens
+        // (listing.js FLOWS) — a second button for them said the hours were a
+        // different thing from the listing they belong to.
         el(
           'button',
           {
             type: 'button',
             class: 'pill pill--sm',
-            dataset: { room: room.id, action: published || review ? 'edit' : 'finish' },
+            dataset: { room: room.id, action: state === 'draft' ? 'finish' : 'edit' },
             onclick: () => onListing({ venueId, roomId: room.id, step: 'describe' }),
           },
-          published || review ? 'Edit listing' : 'Finish this listing'
-        ),
-        el(
-          'button',
-          {
-            type: 'button',
-            class: 'pill pill--sm',
-            dataset: { room: room.id, action: 'hours' },
-            onclick: () => onListing({ venueId, roomId: room.id, step: 'availability' }),
-          },
-          'Open hours'
+          state === 'draft' ? 'Finish this listing' : 'Edit listing'
         ),
       ]),
     ]);
@@ -604,6 +627,7 @@ export function createDesk({
         // untrue.
         el('p', { class: 'desk__address' }, [
           venue?.address ?? '',
+          venue ? editVenue() : null,
           venue?.address && venue?.verified ? el('span', { class: 'desk__dot', text: '·' }) : null,
           venue?.verified ? verifiedChip() : null,
         ]),
@@ -741,23 +765,9 @@ export function createDesk({
       const rooms = roomsOf(venueId, placed);
       replaceChildren(body, [
         said,
-        // "0 spaces are published" is true and useless — the answer to a
-        // question nobody asked, on the one screen that owes the host what to do
-        // next. A venue registered and abandoned before its first space lands
-        // exactly here.
-        el('p', {
-          class: 'desk__count',
-          text: rooms.length
-            ? `${plural(rooms.filter((r) => r.status === 'published').length, 'space is', 'spaces are')} published${
-                rooms.some((r) => r.status !== 'published')
-                  ? `, ${rooms.filter((r) => r.status !== 'published').length} still in draft`
-                  : ''
-              }.`
-            : 'No spaces here yet. Add one and Steeple will put it on the map.',
-        }),
+        el('p', { class: 'desk__count', text: countLine(rooms) }),
         rooms.length ? el('ul', { class: 'spaces' }, rooms.map(spaceRow)) : null,
         venue?.remoteId ? bookingModeBlock(venue) : null,
-        venueSettings(venue),
       ].filter(Boolean));
       if (working) for (const control of body.querySelectorAll('button, input')) control.disabled = true;
       return;

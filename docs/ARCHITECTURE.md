@@ -247,15 +247,17 @@ only two images process concurrently. Accepted files auto-orient from EXIF, stri
 variants at 400/800/1600px (`ImageSharpImageProcessor`, never upscaling a smaller source), and
 keys the stored objects by a SHA-256 content hash. `IMediaStore` is `S3MediaStore` (DO Spaces,
 public-read/CDN) when `Media:ServiceUrl`/bucket/keys are configured, else `LocalDiskMediaStore`
-(dev; the API itself serves `/media` and therefore publishes a loopback port in compose — see
-Deployment). `RoomPhotoDto` carries `id`/`thumbUrl`/`cardUrl` alongside the legacy `url`
+(dev; the API serves `/media`, while clients receive origin-independent `media/...` paths and
+resolve/proxy them through their current first-party origin). `RoomPhotoDto` carries
+`id`/`thumbUrl`/`cardUrl` alongside the legacy `url`
 (full-size, still populated for seeded picsum rows); cards prefer `cardUrl`. Metadata
 edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/min/account) —
 10 MB cap enforced by Kestrel before the pipeline runs.
 
 **Web SPA** — `Steeple.Web.v2` is the deployed web surface; its real-API migration
 completed 2026-08-07 (`docs/backlog/v2_migration/design.md`, D1–D9). Vite produces static
-assets and the nginx host serves them while proxying same-origin `/api` requests to the API
+assets and the nginx host serves them while proxying same-origin `/api` and local `/media`
+requests to the API
 container; the API still emits no CORS headers. Hash routes own navigation, and are also
 the no-JavaScript fallback: the title page's CTAs are printed in `index.html` as real links.
 
@@ -346,9 +348,10 @@ surfaces plus one takedown lever, over four screens:
 
 Decisions log `listing_moderated` / `listing_unlisted_by_operator` stdout lines in the same
 shape as `IAnalyticsSink`, attributed to the forwarded `Remote-User` header (falling back to
-`"local-dev"` locally). Listing photos come from the media origin, so Admin's CSP `img-src`
-is config-pinned (`Admin:MediaImageOrigins`) — a queue whose photos are blocked is a decision
-made blind. Deleted with the reduction: users/analytics/feature-flag panels, login/MFA/
+`"local-dev"` locally). Admin proxies local-disk `media/...` photos from the API on its own
+origin; absolute CDN photos remain config-pinned in CSP `img-src` (`Admin:MediaImageOrigins`) —
+a queue whose photos are blocked is a decision made blind. Deleted with the reduction:
+users/analytics/feature-flag panels, login/MFA/
 trusted-device theater, application force-status repair, bulk listing-status writes (they
 bypassed the verified invariant), and the `ProviderEditedAtUtc` review feed — the column and
 its stamping stay as the dormant abuse-response seam.
@@ -402,8 +405,15 @@ booking_occurrences 1─* payments (014; partial unique (OccurrenceId) WHERE Sta
   `btree_gist` exclusion constraint rejects overlap atomically; applications never hold
   slots. The constraint is an *expression* over two `timestamptz` columns (no range
   column) so Persistence stays provider-agnostic.
+- **No lost application updates (2026-08-07):** every application state transition
+  (decision, withdraw, thread flips, counter-offers, expiry sweep) saves through the row's
+  Postgres `xmin` as an optimistic concurrency token (`ApplicationConfiguration` — no schema
+  change), so racing transitions leave exactly one winner and a booking that agrees with it;
+  the loser answers `409 invalid_state`. Translated to `ConcurrentUpdateException` in the EF
+  adapters; proven by `ApplicationConcurrencyTests`.
 - **Bounded recurrence:** occurrences are a finite set materialized at approval; renewal
-  = a *new* booking re-checking availability.
+  = a *new* booking re-checking availability. A schedule whose weekdays never occur in its
+  term is rejected at validation — a booking can never hold zero occurrences.
 - **Timezone correctness:** schedules are venue-local wall-clock, materialized per-date
   in `venues.Timezone` — never by adding fixed UTC intervals.
 - **Published ⇒ venue verified:** every path that sets a room to `Published` also sets
@@ -508,10 +518,11 @@ The SPA has no server of its own, so its host sets everything a static host must
 - **Proxy abuse controls** — real-IP/proto input is trusted only from private Docker peers;
   nginx emits one canonical `X-Forwarded-For` value and caps `/api/` at 5 req/s (burst 30).
   The API independently applies 300/min total per account/IP and 120/min/IP to discovery.
-- ⚠ **Coupling:** uploaded room photos are served from `Media:PublicBaseUrl` and stored as
-  absolute URLs. While that is the web origin they are covered by `'self'`; pointing it at
-  a CDN or Spaces bucket means adding that origin to `img-src` or every uploaded photo
-  silently stops loading.
+- **Media URLs:** local-disk uploads store origin-independent `media/...` paths. Vite/web nginx
+  proxy that path to the API, Admin does the same for its review queue, and mobile resolves it
+  against `STEEPLE_API_URL`; changing a local port no longer orphans rows or needs a CSP edit.
+  Object-store uploads keep absolute CDN URLs, and that fixed CDN origin must be present in web
+  nginx and Admin `img-src` before production uploads begin.
 
 Verified in the real container (an isolated compose project on :8180): headers and
 `Content-Encoding: gzip` by `curl`, then the app driven headless with village on and

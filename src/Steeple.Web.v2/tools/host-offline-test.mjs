@@ -29,7 +29,7 @@
 // needs the operator's first-listing approve — tools/fixtures.mjs).
 // World-OFF is the documented state: this suite is about words, not village.
 
-import { API, apiIsUp, call, closeBrowsers, launch, mintVenue, signInPage, stamp } from './fixtures.mjs';
+import { agreeCurrent, API, apiIsUp, call, closeBrowsers, launch, mintVenue, signInPage, stamp } from './fixtures.mjs';
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?q=low&world=off';
@@ -73,6 +73,9 @@ const host = await mintVenue({
   roomName: 'Long Room',
 });
 check(`fixture: ${host.venueName} is kept by somebody`, host.listingStatus === 200, `status ${host.listingStatus}`);
+// The P4 agreements ask would otherwise sit over the desk and swallow every
+// click this suite makes (and dismissing it signs the account out, 2026-08-07).
+await agreeCurrent(host.token);
 
 const browser = await launch();
 const page = await browser.newPage();
@@ -84,7 +87,7 @@ page.on('console', (msg) => {
   if (said.includes('GL Driver Message') || said.includes('GPU stall')) return;
   // A refused request logs itself in the console; that is the browser talking
   // about the cut this suite made, not the app failing. So does a photograph
-  // whose absolute URL points at an API port nobody is listening on any more.
+  // whose bytes live in another worktree's local media-store.
   if (/Failed to (load resource|fetch)|net::ERR/.test(said)) return;
   problems.push(`[console.error] ${said}`);
 });

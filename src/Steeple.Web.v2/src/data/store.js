@@ -33,6 +33,7 @@
 import { bus } from '../core/bus.js';
 import * as session from './session.js';
 import { ACTIVITY_TYPES, getRoom, getVenue, VENUES } from './venues.js';
+import { ACCESS_LABELS, ACTIVITY_LABELS, AMENITY_LABELS, toLabels } from './vocabulary.js';
 
 // Dev builds carry the demo village; a production bundle starts empty (D4).
 // Written as "not a production build" on purpose: `import.meta.env` is absent
@@ -490,10 +491,8 @@ export function scheduleConflicts(venueId, roomId, schedule) {
 // wholesale. There is no local status machine to disagree with the server's,
 // because there is no second record.
 
-/** The wire's activity token as the label this product prints. */
-const ACTIVITY_LABELS = Object.fromEntries(
-  ACTIVITY_TYPES.map((label) => [label.toLowerCase(), label])
-);
+// The wire's activity token reads as a label through the shared vocabulary
+// (imported above) — the map this file used to build from ACTIVITY_TYPES.
 
 /** steeple's ScheduleDto in this store's own vocabulary. */
 function fromWireSchedule(schedule = {}) {
@@ -907,7 +906,9 @@ export function editRoom(venueId, roomId, patch, remote = null) {
  * steeple's ManagedRoomDto in this store's own vocabulary. `status` needs no
  * translation — draft/published/unlisted are the words both sides use — and
  * `publishRequestedAt` is what tells the desk a room is with a moderator
- * rather than merely unfinished.
+ * rather than merely unfinished. The three vocabularies ride along as printed
+ * labels: dropping them here left the mirror blank, and a blank mirror is what
+ * an editor would later send back to steeple as if the host had cleared them.
  */
 function fromWireRoom(dto) {
   return {
@@ -919,6 +920,9 @@ function fromWireRoom(dto) {
     capacity: dto.capacity,
     pricePerHour: dto.pricePerHour,
     houseRules: dto.houseRules ?? '',
+    activities: toLabels(dto.activities, ACTIVITY_LABELS),
+    amenities: toLabels(dto.amenities, AMENITY_LABELS),
+    accessibility: toLabels(dto.accessibility, ACCESS_LABELS),
     status: dto.status,
     publishRequestedAt: dto.publishRequestedAtUtc ?? null,
     photo: dto.photos?.find((p) => p.isPrimary)?.cardUrl ?? dto.photos?.[0]?.cardUrl ?? null,

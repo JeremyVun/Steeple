@@ -20,7 +20,7 @@
 
 import { bus, CORRESPONDENCE_VIEWS, state } from '../../core/bus.js';
 import { forgetVenues, knownVenues } from '../../data/catalog.js';
-import { resultLine } from '../copy.js';
+import { inViewLine, resultLine } from '../copy.js';
 import { el } from '../dom.js';
 import { SHEET_BAND } from '../rail.js';
 import { createAtlas } from './atlas.js';
@@ -56,23 +56,53 @@ export function createDiscovery({ announce = () => {} } = {}) {
   // not yank the map, and neither must the same suburb answering again.
   let framedSuburb = null;
 
+  // The search's whole answer, and what the map is letting through. The rows
+  // are the answer clipped to where the map is looking — a visitor zoomed onto
+  // one corner is asking about that corner, and a list still saying the whole
+  // area would be a claim about spaces that are not in front of them. `null`
+  // until the first answer, so the map settling during boot prints nothing.
+  let answered = null;
+  let troubled = false;
+
+  const onMap = (item) =>
+    !Number.isFinite(item.lat) ||
+    !Number.isFinite(item.lng) ||
+    atlas.map.getBounds().contains([item.lat, item.lng]);
+
+  const EDGE =
+    'The spaces this search found lie beyond the edges of the map. Pull back to bring them in.';
+
+  /**
+   * Say what the answer looks like from here. `whole` is for the moment a new
+   * answer is about to re-frame the map around itself — clipping against the
+   * view it is leaving would print the old place's count over the new answer.
+   */
+  function showAnswer({ whole = false } = {}) {
+    const shown = whole ? answered : answered.filter(onMap);
+    const clipped = shown.length < answered.length;
+    count.textContent = clipped ? inViewLine(shown) : resultLine(answered);
+    results.render(shown, clipped && shown.length === 0 ? { emptyText: EDGE } : {});
+    results.setCurrent(state.venueId, state.roomId);
+  }
+
   const search = createSearch({
     announce,
     onResults: (items, { suburb = null } = {}) => {
-      count.textContent = resultLine(items);
-      results.render(items);
+      answered = items;
+      troubled = false;
       // Pins first: an answer may be the first sight of a venue — one a host
       // listed this morning, one beyond the last page of results — and it has
       // to be on the map before it can be priced or rested.
       atlas.setVenues(knownVenues());
       atlas.setPrices(items);
       atlas.setMatching(state.matching);
-      results.setCurrent(state.venueId, state.roomId);
       // A chosen suburb is a spatial command, not just a filter: the map goes
       // to the venues that answered it. Back to "Anywhere" pulls back to the
       // whole area; a suburb with nothing to show moves nothing (the count
       // line already says so, and there is no honest place to go).
-      if (suburb !== framedSuburb) {
+      const framing = suburb !== framedSuburb;
+      showAnswer({ whole: framing });
+      if (framing) {
         framedSuburb = suburb;
         const points = items
           .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
@@ -94,11 +124,20 @@ export function createDiscovery({ announce = () => {} } = {}) {
     // (search.js publishes an empty matching set) — they are still there; what
     // is not known is which of them can take you.
     onTrouble: (failure) => {
+      troubled = true;
       count.textContent = 'No answer just now';
       results.showTrouble(failure);
       atlas.setPrices([]);
       list.scrollTop = 0;
     },
+  });
+
+  // The other half of the clipping: the map came to rest somewhere new — a
+  // visitor's pan or zoom, or its own framing landing — and the list follows.
+  // Leaflet says moveend for zooms too. Nothing to re-say while the surface is
+  // showing trouble, or before the first answer.
+  atlas.map.on('moveend', () => {
+    if (answered && !troubled) showAnswer();
   });
 
   const panel = el('div', { class: 'dm-panel' }, [head, list]);

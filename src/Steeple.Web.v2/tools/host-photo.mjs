@@ -63,3 +63,40 @@ export function writeRoomPhoto(path) {
   writeFileSync(path, roomPhoto());
   return path;
 }
+
+/**
+ * The photograph a phone actually takes: too many pixels, and too many bytes
+ * for the API to accept as it stands (`MaxUploadBytes` is 10 MB). Noise rather
+ * than a gradient on purpose — deflate would squeeze a smooth image down to
+ * nothing, and the point of this fixture is its size on the wire. Seeded, so a
+ * run's file is the same file every time.
+ */
+export function writeOversizedRoomPhoto(path, width = 2400, height = 1800) {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 2;
+  const raw = Buffer.alloc(height * (1 + width * 3));
+  let seed = 0x2f6e2b1;
+  let at = 0;
+  for (let y = 0; y < height; y += 1) {
+    raw[at++] = 0; // filter: none
+    for (let x = 0; x < width * 3; x += 1) {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      raw[at++] = seed & 0xff;
+    }
+  }
+  writeFileSync(
+    path,
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('IHDR', header),
+      chunk('IDAT', deflateSync(raw, { level: 1 })),
+      chunk('IEND', Buffer.alloc(0)),
+    ])
+  );
+  return path;
+}

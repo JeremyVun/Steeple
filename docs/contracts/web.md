@@ -65,6 +65,14 @@ and behind a stripped proxy prefix.
   RFC 9457 problem document verbatim with its stable `code` lifted out.
 - Timeouts: **4s** for reads and JSON writes, **20s** for photo upload. `notFoundAsNull` turns a
   404 into `null` for listing reads (an unpublished room is an answer, not a failure).
+- **A photograph is prepared before it is sent** (`data/photo.js`, 2026-08-07): decoded with the
+  EXIF orientation applied, drawn down to the widest variant steeple keeps (1600px, never
+  upscaled) and re-encoded JPEG — so a 12 MP phone photo crosses the wire at a few hundred KB
+  instead of being refused whole by the API's 10 MB cap, and its GPS never leaves the device.
+  The picker refuses what this browser cannot decode in the API's own words rather than after an
+  upload; an image that re-encodes larger than it arrived is sent untouched. The server still
+  strips and re-encodes everything it is given — this shortens the wire, it does not replace the
+  gate. Driven by `tools/photo-prepare-test.mjs` (module only, no API).
 - Repeatable query params repeat the key (`activities`, `amenities`, `accessibility`,
   `daysOfWeek`); empty string is never sent.
 
@@ -74,14 +82,13 @@ and behind a stripped proxy prefix.
 | `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
 | `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
-| `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
-
-**Defined but never called** (the integration to-do list): `getManagedRoom`,
-`getRoomAvailabilityRules`.
+| `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
+| `getRoomAvailabilityRules` | `correspondence.js` (the desk's hours read) |
+| `acceptAgreement` (what is owed rides on `getMe`) | `agreements.js` |
+| `postEvents` | `analytics.js` (the interaction batcher) |
 
 **Not present in `api.js` at all** (no client function exists yet): occurrence no-show
-(`POST /occurrences/{id}/no-show`), ratings, analytics ingest (`POST /events`),
-`POST /me/agreements`, `POST /me/devices`.
+(`POST /occurrences/{id}/no-show`), ratings, `POST /me/devices`.
 
 A request whose body is `undefined` carries no body and declares no content type — the
 revocations below are the only such calls; `null` still means the empty JSON document that
@@ -416,7 +423,10 @@ it is contained by construction: its letters are written under the seed's own id
     The app is always behind a proxy, and a proxy whose upstream is down answers 502 — the
     page never sees a network error, so the plainest outage got the vaguest sentence.
     **504 is excluded on purpose:** a gateway timeout may well have landed, so it must not
-    be promised away; the idempotency key is what makes retrying it safe.
+    be promised away; the idempotency key is what makes retrying it safe. Since 2026-08-07
+    the hosting chain's `ui/host/manage.js:attempt` reads `offline` through the same
+    predicate — before that, a dead API behind the proxy printed as a refusal there and the
+    flow's kept-here fallback never fired.
 - **Real (Phase 2.5, 2026-08-05):** the money, on both sides.
   - **The desk is `Bookings · Requests · Spaces`** and opens on **Bookings** — confirmed
     bookings with dates still to come, each with the group, the schedule, the frozen
