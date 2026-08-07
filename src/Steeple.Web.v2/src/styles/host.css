@@ -807,6 +807,18 @@
   border-top: 1px solid var(--line);
 }
 
+/* The setting is stored but not yet in effect (instant book rides on payments
+   being enabled) — said plainly above the radios rather than left to surprise. */
+.settings__note {
+  margin-top: 9px;
+  padding: 9px 12px;
+  border-radius: var(--radius-card);
+  background: var(--sage-tint);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--sage-deep);
+}
+
 /* Deliberately not `.choice` — the request sheet owns that name for its own
    radios (styles/guest.css), and a shared class across two surfaces is how one
    of them silently restyles the other. */
@@ -1217,6 +1229,19 @@
   color: var(--terracotta-deep);
 }
 
+/* The trust chips, worn in the head beside the name they are about. */
+.letterpage__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.letterpage__chips .verified {
+  margin: 0;
+}
+
 .letterpage__meta {
   margin: 8px 0 0;
   font-size: 12.5px;
@@ -1344,18 +1369,58 @@
   color: var(--ink-faint);
 }
 
-.space-note {
-  padding-top: 13px;
-  border-top: 1px dashed var(--hair);
+/* Which space this is, at a glance: photo, name, the two deciding facts. */
+.spacecard {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
 }
 
-.space-note__line {
-  display: flex;
-  align-items: baseline;
+.spacecard__photo {
+  width: 64px;
+  height: 48px;
+  border-radius: 5px;
+  object-fit: cover;
+  background: var(--paper-deep);
+}
+
+.spacecard__photo--none {
+  display: block;
+  border: 1px dashed var(--hair);
+}
+
+.spacecard__body {
+  display: grid;
   gap: 2px;
-  margin: 7px 0 5px;
-  font-size: 13px;
+}
+
+.spacecard__name {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  color: var(--ink);
+}
+
+.spacecard__meta {
+  font-size: 12.5px;
   color: var(--ink-soft);
+}
+
+/* The reply box on the thread — writing back is part of reading a letter. */
+.thread__reply {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.thread__reply .input--area {
+  min-height: 0;
 }
 
 .outcome {
@@ -1380,7 +1445,7 @@
   color: var(--ink);
 }
 
-/* ── the four decisions ─────────────────────────────────────────────────── */
+/* ── the decisions ──────────────────────────────────────────────────────── */
 
 .letterpage__actions {
   position: sticky;
@@ -1403,6 +1468,12 @@
 
 .letterpage__actions .pill--primary {
   padding: 10px 20px;
+}
+
+/* The quiet third way sits beside the decision pair without competing with it. */
+.letterpage__actions .linkish {
+  align-self: center;
+  margin-left: 6px;
 }
 
 .letterpage__drawer {
@@ -1429,19 +1500,6 @@
   align-items: center;
   gap: 14px;
   margin-top: 2px;
-}
-
-.starters {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 4px;
-}
-
-.starters .linkish {
-  text-align: left;
-  line-height: 1.45;
 }
 
 .clashlist {

@@ -88,6 +88,12 @@ export function newNonce() {
  * @param {{onCredential:(c:{provider:string,idToken:string,nonce:string,displayName:null})=>void,
  *          onError?:(e:Error)=>void}} handlers
  */
+// GIS keeps exactly one initialize() per page and warns on every repeat, so the
+// nonce and the callback's handlers are minted once and the handlers swapped on
+// each later mount. The nonce is therefore per page-load rather than per mount —
+// still single-use at the API, which is what it is for.
+let googleAttempt = null;
+
 export async function mountGoogleButton(container, { onCredential, onError } = {}) {
   if (!googleConfigured()) return false;
   try {
@@ -102,29 +108,34 @@ export async function mountGoogleButton(container, { onCredential, onError } = {
     return false;
   }
 
-  const nonce = newNonce();
-  google.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    nonce,
-    ux_mode: 'popup',
-    // Nothing is auto-selected: a shared browser must never sign somebody in
-    // because the last person here used it.
-    auto_select: false,
-    itp_support: true,
-    callback: (response) => {
-      if (!response?.credential) {
-        onError?.(new Error('Google returned no credential'));
-        return;
-      }
-      onCredential?.({
-        provider: 'google',
-        idToken: response.credential,
-        nonce,
-        // Google's ID token already carries the name; steeple reads it there.
-        displayName: null,
-      });
-    },
-  });
+  if (googleAttempt) {
+    googleAttempt.handlers = { onCredential, onError };
+  } else {
+    googleAttempt = { nonce: newNonce(), handlers: { onCredential, onError } };
+    google.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      nonce: googleAttempt.nonce,
+      ux_mode: 'popup',
+      // Nothing is auto-selected: a shared browser must never sign somebody in
+      // because the last person here used it.
+      auto_select: false,
+      itp_support: true,
+      callback: (response) => {
+        const { onCredential: credential, onError: failed } = googleAttempt.handlers;
+        if (!response?.credential) {
+          failed?.(new Error('Google returned no credential'));
+          return;
+        }
+        credential?.({
+          provider: 'google',
+          idToken: response.credential,
+          nonce: googleAttempt.nonce,
+          // Google's ID token already carries the name; steeple reads it there.
+          displayName: null,
+        });
+      },
+    });
+  }
 
   container.replaceChildren();
   google.renderButton(container, {

@@ -1,6 +1,6 @@
 # Contracts — Applications, bookings, notifications (was CONTRACTS §5)
 
-> **Scope:** the request→approve loop — application submit, thread messages, counter-offers,
+> **Scope:** the apply/instant-book loop — application submit, thread messages, counter-offers,
 > decisions/withdrawal; bookings, occurrences, cancellation, no-show, ratings writes; and the
 > notification inbox. Also the `GET /manage/venues` stub clients use to decide whether to show
 > a provider surface (full manage CRUD lives in `manage.md`).
@@ -33,7 +33,7 @@ whose selected weekdays occur between its dates — it would materialize zero oc
 `402 payment_method_required` *(additive 2026-08-05, while `payments.enabled` — save a method
 via `payments.md` first; applies to every room, instant or manual)*,
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer
-identically — no existence leak), `404 geofence_rejected` (reserved, defense in depth),
+identically — no existence leak),
 `409 schedule_unavailable` (any occurrence outside open hours / on a blackout / already booked —
 body carries the per-date conflict list, `manage.md` "Guest availability reads"; skipped for
 rooms with no availability rules), `409 slot_taken` *(instant venues only, below)*,
@@ -120,7 +120,7 @@ digest (host-only) — specified with the availability engine in `manage.md`.
 
 ### `GET /api/v1/manage/venues` ✅ → `[{id, name, slug}]` — venues where the caller is a `venue_manager` (empty for non-providers); clients use it to decide whether to show a provider surface. Full CRUD lives in `manage.md`.
 
-### Bookings ✅ *(built 2026-07-04 — created only by approval; there is deliberately no `POST /bookings`)*
+### Bookings ✅ *(built 2026-07-04 — created by instant submit, manual approval, or counter-offer acceptance; there is deliberately no `POST /bookings`)*
 `Booking` ✅: `{ id, applicationId, roomId, roomName, venueName, venueSlug, roomSlug,
 venueTimezone, organizerId, organizerName, type: "oneOff"|"recurring", startDate, endDate,
 schedule{…}, status: "confirmed"|"completed"|"cancelled", createdAtUtc,
@@ -169,15 +169,18 @@ no background worker.
 `after` is the opaque `nextCursor` from the previous page (unreadable cursors read from the top).
 `type` ∈ `applicationReceived | applicationMessage | applicationApproved |
 applicationDeclined | bookingCancelled | renewalDue | ratingReceived | listingApproved |
-listingDeclined | paymentFailed | occurrenceRefunded | bookingReceived |
+listingDeclined | counterOfferReceived | counterOfferAccepted | counterOfferDeclined |
+paymentFailed | occurrenceRefunded | bookingReceived |
 bookingReminder` (additive; `paymentFailed`/`occurrenceRefunded` go to the
 organizer, `bookingReceived` is the host-side instant-booking notice, and
 `bookingReminder` is the reminder worker's nudge — payments payloads carry the
 booking display fields + `bookingId`, `occurrenceId?`, `amount?`, `currency?`,
 `deepLink: "/bookings/{id}"`).
 `payload` for the application types: `{applicationId, roomId, roomName, venueName, venueSlug,
-roomSlug, organizerName, status, deepLink}` (deepLink = the canonical path registry in
-`infra.md`); for `bookingCancelled`/`renewalDue`: the same display fields with `bookingId` and
+roomSlug, organizerName, status, senderName?, messageAdded, deepLink}` (`senderName` is present
+on `applicationMessage`; `messageAdded: true` means an approve/decline decision also added a
+thread message; deepLink = the canonical path registry in `infra.md`); for
+`bookingCancelled`/`renewalDue`: the same display fields with `bookingId` and
 `deepLink: "/bookings/{id}"`; for `ratingReceived`: the same booking display fields with
 `bookingId` and `deepLink: "/bookings/{id}"` but no stars/comment; for `bookingReminder` (the T−7d / T−1d
 sweep, `api-ports.md`): the booking display fields plus `{bookingId, occurrenceId,

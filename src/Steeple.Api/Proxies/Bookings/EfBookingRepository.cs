@@ -123,6 +123,22 @@ public class EfBookingRepository : IBookingRepository
         PageAsync(Graph().Where(b => venueIds.Contains(b.Room!.VenueId)), status, now, page, pageSize, ct);
 
     /// <inheritdoc />
+    public async Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+        Guid organizerId, Guid venueId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var upcoming = _db.Bookings.Where(b =>
+            b.OrganizerId == organizerId
+            && b.Status == BookingStatus.Confirmed
+            && b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now));
+
+        var total = await upcoming.CountAsync(ct).ConfigureAwait(false);
+        var atVenue = total == 0
+            ? 0
+            : await upcoming.CountAsync(b => b.Room!.VenueId == venueId, ct).ConfigureAwait(false);
+        return new UpcomingBookingCounts(atVenue, total);
+    }
+
+    /// <inheritdoc />
     public Task SaveAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
 
     private IQueryable<Booking> Graph() =>

@@ -272,6 +272,10 @@ export function createUI(_engine, _world) {
     if (view !== previous?.view && (view === 'journal' || view === 'desk')) {
       track('inbox_opened', { surface: view === 'desk' ? 'host' : 'guest' });
     }
+    // A host may have replied or decided while this tab stayed open. The
+    // request list and notification feed are separate reads; opening the inbox
+    // refreshes both, and an unread event gets the same one-time slip as arrival.
+    if (view === 'journal') ambient.wake();
   });
 
   bus.on('mode:change', () => {

@@ -24,6 +24,15 @@ public sealed class ApplicationService : IApplicationService
     private const int MaxGroupSize = 1000;
     private const int MaxTextLength = 2000;
 
+    /// <summary>
+    /// The uncarded instant-book caps (booking-modes.md, 2026-08-08): a guest with no payment
+    /// method on file may hold this many upcoming bookings at one venue / across all venues
+    /// before an instant submit falls back to request→approve. A verified payment method lifts
+    /// both. Guards calendar spam-booking; tuning is a Phase 6 item.
+    /// </summary>
+    private const int UncardedUpcomingCapPerVenue = 3;
+    private const int UncardedUpcomingCapTotal = 10;
+
     /// <summary>Feature flag gating the submit-time availability hard block (CONTRACTS §6).</summary>
     private const string AvailabilityFlag = "listing.availability";
 
@@ -135,7 +144,8 @@ public sealed class ApplicationService : IApplicationService
 
         var now = _clock.GetUtcNow();
         var schedule = ParseSchedule(request.Schedule);
-        var instant = paymentsOn && room.Venue.BookingMode == BookingMode.Instant;
+        var instant = room.Venue.BookingMode == BookingMode.Instant
+            && await WithinInstantCapAsync(organizerId, room.Venue.Id, paymentsOn, ct).ConfigureAwait(false);
         var application = new Application
         {
             Id = Guid.NewGuid(),
@@ -210,6 +220,24 @@ public sealed class ApplicationService : IApplicationService
     }
 
     /// <summary>
+    /// The instant-book spam guard (booking-modes.md, 2026-08-08 — instant no longer rides on
+    /// <c>payments.enabled</c>): a guest whose payment identity is verified books freely; one
+    /// without a method on file is capped on upcoming bookings, per venue and overall, and an
+    /// over-cap submit falls back to request→approve (a pending application, never an error).
+    /// While payments are on the 402 gate has already proven the method, so no extra reads run.
+    /// </summary>
+    private async Task<bool> WithinInstantCapAsync(Guid organizerId, Guid venueId, bool paymentsOn, CancellationToken ct)
+    {
+        if (paymentsOn || await _payments.HasPaymentMethodAsync(organizerId, ct).ConfigureAwait(false))
+        {
+            return true;
+        }
+
+        var counts = await _bookings.CountUpcomingForOrganizerAsync(organizerId, venueId, ct).ConfigureAwait(false);
+        return counts.AtVenue < UncardedUpcomingCapPerVenue && counts.Total < UncardedUpcomingCapTotal;
+    }
+
+    /// <summary>
     /// The instant-book confirmation (booking-modes.md): the submit itself is the booking
     /// transaction. The application is tracked-unsaved (Approved) and commits atomically with the
     /// booking + occurrences inside <see cref="IBookingService.ConfirmFromApplicationAsync"/> —
@@ -270,8 +298,12 @@ public sealed class ApplicationService : IApplicationService
                     $"Your booking of {room.Name} at {venue.Name} is confirmed.\n\n" +
                     $"When: {DescribeSchedule(application)}\n\n" +
                     // CTA appended centrally by NotificationDispatcher from the payload deepLink.
-                    "This venue books instantly — no approval needed. Your card covers each " +
-                    "session as it comes up; the first payment is being taken now."),
+                    // The card sentence is only true while payments are on (the charge kick is a
+                    // no-op otherwise — instant book itself no longer rides on the flag).
+                    ("This venue books instantly — no approval needed." +
+                        (_flags.IsEnabled(PaymentService.PaymentsFlag)
+                            ? " Your card covers each session as it comes up; the first payment is being taken now."
+                            : ""))),
             ct).ConfigureAwait(false);
 
         // Host-side notice: a booking landed without a decision from them (the rescind lever is
@@ -291,7 +323,10 @@ public sealed class ApplicationService : IApplicationService
                         $"When: {DescribeSchedule(application)}\n\n" +
                         $"\"{application.IntentText}\"\n\n" +
                         "Your venue books instantly, so this is confirmed. If it doesn't fit, you can " +
-                        "cancel it any time from your Steeple inbox — the organizer is refunded in full."),
+                        "cancel it any time from your Steeple inbox" +
+                        (_flags.IsEnabled(PaymentService.PaymentsFlag)
+                            ? " — the organizer is refunded in full."
+                            : ".")),
                 ct).ConfigureAwait(false);
         }
 
@@ -525,11 +560,13 @@ public sealed class ApplicationService : IApplicationService
 
         if (callerIsOrganizer)
         {
-            await NotifyManagersAsync(application, NotificationType.ApplicationMessage, email, ct).ConfigureAwait(false);
+            await NotifyManagersAsync(
+                application, NotificationType.ApplicationMessage, email, ct, senderName).ConfigureAwait(false);
         }
         else
         {
-            await NotifyOrganizerAsync(application, NotificationType.ApplicationMessage, email, ct).ConfigureAwait(false);
+            await NotifyOrganizerAsync(
+                application, NotificationType.ApplicationMessage, email, ct, senderName).ConfigureAwait(false);
         }
 
         var refreshed = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false) ?? application;
@@ -647,7 +684,8 @@ public sealed class ApplicationService : IApplicationService
             application,
             approve ? NotificationType.ApplicationApproved : NotificationType.ApplicationDeclined,
             email,
-            ct).ConfigureAwait(false);
+            ct,
+            messageAdded: request.Message is { Length: > 0 }).ConfigureAwait(false);
 
         await TrackSafelyAsync(
             "application_decided",
@@ -1294,7 +1332,12 @@ public sealed class ApplicationService : IApplicationService
     // ----- Notification fan-out -----------------------------------------------------------------
 
     private async Task NotifyManagersAsync(
-        Application application, NotificationType type, EmailContent? email, CancellationToken ct)
+        Application application,
+        NotificationType type,
+        EmailContent? email,
+        CancellationToken ct,
+        string? senderName = null,
+        bool messageAdded = false)
     {
         var managers = await _venueManagers.GetManagersAsync(application.Room!.VenueId, ct).ConfigureAwait(false);
         if (managers.Count == 0)
@@ -1305,17 +1348,22 @@ public sealed class ApplicationService : IApplicationService
         await _notifications.NotifyAsync(
             managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
             type,
-            BuildPayload(application),
+            BuildPayload(application, senderName, messageAdded),
             email,
             ct).ConfigureAwait(false);
     }
 
     private Task NotifyOrganizerAsync(
-        Application application, NotificationType type, EmailContent? email, CancellationToken ct) =>
+        Application application,
+        NotificationType type,
+        EmailContent? email,
+        CancellationToken ct,
+        string? senderName = null,
+        bool messageAdded = false) =>
         _notifications.NotifyAsync(
             [new NotificationRecipient(application.OrganizerId, application.Organizer?.Email)],
             type,
-            BuildPayload(application),
+            BuildPayload(application, senderName, messageAdded),
             email,
             ct);
 
@@ -1323,7 +1371,10 @@ public sealed class ApplicationService : IApplicationService
     /// The inbox row's JSON document: ids + display fields + the canonical deep link
     /// (CONTRACTS §9 — clients render from this, never from push/email content).
     /// </summary>
-    private static object BuildPayload(Application application) => new
+    private static object BuildPayload(
+        Application application,
+        string? senderName = null,
+        bool messageAdded = false) => new
     {
         applicationId = application.Id,
         roomId = application.RoomId,
@@ -1333,6 +1384,8 @@ public sealed class ApplicationService : IApplicationService
         roomSlug = application.Room.Slug,
         organizerName = application.Organizer!.DisplayName,
         status = FlagEnumExtensions.ToCamelCaseToken(application.Status.ToString()),
+        senderName,
+        messageAdded,
         deepLink = $"/inbox/applications/{application.Id}",
     };
 

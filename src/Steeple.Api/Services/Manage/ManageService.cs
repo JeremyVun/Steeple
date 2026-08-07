@@ -16,6 +16,13 @@ public sealed class ManageService : IManageService
     /// <summary>Flag gating the "open hours required to publish" rule (config-backed, off by default).</summary>
     private const string OpenHoursRequiredFlag = "manage.open_hours_required";
 
+    /// <summary>
+    /// Whether a venue's "instant" choice is in effect. Instant book confirms at submit only while
+    /// payments are enabled (ApplicationService — the card at request is the commitment gate), so
+    /// the manage surface reports the same truth the public listing already does.
+    /// </summary>
+    private bool InstantBookingActive => _flags.IsEnabled(Payments.PaymentService.PaymentsFlag);
+
     private readonly IManageRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IGeocodingGateway _geocoding;
@@ -71,7 +78,7 @@ public sealed class ManageService : IManageService
         var (venue, error) = await LoadScopedVenueAsync(callerId, venueId, ct).ConfigureAwait(false);
         return error is not null
             ? new ManageResult<ManagedVenueDetailDto>(null, error)
-            : ManageResult<ManagedVenueDetailDto>.Ok(venue!.ToManagedDetailDto());
+            : ManageResult<ManagedVenueDetailDto>.Ok(venue!.ToManagedDetailDto(InstantBookingActive));
     }
 
     /// <inheritdoc />
@@ -154,7 +161,7 @@ public sealed class ManageService : IManageService
         await TrackSafelyAsync("venue_created", new { venueId = venue.Id, suburb = venue.Suburb }).ConfigureAwait(false);
 
         return ManageResult<CreateOutcome<ManagedVenueDetailDto>>.Ok(
-            new CreateOutcome<ManagedVenueDetailDto>(venue.ToManagedDetailDto(), Created: true));
+            new CreateOutcome<ManagedVenueDetailDto>(venue.ToManagedDetailDto(InstantBookingActive), Created: true));
     }
 
     /// <inheritdoc />
@@ -245,7 +252,7 @@ public sealed class ManageService : IManageService
         }
 
         await _repository.SaveChangesAsync(ct).ConfigureAwait(false);
-        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto());
+        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto(InstantBookingActive));
     }
 
     /// <inheritdoc />
@@ -307,7 +314,7 @@ public sealed class ManageService : IManageService
         await _repository.AddVenueVerificationRequestAsync(verification, ct).ConfigureAwait(false);
         await TrackSafelyAsync("venue_verification_requested", new { venueId = venue.Id, documentCount = verification.Documents.Count }).ConfigureAwait(false);
 
-        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto());
+        return ManageResult<ManagedVenueDetailDto>.Ok(venue.ToManagedDetailDto(InstantBookingActive));
     }
 
     /// <inheritdoc />
@@ -583,7 +590,7 @@ public sealed class ManageService : IManageService
         }
 
         var venue = await _repository.GetVenueWithRoomsAsync(venueId.Value, ct).ConfigureAwait(false);
-        return venue?.ToManagedDetailDto();
+        return venue?.ToManagedDetailDto(InstantBookingActive);
     }
 
     /// <summary>The room this caller already created with this key, or null. See <see cref="ReplayVenueAsync"/>.</summary>

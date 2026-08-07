@@ -2,9 +2,9 @@
 
 > **Scope:** the frozen seams of the active web frontend (`src/Steeple.Web.v2`) — `api.js`
 > (the wire), `session.js` (tokens), `catalog.js` (product vocabulary + offline fallback),
-> `store.js` (the demo correspondence store), plus harness truths and the real-vs-demo state.
+> `store.js` (the per-person server mirror), plus harness truths and environment-gated integrations.
 > Wire shapes themselves live in the endpoint seam files; conventions: `conventions.md`.
-> Verified against `src/Steeple.Web.v2/src/data/` and `tools/` (2026-08-05).
+> Verified against `src/Steeple.Web.v2/src/` and `tools/` (2026-08-08).
 
 Vite + vanilla JS + Leaflet SPA with a Three.js village splash; nginx serves the built assets
 in containers and proxies same-origin `/api` to the API (the API emits **no CORS** by design —
@@ -16,7 +16,7 @@ The retired prototype route `#/village` redirects in place to `#/browse` for old
 
 **The seam rule:** the day an upstream name changes, exactly one file moves.
 
-## The boot state machine ✅ *(2026-08-07 — build_plan Phase 3.5)*
+## The boot state machine ✅ *(2026-08-07 — production migration Phase 3.5)*
 
 **Product rule: intent beats scenery.** A press on the printed title page's *Find a space*,
 *Host a space* or down affordance is accepted from the first frame it is shown. Three states,
@@ -50,7 +50,7 @@ with one owner each:
   `releaseBoot()` opens the `afterBoot` gate the instant the product takes the page.
 - `reportArrival(destination, entry)` is the named analytics seam (`entry: direct | cinematic`),
   emitted once when the intent settles — never once on the native press and again on hydration.
-  P5's web batcher has not landed; wire it there and add the CONTRACTS §7 row with it.
+  `main.js` forwards it to the web batcher as `arrival_settled`.
 - ⚠️ Leaflet's tile layer ships **with** the map, never deferred (`ui/map/atlas.js`).
 - Driven by `tools/boot-priority-test.mjs` (51 checks, §1–§6) against a `build:debug` bundle.
 
@@ -60,10 +60,12 @@ with one owner each:
 no shape invented. Base is the document-relative `'api/v1'` so the same bundle works at `/`
 and behind a stripped proxy prefix.
 
-- `ApiError {message, status, problem, code, detail}` — `status: 0` means *nothing answered*
-  (the only case a caller may read as "the API is not here"); a failure that arrived carries the
-  RFC 9457 problem document verbatim with its stable `code` lifted out.
-- Timeouts: **4s** for reads and JSON writes, **20s** for photo upload. `notFoundAsNull` turns a
+- `ApiError {message, status, problem, code, detail, timedOut}` — `status: 0` means no response
+  arrived; `timedOut` distinguishes a request the browser stopped waiting for from one it could
+  not send. A failure that arrived carries the RFC 9457 problem document verbatim with its stable
+  `code` lifted out.
+- Timeouts: **4s** for reads, **15s** for JSON writes and **20s** for photo upload.
+  `notFoundAsNull` turns a
   404 into `null` for listing reads (an unpublished room is an answer, not a failure).
 - **A photograph is prepared before it is sent** (`data/photo.js`, 2026-08-07): decoded with the
   EXIF orientation applied, drawn down to the widest variant steeple keeps (1600px, never
@@ -82,7 +84,7 @@ and behind a stripped proxy prefix.
 | `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
 | `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
-| `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
+| `suggestAddresses`, `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 | `getRoomAvailabilityRules` | `correspondence.js` (the desk's hours read) |
 | `acceptAgreement` (what is owed rides on `getMe`) | `agreements.js` |
 | `postEvents` | `analytics.js` (the interaction batcher) |
@@ -108,9 +110,11 @@ Owns identity and **nothing else reads a token**. The two halves live in two pla
 (`{user: null, reason, stamp}`) rather than removing the key, so a sibling tab can relay
 `signedOut` vs `expired` rather than guessing.
 
-- `signIn({email, displayName})` → `POST /auth/sessions {provider:'dev', idToken:'email|Name',
-  device:{platform:'web'}, refreshTransport:'cookie'}`. Dev provider only
-  (`Auth:DevLoginEnabled`, Development-only) — when Google/Apple arrive **only `signIn()` changes**.
+- `signInWithProvider({provider, idToken, nonce?, displayName?, turnstileToken?})` is the common
+  Google/Apple/dev path to `POST /auth/sessions`, always requesting cookie refresh transport.
+  `signIn({email, displayName, turnstileToken?})` remains the Development-only dev-provider
+  helper. `providers.js` lazily loads Google or Apple only when its build-time client settings
+  exist; unconfigured providers are not offered.
 - `refresh()` is **single-flight per tab** (one promise memoized) and re-reads storage first, so a
   tab whose sibling signed out does not go to the network at all. It presents nothing: the cookie
   is the credential. It resolves to `null` when steeple *refused* (the session is dropped and
@@ -143,9 +147,11 @@ The one seam the inbox, an opened letter, the host's desk and all four host deci
 through (v2_migration D4/D5, 2026-08-05). Each function calls `api.js`, hands steeple's own
 answer to `store.js`'s mirror, and returns a verdict — never a guess.
 
-- Reads: `refreshMine()` (`GET /me/applications`), `refreshManaged(venueSlugs)`
+- Reads: `refreshMine()` (`GET /me/applications`), `refreshHosted()` (managed venues plus their
+  requests for the unified inbox), `refreshManaged(venueSlugs)`
   (`GET /manage/applications`), `openApplication(id)` (`GET /applications/{id}`, the thread),
-  `managedVenues()` (`GET /manage/venues` + a detail read each, five in flight).
+  `managedVenues()` (`GET /manage/venues` + a detail read each, five in flight), and
+  `refreshRoomHours(rooms)` (manager availability reads mirrored for the desk).
 - Guest writes: `sendMessage`, `withdraw`, `respondToCounter(id, accept)`.
 - Host writes: `decide(id, 'approve'|'decline', message?)`, `ask` (= `sendMessage`),
   `counterOffer(id, schedule, message)`.
@@ -183,8 +189,9 @@ answer to `store.js`'s mirror, and returns a verdict — never a guess.
 
 **The failure vocabulary is the contract.** Every verdict is `{ok:true, value}` or
 `{ok:false, reach, code, problem, status}` with `reach` ∈ `refused` (steeple said no; its own
-`detail` is the sentence to print) · `offline` (`status: 0` — *nothing happened*, and the
-surface says so) · `signedOut` (401) · `unavailable` (404 — a route that is not there, e.g.
+`detail` is the sentence to print) · `offline` (the request could not reach steeple: non-timeout
+status `0`, `502` or `503`) · `slow` (the browser timed out; the request may still have landed) ·
+`signedOut` (401) · `unavailable` (404 — a route that is not there, e.g.
 counter-offers with `booking.counter_offers` off: an absent feature, not an error).
 An approve that answers `409 slot_taken` is a product moment, not a failure message.
 
@@ -241,7 +248,7 @@ live API, one with a dead target — and proves the 502 case against a real prox
 
 ### Venue presence — the seam that `venues.js` used to be (2026-08-06, review issue 7)
 
-steeple has **no venue endpoint** (`docs/CONTRACT4.md` §5): its funnel is room-first. So a
+steeple has **no venue endpoint** (`src/Steeple.Web.v2/docs/CONTRACT4.md` §5): its funnel is room-first. So a
 venue is never fetched, it is **assembled**, from the two answers that carry one — a search
 summary (venue name, short name, suburb, lat/lng, and the rooms that matched) and `RoomDetail`'s
 venue block (address, parking, transit, `isIdentityVerified`), with the sitemap saying which
@@ -378,9 +385,10 @@ it is contained by construction: its letters are written under the seed's own id
 (`maria-alvarez`…), a real account's id is a GUID, and the desk is scoped to
 `GET /manage/venues`, so no signed-in person ever inherits it and no desk ever shows it.
 
-## Real vs demo, as of 2026-08-05
+## Current implementation, as of 2026-08-08
 
-- **Real:** catalog reads; auth sessions (dev provider); application submit (`Idempotency-Key`,
+- **Real:** catalog reads; auth sessions (Google and Apple when configured, plus the dev provider
+  in Development); application submit (`Idempotency-Key`,
   result mirrored into the local store); the whole hosting chain — dev SSO → `POST` venue →
   room → photo upload → `PUT` availability → `PATCH {status:'published'}` (publish requires a
   photo; moderation answers `draft` + `publishRequestedAtUtc`).
@@ -390,12 +398,14 @@ it is contained by construction: its letters are written under the seed's own id
   `ui/guest/sso.js` in the shared `.modal__layer`). The inbox tab, its badge, the journal and
   an opened letter render only for a signed-in guest; a cold link to `#/journal` or
   `#/letter/…` while signed out lands in the village **and the address bar is corrected with
-  it**. "Identity verified (SSO)" is gated on fact everywhere it is printed: the session
-  (`journal.js`), the organizer's own `verified` (`host/desk.js` cards), the venue's
-  (`host/desk.js` head), the session again (`host/listing.js`).
+  it**. Verification copy is gated on fact everywhere it is printed: account-owned surfaces use
+  "Identity verified (SSO)" from the session, while host views use "Identity verified" for the
+  organizer recorded on an application and for the managed venue's verified flag.
 - **Real (Phase 2, 2026-08-05):** the whole of the correspondence. The guest inbox is
-  `GET /me/applications`, read on sign-in and on every open of the inbox or a letter; the
-  thread comes from `GET /applications/{id}`; withdraw, counter accept/decline and messages
+  unified: it reads both `GET /me/applications` and the requests at the person's managed venues,
+  groups undecided host-side requests under **Hosting**, and counts pending host decisions in the
+  badge. Opening a Hosting row switches to the host letter. The thread comes from
+  `GET /applications/{id}`; withdraw, counter accept/decline and messages
   are wire writes that re-mirror the answer. The host desk **exists only when
   `GET /manage/venues` is non-empty** and is scoped to those venues — the seeded-venue
   chooser is gone, and somebody who keeps no venue is taken to the listing flow instead of an
@@ -453,19 +463,25 @@ it is contained by construction: its letters are written under the seed's own id
     one honest sentence each, scoped in copy to new asks only.
   - **Notifications are ambient, not a tab** (`ui/notifications.js`). `GET /me/notifications` is
     read on sign-in and on arriving at the product surface; the newest unread of
-    `bookingReminder | paymentFailed | occurrenceRefunded | bookingReceived` is shown once as a
-    `.slip` — with the same deep-link follower an email CTA uses (`followDeepLink`) — and marked
-    read. The inbox keeps the last few as quiet lines (`.jnotes`). Losing a slip loses a
-    reminder, never a fact: every fact it names lives on the letter or the desk.
+    `bookingReminder | paymentFailed | occurrenceRefunded | bookingReceived | listingApproved |
+    applicationMessage | applicationApproved | applicationDeclined`
+    is shown once as a `.slip` — with the same deep-link follower an email CTA uses
+    (`followDeepLink`) — and marked read. The inbox keeps the last few as quiet lines (`.jnotes`);
+    opening the inbox refreshes this feed as well as its request rows, so a decision made while the
+    tab stayed open appears without a reload. Booking approval says the booking is confirmed;
+    when the decision also carried a host note, one combined notification says both rather than
+    producing two alerts. Standalone messages name the sender when the event payload carries it.
+    Listing approval names the space, says that it is live and bookable, and its slip links to the
+    public page. Notification copy/eligibility is pinned by `tools/notifications-test.mjs`;
+    `tools/booking-notification-test.mjs` drives a real host message + approval into an already
+    signed-in guest's browser and follows the notification back to the conversation.
   - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (65/65).
-- **Demo:** dev provider only, `turnstileToken` hardcoded `null` (D7); `organizationName` is
-  sent as `null` — the group beside a name is whatever came back on a request, and the input
-  that would set it belongs to Phase 4; the card step is deliberately plain and the mock
-  gateway's own (`saveMockCard` retires at Stripe-time), and the payout screen is the mock's
-  stand-in for hosted KYC.
-
-⚠ Still unbuilt: D7 (Turnstile, agreements, real providers), D8's longer-write-timeouts half
-(the idempotency-key half is done — see below).
+- **Environment-gated:** `providers.js` offers Google/Apple only when their client settings exist;
+  `turnstile.js` renders Cloudflare's widget only when `VITE_TURNSTILE_SITE_KEY` exists, otherwise
+  both protected writes send `null` as the API expects in an unconfigured environment. The SSO
+  panel records the current Terms and Privacy versions through `agreements.js`, and the request
+  form sends its `organizationName`. Card setup and payout onboarding still render the gateway's
+  explicit mock flow when the API answers `mock: true`.
 
 D9 landed 2026-08-06: the CSP (and gzip, nosniff, Referrer-Policy) live in
 `src/Steeple.Web.v2/nginx.conf` — ARCHITECTURE.md → Deployment owns the policy and the one
@@ -476,18 +492,18 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
 
 ## Known hazards (unfixed)
 
-- ~~The 4s abort timeout on writes can double-create venues~~ — fixed for the in-session retry
-  path (D8's client half): `createManagedVenue`/`createManagedRoom` (`data/api.js`) now accept
-  and send `Idempotency-Key`, and `ui/host/manage.js`'s `saveVenue`/`saveRoom` generate one
+- **Create idempotency does not survive a full reload.** `createManagedVenue`/
+  `createManagedRoom` (`data/api.js`) accept and send `Idempotency-Key`, and
+  `ui/host/manage.js`'s `saveVenue`/`saveRoom` generate one
   `crypto.randomUUID()` per logical create, hold it on `draft.remote.{venue,room}IdempotencyKey`
   across every retry (same idiom as `guest/send.js`'s `draft.idempotencyKey`), and delete it
   only once steeple has answered — so the wizard's own retry (or `withAccess`'s 401-refresh
   replay) lands on the request that already happened. The API already honoured
-  `Idempotency-Key` on manage creates (`ManageIdempotencyIntegrationTests`). Residual gap: the
-  key lives only on the in-memory `draft` for that flow session, so a full page reload between
+  `Idempotency-Key` on manage creates (`ManageIdempotencyIntegrationTests`). The key lives only
+  on the in-memory `draft` for that flow session, so a full page reload between
   the timed-out request and the retry still mints a fresh key (the guest submit path shares
-  this same shape). The 4s timeout itself is unchanged (D8's other half).
-- `draft.roomId` is always `'main-space'` in the listing flow — a second room per venue collides.
+  this same shape). JSON writes wait 15 seconds and timeouts carry `timedOut: true`, so the UI
+  says the write may still have landed.
 - Dev geocoding is `StubGeocodingGateway`: every address resolves to the village centre, so
   geofence-rejection paths are locally unreachable — **and every venue a host has ever listed
   locally stacks on one point of the map.** Nothing is wrong with the pins (a press opens the
@@ -496,7 +512,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   §2.1). It also broke two rulers that measured the map's scale between the *first and last*
   pins on the page — both were zero, and every zoom figure derived from them was `NaN`; they
   now measure between two named pins (`map-test.mjs`, `map-feel.mjs` `pinSpread`).
-- API gaps compiled for steeple live in this project's `docs/CONTRACT4.md` §5 (CORS,
+- API gaps compiled for steeple live in `src/Steeple.Web.v2/docs/CONTRACT4.md` §5 (CORS,
   venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint, …).
 - ~~The property sheets are scenery-backed~~ — fixed 2026-08-06 (review issue 7). Pins and both
   property sheets are the catalog's; see "Venue presence" above.
@@ -506,9 +522,6 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   Its *sheet* works either way — `readVenue` goes by slug through the sitemap — so a deep link
   or an email CTA lands correctly. The count line says what is on the page, not `totalCount`.
   Paging the map is unbuilt.
-- Sign-out's revocation uses the access token it was holding. A token already expired means
-  the `DELETE` answers 401 and the refresh-token family outlives the sign-out (until its own
-  expiry); the local half is unconditional either way.
 - `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`, and
   the ambient notification surface borrows it.
 - **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
@@ -519,9 +532,6 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
 - A `.segments` control is `inline-flex`, so a grid cell stretches it into a full-width track
   with the switch huddled at one end. Every placement inside a `.field`/`.chosen__value` must
   set `justify-self`/`justify-items: start`.
-- The desk's Spaces tab reads open hours from the **local** store (`hoursSummary` ←
-  `openHoursFor`), so a room whose hours only exist at steeple reads "No open hours set" in red.
-  Pre-existing, and now visible beside real bookings; the fix is a managed-availability read.
 - `ui/guest/letter.js` prints an hourly price only when this browser has a listing for the room.
   A missing figure means *unknown*, never free (free listings were removed 2026-07-07) — and
   `priceParts` answers "Free" to a price it was not given, which is how a host-listed room's

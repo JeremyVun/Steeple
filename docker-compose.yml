@@ -79,7 +79,6 @@ services:
       Media__Bucket: "${MEDIA_BUCKET:-}"
       Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
       Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
-      Geocoding__GoogleApiKey: "${GEOCODING_GOOGLE_API_KEY:-}"
       Email__ApiKey: "${EMAIL_API_KEY:-}"
       Email__From: "${EMAIL_FROM:-Steeple <onboarding@resend.dev>}"
       Email__WebBaseUrl: "${EMAIL_WEB_BASE_URL:-}"

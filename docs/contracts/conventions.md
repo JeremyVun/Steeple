@@ -13,10 +13,10 @@ keeps the mirrors honest.
 
 ## 1. Governance — how contracts change
 
-`Steeple.Api/Contracts/` is the reference implementation; `Steeple.Web/Models/ApiModels.cs`
-and `/mobile/lib/**/models/` are hand-kept mirrors.
+`Steeple.Api/Contracts/` is the reference implementation;
+`src/Steeple.Web.v1/Models/ApiModels.cs` and `mobile/lib/**/models/` are hand-kept mirrors.
 
-> As-built note (2026-08-05): `Steeple.Web/Models/ApiModels.cs` belongs to the **deprecated**
+> As-built note (2026-08-05): `src/Steeple.Web.v1/Models/ApiModels.cs` belongs to the **deprecated**
 > web v1. The active web mirror is `src/Steeple.Web.v2/src/data/api.js` (wire) plus
 > `catalog.js` (product vocabulary over it) — see `web.md`.
 
@@ -50,7 +50,7 @@ and `/mobile/lib/**/models/` are hand-kept mirrors.
 | Enums | Stable camelCase strings on the wire (`"children"`, `"stepFreeAccess"`, `"church"`); flags enums = string arrays. Clients humanize for display. ✅ (normalized 2026-07-03; decision log SYSTEM_DESIGN §17) |
 | Pagination | Request `page` (1-based) + `pageSize` (≤100, default 24); response `{ items, totalCount, page, pageSize }` |
 | Errors | RFC 9457 ProblemDetails + `code` extension: `{ type, title, status, detail?, code }`. Stable `code` values documented per endpoint (e.g. `slot_taken`, `geofence_rejected`, `turnstile_failed`, `rate_limited`) |
-| Auth | `Authorization: Bearer <accessToken>` (mobile & Web-BFF server-side). Anonymous allowed on all Discovery reads |
+| Auth | `Authorization: Bearer <accessToken>` (mobile and the web SPA; web keeps it in module memory). Anonymous allowed on all Discovery reads |
 | Idempotency | `Idempotency-Key` header (client GUID) honored on `POST /listings/{id}/applications` ✅, `POST /manage/venues` ✅, `POST /manage/venues/{id}/rooms` ✅ (2026-08-05, D8). Replays return the original result as `200` (first create is `201`); keys are scoped to the authenticated user and never expire; a non-GUID value is treated as absent (unguarded create, never a `400`). Not yet honored on `POST /auth/sessions` — see `identity.md` |
 | Rate limits | `429` + `Retry-After`. Public writable endpoints additionally require a Turnstile token field where noted |
 | Unknown fields | Clients must ignore them (see §1.1) |

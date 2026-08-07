@@ -46,6 +46,7 @@
 import {
   API,
   MAILBOX,
+  agreeCurrent,
   apiIsUp,
   call,
   closeBrowsers,
@@ -299,6 +300,14 @@ const instant = kept(
   })
 );
 
+// Every minted account accepts the shipping agreements up front: the P4 ask
+// otherwise opens over the page mid-beat, and dismissing it signs the account
+// out (hardening-test §4 owns the un-agreed state; this suite is about
+// correspondence). Hosts agree here; each guest agrees when its token is minted,
+// before its browser signs in.
+await agreeCurrent(manual.token);
+await agreeCurrent(instant.token);
+
 const guest = { email: `guest-${stamp}@example.org`, name: 'Nadia Prosser' };
 const instantGuest = { email: `guest-i-${stamp}@example.org`, name: 'Tom Reddick' };
 
@@ -352,14 +361,16 @@ eq(
 await strangerPage.close();
 
 console.log('\n1 · the request, and the card steeple asks for first');
+// One token for the whole scenario: every sign-in is a permit spent on a budget
+// the browsers need too, and asking three times for the same person's token is
+// how a suite talks itself into a 429 it then blames on the app. Minted (and
+// agreed) before the browser signs in, so the P4 ask never has a debt to press.
+const guestToken = (await signIn(guest.email, guest.name)).accessToken;
+await agreeCurrent(guestToken);
+
 const guestPage = await openPage('guest');
 await boot(guestPage);
 await signInPage(guestPage, guest.email, guest.name);
-
-// One token for the whole scenario: every sign-in is a permit spent on a budget
-// the browsers need too, and asking three times for the same person's token is
-// how a suite talks itself into a 429 it then blames on the app.
-const guestToken = (await signIn(guest.email, guest.name)).accessToken;
 
 const mine = await call('GET', '/me/applications', { token: guestToken });
 eq('a brand new account has an empty inbox', mine.body?.totalCount, 0);
@@ -450,9 +461,9 @@ check('and offers no other venue', options.length === 0, `saw ${JSON.stringify(o
 console.log('\n3 · the loop');
 await press(hostPage, '.desk .card, .desk .row');
 await until(hostPage, () => document.querySelector('.letterpage.is-open'));
-await press(hostPage, '.letterpage__actions [data-action="ask"]');
-await write(hostPage, '#ask-body', 'How many tables would you like set out?');
-await press(hostPage, '[data-action="send-question"]');
+// Writing back is the thread's own reply box now, not a decision button.
+await write(hostPage, '#reply-body', 'How many tables would you like set out?');
+await press(hostPage, '[data-action="send-reply"]');
 await until(
   hostPage,
   (id) => window.__steeple.store.getApplication(id)?.status === 'needsInfo',
@@ -568,6 +579,7 @@ if (cta) {
 
 console.log('\n5 · instant book');
 const instantToken = (await signIn(instantGuest.email, instantGuest.name)).accessToken;
+await agreeCurrent(instantToken);
 const setup = await call('POST', '/me/payments/setup', { token: instantToken });
 await call('POST', '/me/payments/setup/mock-confirm', {
   token: instantToken,
@@ -636,6 +648,7 @@ eq('and steeple refuses it too', forbidden.status, 404);
 console.log('\n7 · the send that could not get through');
 const offGuest = { email: `guest-off-${stamp}@example.org`, name: 'Priya Nandal' };
 const offToken = (await signIn(offGuest.email, offGuest.name)).accessToken;
+await agreeCurrent(offToken);
 const offSetup = await call('POST', '/me/payments/setup', { token: offToken });
 await call('POST', '/me/payments/setup/mock-confirm', {
   token: offToken,

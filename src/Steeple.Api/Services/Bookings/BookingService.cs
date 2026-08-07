@@ -60,6 +60,11 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
+    public Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+        Guid organizerId, Guid venueId, CancellationToken ct = default) =>
+        _repository.CountUpcomingForOrganizerAsync(organizerId, venueId, _clock.GetUtcNow(), ct);
+
+    /// <inheritdoc />
     public async Task<BookingConfirmation> ConfirmFromApplicationAsync(
         Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
     {

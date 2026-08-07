@@ -30,6 +30,7 @@
 //   'letter:change'  ({ letter }) — the correspondence changed instrument
 //   'quality:change' ({ tier })
 //   'store:change'   ({ type, ... }) — emitted by data/store.js on every mutation
+//   'notifications:change' ({ rows }) — the server inbox was refreshed
 
 const listeners = new Map();
 

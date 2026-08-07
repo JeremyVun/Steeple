@@ -2,7 +2,8 @@
 
 > **Scope:** the client event-ingest endpoint (`POST /api/v1/events`) and the complete event
 > taxonomy — every event name, its source (server-authoritative vs client), and its key props.
-> Adding an event = update this table + emit + (if client-sourced) add to both client batchers.
+> Adding an event = update this table + emit + (if client-sourced) add to the allowlist and each
+> client batcher whose surface can produce it.
 > Conventions/governance: see `conventions.md`. Legend: ✅ built & live · 🔲 planned.
 
 **Ingest** ✅ *(built 2026-07-04 — ROADMAP Phase 4)*: `POST /api/v1/events` (anonymous OK — a
@@ -26,8 +27,8 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `search_performed` ✅ | server | filters, resultCount, zeroResult (+ additive: hasWhenFilter, whenMode `oneOff\|recurring\|none`, timeOfDay?, weekdayCount?, amenities[]) |
 | `listing_viewed` ✅ | server | roomId, venueId |
 | `map_interacted` ✅ | client | kind (pan/zoom/pin/locate) |
-| `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |
-| `sso_started` ✅ / `sso_completed` ✅ | web BFF¹ / server | provider?, surface, trigger / provider, surface, isNewUser |
+| `application_started` ✅ / `application_submitted` ✅ | client / server | roomId; activityType, frequency, groupSize |
+| `sso_started` ✅ / `sso_completed` ✅ | client / server | provider?, surface, trigger / provider, surface, isNewUser |
 | `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path; additive `viaCounterOffer`) |
 | `booking_confirmed` ✅ / `booking_cancelled` ✅ / `no_show_marked` ✅ | server | bookingId, type, occurrenceCount (+ additive `weekdayCount`, `viaCounterOffer`; + additive 2026-08-05 `instant`, `isPaid`) / cancelledBy (+ additive `cancelledBy: "system"`, `reason: "payment_failure"`, `cancelRemainingTerm` on the failure-ladder path) / markedBy |
 | `rating_submitted` ✅ | server | rateeType, stars, hasComment |
@@ -54,22 +55,24 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `decision_pressed` ✅ *(2026-08-07)* | client | decision (`approve`\|`decline`\|`ask`\|`counter`\|`message`\|`withdraw`\|`counterAccept`\|`counterDecline`), surface |
 | `card_step_opened` ✅ *(2026-08-07)* | client | reason (`apply` \| `account` \| `failure`) |
 | `payout_step_opened` ✅ *(2026-08-07)* | client | state (`prompt` \| `onboarding` \| `connected`) |
-| `arrival_settled` ✅ *(2026-08-07)* | client | destination (`village` \| `desk`), entry (`cinematic` \| `direct`) — one per press the boot actually answered (`src/core/intent.js`, build plan P3.5) |
-| `address_suggestion_picked` ✅ *(2026-08-07)* | client | — (a host filled the venue address from the typeahead, `manage.md` address-suggestions) |
+| `arrival_settled` ✅ *(2026-08-07)* | client | destination (`village` \| `desk`), entry (`cinematic` \| `direct`) — one per press the boot actually answered (`src/core/intent.js`, production migration P3.5) |
+| `address_suggestion_picked` 🔲 | client | — (the UI calls `track`, but the current web batcher and API allowlist both drop this name) |
 
 ¹ The deprecated v1 BFF emitted these client-ish funnel events server-side (`IWebAnalytics`, same
-stdout log line shape) and retired with it. **Web v2 emits them from its own batcher**
-(`src/data/analytics.js`, built 2026-08-07): `track()` queues and returns, a timer posts batches
-of ≤25 to `POST /api/v1/events`, and `pagehide`/`visibilitychange` flush through `sendBeacon` —
-which carries no `Authorization` header, so unload-time events reach steeple **without a
-`userId`**. That is the accepted cost of not losing the last batch. `sso_started` at the apply
-gate carries `trigger` instead of `provider` (the provider isn't chosen yet at that point).
+stdout log line shape) and retired with it. **Web v2 and mobile emit their applicable rows from
+their own batchers.** Web's `src/data/analytics.js` queues up to 25, flushes after 4 seconds, and
+uses `sendBeacon` on `pagehide`/hidden — which carries no `Authorization` header, so those final
+events reach steeple **without a `userId`**. Mobile's
+`mobile/lib/core/analytics/analytics_service.dart` flushes at 20 queued events, every 15 seconds,
+or on lifecycle pause; a failed flush is re-queued within a 100-event cap. Both `track()` calls
+return without delaying the interaction. `sso_started` at the web apply gate carries `trigger`
+instead of `provider` (the provider isn't chosen yet at that point).
 
-The Ingest allowlist (`EventIngestService.AllowedEventNames`) is exactly the nine client-sourced
-rows in the table — `map_interacted`, `application_started`, `sso_started`,
+The Ingest allowlist (`EventIngestService.AllowedEventNames`) is exactly the nine **built**
+client-sourced rows in the table — `map_interacted`, `application_started`, `sso_started`,
 `notification_opened`, `inbox_opened`, `decision_pressed`, `card_step_opened`,
 `payout_step_opened`, `arrival_settled`. Everything else is server-authoritative and silently
-rejected if a client attempts to submit it; the client keeps the same list so it never sends what
-would be dropped.
+rejected if a client attempts to submit it. Web keeps the same nine-name list; mobile currently
+emits the shared first four rows because the other five are web-only surfaces.
 
 Naming: `snake_case`, past tense.

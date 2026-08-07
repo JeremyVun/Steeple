@@ -28,8 +28,10 @@ import {
   mirrorApplication,
   mirrorApplications,
   mirrorBooking,
+  mirrorManagedVenues,
   mirrorRoomAvailability,
   forgetApplication,
+  placedVenues,
 } from './store.js';
 
 const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
@@ -298,7 +300,7 @@ export async function refreshMine() {
  * scope the page is authoritative for, so a request decided elsewhere leaves
  * the desk rather than lingering on it.
  */
-export async function refreshManaged(venueSlugs = []) {
+export async function refreshManaged(venueSlugs = [], { withBookings = true } = {}) {
   const scoped = new Set(venueSlugs);
   const open = openPass();
   try {
@@ -307,11 +309,32 @@ export async function refreshManaged(venueSlugs = []) {
     mirrorApplications(read.items, {
       scope: scoped.size && read.whole ? (a) => scoped.has(a.venueId) : null,
     });
-    await together(read.items, (dto) => pullBooking(dto, open));
+    // The desk needs what each yes made; the inbox's hosting rows do not, and
+    // reading the bookings for both is exactly the double read §8 forbids.
+    if (withBookings) await together(read.items, (dto) => pullBooking(dto, open));
     return { ok: true, value: read.items.length };
   } finally {
     closePass(open);
   }
+}
+
+/**
+ * The hosting side of the inbox: the venues this person keeps, and the requests
+ * waiting at them. The inbox asks for itself — a host who never opens the desk
+ * still gets their letters — and a person who keeps no venue costs one list
+ * read that answers empty. The desk's own read (`ui/host/index.js`) remains the
+ * fuller one: hours, bookings and payouts belong to it alone.
+ */
+export async function refreshHosted() {
+  if (!session.isSignedIn()) return { ok: true, value: 0 };
+  const listed = await managedVenues();
+  if (!listed.ok) return listed;
+  mirrorManagedVenues(listed.value);
+  const slugs = placedVenues()
+    .filter((v) => v.remoteId)
+    .map((v) => v.id);
+  if (!slugs.length) return { ok: true, value: 0 };
+  return refreshManaged(slugs, { withBookings: false });
 }
 
 /** One request in full — the thread included. This is what opens a letter. */

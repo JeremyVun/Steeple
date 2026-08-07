@@ -1,15 +1,14 @@
-# Steeple Mobile — Internal Contracts (the scaffolding)
+# Steeple Mobile — Internal Contracts
 
-> **This file was `docs/MOBILE_CONTRACTS.md`** (moved here 2026-08-05, content unchanged).
+> **This file was `docs/MOBILE_CONTRACTS.md`** (moved here 2026-08-05).
 > Its own §1–§12 numbering is preserved: `/mobile` code cites "MOBILE_CONTRACTS §n", and
 > `docs/MOBILE_CONTRACTS.md` now points here.
 >
 > **Status:** Adopted 2026-07-04. The `docs/contracts/` wire seam files own every **wire**
 > shape; this doc owns the **in-app seams of `/mobile`** — the Dart interfaces, providers,
 > routes, and shared widgets that let independent agents build features against stable
-> contracts without reading each other's code. The vertical-skeleton prototype (ROADMAP
-> Phase 4 kickoff) implements everything in §3–§10 first; feature work then fills in behind
-> these seams.
+> contracts without reading each other's code. The implemented app fills these seams with real
+> repositories and fixture-backed fakes.
 >
 > **Change rule:** changing any interface/route/provider named here = update this doc +
 > every implementation **in the same PR**. Additive members are free. If code and this doc
@@ -47,8 +46,9 @@ class EnvConfig {
   final SteepleEnv env;            // --dart-define=STEEPLE_ENV
   final Uri apiBaseUrl;            // dev: http://localhost:5200 (Android emu: 10.0.2.2)
   final String? sentryDsn;         // null in dev → Sentry off
-  final bool useFakes;             // --dart-define=STEEPLE_FAKES=true → fake repos (§10)
+  final bool useFakes;             // --dart-define=STEEPLE_FAKES=true → fake repos (§11)
   final String canonicalWebHost;   // for universal-link parsing, e.g. steeple.example
+  final int buildNumber;           // --dart-define=STEEPLE_BUILD; sent to the flags proxy
 }
 ```
 
@@ -387,7 +387,7 @@ via the `app.steeple/maps` platform channel (method `hasApiKey`; handled in
 view is created key-less, so any widget that mounts a `GoogleMap` must gate on this
 provider and render a placeholder when it is false; channel errors count as false.
 
-## 11. Fixtures & fakes (how mobile builds against 🔲 endpoints)
+## 11. Fixtures & fakes (offline development and deterministic tests)
 
 - `test/fixtures/<name>.json` — copied **verbatim from CONTRACTS.md examples** (fixture
   names: `listing_search.json`, `room_detail.json`, `auth_session.json`,
@@ -419,9 +419,8 @@ provider and render a placeholder when it is false; channel errors count as fals
   fixture JSON **through the real `fromJson`** (never hand-built objects), with ~300ms
   simulated latency and a settable `AppError? nextError` for error-state work.
 - `EnvConfig.useFakes` swaps all repository providers via one
-  `fakeRepositoryOverrides` list in `app/bootstrap.dart`. This is how discovery/apply UI
-  work proceeds while Identity/Applications endpoints are still 🔲 server-side, and how
-  widget tests get cheap deterministic data. Fakes also power the `integration_test`
+  `fakeRepositoryOverrides` list in `app/bootstrap.dart`. This lets UI work proceed without a
+  running backend and gives widget tests cheap deterministic data. Fakes also power the `integration_test`
   happy path (mock SSO per MOBILE_DESIGN §7).
 
 ## 12. Definition of done — every `/mobile` PR

@@ -36,6 +36,17 @@ public interface IBookingRepository
     Task<(IReadOnlyList<Booking> Items, int TotalCount)> GetForVenuesAsync(
         IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
+    /// <summary>
+    /// How many confirmed bookings with scheduled time still ahead the organizer holds — at the
+    /// named venue and across all venues. Feeds the uncarded instant-book cap (booking-modes.md):
+    /// "upcoming" is the same effective-status predicate the confirmed filter uses.
+    /// </summary>
+    Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+        Guid organizerId, Guid venueId, DateTimeOffset now, CancellationToken ct = default);
+
     /// <summary>Flushes mutations made to already-loaded bookings/occurrences (sweeps, cancels, no-shows).</summary>
     Task SaveAsync(CancellationToken ct = default);
 }
+
+/// <summary>An organizer's live upcoming-booking tallies: at one venue, and across all venues.</summary>
+public sealed record UpcomingBookingCounts(int AtVenue, int Total);

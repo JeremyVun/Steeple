@@ -266,6 +266,11 @@ check('and nothing was injected into the sheet', (await page.$$('.listing script
 await shot('01-place');
 await click('[data-action="advance"]', 'Continue');
 check('Describe is next — the venue is created on the way out of Place', (await onStep()) === '2Describe', await onStep());
+check('the suggested room name is a placeholder', (await value('#room-name')) === '');
+check(
+  'the room name placeholder reads Main space',
+  (await page.$eval('#room-name', (node) => node.placeholder)) === 'Main space'
+);
 
 // ── 2. the session it is written under ────────────────────────────────────
 //

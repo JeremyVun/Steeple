@@ -237,6 +237,21 @@ export function venueApplications(venueId) {
   return load().applications.filter((a) => a.venueId === venueId).sort(byNewest);
 }
 
+/**
+ * The requests other people have sent to the venues this person keeps — the
+ * hosting side of one unified inbox. Scoped to venues steeple has confirmed
+ * (`remoteId`), and never to a request they sent themselves: that one is
+ * already in the inbox as theirs.
+ */
+export function hostedApplications() {
+  const me = currentOrganizerId();
+  if (me === ANON) return [];
+  const kept = new Set(load().placedVenues.filter((v) => v.remoteId).map((v) => v.id));
+  return load()
+    .applications.filter((a) => kept.has(a.venueId) && a.organizerId !== me)
+    .sort(byNewest);
+}
+
 export function getApplication(applicationId) {
   return load().applications.find((a) => a.id === applicationId) ?? null;
 }
@@ -771,6 +786,10 @@ export function mirrorManagedVenues(venues) {
       lng: venue.longitude,
       verified: venue.isIdentityVerified === true,
       bookingMode: venue.bookingMode ?? null,
+      // Whether "instant" is in effect platform-wide (it rides on payments being
+      // enabled). Absent on an older answer means active — the note below is
+      // only ever shown on the server's explicit word.
+      instantBookingActive: venue.instantBookingActive !== false,
       rooms,
     });
     // A venue the village already carries as scenery keeps its own rooms; what
@@ -1382,6 +1401,7 @@ function seed() {
 export const store = {
   currentOrganizerId,
   guestApplications,
+  hostedApplications,
   venueApplications,
   getApplication,
   threadFor,

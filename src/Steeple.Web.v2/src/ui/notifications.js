@@ -21,7 +21,7 @@
 //
 //   createNotifications({ notice, announce }) -> { read, ambient }
 
-import { rollTo, state } from '../core/bus.js';
+import { bus, rollTo, state } from '../core/bus.js';
 import { track } from '../data/analytics.js';
 import { markNotificationsRead, notifications } from '../data/correspondence.js';
 import * as session from '../data/session.js';
@@ -29,11 +29,20 @@ import { followDeepLink } from './deepLink.js';
 
 /**
  * The types that are worth saying without being asked. Everything else steeple
- * writes (an application received, a decision, a message) already lands on a
- * surface this person visits *for that reason*, and repeating it in the corner
- * would be the product talking over itself.
+ * writes already land on an owning surface, but a person should not have to
+ * reopen every request to discover that a host replied or decided it. These are
+ * the changes worth saying without being asked.
  */
-const AMBIENT = new Set(['bookingReminder', 'paymentFailed', 'occurrenceRefunded', 'bookingReceived']);
+const AMBIENT = new Set([
+  'bookingReminder',
+  'paymentFailed',
+  'occurrenceRefunded',
+  'bookingReceived',
+  'listingApproved',
+  'applicationMessage',
+  'applicationApproved',
+  'applicationDeclined',
+]);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -67,9 +76,28 @@ export function lineFor(row) {
       return `You have been refunded for ${where || 'a session'}${at.localDate ? ` on ${shortDate(at.localDate)}` : ''}.`;
     case 'bookingReceived':
       return `${at.organizerName ?? 'A group'} booked ${at.roomName ?? 'a space'}${at.localDate ? ` from ${shortDate(at.localDate)}` : ''}.`;
+    case 'listingApproved':
+      return `Your listing is live — ${where || 'your space'} can now be found and booked.`;
+    case 'applicationMessage':
+      return at.senderName
+        ? `${at.senderName} sent you a message about ${where || 'your request'}.`
+        : `There\u2019s a new message about ${where || 'your request'}.`;
+    case 'applicationApproved': {
+      const confirmed = `Your booking is confirmed — ${where || 'your space'}.`;
+      return at.messageAdded
+        ? `${confirmed} There\u2019s also a message from ${at.venueName || 'the host'}.`
+        : confirmed;
+    }
+    case 'applicationDeclined':
+      return `Your request for ${where || 'a space'} wasn\u2019t accepted.`;
     default:
       return null;
   }
+}
+
+/** Whether this build deliberately surfaces this row in the inbox and as a slip. */
+export function isAmbient(row) {
+  return AMBIENT.has(row?.type) && Boolean(lineFor(row));
 }
 
 /** What the slip's one way on should be called, for each kind. */
@@ -78,7 +106,18 @@ const ACTION_LABEL = {
   occurrenceRefunded: 'See the booking',
   bookingReceived: 'Open it',
   bookingReminder: 'See the details',
+  listingApproved: 'View your listing',
+  applicationMessage: 'Read message',
+  applicationApproved: 'See your booking',
+  applicationDeclined: 'See request',
 };
+
+export function actionLabelFor(row) {
+  if (row?.type === 'applicationApproved' && row.payload?.messageAdded) {
+    return 'See booking & message';
+  }
+  return ACTION_LABEL[row?.type] ?? 'Open it';
+}
 
 export function createNotifications({ notice, announce } = {}) {
   // Everything steeple last answered with, ambient rows only, newest first.
@@ -99,7 +138,8 @@ export function createNotifications({ notice, announce } = {}) {
     }
     const answer = await notifications({ pageSize: 24 });
     if (!answer.ok) return held;
-    held = (answer.value.items ?? []).filter((row) => AMBIENT.has(row.type) && lineFor(row));
+    held = (answer.value.items ?? []).filter(isAmbient);
+    bus.emit('notifications:change', { rows: held });
     return held;
   }
 
@@ -133,7 +173,7 @@ export function createNotifications({ notice, announce } = {}) {
       line,
       link
         ? {
-            label: ACTION_LABEL[row.type] ?? 'Open it',
+            label: actionLabelFor(row),
             onPick: () => {
               if (state.roll < 1) rollTo(1);
               followDeepLink(link);
@@ -154,7 +194,7 @@ export function createNotifications({ notice, announce } = {}) {
   const ambient = () => held;
 
   function wake() {
-    read({ again: true }).then(speak);
+    return read({ again: true }).then(speak);
   }
 
   // Arriving at the product surface is the moment: the roll landing is what

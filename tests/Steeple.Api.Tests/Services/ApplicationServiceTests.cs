@@ -325,6 +325,7 @@ public class ApplicationServiceTests
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.ApplicationMessage, notification.Type);
         Assert.Contains(notification.Recipients, r => r.UserId == organizer.Id);
+        Assert.Equal(room.Venue!.Name, notification.Payload.GetType().GetProperty("senderName")!.GetValue(notification.Payload));
     }
 
     [Fact]
@@ -342,6 +343,7 @@ public class ApplicationServiceTests
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.ApplicationMessage, notification.Type);
         Assert.Contains(notification.Recipients, r => r.UserId == manager.Id);
+        Assert.Equal(organizer.DisplayName, notification.Payload.GetType().GetProperty("senderName")!.GetValue(notification.Payload));
     }
 
     [Fact]
@@ -391,7 +393,27 @@ public class ApplicationServiceTests
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.ApplicationApproved, notification.Type);
         Assert.Contains(notification.Recipients, r => r.UserId == organizer.Id);
+        Assert.Equal(false, notification.Payload.GetType().GetProperty("messageAdded")!.GetValue(notification.Payload));
         Assert.Contains(analytics.Events, e => e.EventType == "application_decided");
+    }
+
+    [Fact]
+    public async Task DecideAsync_ManagerApprovesWithMessage_MarksTheCombinedNotification()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out _);
+
+        var result = await service.DecideAsync(
+            application.Id,
+            manager.Id,
+            new ApplicationDecisionRequest("approve", "We look forward to welcoming you."));
+
+        Assert.Null(result.Error);
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.ApplicationApproved, notification.Type);
+        Assert.Equal(true, notification.Payload.GetType().GetProperty("messageAdded")!.GetValue(notification.Payload));
     }
 
     [Fact]

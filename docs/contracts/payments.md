@@ -34,7 +34,7 @@ make double-charging impossible by construction.
 
 ## Guest method-on-file ✅
 
-- `POST /api/v1/me/payments/setup` ✅ (auth, `apply` limit) → `{clientSecret, publishableKey,
+- `POST /api/v1/me/payments/setup` ✅ (auth, `payments` limit: 10/min/account) → `{clientSecret, publishableKey,
   mock: true}`. Ensures the caller's provider customer and opens a setup intent. At
   Stripe-time the same two fields feed Stripe Elements; `mock: true` tells clients to render
   the mock card form instead.
@@ -100,10 +100,12 @@ policy page): venue-no-show auto-refund, goodwill refund endpoint
   (`mock-onboarding:acct_mock_…`) is **not navigable** — mock-era clients render their own
   screen and complete via the endpoint below; at Stripe-time `url` is the Stripe-hosted
   account-link URL, consumed unchanged.
-- `POST …/payments/onboarding/mock-complete` ✅ *(Development-only)* — one call collapses hosted KYC
+- `POST /api/v1/manage/venues/{id}/payments/onboarding/mock-complete` ✅ *(Development-only)* —
+  one call collapses hosted KYC
   + `account.updated` webhooks + the opt-in switch: flips `detailsSubmitted/chargesEnabled/
   payoutsEnabled` and stamps the opt-in. `400 invalid_payment` before onboarding starts.
-- `GET …/payments` ✅ → `{onboardingStarted, detailsSubmitted, chargesEnabled, payoutsEnabled,
+- `GET /api/v1/manage/venues/{id}/payments` ✅ → `{onboardingStarted, detailsSubmitted,
+  chargesEnabled, payoutsEnabled,
   optedIn, dashboardUrl: null, mock: true}` (payments.md §9 fields, so Stripe slots in).
 
 ⚠ **Mock-era simplification (deliberate, documented):** payout state **gates nothing** —

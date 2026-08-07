@@ -1,7 +1,10 @@
-// A REQUEST — one application, opened. On the left, what was asked and by
-// whom, with the trust the platform can honestly vouch for. On the right, the
-// week: the schedule ribbon, what it collides with, and the four things a host
-// can do about it. Approve seals it and gets out of the way.
+// A REQUEST — one application, opened. On the left, the space it names (photo
+// first — a host with many rooms identifies by sight), what was asked and by
+// whom, and the message thread with its reply box: writing back is part of
+// reading a letter, not a separate decision. On the right, the week: the
+// schedule ribbon, what it collides with, and the decision pair — Approve and
+// Decline — with "suggest another time" as the quiet third way. Approve seals
+// it and gets out of the way.
 
 import { state } from '../../core/bus.js';
 import * as wire from '../../data/correspondence.js';
@@ -37,14 +40,8 @@ import {
 } from './model.js';
 import { createRibbon, ribbonSpoken } from './ribbon.js';
 
-const VERIFIED_LABEL = 'Identity verified (SSO)';
+const VERIFIED_LABEL = 'Identity verified';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-const QUESTION_STARTERS = [
-  'How many adults will be with the group?',
-  'Will you need the kitchen or the stage?',
-  'Who should we call on the day if something is locked?',
-];
 
 function declineDraft(room, organizer) {
   return `Thank you for asking about ${room?.name ?? 'the space'}. We are not able to host ${
@@ -79,7 +76,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
   const scheduleText = el('p', { class: 'letterpage__when' });
 
   let application = null;
-  let mode = 'none'; // none | ask | decline | counter | clash
+  let mode = 'none'; // none | decline | counter | clash
   let counter = null;
   let sealTimer = 0;
   let working = false;
@@ -185,73 +182,6 @@ export function createLetterPage({ announce, onBackToDesk }) {
     renderActions();
   }
 
-  function openAsk() {
-    mode = 'ask';
-    const box = el('textarea', {
-      class: 'input input--area',
-      id: 'ask-body',
-      rows: '4',
-      placeholder: 'A short question, in your own words.',
-    });
-    const send = el(
-      'button',
-      {
-        type: 'button',
-        class: 'pill pill--primary',
-        dataset: { action: 'send-question' },
-        onclick: async () => {
-          const body = box.value.trim();
-          if (!body) {
-            box.focus();
-            announce?.('Write the question first.');
-            return;
-          }
-          const who = organizerOf(application).name;
-          const updated = await move(() => wire.ask(application.id, body));
-          if (!updated) return;
-          announce?.(`Question sent. The request now waits on ${who} and shows as question asked.`);
-          show(application.id);
-        },
-      },
-      'Send the question'
-    );
-
-    replaceChildren(drawer, [
-      el('h3', { class: 'eyebrow', text: 'Ask a question' }),
-      el('p', {
-        class: 'prose prose--sm',
-        text: 'The request stays open while you wait, and their answer brings it back to you.',
-      }),
-      labelled('Your question', box),
-      el(
-        'ul',
-        { class: 'starters' },
-        QUESTION_STARTERS.map((text) =>
-          el(
-            'li',
-            {},
-            el(
-              'button',
-              {
-                type: 'button',
-                class: 'linkish',
-                onclick: () => {
-                  box.value = box.value ? `${box.value.trim()} ${text}` : text;
-                  box.focus();
-                },
-              },
-              text
-            )
-          )
-        )
-      ),
-      el('div', { class: 'drawer__foot' }, [send, cancelButton()]),
-    ]);
-    revealDrawer();
-    renderActions();
-    box.focus();
-  }
-
   function openDecline() {
     mode = 'decline';
     const room = effectiveRoom(application.venueId, application.roomId);
@@ -328,11 +258,11 @@ export function createLetterPage({ announce, onBackToDesk }) {
             }
           );
           if (!updated) return;
-          announce?.(`Counter-offer sent: ${said}. The request waits with ${who} now.`);
+          announce?.(`Offer sent: ${said}. The request waits with ${who} now.`);
           show(application.id);
         },
       },
-      'Send the counter-offer'
+      'Send the offer'
     );
 
     const message = el('textarea', {
@@ -472,7 +402,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
     );
 
     replaceChildren(drawer, [
-      el('h3', { class: 'eyebrow', text: 'Counter-offer a different time' }),
+      el('h3', { class: 'eyebrow', text: 'Suggest another time' }),
       el('p', {
         class: 'field__hint',
         text: 'Their request stays open while they consider it — accepting books the space, declining returns it to you.',
@@ -496,7 +426,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
     }
     setFrequency(counter.frequency);
     renderActions();
-    announce?.('Counter-offer editor open. The ribbon follows what you change.');
+    announce?.('Suggest another time. The ribbon follows what you change.');
   }
 
   function cancelButton(label = 'Cancel') {
@@ -547,7 +477,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
             dataset: { action: 'back-to-desk' },
             onclick: onBackToDesk,
           },
-          'Back to requests'
+          'Back'
         ),
       ]),
     ]);
@@ -576,7 +506,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
             dataset: { action: 'back-to-desk' },
             onclick: onBackToDesk,
           },
-          'Back to requests'
+          'Back'
         ),
       ]),
     ]);
@@ -612,58 +542,103 @@ export function createLetterPage({ announce, onBackToDesk }) {
         label
       );
 
+    // Two decisions, and one quiet third way. Writing back is not here at all —
+    // the reply box lives on the thread, where a person looks for it.
     replaceChildren(actions, [
       button('Approve', 'approve', 'pill pill--primary', onApprove),
-      button(
-        application.status === APP_STATUS.pending ? 'Ask a question' : 'Write back',
-        'ask',
-        'pill',
-        openAsk
-      ),
-      button('Counter-offer', 'counter', 'pill', () => openCounter()),
       button('Decline', 'decline', 'pill pill--quiet', openDecline),
+      button('Suggest another time', 'counter', 'linkish', () => openCounter()),
     ]);
   }
 
   // ── the left-hand page ────────────────────────────────────────────────────
 
+  /** What the platform can honestly say about the person, worn as chips. */
+  function trustChips(organizer) {
+    const chips = [
+      organizer.verified
+        ? el('span', { class: 'verified verified--sm' }, [
+            el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
+            VERIFIED_LABEL,
+          ])
+        : null,
+      joinedText(organizer) ? el('span', { class: 'chip', text: joinedText(organizer) }) : null,
+    ].filter(Boolean);
+    return chips.length ? el('div', { class: 'letterpage__chips' }, chips) : null;
+  }
+
+  /**
+   * Only when the title carries the group's name does this have a job left to
+   * do: naming the person behind it, once. Everyone else is already named in
+   * the title, and their trust chips live in the head beside it.
+   */
   function trustBlock(organizer) {
+    if (!organizer.org) return null;
     return el('section', { class: 'trust' }, [
       el('h2', { class: 'eyebrow', text: 'Who is asking' }),
       el('p', { class: 'trust__name', text: organizer.name }),
-      organizer.org ? el('p', { class: 'trust__org', text: organizer.org }) : null,
-      el('div', { class: 'trust__signals' }, [
-        organizer.verified
-          ? el('span', { class: 'verified verified--sm' }, [
-              el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
-              VERIFIED_LABEL,
-            ])
-          : null,
-        joinedText(organizer) ? el('span', { class: 'chip', text: joinedText(organizer) }) : null,
-      ]),
     ]);
   }
 
+  /**
+   * The correspondence, and the way to add to it. The reply box lives here — on
+   * the thread, where a person looks for it — not among the decisions: writing
+   * back keeps the request open, and their answer brings it back to you.
+   */
   function threadBlock() {
     const messages = threadFor(application.id);
-    if (!messages.length) return null;
+    const undecided = UNDECIDED.has(application.status);
+    if (!messages.length && !undecided) return null;
+    const who = organizerOf(application).name;
+
+    const box = el('textarea', {
+      class: 'input input--area',
+      id: 'reply-body',
+      rows: '2',
+      placeholder: `Write back to ${who}…`,
+    });
+    const send = el(
+      'button',
+      {
+        type: 'button',
+        class: 'pill',
+        dataset: { action: 'send-reply' },
+        onclick: async () => {
+          const body = box.value.trim();
+          if (!body) {
+            box.focus();
+            announce?.('Write the message first.');
+            return;
+          }
+          const updated = await move(() => wire.ask(application.id, body));
+          if (!updated) return;
+          announce?.(`Sent. The request stays open and now waits on ${who}.`);
+          show(application.id);
+        },
+      },
+      'Send'
+    );
+
     return el('section', { class: 'thread' }, [
       el('h2', { class: 'eyebrow', text: 'Messages' }),
-      el(
-        'ol',
-        { class: 'thread__list' },
-        messages.map((message) =>
-          el('li', { class: `thread__item thread__item--${message.sender}` }, [
-            el('p', {
-              class: 'thread__by',
-              text: `${message.sender === 'host' ? 'You wrote' : `${organizerOf(application).name} wrote`} · ${fmtDate(
-                message.sentAt.slice(0, 10)
-              )}`,
-            }),
-            el('p', { class: 'prose prose--sm', text: message.body }),
-          ])
-        )
-      ),
+      messages.length
+        ? el(
+            'ol',
+            { class: 'thread__list' },
+            messages.map((message) =>
+              el('li', { class: `thread__item thread__item--${message.sender}` }, [
+                el('p', {
+                  class: 'thread__by',
+                  text: `${message.sender === 'host' ? 'You wrote' : `${who} wrote`} · ${fmtDate(
+                    message.sentAt.slice(0, 10)
+                  )}`,
+                }),
+                el('p', { class: 'prose prose--sm', text: message.body }),
+              ])
+            )
+          )
+        : null,
+      undecided ? el('div', { class: 'thread__reply' }, [box, send]) : null,
     ]);
   }
 
@@ -693,21 +668,25 @@ export function createLetterPage({ announce, onBackToDesk }) {
     ]);
   }
 
-  /** The listing as it stands, so a decision is made against the real room. */
-  function spaceBlock(room) {
-    return el('section', { class: 'space-note' }, [
-      el('h2', { class: 'eyebrow', text: 'The space they are asking for' }),
-      el('p', { class: 'space-note__line' }, [
-        `${room.name} · seats ${room.capacity} · `,
-        el('span', {
-          class: `price price--sm${room.pricePerHour == null ? ' price--free' : ''}`,
-          text: room.pricePerHour == null ? 'Free' : `$${room.pricePerHour}/hr`,
-        }),
+  /**
+   * Which space this is, identifiable at a glance — a host with many rooms
+   * knows them by sight, not by re-reading their own listing copy. Photo, name,
+   * the two facts a decision leans on, and nothing echoed back.
+   */
+  function spaceBlock(room, venue) {
+    const facts = [
+      venue?.shortName ?? null,
+      `Seats ${room.capacity}`,
+      room.pricePerHour == null ? 'Free' : `$${room.pricePerHour}/hr`,
+    ].filter(Boolean);
+    return el('section', { class: 'spacecard' }, [
+      room.photo
+        ? el('img', { class: 'spacecard__photo', src: room.photo, alt: '' })
+        : el('span', { class: 'spacecard__photo spacecard__photo--none', 'aria-hidden': 'true' }),
+      el('span', { class: 'spacecard__body' }, [
+        el('span', { class: 'spacecard__name', text: room.name }),
+        el('span', { class: 'spacecard__meta', text: facts.join(' · ') }),
       ]),
-      el('p', {
-        class: 'field__hint',
-        text: `Welcomes ${room.activities.join(', ')}. ${room.houseRules}`,
-      }),
     ]);
   }
 
@@ -790,30 +769,29 @@ export function createLetterPage({ announce, onBackToDesk }) {
       el('h1', { class: 'sheet__title', text: organizer.org ?? organizer.name }),
       el('p', {
         class: 'letterpage__meta',
-        text: `${room?.name ?? application.roomId} · ${plural(
-          application.groupSize,
-          'person',
-          'people'
-        )} in a room for ${room?.capacity ?? '—'} · ${application.activityType} · sent ${fmtDate(
-          application.createdAt.slice(0, 10)
-        )}`,
+        text: `About ${plural(application.groupSize, 'person', 'people')} · ${
+          application.activityType
+        } · Sent ${fmtDate(application.createdAt.slice(0, 10))}`,
       }),
+      trustChips(organizer),
     ]);
 
     replaceChildren(left, [
+      // The space first: with many rooms, "which one is this about" is the
+      // first question, and a photo answers it faster than any line of text.
+      room ? spaceBlock(room, venue) : null,
       el('section', { class: 'intent' }, [
-        el('h2', { class: 'eyebrow', text: 'What they would like to do' }),
+        el('h2', { class: 'eyebrow', text: 'Plans' }),
         el('p', { class: 'intent__body', text: application.intentText }),
       ]),
       trustBlock(organizer),
       threadBlock(),
       counterHistoryBlock(),
       undecided ? null : outcomeBlock(),
-      room ? spaceBlock(room) : null,
     ]);
 
     replaceChildren(week, [
-      el('h2', { class: 'eyebrow', text: 'The week they are asking for' }),
+      el('h2', { class: 'eyebrow', text: 'When' }),
       scheduleText,
       ribbon.element,
       legend(),
@@ -840,7 +818,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
       ribbonSpoken(application.venueId, application.roomId, scheduleOf(application), application.id),
       read.notes.map((n) => n.text).join(' '),
       UNDECIDED.has(application.status)
-        ? 'Four decisions are open: approve, ask a question, counter-offer, decline.'
+        ? 'You can approve, decline, suggest another time, or write back on the thread.'
         : '',
     ]
       .filter(Boolean)

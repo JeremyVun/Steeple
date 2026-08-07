@@ -222,10 +222,14 @@ app-time ~6× slow: suites wait on state, never wall-clock.
 
 **Everything is real.** Catalog, sign-in/out, agreements, the apply calendar
 (`openHours` + availability), submit (`Idempotency-Key`, org-name input, 402 → mock card
-step → the send resumes itself), instant book, inbox/threads/withdraw/counters, all four
-host decisions (`409 slot_taken` renders as the product moment — "Already taken", steeple
-declined it as it happened), the desk (only when `GET /manage/venues` answers; Bookings ·
-Requests · Spaces, Requests only for manual venues or live leftovers; hours are steeple's),
+step → the send resumes itself), instant book, one unified inbox (sent requests plus
+**hosting rows** for venue keepers — a hosting row opens the host letter; 2026-08-08),
+threads/withdraw/counters, all four host decisions (on the letter: Approve · Decline ·
+a reply box **on the thread** · a quiet "Suggest another time" link; `409 slot_taken`
+renders as the product moment — "Already taken", steeple declined it as it happened), the
+desk (only when `GET /manage/venues` answers; Bookings ·
+Requests · Spaces, Requests only for manual venues or live leftovers; hours are steeple's;
+Spaces says when a stored "instant" choice is not in effect — `instantBookingActive`),
 the hosting chain (venue → room → photo → hours → publish; first listing → Admin review,
 later rooms self-serve), payments truth both sides (frozen price, per-date charge state,
 failure ladder + card panel, rescind → auto-refund, mock payout onboarding),

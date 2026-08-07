@@ -871,6 +871,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       id: 'room-name',
       type: 'text',
       value: room.name,
+      placeholder: 'Main space',
       oninput: (event) => {
         room.name = event.target.value;
         renderFoot();
@@ -1885,7 +1886,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
   }
 
   /** A blank space, ready to be described. */
-  const blankRoom = (name = 'Main space') => ({
+  const blankRoom = (name = '') => ({
     name,
     description: '',
     capacity: 40,

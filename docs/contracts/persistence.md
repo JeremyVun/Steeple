@@ -46,14 +46,15 @@ rooms 1─* room_open_hours (per-weekday [start,end) windows)
 rooms 1─* room_blackout_dates (unique (RoomId, Date))
 
 rooms 1─* applications *─1 users (organizer)
-  ActivityType, GroupSize, venue-local schedule (dates/times + optional DayOfWeek),
+  ActivityType, GroupSize, venue-local schedule (dates/times + optional DaysOfWeek mask),
   IntentText, OrganizationName?, Status, ExpiresAtUtc;
   unique filtered (OrganizerId, IdempotencyKey)
   applications 1─* application_messages (the "ask" thread)
   applications 1─* application_counter_offers (history kept; partial unique index =
     at most one Status=0 (open) counter per application)
 
-applications 1─0..1 bookings (created only by approval; unique ApplicationId; EndDate always bounded)
+applications 1─0..1 bookings (created by instant submit, manual approval, or accepted counter;
+  unique ApplicationId; EndDate always bounded)
   bookings 1─* booking_occurrences (denormalized RoomId; UTC StartUtc/EndUtc; venue-local LocalDate)
     EXCLUDE USING gist ("RoomId" WITH =, tstzrange("StartUtc","EndUtc") WITH &&)
       WHERE ("Status" <> 3)      ← cancelled rows leave the constraint = cancellation frees slots
@@ -124,12 +125,13 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
 - **Timezone correctness:** schedules are venue-local wall-clock, materialized per-date in
   `venues.Timezone` by `ScheduleMaterializer` — **never** by adding fixed UTC intervals.
   DST rules are pinned by unit tests.
-- **Bounded recurrence:** occurrences are a finite set materialized at approval; renewal is a
+- **Bounded recurrence:** occurrences are a finite set materialized at booking confirmation;
+  renewal is a
   *new* booking that re-checks availability.
 - **Flags-enum filtering** is a bitwise mask in SQL; multi-value matching is **AND** ("room
   accepts *all* requested").
-- **Availability rules are advisory shaping** for guests and hosts; the exclusion constraint is
-  the only booking authority.
+- **Availability rules are enforced** when a schedule is checked or committed; the exclusion
+  constraint remains the final concurrency authority for confirmed-slot races.
 - **Only Published rooms are publicly visible** — search filters status in SQL *and*
   `ListingService` gates direct id/slug lookups (Draft/Unlisted → 404).
 - **Operator takedowns are manager-proof:** `OperatorUnlistedAtUtc` is only written by Admin;

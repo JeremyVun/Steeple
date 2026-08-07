@@ -35,6 +35,15 @@ public interface IBookingService
     Task<BookingConfirmation> ConfirmFromApplicationAsync(
         Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default);
 
+    /// <summary>
+    /// The organizer's live upcoming-booking tallies (at <paramref name="venueId"/> and overall) —
+    /// the Applications module's read for the uncarded instant-book cap (booking-modes.md): a
+    /// guest with no payment method on file may only hold so many upcoming bookings before an
+    /// instant submit falls back to request→approve.
+    /// </summary>
+    Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+        Guid organizerId, Guid venueId, CancellationToken ct = default);
+
     /// <summary>The organizer's bookings, newest first, optionally filtered by status token.</summary>
     Task<BookingResult<BookingListResult>> GetForOrganizerAsync(
         Guid organizerId, string? status, int page, int pageSize, CancellationToken ct = default);

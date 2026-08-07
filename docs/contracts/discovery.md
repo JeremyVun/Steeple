@@ -27,7 +27,7 @@ Response `ListingSearchResult`:
   "items": [RoomSummary],
   "totalCount": 42, "isZeroResult": false,          // zeroResult = the liquidity metric
   "appliedBounds": {"minLat":…,"maxLat":…,"minLng":…,"maxLng":…},
-  "center": {"latitude":…,"longitude":…} | null,
+  "center": {"latitude":…,"longitude":…},
   "page": 1, "pageSize": 24
 }
 ```
@@ -52,7 +52,7 @@ set for one-off searches, absent for recurring ones.
   tokens, bound manually like the flags params) plus the same band/range; a room matches only
   when the slot is free on **every** matching date within the next 28 days (horizon fixed —
   honest against real bookings, cheap at beachhead scale).
-- `durationMinutes` (default 120): a room matches only if a free window fits the duration;
+- `durationMinutes` (default 120, clamped to 30–720): a room matches only if a free window fits the duration;
   with an explicit `startTime`/`endTime` the requested range itself must be free.
 - Semantics: free = open hours − blackouts − **confirmed** occurrences (same engine as the
   guest availability reads in `manage.md`). Malformed When params → `400 invalid_when`
@@ -62,7 +62,8 @@ set for one-off searches, absent for recurring ones.
 
 ### `GET /api/v1/listings/by-slug/{venueSlug}/{roomSlug}` ✅ · `GET /api/v1/listings/{id}` ✅
 Response `RoomDetail`: summary fields + `description, houseRules, amenities[],
-photos[{url, caption?, isPrimary, sortOrder}]`, `venue{name, slug, venueType, addressLine,
+photos[{id, url, thumbUrl?, cardUrl?, caption?, isPrimary, sortOrder}]`,
+`venue{venueId, name, slug, venueType, addressLine,
 suburb, postcode, contactEmail?, parkingInfo, transitInfo, isIdentityVerified, latitude,
 longitude}`, `rating?{averageStars, count}`. 404 (ProblemDetails) when unknown, **not
 Published** (Draft/Unlisted never leak via direct URL), or **outside the geofence**
@@ -82,7 +83,8 @@ confirms immediately — the apply UI must say so) or `"manual"` (request → ap
 never promises an instant confirmation the server won't give (`payments.md`).
 
 ### `GET /api/v1/venues/{id}/ratings` ✅
-Public, revealed venue review comments, newest first. Returns an empty page unless the venue has
+Public, revealed venue review comments, newest first. `page` defaults to 1; `pageSize` defaults
+to 10 and is clamped to 1–50. Returns an empty page unless the venue has
 at least one Published room inside the beachhead. Hidden rows and unrevealed double-blind ratings
 are excluded. Response:
 `{items:[{stars, comment?, raterName, createdAtUtc}], totalCount, page, pageSize}`.

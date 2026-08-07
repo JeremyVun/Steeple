@@ -84,7 +84,9 @@ A restart mid-race, or a second API instance, degrades to the old behaviour — 
 signed out — never to a security hole, because the conditional update is still the arbiter.
 ### `GET /api/v1/me` ✅ — profile + `agreements: [{docType, version, acceptedAtUtc}]`.
 ### `DELETE /api/v1/me` ✅ — account deletion (anonymize + revoke all sessions; Apple 5.1.1(v) requirement).
-### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere").
+### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere"). Accepts
+either a bearer token or the refresh cookie, expires that cookie, and answers `401` only when
+neither credential is present.
 ### `POST /api/v1/me/agreements` ✅ — `{docType: "tos"|"privacy", version}` acceptance record; idempotent per (user, doc, version). `400 unknown_doc_type`.
 ### `POST /api/v1/me/devices` ✅ *(built 2026-07-04 — Phase 4)* — `{fcmToken, platform}` push registration (upsert by `fcmToken`; re-registering under a different account moves it); `DELETE /api/v1/me/devices/{token}` on logout, deletes only if owned by the caller (204 either way). `400 invalid_device` (platform not `ios`/`android`/`web`, or `fcmToken` empty/over 512 chars). Account deletion removes the caller's device rows.
 

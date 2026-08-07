@@ -315,10 +315,14 @@ export function readSchedule(venueId, roomId, proposal) {
       } and would be skipped.`,
     });
   }
-  if (!notes.length) {
+  if (!notes.length && dates.length) {
+    const hours = openHoursFor(venueId, roomId).length ? ' during your open hours' : '';
     notes.push({
       tone: 'clear',
-      text: `All ${plural(dates.length, 'date is', 'dates are')} free, inside the open hours.`,
+      text:
+        dates.length === 1
+          ? `This date is free${hours}.`
+          : `All ${dates.length} dates are free${hours}.`,
     });
   }
 

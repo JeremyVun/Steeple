@@ -12,10 +12,10 @@
 // events, a closed surface is `visibility: hidden` + `inert`, and only the
 // sheet itself opts back in. A closed surface must not swallow the village.
 
-import { bus, setView, state } from '../../core/bus.js';
-import { refreshMine } from '../../data/correspondence.js';
+import { bus, setMode, setView, state } from '../../core/bus.js';
+import { refreshHosted, refreshMine } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
-import { getApplication, guestApplications } from '../../data/store.js';
+import { getApplication, guestApplications, hostedApplications } from '../../data/store.js';
 import { heldVenue } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
 import { createComposer } from './composer.js';
@@ -32,7 +32,7 @@ import { isYourMove, plural } from './copy.js';
 // land on that are not "away": any guest sheet (a closed one never takes an
 // event at all), the top line and the porch — which are how you leave on
 // purpose — and anything modal, which has its own way out.
-const NOT_AWAY = '.guest__surface, .sent, .nav, .porch, [role="dialog"], .modal__layer';
+const NOT_AWAY = '.guest__surface, .sent, .slip, .nav, .porch, [role="dialog"], .modal__layer';
 
 export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } = {}) {
   document.documentElement.dataset.letter = state.letter;
@@ -53,6 +53,12 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     announce,
     onOpen: (app) =>
       setView('letter', { applicationId: app.id, venueId: app.venueId, roomId: app.roomId }),
+    // A hosting row is the desk's correspondence: switch lenses first, so the
+    // guest letter never flashes over somebody else's request on the way.
+    onOpenHosting: (app) => {
+      setMode('host');
+      setView('letter', { applicationId: app.id, venueId: app.venueId, roomId: app.roomId });
+    },
     onBrowse: () => setView('village'),
     // What steeple wrote while this person was away, printed as lines at the
     // head of the inbox rather than as a second inbox of its own.
@@ -147,7 +153,9 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     const guest = state.mode === 'guest' && session.isSignedIn();
     tab.hidden = !guest;
     if (!guest) return;
-    const waiting = guestApplications().filter((a) => isYourMove(a.status)).length;
+    const waiting =
+      guestApplications().filter((a) => isYourMove(a.status)).length +
+      hostedApplications().filter((a) => a.status === 'pending').length;
     tabCount.textContent = waiting ? String(waiting) : '';
     tabCount.hidden = !waiting;
     tab.classList.toggle('is-on', state.view === 'journal' || state.view === 'letter');
@@ -273,7 +281,10 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
   let reading = null;
   function readInbox() {
     if (!session.isSignedIn()) return;
-    reading ??= refreshMine().finally(() => {
+    // Both sides of one inbox: the requests this person sent, and — when they
+    // keep a venue — the requests groups have sent them. For everyone else the
+    // hosting read is one list call that answers empty.
+    reading ??= Promise.all([refreshMine(), refreshHosted()]).finally(() => {
       reading = null;
     });
   }
@@ -316,6 +327,13 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     } else if (state.view === 'apply') {
       composer.refresh();
     }
+  });
+
+  // Notifications are a separate server feed from request rows. Redraw the
+  // open inbox when that feed answers so a decision made while this tab stayed
+  // signed in appears without a reload.
+  bus.on('notifications:change', () => {
+    if (state.mode === 'guest' && state.view === 'journal') journal.render();
   });
 
   render();

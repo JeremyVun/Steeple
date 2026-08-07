@@ -4,7 +4,7 @@
 > the adapter that implements it, and the rules a new module must follow. Wire shapes are in
 > `discovery.md` / `identity.md` / `applications.md` / `manage.md`;
 > conventions/governance: see `conventions.md`. Verified against
-> `src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs` (2026-08-05).
+> `src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs` (2026-08-07).
 
 ## Layering
 
@@ -35,11 +35,11 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Discovery | search, listing detail by id/slug, suburbs, sitemap, geofence endpoint (`Controllers/ListingsApiController.cs`, route `api/v1`) | `IListingService`, `IRoomRepository`, `IGeofencePolicy` |
 | Identity | SSO verification, own token issue/rotation, `/me`, agreements, deletion, devices (`Controllers/Identity/`) | `IIdentityService`, `IIdentityRepository`, `IIdTokenVerifier` (×2, +dev), `IAccessTokenIssuer`, `ITurnstileVerifier` |
 | Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
-| Bookings | approval-as-transaction, occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
+| Bookings | confirmation transaction (instant submit/manual approval/counter acceptance), occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
 | Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `ChargePlanner` (pure) |
 | Notifications | inbox rows (= truth), cursor paging, email/push fan-out (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
-| Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller — the API's one `BackgroundService`) | `IBookingReminderService`, `IBookingReminderRepository` |
+| Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller; its worker is enabled by `ReminderOptions.Enabled`) | `IBookingReminderService`, `IBookingReminderRepository` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
 | Availability | open hours + blackouts; free-window computation for guests, hosts, and the publish gate | `IAvailabilityService`, `IAvailabilityRepository`, `AvailabilityCalculator` (pure) |
 | Media | photo upload pipeline + storage | `IMediaService`, `IMediaRepository`, `IImageProcessor`, `IMediaStore` |
@@ -60,6 +60,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IIdTokenVerifier` ×2 (+1) | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery, fail-closed without client ids); `DevIdTokenVerifier` registered **only** when `Auth:DevLoginEnabled` |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
 | `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; key required; repository-known keys rejected in Production) |
+| `IRefreshRotationGrace` | `MemoryRefreshRotationGrace` (per-process successor-pair cache for concurrent browser refreshes) |
 | `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
 | `IVenueManagerRepository` | `EfVenueManagerRepository` (read-only; Admin writes the links) |
@@ -77,6 +78,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) when a service account is configured, else `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-process concurrency cap, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 keys; ImageSharp 3.1.x) |
+| `IMediaRepository` | `EfMediaRepository` (manager-scoped room/photo rows) |
 | `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) when `MediaOptions.UseObjectStorage`, else `LocalDiskMediaStore` (dev; served by the API at `/media`) |
 | `IFeatureFlags` | `ConfigFeatureFlags` (reads the `Flags:` config section — never a network call) |
 | `IPublicFlagsService` | `PublicFlagsService` (hardcoded public allowlist — see `infra.md`) |
@@ -90,7 +92,8 @@ processor, media store, flags) are **singletons**.
 
 Fixed 1-minute windows: global 300/min per account/IP · `discovery` 120/min per IP ·
 `auth` 10/min per IP · `refresh` 60/min per IP · `apply` 5/min per account, per-IP fallback
-(submits, thread messages, counter-offers, ratings) · `payments` 10/min per account (putting
+(application submit/message/decision/withdraw/counter writes plus booking cancel, no-show and
+ratings) · `payments` 10/min per account (putting
 a card on file) · `manage` 30/min per account · `media` 12/min per account ·
 `availability` 30/min per IP · `events` 60/min per IP.
 All answer `429` + `Retry-After` with ProblemDetails `code: rate_limited`.

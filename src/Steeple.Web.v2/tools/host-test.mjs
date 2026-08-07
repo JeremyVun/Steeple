@@ -32,6 +32,7 @@
 // World-ON is the documented state: the way out of hosting is the village.
 
 import {
+  agreeCurrent,
   apiIsUp,
   apply,
   closeBrowsers,
@@ -86,6 +87,9 @@ const host = await mintVenue({
 });
 check(`fixture: ${host.venueName} is kept, in ${host.bookingMode} mode`, host.bookingMode === 'manual' && host.listingStatus === 200,
   `${host.bookingMode} · listing ${host.listingStatus}`);
+// The host agrees up front, or the P4 ask opens over the porch switch and the
+// press that should enter hosting dismisses it — which signs the account out.
+await agreeCurrent(host.token);
 const guest = await mintGuest({ email: `host-place-guest-${stamp}@example.org`, name: 'Nadia Prosser' });
 const request = await apply(guest, host);
 check('fixture: a request is waiting on it', request?.status === 'pending', request?.status);
@@ -191,7 +195,7 @@ await clickText('.arrival__cta', /Find a space/, 'arrival CTA');
 // click needs is not on the page until the surface has landed.
 await page.waitForFunction('__steeple.state.roll >= 0.999', { timeout: 40000 }).catch(() => {});
 await wait(800);
-check('porch switch reads as an offer', (await text('.porchswitch')) === 'I have space to share', await text('.porchswitch'));
+check('porch switch reads as an offer', (await text('.porchswitch')) === 'Host a space', await text('.porchswitch'));
 await click('.porchswitch', 'the mode switch');
 await page.waitForFunction('!!document.querySelector(".desk")', { timeout: 30000 }).catch(() => {});
 await wait(1200);
@@ -221,12 +225,14 @@ check('the request opens in the host lens', (await state('view')) === 'letter' &
 check('the schedule ribbon is drawn', (await page.$$('.letterpage .lane')).length > 0, `${(await page.$$('.letterpage .lane')).length} lanes`);
 await shot('letter');
 
-await click('[data-action="ask"]', 'Write back');
-check('the drawer opens', await visible('#ask-body'));
+// The ask drawer became the thread's reply box (no drawer); the decline drawer
+// is the Esc subject now.
+await click('[data-action="decline"]', 'Decline');
+check('the drawer opens', await visible('#decline-note'));
 await page.keyboard.press('Escape');
 await wait(700);
 check('Esc closed the drawer, not the request', (await state('view')) === 'letter', await state('view'));
-check('and the drawer is gone', !(await visible('#ask-body')));
+check('and the drawer is gone', !(await visible('#decline-note')));
 await page.keyboard.press('Escape');
 await wait(1600);
 check('Esc again returns to the board', (await state('view')) === 'desk', await state('view'));

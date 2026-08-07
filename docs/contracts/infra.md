@@ -26,7 +26,8 @@
   `booking.recurring_materialization`, `trust.phone_otp_stepup`.
 
 Flags read by the API today (as-built, `Flags:` config section): server-side gates
-`listing.availability`, `manage.open_hours_required`, `booking.counter_offers` plus the three
+`listing.availability`, `manage.open_hours_required`, `booking.counter_offers`,
+`payments.enabled` plus the three
 public `mobile.*` rows. All default **off** in `appsettings.json` and are **on** in
 `appsettings.Development.json` so the dev loop exercises them.
 

@@ -2,18 +2,21 @@
 
 > **Scope:** venue-manager-scoped venue/room CRUD, the moderation model (first-publish gate),
 > room availability rules + the guest/host availability reads computed from them, and the photo
-> pipeline. Every route here is manager-scoped.
+> pipeline. Manage resource routes are manager-scoped; address suggestions require only a signed-in
+> account, and the two guest availability routes are anonymous.
 > Conventions/governance (errors, enum tokens, rate limits): see `conventions.md`.
 > Legend: ✅ built & live · 🔲 planned.
 
 ## Manage (provider self-service) ✅ *(built 2026-07-04 — ROADMAP Phase 5)*
 
-All routes are venue-manager-scoped: an id the caller doesn't manage answers `404 not_found`,
+Manage resource routes are venue-manager-scoped: an id the caller doesn't manage answers `404 not_found`,
 identical to an unknown id (no existence leak). Rate limits: `manage` policy (30/min/account) on
-every write below except photo upload, which uses `media` (12/min/account, the expensive image
-pipeline). Errors are ProblemDetails with `code` ∈ `not_found | invalid_venue | invalid_room |
+every **manage** write below except photo upload, which uses `media` (12/min/account, the
+expensive image pipeline); the anonymous availability check uses `availability` (30/min/IP).
+Errors are ProblemDetails with `code` ∈ `not_found | invalid_venue | invalid_room |
 invalid_photo | invalid_image | invalid_verification | geofence_rejected | has_active_bookings |
-operator_unlisted | no_photos | already_verified | verification_pending` (409 for
+operator_unlisted | no_photos | no_open_hours | invalid_availability | invalid_range |
+already_verified | verification_pending` (409 for
 `has_active_bookings`, `operator_unlisted`, `already_verified`, `verification_pending`; 404 for
 `not_found`; 400 for the rest).
 
@@ -52,7 +55,11 @@ geofence on the venue's address). Then:
   venueType, addressLine, suburb, postcode, contactEmail?, parkingInfo, transitInfo, latitude,
   longitude, timezone, isIdentityVerified, verificationStatus, verificationRequestedAtUtc?,
   rooms: [ManagedRoomSummaryDto], bookingMode /* additive 2026-08-05: "instant"|"manual" —
-  the host's stored choice (the public read emits the effective mode, `discovery.md`) */}`.
+  the host's stored choice (the public read emits the effective mode, `discovery.md`) */,
+  instantBookingActive /* additive 2026-08-07: whether "instant" is in effect platform-wide —
+  false while `payments.enabled` is off (instant book's commitment gate is the card at
+  request), in which case a venue stored as instant still receives requests. Clients show the
+  stored choice plus this truth; the web desk prints a note when they disagree. */}`.
   `verificationStatus` ∈ `unverified | pending | verified |
   declined` and summarizes the latest host verification request plus the venue's verified flag.
 - `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address required on
@@ -99,7 +106,7 @@ Payments module and read through its service.
 
 ### Rooms
 - `GET /api/v1/manage/rooms/{id}` ✅ → `ManagedRoomDto`: `{id, venueId, venueName, venueSlug,
-  name, slug, description, capacity, pricePerHour?, currency, houseRules, status,
+  name, slug, description, capacity, pricePerHour, currency, houseRules, status,
   publishRequestedAtUtc?, firstPublishedAtUtc?, activities[], amenities[], accessibility[],
   photos: [RoomPhotoDto], updatedAtUtc}`.
 - `POST /api/v1/manage/venues/{id}/rooms` ✅ — `SaveRoomRequest`; creates the room in `draft`
@@ -113,7 +120,7 @@ Payments module and read through its service.
 Slugs (`Utils/Slugs.cs`) are derived from the name at creation and **immutable** thereafter —
 renames never break a shared listing URL or SEO equity.
 
-### Idempotent creates ✅ *(built 2026-08-05 — `docs/backlog/v2_migration/design.md` D8)*
+### Idempotent creates ✅ *(built 2026-08-05 — v2 migration D8)*
 
 `POST /manage/venues` and `POST /manage/venues/{id}/rooms` honor the `Idempotency-Key` header
 (`conventions.md` §2), same replay-returns-original semantics as the applications submit:
@@ -159,13 +166,15 @@ never crossing midnight.
 
 **Guest availability reads ✅ *(built 2026-07-05 — availability plan commit 5)*:**
 
-- `GET /api/v1/listings/{roomId}/availability?from&to` ✅ (anonymous; published-gated — Draft/
+- `GET /api/v1/listings/{roomId}/availability?from&to` ✅ (anonymous; behind
+  `listing.availability`; flag off → 404; published-gated — Draft/
   Unlisted answer 404 like every public listing read) → `RoomAvailabilityDto`: `{roomId,
   timezone, from, to, days: [{date, isBlackout, freeWindows: [{startTime, endTime}]}]}`.
   `freeWindows` = open hours − blackouts − **confirmed** booked time (pending demand is never
   leaked), `[)` venue-local intervals. Limits: `from` ≥ today (venue-local), `to` ≥ `from`,
   range ≤ 92 days → `400 invalid_range`.
-- `POST /api/v1/listings/{roomId}/availability/check` ✅ (anonymous, per-IP `availability`
+- `POST /api/v1/listings/{roomId}/availability/check` ✅ (anonymous, behind
+  `listing.availability`; flag off → 404; per-IP `availability`
   policy 30/min) — `{schedule: ScheduleDto}` (same shape the apply form submits) →
   `ScheduleCheckResultDto`: `{available, totalOccurrences, conflicts: [{date, reason}]}` with
   `reason` ∈ `outsideOpenHours | blackout | booked`. Advisory dry-run of the submit-time block.
