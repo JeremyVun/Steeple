@@ -68,8 +68,8 @@ JwtBearer auth (`MapInboundClaims=false`) → rate limiting → ProblemDetails e
 | Port | Adapter |
 |---|---|
 | `IRoomRepository` | `RoomRepository` (EF, bounding-box query) |
-| `IGeofencePolicy` | `GeofencePolicy` (pure logic over config) |
-| `IGeocodingGateway` | `GoogleGeocodingGateway` (geocodes provider address entry, US-scoped; falls back to `StubGeocodingGateway` — beachhead centre — when `Geocoding:GoogleApiKey` is unset) |
+| `IGeofencePolicy` | `GeofencePolicy` (pure logic over the `Geofence` config section, incl. the served area's IANA timezone). Area-neutral port (`Bounds`/`IsServed`/`TimezoneId`) — the single-beachhead scope lives in this implementation only (SYSTEM_DESIGN §17, 2026-08-07) |
+| `IGeocodingGateway` | `AppleMapsGeocodingGateway` (geocodes provider address entry **and** answers the address typeahead; US-scoped, beachhead-biased; ES256 team JWT → `/v1/token` access-token cache in singleton `AppleMapsTokenProvider`) when `Geocoding:AppleTeamId/AppleKeyId/ApplePrivateKey` are set; else `GoogleGeocodingGateway` (geocode only) on `Geocoding:GoogleApiKey`; else `StubGeocodingGateway` (beachhead centre + canned suggestions) |
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (structured JSON line → stdout → Promtail/Loki) |
 | `IIdTokenVerifier` ×2 | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery; fail-closed without client ids) |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
@@ -138,10 +138,11 @@ run can't double-send; a failed dispatch releases its claim for the next sweep. 
 occurrences are read-only to this module.
 
 **Bookings** — **approval is the booking transaction**: application flip + booking +
-materialized occurrences commit in one `SaveChanges` (one DB transaction); an exclusion
-violation (SQLSTATE 23P01, translated in `EfBookingRepository`) aborts it all → the
+materialized occurrences commit in one `SaveChanges` inside a repository-owned transaction.
+Same-room creates first queue on that room row so concurrent GiST checks cannot deadlock; an
+exclusion violation (SQLSTATE 23P01, translated in `EfBookingRepository`) aborts it all → the
 application auto-declines with notice and the provider gets `409 slot_taken`;
-first-approval-wins falls out for free. `ScheduleMaterializer` (pure, unit-tested) turns
+first-approval-wins falls out of the database transaction. `ScheduleMaterializer` (pure, unit-tested) turns
 venue-local wall-clock into per-date UTC instants in the venue's IANA zone — DST-correct:
 spring-forward gap times shift forward by the gap, fall-back ambiguity resolves to
 standard time; `[)` ranges keep back-to-back slots compatible. Reads run **lazy sweeps**
@@ -261,10 +262,12 @@ the no-JavaScript fallback: the title page's CTAs are printed in `index.html` as
 *Boot* is a three-state machine (P3.5; `core/intent.js` + `main.js`): **printed arrival**
 (markup only — a press records its destination natively), **product-first flat boot** (any
 intent or deep link before the village is ready opens the map/desk directly; no engine,
-world, or Three chunk is fetched for the rest of that visit), and **live-village boot** (no
-early intent — poster → canvas crossfade, the cinematic roll). Product reads never wait on
-3D; the tile layer always ships with the map (a grid-layer-less Leaflet map settles NaN
-zoom and dies on the next `invalidateSize`).
+world, or Three chunk is fetched on that product path), and **live-village boot** (no early
+intent — poster → canvas crossfade, the cinematic roll). A village-capable flat boot lazily
+restores the poster and raises Three/world only if the visitor returns to the title;
+`?world=off` and `build:flat` never do. Product reads never wait on 3D; the tile layer always
+ships with the map (a grid-layer-less Leaflet map settles NaN zoom and dies on the next
+`invalidateSize`).
 
 *Seams* (`src/data/`): `api.js` — the wire, `/api/v1` names verbatim, read timeout 4s,
 writes 15s, and a timeout is classified as "unknown", never "unreachable". `session.js` —
@@ -277,7 +280,8 @@ party exists; a provider with no `VITE_*` client id is not offered, SDKs load on
 sign-in attempt, nonces bind tokens per attempt. `turnstile.js` — the widget, off without
 `VITE_TURNSTILE_SITE_KEY`; both token-carrying writes send null when unkeyed.
 `agreements.js` — the two legal documents at shipping versions; a first panel sign-in is
-asked to agree (the ask waits for a quiet moment), `POST /me/agreements` records it.
+asked to agree, a session still owing one is gated until it agrees or signs out
+(declining/dismissing signs out, 2026-08-07), `POST /me/agreements` records it.
 `catalog.js` — product vocabulary over the wire with a bundled fallback when the API is
 away. `correspondence.js` — everything after a request is written; every failure is a
 verdict (`refused | offline | signedOut | unavailable`), never a guess.

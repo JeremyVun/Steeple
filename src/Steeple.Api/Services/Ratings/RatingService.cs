@@ -250,7 +250,7 @@ public sealed class RatingService : IRatingService
         var safePageSize = Math.Clamp(pageSize, 1, MaxReviewPageSize);
 
         if (!await _ratings
-                .VenueHasPublishedRoomInBeachheadAsync(venueId, _geofence.Beachhead, ct)
+                .VenueHasPublishedRoomInAreaAsync(venueId, _geofence.Bounds, ct)
                 .ConfigureAwait(false))
         {
             return new VenueReviewPageDto([], 0, safePage, safePageSize);

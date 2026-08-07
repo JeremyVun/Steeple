@@ -51,9 +51,14 @@ export function createDiscovery({ announce = () => {} } = {}) {
   // ── the search, and everything it answers ──────────────────────────────────
   const list = el('div', { class: 'dm-list' }, results.element);
 
+  // Which suburb the map was last framed for, so choosing one is answered with
+  // a move exactly once — narrowing the same search (a date, a capacity) must
+  // not yank the map, and neither must the same suburb answering again.
+  let framedSuburb = null;
+
   const search = createSearch({
     announce,
-    onResults: (items) => {
+    onResults: (items, { suburb = null } = {}) => {
       count.textContent = resultLine(items);
       results.render(items);
       // Pins first: an answer may be the first sight of a venue — one a host
@@ -63,6 +68,21 @@ export function createDiscovery({ announce = () => {} } = {}) {
       atlas.setPrices(items);
       atlas.setMatching(state.matching);
       results.setCurrent(state.venueId, state.roomId);
+      // A chosen suburb is a spatial command, not just a filter: the map goes
+      // to the venues that answered it. Back to "Anywhere" pulls back to the
+      // whole area; a suburb with nothing to show moves nothing (the count
+      // line already says so, and there is no honest place to go).
+      if (suburb !== framedSuburb) {
+        framedSuburb = suburb;
+        const points = items
+          .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
+          .map((item) => [item.lat, item.lng]);
+        if (suburb && points.length > 0) {
+          atlas.frameTo(points);
+        } else if (!suburb) {
+          atlas.flyHome();
+        }
+      }
       // A new question is a new page of answers: read it from the top.
       list.scrollTop = 0;
     },

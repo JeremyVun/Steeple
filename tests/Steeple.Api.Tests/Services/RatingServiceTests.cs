@@ -435,7 +435,7 @@ public class RatingServiceTests
                         && !string.IsNullOrEmpty(r.Comment))
                     .ToList());
 
-        public Task<bool> VenueHasPublishedRoomInBeachheadAsync(
+        public Task<bool> VenueHasPublishedRoomInAreaAsync(
             Guid venueId, BoundingBox beachhead, CancellationToken ct = default) =>
             Task.FromResult(true);
 
@@ -500,11 +500,12 @@ public class RatingServiceTests
 
         public GeoPoint Center => new(0, 0);
 
-        public BoundingBox Beachhead => new(-90, 90, -180, 180);
+        public string TimezoneId => "America/New_York";
+        public BoundingBox Bounds => new(-90, 90, -180, 180);
 
-        public bool IsWithinBeachhead(double latitude, double longitude) => true;
+        public bool IsServed(double latitude, double longitude) => true;
 
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Beachhead;
+        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
     }
 
     private sealed class FakeNotificationDispatcher : INotificationDispatcher

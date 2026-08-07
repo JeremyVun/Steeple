@@ -13,7 +13,7 @@ import { getListing } from '../data/catalog.js';
 import { priceParts, seatsText } from './copy.js';
 import { chipList, el, replaceChildren } from './dom.js';
 import { createBanner } from './map/banner.js';
-import { createPutDown } from './rail.js';
+import { createPutDown, sheetScroller } from './rail.js';
 
 /** The fields a source actually answered for — the rest are somebody else's. */
 const said = (values) =>
@@ -68,7 +68,8 @@ export function createRoomPanel({ onRequest }) {
 
   function paint(venue, room) {
     const { amount, unit, free } = priceParts(room);
-    const held = body.scrollTop;
+    const scroller = sheetScroller(element, body);
+    const held = scroller.scrollTop;
 
     replaceChildren(head, [
       hero.element,
@@ -128,7 +129,7 @@ export function createRoomPanel({ onRequest }) {
         ]),
     ]);
 
-    body.scrollTop = held;
+    scroller.scrollTop = held;
   }
 
   let wasOpen = false;
@@ -150,7 +151,7 @@ export function createRoomPanel({ onRequest }) {
       // Only a sheet that was shut comes back at the top. Coming out from under
       // the booking overlay is not opening — it is finding the page as you left
       // it, scroll and all.
-      if (open && !wasOpen) body.scrollTop = 0;
+      if (open && !wasOpen) element.scrollTop = body.scrollTop = 0;
       wasOpen = open;
     },
   };

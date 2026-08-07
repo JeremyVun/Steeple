@@ -174,10 +174,11 @@ means this repo's `docs/CONTRACTS.md`.
 **Boot is a three-state machine** (P3.5): printed arrival (the title CTAs are real links
 in `index.html` — a press is answered from the first frame), product-first **flat boot**
 (any intent or deep link before the village is ready opens the product with no engine,
-world, or Three fetch for the rest of that visit — a cold `#/…` hash is always a flat
-boot), and the live-village boot (poster → canvas crossfade, cinematic roll). Product
-reads never wait on 3D; ⚠ never defer Leaflet's tile layer (NaN-zoom boot-killer,
-`ui/map/atlas.js`).
+world, or Three fetch; a cold `#/…` hash is always a flat boot), and the live-village boot
+(poster → canvas crossfade, cinematic roll). A flat-boot visitor's first return to the
+title restores the poster immediately and lazily raises the village there; explicit
+`?world=off`/`build:flat` visits remain flat. Product reads never wait on 3D; ⚠ never defer
+Leaflet's tile layer (NaN-zoom boot-killer, `ui/map/atlas.js`).
 
 **Run/verify:** `npm run dev` (vite :5173, proxies `/api` → API :5200 — the API serves no
 CORS by design, the proxy is the missing BFF; `STEEPLE_API_ORIGIN` moves the target);
@@ -202,7 +203,9 @@ app-time ~6× slow: suites wait on state, never wall-clock.
 - `src/data/turnstile.js` — the widget; no `VITE_TURNSTILE_SITE_KEY` ⇒ no widget and null
   tokens (the API fails open without a secret — key both sides or neither).
 - `src/data/agreements.js` — the two legal documents at shipping versions; a first *panel*
-  sign-in is asked to agree (the ask waits for a quiet moment); bump versions with the page.
+  sign-in is asked to agree inline, and a session that still owes an acceptance is gated —
+  the panel returns until they agree or sign out, and declining/dismissing signs out
+  (2026-08-07); bump versions with the page.
 - `src/data/correspondence.js` — the wire for everything after a request is written (inbox,
   thread, withdraw, counter response, host decisions, method-on-file). Verdicts' `reach` is
   `refused | offline | signedOut | unavailable` — never a guess (D4/D5).
@@ -236,7 +239,8 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
 - Sign-in is 10/min per-IP: `fixtures.paceAuth` paces within a process; give back-to-back
   auth-heavy suites breathing room.
 - **The P4 agreements ask interrupts real-input suites**: a fixture account that never
-  agreed gets the quiet-moment ask mid-run and the panel swallows a pointer beat. Call
+  agreed gets the gate at boot/sign-in, and **dismissing it signs the account out**
+  (2026-08-07). Call
   `fixtures.agreeCurrent(token)` on minted accounts (versions are read from
   `src/data/agreements.js`, no drift) — except in `hardening-test` §4, whose subject is the
   un-agreed state.
@@ -247,17 +251,25 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
 - Console-noise discipline: dead-port media 404s and GL narration are environmental —
   `fixtures.isEnvironmentNoise` is the shared filter; judge the check lines.
 - Known-stale sets (documented in the suites' own headers): `guest-test` 31/42 (map-first
-  roll drift) · `world-test` exactly 12, symmetric per style — asymmetry is real.
+  roll drift) · `world-test` exactly 12, symmetric per style — asymmetry is real ·
+  `booking-flow-test` fails from §5 (seed venues became instant-book 2026-08-05;
+  correspondence-test is the live gate for both flows).
   `input-test`'s opening roll beats are a **load reading** (headless GL under load), not a
   verdict.
 - All suites launch Chrome on a **pipe** and close in `finally` — a SIGKILL mid-run leaves
   zero orphaned "Chrome for Testing" processes (verified in the P6 sweep).
+- Headless pages stop advancing CSS transitions after an earlier `page.screenshot()` in
+  the run — computed opacity then reads 0 forever, which mimics a broken affordance. For
+  timing claims assert on DOM state (`aria-busy`, class dwell), shoot last; each
+  `deviceScaleFactor:2` shot costs 1–2.5s, so tight sampling loops silently span seconds.
 
 **Hazards (each verified against code, 2026-08-07):**
-- Guest CSS classes never on host surfaces: `.choice*` is the request sheet's
-  (`guest.css` loads after `host.css` — the booking-mode radios are `.mode*` for exactly
-  this reason); `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style
-  their own.
+- Class names are never shared across guest and host surfaces: stylesheets load
+  main → map → panels → guest → host, so a shared name means `host.css` silently restyles
+  the guest surface. The booking-mode radios are `.mode*` (not the sheet's `.choice*`),
+  and the host's opened letter is `.letterpage__*` (2026-08-07 — its `.letter__sheet` rule
+  had bled `overflow:hidden` onto the guest request sheet and made it unscrollable);
+  `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own.
 - Room photo URLs are stored **absolute** from `Media:PublicBaseUrl` — moving the media
   host orphans every photo written (open decision: `docs/backlog/README.md`); any new media
   origin must be added to web nginx CSP `img-src` **and** `Admin:MediaImageOrigins`, or

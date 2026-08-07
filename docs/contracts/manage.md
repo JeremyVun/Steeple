@@ -59,6 +59,13 @@ geofence on the venue's address). Then:
   required on create); the caller becomes the first `venue_manager`. Address is geocoded
   server-side (`IGeocodingGateway`) and geofence-checked → `400 geofence_rejected` outside the
   beachhead. `201` with the created `ManagedVenueDetailDto`.
+- `GET /api/v1/manage/address-suggestions?q=` ✅ *(additive 2026-08-07)* — address typeahead
+  for the venue address form. Signed-in, `manage` rate-limit policy. →
+  `[{label, latitude, longitude, addressLine?, suburb?, postcode?}]` (≤ 6; structured parts
+  null when the provider doesn't break the address down — clients fall back to the label).
+  Input under 3 chars **and** provider outages both answer `[]`, never an error. Backed by
+  `IGeocodingGateway.AutocompleteAsync` (Apple Maps Server adapter in production; canned
+  beachhead suggestions from the dev stub).
 - `PATCH /api/v1/manage/venues/{id}` ✅ — same `SaveVenueRequest` shape; `null` fields mean
   "unchanged". Address-affecting changes re-geocode (same geofence check) and stamp
   `ProviderEditedAtUtc`.

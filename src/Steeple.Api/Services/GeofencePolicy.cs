@@ -14,7 +14,7 @@ public sealed class GeofencePolicy : IGeofencePolicy
     public GeofencePolicy(IOptions<GeofenceOptions> options)
     {
         _options = options.Value;
-        Beachhead = new BoundingBox(
+        Bounds = new BoundingBox(
             MinLatitude: _options.MinLatitude,
             MaxLatitude: _options.MaxLatitude,
             MinLongitude: _options.MinLongitude,
@@ -23,7 +23,7 @@ public sealed class GeofencePolicy : IGeofencePolicy
     }
 
     /// <inheritdoc />
-    public BoundingBox Beachhead { get; }
+    public BoundingBox Bounds { get; }
 
     /// <inheritdoc />
     public GeoPoint Center { get; }
@@ -32,8 +32,11 @@ public sealed class GeofencePolicy : IGeofencePolicy
     public string AreaName => _options.AreaName;
 
     /// <inheritdoc />
-    public bool IsWithinBeachhead(double latitude, double longitude) =>
-        Beachhead.Contains(latitude, longitude);
+    public string TimezoneId => _options.Timezone;
+
+    /// <inheritdoc />
+    public bool IsServed(double latitude, double longitude) =>
+        Bounds.Contains(latitude, longitude);
 
     /// <inheritdoc />
     public BoundingBox ResolveSearchBounds(ListingSearchQuery query)
@@ -47,7 +50,7 @@ public sealed class GeofencePolicy : IGeofencePolicy
                 MaxLatitude: Math.Max(minLat, maxLat),
                 MinLongitude: Math.Min(minLng, maxLng),
                 MaxLongitude: Math.Max(minLng, maxLng));
-            return Intersect(viewport, Beachhead);
+            return Intersect(viewport, Bounds);
         }
 
         // 2. Center + radius -> build a bbox from the radius then intersect with the beachhead.
@@ -55,11 +58,11 @@ public sealed class GeofencePolicy : IGeofencePolicy
             query.RadiusMeters is double radius && radius > 0)
         {
             var radiusBox = GeoMath.FromRadius(centerLat, centerLng, radius);
-            return Intersect(radiusBox, Beachhead);
+            return Intersect(radiusBox, Bounds);
         }
 
         // 3. No spatial filter -> the full beachhead.
-        return Beachhead;
+        return Bounds;
     }
 
     /// <summary>

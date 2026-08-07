@@ -46,9 +46,9 @@ public class StubGeocodingGateway : IGeocodingGateway
 
         IReadOnlyList<AddressSuggestion> suggestions = new List<AddressSuggestion>
         {
-            new("Vienna, VA 22180", lat, lng),
-            new("Oakton, VA 22124", lat + 0.02, lng - 0.04),
-            new("Falls Church, VA 22043", lat - 0.03, lng + 0.07),
+            new("120 Church St NE, Vienna, VA 22180", lat, lng, "120 Church St NE", "Vienna", "22180"),
+            new("2911 Hunter Mill Rd, Oakton, VA 22124", lat + 0.02, lng - 0.04, "2911 Hunter Mill Rd", "Oakton", "22124"),
+            new("2200 Westmoreland St, Falls Church, VA 22043", lat - 0.03, lng + 0.07, "2200 Westmoreland St", "Falls Church", "22043"),
         };
 
         return Task.FromResult(suggestions);

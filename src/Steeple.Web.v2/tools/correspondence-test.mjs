@@ -450,7 +450,7 @@ check('and offers no other venue', options.length === 0, `saw ${JSON.stringify(o
 console.log('\n3 · the loop');
 await press(hostPage, '.desk .card, .desk .row');
 await until(hostPage, () => document.querySelector('.letterpage.is-open'));
-await press(hostPage, '.letter__actions [data-action="ask"]');
+await press(hostPage, '.letterpage__actions [data-action="ask"]');
 await write(hostPage, '#ask-body', 'How many tables would you like set out?');
 await press(hostPage, '[data-action="send-question"]');
 await until(

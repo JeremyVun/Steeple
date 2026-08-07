@@ -24,11 +24,11 @@ const ROLL_WASH = 0.62;
 const POSTER_HOLD_S = 0.65;
 const POSTER_EASE_S = 1.2;
 
-export function createJourney(engine, world, { posterAspect = null } = {}) {
+export function createJourney(engine, world, { posterAspect = null, roll: heldRoll = null } = {}) {
   const compositions = createCompositions(engine, world);
   const rig = createRig(engine, compositions);
   const post = createPost(engine);
-  const roll = createRoll(engine);
+  const roll = heldRoll ?? createRoll(engine);
   const input = createInput(engine, world, compositions, rig);
 
   // Only the title page opens over the poster; a deep link past it never sees

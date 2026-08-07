@@ -203,7 +203,7 @@ public sealed class ListingService : IListingService
             return null;
         }
 
-        if (!_geofence.IsWithinBeachhead(venue.Latitude, venue.Longitude))
+        if (!_geofence.IsServed(venue.Latitude, venue.Longitude))
         {
             return null;
         }

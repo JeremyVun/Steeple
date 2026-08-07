@@ -42,7 +42,7 @@ const CROSSFADE = 0.24;
 /** How much of the flick before this one still counts when a finger lets go. */
 const FLICK_MEMORY = 0.5;
 
-export function createRoll(engine) {
+export function createRoll(engine, { beforeReturn = null } = {}) {
   const reduced = state.reducedMotion;
 
   let p = 0;
@@ -188,6 +188,7 @@ export function createRoll(engine) {
 
   bus.on('roll:request', ({ target, land }) => {
     const wanted = clamp(target, 0, 1);
+    if (wanted < p) beforeReturn?.();
     if (wanted === p && !tweening) {
       arrive();
       land?.();
@@ -224,6 +225,12 @@ export function createRoll(engine) {
       landing = null;
       put(next);
       arrive();
+    },
+    /** Replace the flat boot's inert engine and honor where the roll now stands. */
+    attachEngine(next) {
+      engine = next;
+      if (p >= 1) engine.stop();
+      else engine.start();
     },
   };
 }

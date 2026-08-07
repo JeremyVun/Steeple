@@ -86,14 +86,13 @@ export function verifiedChip(text = VERIFIED_LABEL) {
 const GUEST_WORDS = {
   eyebrow: 'Before you send',
   title: 'Confirm who you are',
-  blurb:
-    'Steeple confirms a person once, so the host reading your request knows a real neighbour is asking. Your name and your group travel with it; nothing else about you is shared.',
   carryOn: (name) => `Continue as ${name}`,
   cancel: 'Back to your request',
   formEyebrow: 'Sign in',
   peopleEyebrow: 'Sign in as',
   signedOutAgain: 'Signed out. Choose who is asking.',
   missingEmail: 'An email address, so the host can be told who asked.',
+  declineAgreements: 'Not now — sign out',
 };
 
 /** The Apple mark, at the weight their guidance asks for beside the words. */
@@ -147,14 +146,17 @@ export function createIdentityStep({
   const check = el('div', { class: 'identity__check', hidden: !turnstile.configured() });
   const guard = turnstile.mount(check);
 
+  // Kept as nodes because the panel changes its own words when the question
+  // changes: a person who owes an acceptance is not being asked to sign in.
+  const titleEl = el('h2', { class: 'identity__title', text: say.title });
+
   const element = el('section', {
     class: 'identity',
     tabindex: '-1',
     'aria-label': say.title,
   }, [
     say.eyebrow ? el('p', { class: 'eyebrow', text: say.eyebrow }) : null,
-    el('h2', { class: 'identity__title', text: say.title }),
-    el('p', { class: 'prose prose--sm', text: say.blurb }),
+    titleEl,
     body,
     check,
   ].filter(Boolean));
@@ -180,15 +182,17 @@ export function createIdentityStep({
   }
 
   /**
-   * The two documents, said once, where the person is about to agree to them.
+   * The two documents, said where the person is about to agree to them — and
+   * said in the product's own words, not by title alone. Nobody should press
+   * "Agree" on the strength of two link labels.
    *
    * Steeple records acceptance against a version, so this is shown whenever the
    * version on file is not the current one — first sign-in, and again the day
-   * the words change (`docs/contracts/identity.md`). It is a sentence and two
-   * links, not a scroll-to-the-bottom ceremony: the pages are one press away and
-   * they are short.
+   * the words change (`docs/contracts/identity.md`). The summary paraphrases
+   * `public/terms.html` and `public/privacy.html`; if those pages change in
+   * substance, these sentences move with them.
    */
-  function agreementNote(documents) {
+  function agreementAsk(documents) {
     const link = (doc) =>
       el('a', { class: 'linkish', href: doc.href, target: '_blank', rel: 'noopener' }, doc.label);
     const parts = [];
@@ -196,7 +200,12 @@ export function createIdentityStep({
       if (index > 0) parts.push(index === documents.length - 1 ? ' and ' : ', ');
       parts.push(link(doc));
     });
-    return el('p', { class: 'identity__legal prose prose--sm' }, ['Continuing accepts Steeple’s ', ...parts, '.']);
+    return [
+      el('p', { class: 'identity__legal prose prose--sm' }, [
+        'Continuing accepts Steeple’s ',
+        ...parts
+      ]),
+    ];
   }
 
   async function agreeAndCarryOn(user) {
@@ -236,30 +245,40 @@ export function createIdentityStep({
       },
       toAgree.length ? 'Agree and continue' : say.carryOn(user.displayName)
     );
+    // While an acceptance is owed there is no way past that keeps the session:
+    // agreeing continues, everything else signs out. A "Not now" that left an
+    // un-agreed account signed in and working was the ask defeating itself
+    // (owner decision 2026-08-07).
+    const decline = el(
+      'button',
+      {
+        type: 'button',
+        class: 'linkish',
+        onclick: () => {
+          session.signOut();
+          announce?.(say.signedOutAgain);
+          if (onCancel) {
+            onCancel();
+          } else {
+            render();
+            focusFirst();
+          }
+        },
+      },
+      say.declineAgreements
+    );
     return [
       personCard(user),
       verifiedChip(),
-      toAgree.length ? agreementNote(toAgree) : null,
+      ...(toAgree.length ? agreementAsk(toAgree) : []),
       note(),
       el('div', { class: 'identity__actions' }, [
         carryOn,
-        el(
-          'button',
-          {
-            type: 'button',
-            class: 'linkish',
-            onclick: () => {
-              session.signOut();
-              announce?.(say.signedOutAgain);
-              render();
-              focusFirst();
-            },
-          },
-          'Not you — sign in as someone else'
-        ),
-        onCancel
-          ? el('button', { type: 'button', class: 'linkish', onclick: () => onCancel() }, say.cancel)
-          : null,
+        toAgree.length
+          ? decline
+          : onCancel
+            ? el('button', { type: 'button', class: 'linkish', onclick: () => onCancel() }, say.cancel)
+            : null,
       ].filter(Boolean)),
     ];
   }
@@ -554,6 +573,11 @@ export function createIdentityStep({
 
   function render() {
     const user = session.currentUser();
+    // A caller with agreement words of its own gets them the moment the panel's
+    // question stops being "who are you" and becomes "do you agree" — the shelf
+    // must not say "Sign in to Steeple" over somebody who already has.
+    const owing = Boolean(user) && Boolean(owed?.length);
+    titleEl.textContent = owing && say.agreeTitle ? say.agreeTitle : say.title;
     element.classList.toggle('is-verified', Boolean(user));
     element.classList.toggle('is-signing', busy);
     replaceChildren(body, user ? signedIn(user) : signedOut().filter(Boolean));
@@ -604,6 +628,12 @@ export function createIdentityStep({
      * watcher), taking the agreement prompt with it before it rendered.
      */
     settled: () => !busy && session.isSignedIn() && owed !== null && owed.length === 0,
+    /**
+     * Whether the person on screen still owes an acceptance. Whoever wraps this
+     * panel in a dismissable layer must treat dismissing it as declining — an
+     * un-agreed account must not stay signed in and working.
+     */
+    owesAcceptance: () => session.isSignedIn() && Boolean(owed?.length),
     /** The Turnstile token this panel is holding, for the write that follows. */
     turnstileToken: () => guard.token(),
     resetTurnstile: () => guard.reset(),

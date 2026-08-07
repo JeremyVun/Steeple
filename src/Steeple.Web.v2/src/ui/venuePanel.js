@@ -18,7 +18,7 @@ import { readVenue } from '../data/catalog.js';
 import { draftRooms, HOME_LABEL, priceParts, publishedRooms, seatsText, VERIFIED_LABEL } from './copy.js';
 import { el, replaceChildren } from './dom.js';
 import { createBanner } from './map/banner.js';
-import { createPutDown } from './rail.js';
+import { createPutDown, sheetScroller } from './rail.js';
 
 // Two sheets of paper, one behind the other — the plainest drawing of "take a
 // copy of this" there is. Hand-written markup, never anything from the data.
@@ -207,7 +207,8 @@ export function createVenuePanel() {
   function paint(venue) {
     const token = (showing += 1);
     // Reading down a sheet is not interrupted by the rest of it arriving.
-    const held = body.scrollTop;
+    const scroller = sheetScroller(element, body);
+    const held = scroller.scrollTop;
 
     replaceChildren(head, [
       hero.element,
@@ -277,7 +278,7 @@ export function createVenuePanel() {
         ]),
     ]);
 
-    body.scrollTop = held;
+    scroller.scrollTop = held;
 
     // The venue has no photograph of its own — steeple photographs rooms, not
     // buildings — so the head borrows the *second* view of the first space,
@@ -325,7 +326,7 @@ export function createVenuePanel() {
       element.classList.toggle('is-behind', open && behind);
       element.toggleAttribute('inert', !open || behind);
       element.setAttribute('aria-hidden', open && !behind ? 'false' : 'true');
-      if (open && !wasOpen) body.scrollTop = 0;
+      if (open && !wasOpen) element.scrollTop = body.scrollTop = 0;
       wasOpen = open;
     },
   };

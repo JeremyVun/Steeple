@@ -1171,7 +1171,7 @@
 
 /* ── the opened letter ──────────────────────────────────────────────────── */
 
-.letter__sheet {
+.letterpage__sheet {
   max-height: calc(100vh - 118px);
   display: flex;
   flex-direction: column;
@@ -1183,29 +1183,29 @@
   transition: opacity 260ms var(--ease), transform 260ms var(--ease);
 }
 
-.letter__head {
+.letterpage__head {
   padding: 18px 26px 14px;
 }
 
 /* The docket line and the way back are short by nature: let the title be the
    only thing in this row that ever takes a second line. */
-.letter__head > .eyebrow,
-.letter__head > .sheet__up {
+.letterpage__head > .eyebrow,
+.letterpage__head > .sheet__up {
   white-space: nowrap;
 }
 
-.letter__head > .eyebrow {
+.letterpage__head > .eyebrow {
   margin-top: 10px;
   color: var(--terracotta-deep);
 }
 
-.letter__meta {
+.letterpage__meta {
   margin: 8px 0 0;
   font-size: 12.5px;
   color: var(--ink-soft);
 }
 
-.letter__cols {
+.letterpage__cols {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
@@ -1213,8 +1213,8 @@
   border-top: 1px solid var(--line);
 }
 
-.letter__left,
-.letter__right {
+.letterpage__left,
+.letterpage__right {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1222,7 +1222,7 @@
   scrollbar-color: var(--line-strong) transparent;
 }
 
-.letter__left {
+.letterpage__left {
   display: grid;
   align-content: start;
   gap: 17px;
@@ -1230,7 +1230,7 @@
   border-right: 1px solid var(--line);
 }
 
-.letter__right {
+.letterpage__right {
   display: flex;
   flex-direction: column;
   gap: 13px;
@@ -1354,7 +1354,7 @@
   margin-top: 6px;
 }
 
-.letter__when {
+.letterpage__when {
   margin: 6px 0 2px;
   font-size: 13.5px;
   font-weight: 600;
@@ -1364,7 +1364,7 @@
 
 /* ── the four decisions ─────────────────────────────────────────────────── */
 
-.letter__actions {
+.letterpage__actions {
   position: sticky;
   bottom: 0;
   z-index: 1;
@@ -1379,26 +1379,26 @@
   );
 }
 
-.letter__actions:empty {
+.letterpage__actions:empty {
   padding: 0;
 }
 
-.letter__actions .pill--primary {
+.letterpage__actions .pill--primary {
   padding: 10px 20px;
 }
 
-.letter__drawer {
+.letterpage__drawer {
   display: none;
   padding: 15px 0 22px;
   border-top: 1px dashed var(--line-strong);
 }
 
-.letter__drawer.is-open {
+.letterpage__drawer.is-open {
   display: grid;
   gap: 11px;
 }
 
-.letter__drawer > .eyebrow {
+.letterpage__drawer > .eyebrow {
   color: var(--terracotta-deep);
 }
 
@@ -1513,6 +1513,86 @@
   color: var(--ink-faint);
 }
 
+/* Address typeahead: the list sits on the street-address field, over whatever
+   follows, and never reflows the form while somebody is typing into it. */
+.suggest__anchor {
+  position: relative;
+}
+
+.suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  box-shadow: 0 10px 28px rgb(28 24 18 / 0.14);
+  max-height: 216px;
+  overflow-y: auto;
+}
+
+.suggest__item {
+  padding: 7px 9px;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.suggest__item:hover,
+.suggest__item--active {
+  background: var(--sage-tint);
+}
+
+/* The room the waiting mark stands in is always reserved, so it costs the line
+   nothing to appear: a spinner that pushed the caret sideways would be worse
+   than no spinner at all. */
+.suggest__anchor .input {
+  padding-right: 30px;
+}
+
+.suggest__busy {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 13px;
+  height: 13px;
+  margin-top: -7px;
+  border: 1.5px solid var(--line-strong);
+  border-top-color: var(--sage-deep);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms var(--ease);
+}
+
+/* Only once steeple has been kept waiting a moment. The delay is on the way in
+   and nothing is held on the way out, so an answer that comes back quickly —
+   which is nearly all of them — never flickers a spinner at the host. */
+.suggest__busy.is-on {
+  opacity: 1;
+  transition-delay: 260ms;
+  animation: suggest-turn 760ms linear infinite;
+}
+
+@keyframes suggest-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .suggest__busy.is-on {
+    animation: none;
+  }
+}
+
 .counter__head {
   display: flex;
   flex-wrap: wrap;
@@ -1591,7 +1671,7 @@
   transition: opacity 320ms var(--ease), visibility 0s linear 330ms;
 }
 
-.letterpage.is-sealed .letter__sheet {
+.letterpage.is-sealed .letterpage__sheet {
   opacity: 0;
   transform: scale(0.994);
   pointer-events: none;
@@ -2001,10 +2081,44 @@
   color: var(--terracotta-deep);
 }
 
-/* the address fields, and where steeple decided that address is */
-.place__fields {
+/* the venue in words, the venue's address, and where that address falls.
+
+   Two columns for two kinds of question — the same shape the Describe step
+   reads in, so the flow keeps one composition from step to step. Stacked full
+   width, a venue name was given the same long line as a paragraph about the
+   place, and the map sat a whole step's scroll away from the address it
+   belongs to. */
+.place {
   display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 28px;
+}
+
+.place__words,
+.place__where {
+  display: grid;
+  align-content: start;
   gap: 15px;
+}
+
+/* A suburb is a word and a ZIP is five digits: the pair says so. */
+.place__where .field__pair {
+  grid-template-columns: minmax(0, 1fr) 118px;
+}
+
+/* Nothing at all until somebody can say where the venue stands — and no gap
+   held open for it either. */
+.place__mark:empty {
+  display: none;
+}
+
+/* Beside the address rather than under the whole sheet, so the plan is smaller
+   than the one the Publish step reviews. */
+.place__mark .placed {
+  grid-template-columns: 112px minmax(0, 1fr);
+  padding: 12px 14px;
+  gap: 14px;
 }
 
 .placed {
@@ -2075,6 +2189,19 @@
   border: 2px solid var(--paper);
   box-shadow: 0 4px 10px -4px rgba(42, 38, 32, 0.7);
   transform: translate(-50%, -50%);
+}
+
+/* A preview of where the picked address falls, which steeple has not been told
+   about yet: the block is held lighter than the settled one and the pin is a
+   ring rather than a mark, so the difference is visible as well as said. */
+.placed--soft {
+  background: var(--paper);
+}
+
+.placed--soft .plan__pin {
+  background: color-mix(in srgb, var(--terracotta) 20%, var(--paper));
+  border-color: var(--terracotta);
+  box-shadow: none;
 }
 
 /* ── describing the room ────────────────────────────────────────────────── */
@@ -2349,16 +2476,16 @@
 /* ── narrow viewports ───────────────────────────────────────────────────── */
 
 @media (max-width: 1120px) {
-  .letter__cols {
+  .letterpage__cols {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .letter__left {
+  .letterpage__left {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
 
-  .letter__right {
+  .letterpage__right {
     padding-left: 26px;
   }
 
@@ -2378,6 +2505,7 @@
 
   /* Two columns and a label at the left both need width to be worth having. */
   .describe,
+  .place,
   .chosen {
     grid-template-columns: minmax(0, 1fr);
   }

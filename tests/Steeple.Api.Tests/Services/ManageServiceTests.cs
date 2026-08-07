@@ -871,15 +871,16 @@ public class ManageServiceTests
     {
         public bool WithinBeachhead { get; set; } = true;
 
-        public BoundingBox Beachhead => new(38.84, 38.96, -77.34, -77.12);
+        public string TimezoneId => "America/New_York";
+        public BoundingBox Bounds => new(38.84, 38.96, -77.34, -77.12);
 
         public GeoPoint Center => new(38.9012, -77.2653);
 
         public string AreaName => "Vienna & nearby (Northern Virginia)";
 
-        public bool IsWithinBeachhead(double latitude, double longitude) => WithinBeachhead;
+        public bool IsServed(double latitude, double longitude) => WithinBeachhead;
 
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Beachhead;
+        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
     }
 
     private sealed class FakeVenueManagerRepository : IVenueManagerRepository

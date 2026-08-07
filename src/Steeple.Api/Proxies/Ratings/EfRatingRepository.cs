@@ -103,7 +103,7 @@ public class EfRatingRepository : IRatingRepository
     }
 
     /// <inheritdoc />
-    public Task<bool> VenueHasPublishedRoomInBeachheadAsync(
+    public Task<bool> VenueHasPublishedRoomInAreaAsync(
         Guid venueId, BoundingBox beachhead, CancellationToken ct = default)
     {
         return _db.Rooms

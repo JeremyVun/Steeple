@@ -174,6 +174,19 @@ const newKey = () =>
   globalThis.crypto?.randomUUID?.() ??
   `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
 
+/**
+ * Address suggestions for the Place step. Quiet by design: signed out, superseded by the next
+ * keystroke, or a downed provider all answer `[]` — a typeahead never gets to interrupt typing.
+ */
+export async function suggestAddresses(q, { signal = null } = {}) {
+  if (!session.isSignedIn()) return [];
+  try {
+    return await session.withAccess((token) => api.suggestAddresses(q, token, { signal }));
+  } catch {
+    return [];
+  }
+}
+
 /** Create the venue, or update the one this draft already made. */
 export function saveVenue(draft) {
   const body = {

@@ -56,7 +56,7 @@ function haloMesh(radius, color, opacity) {
 
 export async function buildWorld(engine) {
   const { scene } = engine;
-  const style = state.style === 'atlas' ? 'atlas' : 'diorama';
+  const style = state.style === 'diorama' ? 'diorama' : 'atlas';
   const quality = state.quality;
   const stageModule = style === 'atlas' ? atlas : diorama;
 

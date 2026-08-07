@@ -39,7 +39,7 @@ public class GeofencePolicyTests
 
         var bounds = policy.ResolveSearchBounds(query);
 
-        Assert.Equal(policy.Beachhead, bounds);
+        Assert.Equal(policy.Bounds, bounds);
     }
 
     [Fact]
@@ -140,32 +140,32 @@ public class GeofencePolicyTests
 
         var bounds = policy.ResolveSearchBounds(query);
 
-        Assert.Equal(policy.Beachhead, bounds);
+        Assert.Equal(policy.Bounds, bounds);
     }
 
     [Fact]
-    public void IsWithinBeachhead_CenterPoint_ReturnsTrue()
+    public void IsServed_CenterPoint_ReturnsTrue()
     {
         var policy = CreatePolicy();
 
-        Assert.True(policy.IsWithinBeachhead(CenterLatitude, CenterLongitude));
+        Assert.True(policy.IsServed(CenterLatitude, CenterLongitude));
     }
 
     [Fact]
-    public void IsWithinBeachhead_PointNorthOfBeachhead_ReturnsFalse()
+    public void IsServed_PointNorthOfBeachhead_ReturnsFalse()
     {
         var policy = CreatePolicy();
 
-        Assert.False(policy.IsWithinBeachhead(39.50, CenterLongitude));
+        Assert.False(policy.IsServed(39.50, CenterLongitude));
     }
 
     [Fact]
-    public void IsWithinBeachhead_PointOnBoundaryCorner_ReturnsTrue()
+    public void IsServed_PointOnBoundaryCorner_ReturnsTrue()
     {
         var policy = CreatePolicy();
 
         // Bounds are inclusive on all four edges.
-        Assert.True(policy.IsWithinBeachhead(MinLatitude, MinLongitude));
-        Assert.True(policy.IsWithinBeachhead(MaxLatitude, MaxLongitude));
+        Assert.True(policy.IsServed(MinLatitude, MinLongitude));
+        Assert.True(policy.IsServed(MaxLatitude, MaxLongitude));
     }
 }

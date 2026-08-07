@@ -90,8 +90,8 @@ check('it boots past the roll', (await page.evaluate('__steeple.state.roll')) ==
 check('...onto the browse surface', (await page.evaluate('__steeple.state.view')) === 'village');
 check('the results are there', (await page.evaluate('document.querySelectorAll(".dm-row").length')) > 0);
 check('the count reads', /space/.test(await text('.dm-count')), await text('.dm-count'));
-check('the scenery switch stands down', await page.evaluate(
-  'getComputedStyle(document.querySelector(".scenery")).display === "none"'
+check('the scenery switch is gone for good', await page.evaluate(
+  'document.querySelector(".scenery") === null'
 ));
 
 // ── 3. nothing invisible is standing over the page ──────────────────────────

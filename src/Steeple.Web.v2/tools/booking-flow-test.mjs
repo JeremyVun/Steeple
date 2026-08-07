@@ -13,6 +13,14 @@
 // dev server of this app:
 //   npx vite --port 5323 --strictPort
 //   node tools/booking-flow-test.mjs "http://localhost:5323/?q=low"
+//
+// ⚠ STALE since booking modes (2026-08-05, db/changelog/013): every seed venue
+// became instant-book, so this suite's seed room answers "Book this space" and
+// its request→identity→pending sections (§5–§8) fail from there — verified
+// 2026-08-07 to fail identically before and after unrelated sheet changes.
+// correspondence-test covers both flows with minted venues and is the live
+// gate; converting this suite means minting a manual venue instead of leaning
+// on the seed.
 
 import { closeBrowsers, launch } from './fixtures.mjs';
 

@@ -54,8 +54,8 @@ publish gate and Listings' public `openHours` both go through the port).
 | Port | Adapter |
 |---|---|
 | `IRoomRepository` | `RoomRepository` (EF, bounding-box query) |
-| `IGeofencePolicy` | `GeofencePolicy` (pure logic over the `Geofence` config section; singleton) |
-| `IGeocodingGateway` | `GoogleGeocodingGateway` (typed HttpClient, US-scoped) when `Geocoding:GoogleApiKey` is set, else `StubGeocodingGateway` (every address → beachhead centre) |
+| `IGeofencePolicy` | `GeofencePolicy` (pure logic over the `Geofence` config section; singleton). **The served-area seam**: `Bounds`/`Center`/`AreaName`/`TimezoneId`/`IsServed`/`ResolveSearchBounds` are area-neutral by design — the single beachhead is this implementation's policy, and serving more areas (or the world) is a new implementation behind this port (SYSTEM_DESIGN §17, 2026-08-07) |
+| `IGeocodingGateway` | `AppleMapsGeocodingGateway` (typed HttpClient + singleton `AppleMapsTokenProvider` ES256-JWT/access-token cache; geocode **and** autocomplete, US-scoped, beachhead-biased) when `Geocoding:AppleTeamId/AppleKeyId/ApplePrivateKey` are all set; else `GoogleGeocodingGateway` (geocode only) when `Geocoding:GoogleApiKey` is set; else `StubGeocodingGateway` (every address → beachhead centre, canned suggestions) |
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (one structured JSON line → stdout → Promtail/Loki) |
 | `IIdTokenVerifier` ×2 (+1) | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery, fail-closed without client ids); `DevIdTokenVerifier` registered **only** when `Auth:DevLoginEnabled` |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
@@ -65,7 +65,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IVenueManagerRepository` | `EfVenueManagerRepository` (read-only; Admin writes the links) |
 | `IManageRepository` | `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IAvailabilityRepository` | `EfAvailabilityRepository` |
-| `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save; translates SQLSTATE 23P01) |
+| `IBookingRepository` | `EfBookingRepository` (same-room creates queue on a transaction-scoped room-row lock before the GiST exclusion check; atomic save translates SQLSTATE 23P01) |
 | `IRatingRepository` | `EfRatingRepository` |
 | `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — `StripePaymentGateway` is the drop-in at Stripe-time |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |

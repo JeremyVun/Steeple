@@ -453,14 +453,15 @@ public class SingleGateModerationIntegrationTests
 
     private sealed class FakeGeofencePolicy : IGeofencePolicy
     {
-        public BoundingBox Beachhead => new(38.50, 38.96, -77.70, -77.12);
+        public string TimezoneId => "America/New_York";
+        public BoundingBox Bounds => new(38.50, 38.96, -77.70, -77.12);
 
         public GeoPoint Center => new(38.9012, -77.2653);
 
         public string AreaName => "Vienna & nearby (Northern Virginia)";
 
-        public bool IsWithinBeachhead(double latitude, double longitude) => Beachhead.Contains(latitude, longitude);
+        public bool IsServed(double latitude, double longitude) => Bounds.Contains(latitude, longitude);
 
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Beachhead;
+        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
     }
 }

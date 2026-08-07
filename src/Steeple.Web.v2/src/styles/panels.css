@@ -765,6 +765,19 @@
     top: calc(var(--browse-bar) + var(--sheet-band, 172px));
   }
 
+  /* Pulled up by its handle, the sheet is given the page band and all — which
+     is the rail's top moving, not the sheet growing (ui/rail.js). The rail is
+     only ever a frame, so while it stands over the map it answers no pointer
+     of its own; the sheet fills it and answers for itself. */
+  .rail.is-lifted {
+    top: var(--browse-bar);
+    pointer-events: none;
+  }
+
+  .rail.is-lifted > .sheet {
+    pointer-events: auto;
+  }
+
   .browse .sheet {
     border-radius: 16px 16px 0 0;
     background: var(--paper);
@@ -778,14 +791,55 @@
     transform: none;
   }
 
-  /* Nothing is transitioned while a finger is on it; on the way out the sheet
-     is seen to go down rather than fade where it stands. */
+  /* Nothing is transitioned while a finger is on it; on the way out, and on the
+     way to a detent it was let go near, the sheet is seen to move rather than
+     arrive. */
   .browse .sheet.is-dragging {
     transition: none;
   }
 
-  .browse .sheet.is-going {
+  .browse .sheet.is-going,
+  .browse .sheet.is-settling {
     transition: transform 190ms var(--ease);
+  }
+
+  /* A phone reads a sheet as one page: the photograph, the name and the spaces
+     scroll together, so the whole of a listing is reachable with the thumb that
+     is already on it. The head stopped being a fixed frame here — what stays is
+     the handle, which is the way back out and must never scroll away. */
+  .browse .sheet--venue,
+  .browse .sheet--room {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .sheet--venue .sheet__head,
+  .sheet--room .sheet__head,
+  .sheet--room .sheet__foot {
+    flex: 0 0 auto;
+  }
+
+  .sheet--venue .sheet__body,
+  .sheet--room .sheet__body {
+    flex: 1 0 auto;
+    overflow: visible;
+  }
+
+  /* Both ends hold their place over the moving page, so they are opaque: the
+     way back at the top, and the one thing to do about a room at the foot. */
+  .sheet--venue .sheet__grab,
+  .sheet--room .sheet__grab {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--paper);
+  }
+
+  .sheet--room .sheet__foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: var(--paper);
   }
 
   .sheet__grab {
@@ -833,11 +887,14 @@
   }
 
   /* The step back is a control, not a caption: on a phone it is set as a chip
-     so a thumb has something to land on. Scoped to the property sheets —
-     `.sheet__up` is borrowed by ui/host's letter page, which is not this. */
+     so a thumb has something to land on. It is also a chip, and a chip sitting
+     2px off the line under it reads as part of that line — the place it belongs
+     to is the picture above, so the air goes underneath. Scoped to the property
+     sheets — `.sheet__up` is borrowed by ui/host's letter page, which is not
+     this. */
   .sheet--venue .sheet__up,
   .sheet--room .sheet__up {
-    margin: 12px 0 2px;
+    margin: 12px 0 14px;
     padding: 5px 12px 5px 10px;
     border-radius: var(--radius-pill);
     background: var(--paper-deep);
@@ -862,6 +919,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .browse .sheet.is-going,
+  .browse .sheet.is-settling,
   .sheet__grab-bar {
     transition: none;
   }

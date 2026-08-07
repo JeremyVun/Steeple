@@ -27,4 +27,7 @@ public class GeofenceOptions
 
     /// <summary>Default map center longitude (decimal degrees).</summary>
     public double CenterLongitude { get; set; }
+
+    /// <summary>The served area's IANA timezone.</summary>
+    public string Timezone { get; set; } = "America/New_York";
 }

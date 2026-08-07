@@ -70,7 +70,7 @@ one of three states:
 | State | Who owns the press | What is on the page |
 | --- | --- | --- |
 | **printed arrival** | the markup | the three controls are real `<a href="#/browse">`/`#/desk` links, so a press before any script records its destination in `location.hash` — the recovery truth across a reload |
-| **product-first (flat)** | `src/core/intent.js` → `main.js` | somebody asked. The product opens at once with `roll = 1`, canvas and poster removed, `data-world="off"`; the village is never started, and one already downloading is abandoned. **That visit stays flat**, including a later return to the title page through the wordmark — no Three is backfilled while the map is in use |
+| **product-first (flat)** | `src/core/intent.js` → `main.js` | somebody asked. The product opens at once with `roll = 1`, canvas and poster removed, `data-world="off"`; the village is never started, and one already downloading is abandoned. If the visitor later returns through the wordmark, the poster is restored synchronously and Three/world are loaded only after the return roll lands. Explicit `?world=off` and `build:flat` visits never hydrate |
 | **live village** | `journey/roll.js` | nobody asked in time. Poster → canvas crossfade, and a press is the 1.28s cinematic roll it has always been |
 
 `src/core/intent.js` is the one thing that answers a press before the product
@@ -119,7 +119,7 @@ three places; change them together.
 
 | Flag | Values | What it does |
 | --- | --- | --- |
-| `?style=` | `diorama` (default), `atlas` | Which scenery the world is staged in. |
+| `?style=` | `atlas` (default), `diorama` | Which scenery the world is staged in. |
 | `?q=` | `high` (default), `low` | `low` skips postprocessing and thins the scatter. |
 | `?tilt=` | `on`/`1`/`true`, `off`/`0`/`false` | Tilt-shift strength. Absent leaves the tuned default. |
 | `?map=` | `simple` (default), `dusk` | Which toning the discovery map's tiles are given. |
@@ -130,10 +130,9 @@ three places; change them together.
 
 Every flag is read once at boot, in `src/core/bus.js`, onto `state`; nothing
 downstream reads the URL. A value the flag does not know falls back to the
-default. The scenery switcher (bottom centre, past arrival) reloads the page with
-`?style=` set and the current deep link preserved, so a comparison never loses
-your place — it steps aside, with the discovery panel, while a request or the
-hosting view is open, since those views have a subject of their own.
+default. Switching scenery is by URL (`?style=`) or the debug API's `setStyle`,
+which reloads with the current deep link preserved, so a comparison never loses
+your place — there is no in-product switcher.
 
 ### Deep links
 
@@ -272,6 +271,22 @@ handle is a button as well, and the same step is written at the top of the sheet
 the end of to find. None of it ever goes to the title page: that is the
 wordmark's chevron, and now the only thing that means it.
 
+The handle pulls both ways. A property sheet stands in two places — at rest with
+the map's band above it, and raised with the whole page under the top line — so
+a long listing is not read through a letterbox, and the band is a place to keep
+rather than a wall. Raising lifts the rail, not the sheet: the sheet always
+fills it, so the gesture is a transform and the layout is handed back to the CSS
+the moment it lands. The invariant that keeps that honest — a sheet nobody is
+holding stands on the foot of the page. A gesture taken away rather than
+finished (a window blur, a capture handed elsewhere) lands the sheet anyway, and
+a sheet ever found lifted at rest puts itself back the next time it is touched:
+lifted, its foot hangs below the window and the end of the listing cannot be
+reached, while it looks exactly like a sheet at rest. `map-narrow.mjs` §9 holds
+that check, with the proof it can bite. The arrow keys say the same thing without a finger. And the
+sheet is one page here rather than a fixed head over a scrolling body: the
+photograph and the name go up with the reading, and what stays is the handle,
+which is the way back out of it.
+
 Both `?map=` tonings show the same tiles, pins and interactions; only the
 grading differs.
 
@@ -359,7 +374,7 @@ Accessibility is part of steeple's brand, not a bolt-on.
 | `Esc` | in a request | Back to wherever that request was opened from — the room, the inbox, hosting |
 | `↓` / `Enter` / scroll | arrival | Come down into the village |
 | `Tab` then `Enter` | on a map pin or list row | Open that church from the panel |
-| `↑` `↓` | on the sheet's handle (narrow) | Raise or lower it a detent |
+| `↑` `↓` | on a sheet's handle (narrow) | Raise or lower it — the list a detent, a property sheet between its two places |
 | `Esc` | while the panel owns focus | Step out of the panel without leaving the view |
 
 The overlay keeps its own tab order — while focus is inside a panel, `Tab`
@@ -495,9 +510,10 @@ src/journey/          everything you feel but never see
   post.js             bloom, tilt-shift, warm grade, vignette
 src/ui/               the printed layer over the world
   arrival.js nav.js venuePanel.js roomPanel.js
-  hoverBanner.js styleSwitcher.js announcer.js copy.js dom.js
+  hoverBanner.js announcer.js copy.js dom.js
   account.js          who you are, on the porch — and the way to stop being them
-  rail.js             the phone's way back: a property sheet you can put down
+  rail.js             the phone's way back: a property sheet you can put down,
+                      and pull up — two places it stands, one handle for both
   map/                the discovery surface — the product past the roll
     index.js          the surface: head, count, scene sync, withdrawal
     atlas.js          Leaflet + OSM tiles, pins, framing around what can be seen

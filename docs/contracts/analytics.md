@@ -25,7 +25,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 |---|---|---|
 | `search_performed` ✅ | server | filters, resultCount, zeroResult (+ additive: hasWhenFilter, whenMode `oneOff\|recurring\|none`, timeOfDay?, weekdayCount?, amenities[]) |
 | `listing_viewed` ✅ | server | roomId, venueId |
-| `map_interacted` ✅ | client | kind (pan/zoom/pin) |
+| `map_interacted` ✅ | client | kind (pan/zoom/pin/locate) |
 | `application_started` ✅ / `application_submitted` ✅ | web BFF¹ / server | roomId; activityType, frequency, groupSize |
 | `sso_started` ✅ / `sso_completed` ✅ | web BFF¹ / server | provider?, surface, trigger / provider, surface, isNewUser |
 | `application_decided` ✅ | server | outcome, timeToDecisionHours (+ `autoDeclined, reason: "slot_taken"` on the race-lost path; additive `viaCounterOffer`) |
@@ -55,6 +55,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `card_step_opened` ✅ *(2026-08-07)* | client | reason (`apply` \| `account` \| `failure`) |
 | `payout_step_opened` ✅ *(2026-08-07)* | client | state (`prompt` \| `onboarding` \| `connected`) |
 | `arrival_settled` ✅ *(2026-08-07)* | client | destination (`village` \| `desk`), entry (`cinematic` \| `direct`) — one per press the boot actually answered (`src/core/intent.js`, build plan P3.5) |
+| `address_suggestion_picked` ✅ *(2026-08-07)* | client | — (a host filled the venue address from the typeahead, `manage.md` address-suggestions) |
 
 ¹ The deprecated v1 BFF emitted these client-ish funnel events server-side (`IWebAnalytics`, same
 stdout log line shape) and retired with it. **Web v2 emits them from its own batcher**

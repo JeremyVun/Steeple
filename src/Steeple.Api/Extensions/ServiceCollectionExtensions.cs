@@ -95,8 +95,10 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Manage module (SYSTEM_DESIGN §4, ROADMAP Phase 5): provider venue/room CRUD with
-    /// server-side geocoding. The Google adapter needs its metered API key; without one the dev
-    /// stub resolves every address to the beachhead center.
+    /// server-side geocoding and address autocomplete. Complete Apple Maps credentials select the
+    /// Apple adapter (geocoding + autocomplete); a Google key selects the Google adapter
+    /// (geocoding only); without either the dev stub resolves every address to the beachhead
+    /// center and answers canned suggestions.
     /// </summary>
     private static IServiceCollection AddSteepleManage(this IServiceCollection services, IConfiguration configuration)
     {
@@ -106,7 +108,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IManageRepository, EfManageRepository>();
 
         var geocoding = configuration.GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions();
-        if (!string.IsNullOrEmpty(geocoding.GoogleApiKey))
+        if (geocoding.HasAppleCredentials)
+        {
+            services.AddSingleton<AppleMapsTokenProvider>();
+            services.AddHttpClient<IGeocodingGateway, AppleMapsGeocodingGateway>();
+        }
+        else if (!string.IsNullOrEmpty(geocoding.GoogleApiKey))
         {
             services.AddHttpClient<IGeocodingGateway, GoogleGeocodingGateway>();
         }

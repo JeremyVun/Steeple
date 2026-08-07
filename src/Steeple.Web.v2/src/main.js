@@ -9,8 +9,9 @@
 //                     opening frame, and the cinematic roll past that.
 //   product-first     somebody asked. The product opens flat, at once, and the
 //                     village is not started; a village already being started is
-//                     abandoned rather than raised over a map in use. That visit
-//                     stays flat, including a later return to the title page.
+//                     abandoned rather than raised over a map in use. If they
+//                     later return to the title, its poster comes back first and
+//                     the village is raised there, never behind the product.
 //
 // Intent beats scenery. That is the whole ordering rule here: the interface
 // chunk goes on the wire first and alone, and engine/world/journey wait for the
@@ -73,6 +74,19 @@ import * as session from './data/session.js';
 
 /** Compile-time, not run-time: this is what lets the flat build drop three.js. */
 const BUILT_FLAT = import.meta.env.VITE_WORLD === 'off';
+const loadVillageModules = import.meta.env.VITE_WORLD === 'off'
+  ? null
+  : () =>
+      Promise.all([
+        import('./core/engine.js'),
+        import('./world/index.js'),
+        import('./journey/index.js'),
+      ]);
+
+// A flat boot removes the image itself so it cannot compete with the product.
+// Its inert markup is enough to recreate it if that visitor later asks to go
+// back up; keeping a detached image node would keep its decoded bitmap alive.
+const POSTER_MARKUP = document.getElementById('poster')?.outerHTML ?? '';
 
 /**
  * The debug/verification API — used by tools/*.mjs. Do not remove.
@@ -151,7 +165,7 @@ async function boot() {
     // vocabulary may go now rather than at the browser's convenience.
     releaseBoot();
     await interfaceReady;
-    return bootFlat(canvas);
+    return bootFlat(canvas, { mayRaise: !flat });
   }
 
   // The interface has the connection to itself. Only once it is interactive,
@@ -161,7 +175,7 @@ async function boot() {
   if (pendingArrival()) {
     taken = true;
     releaseBoot();
-    return bootFlat(canvas);
+    return bootFlat(canvas, { mayRaise: true });
   }
 
   const raised = bootVillage(canvas).then(
@@ -181,7 +195,7 @@ async function boot() {
 
   taken = true;
   releaseBoot();
-  bootFlat(canvas);
+  bootFlat(canvas, { mayRaise: true });
 }
 
 /** The browser drawing breath, or the cap — whichever comes first. */
@@ -202,11 +216,7 @@ async function bootVillage(canvas) {
   // Three chunks, one round trip: nothing in engine.js is needed to *download*
   // the world or the journey, so fetching them one after the other was three
   // serial trips for no ordering that mattered.
-  const [{ createEngine }, { buildWorld }, { createJourney }] = await Promise.all([
-    import('./core/engine.js'),
-    import('./world/index.js'),
-    import('./journey/index.js'),
-  ]);
+  const [{ createEngine }, { buildWorld }, { createJourney }] = await loadVillageModules();
 
   // The narrow interval: the press landed while these were in flight. Their
   // transfers are done and cannot be given back, but nothing is made of them —
@@ -313,7 +323,7 @@ function release(engine) {
  * exception is a village that could not be raised, so nothing here may assume a
  * clean page: the canvas may already be half-alive.
  */
-function bootFlat(canvas) {
+function bootFlat(canvas, { mayRaise = false } = {}) {
   // An aria-hidden black rectangle under the paper helps nobody, and a poster
   // of a village that is not coming is a lie about what scrolling reveals.
   canvas?.remove();
@@ -322,7 +332,15 @@ function bootFlat(canvas) {
 
   // The roll needs a renderer only to put it down at the top and pick it up
   // again. With no renderer there is nothing to put down.
-  const roll = createRoll({ start() {}, stop() {} });
+  let stopFlatGestures = () => {};
+  const roll = createRoll(
+    { start() {}, stop() {} },
+    {
+      beforeReturn: mayRaise
+        ? () => raiseVillageOnReturn(roll, () => stopFlatGestures())
+        : null,
+    }
+  );
 
   publish({ engine: null, world: null, roll });
 
@@ -346,8 +364,97 @@ function bootFlat(canvas) {
   // other page's do — flat or not, the press is answered here now.
   releaseArrival();
 
-  flatGestures();
+  stopFlatGestures = flatGestures();
   window.__steepleReady = true;
+}
+
+let returnRaise = null;
+
+/**
+ * Raise the village only when a flat-boot visitor comes back for it. The poster
+ * answers synchronously; the 3D chunks and world begin after the return roll
+ * lands, so neither can jank the way back up. One attempt per visit: a refused
+ * WebGL context leaves the honest static poster standing.
+ */
+function raiseVillageOnReturn(roll, stopFlatGestures) {
+  if (returnRaise) return returnRaise;
+
+  const { canvas } = restoreVillageFrame();
+  returnRaise = (async () => {
+    await atTop();
+
+    const [{ createEngine }, { buildWorld }, { createJourney }] = await loadVillageModules();
+
+    let engine = null;
+    try {
+      engine = createEngine(canvas);
+      const gl = engine.renderer.getContext();
+      if (!gl || gl.isContextLost?.()) throw new Error('WebGL context lost before the first frame');
+
+      const world = await buildWorld(engine);
+      const journey = createJourney(engine, world, {
+        posterAspect: posterAspect(),
+        roll,
+      });
+
+      // From here the journey owns page input. The same roll survives, now
+      // driving the real engine instead of the flat boot's inert stand-in.
+      stopFlatGestures();
+      roll.attachEngine(engine);
+
+      const arrived = engine.onUpdate(() => {
+        arrived();
+        canvas.classList.add('is-live');
+        const poster = document.getElementById('poster');
+        if (poster) setTimeout(() => poster.remove(), 800);
+      });
+
+      engine.onUpdate((dt, elapsed) => {
+        world.update(dt, elapsed);
+        journey.update?.(dt, elapsed);
+      });
+
+      publish({ engine, world, roll });
+      document.documentElement.dataset.world = 'on';
+      return true;
+    } catch (failure) {
+      if (engine) release(engine);
+      canvas.remove();
+      throw failure;
+    }
+  })().catch((failure) => {
+    console.warn('[steeple] The village could not be raised on return — keeping the poster.', failure);
+    return false;
+  });
+
+  return returnRaise;
+}
+
+/** Put a fresh poster and transparent canvas back under the already-mounted UI. */
+function restoreVillageFrame() {
+  const ui = document.getElementById('ui');
+  const template = document.createElement('template');
+  template.innerHTML = POSTER_MARKUP.trim();
+  const poster = template.content.firstElementChild;
+  if (poster) document.body.insertBefore(poster, ui);
+
+  const canvas = document.createElement('canvas');
+  canvas.id = 'scene';
+  canvas.setAttribute('aria-hidden', 'true');
+  document.body.insertBefore(canvas, ui);
+  return { canvas, poster };
+}
+
+/** The flat roll changes the view to arrival when it reaches zero. */
+function atTop() {
+  if (state.roll <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const off = bus.on('roll:change', ({ roll }) => {
+      if (roll > 0) return;
+      off();
+      resolve();
+    });
+  });
 }
 
 /**
@@ -397,15 +504,12 @@ function shallower() {
  * rather than written a third time.
  */
 function flatGestures() {
-  window.addEventListener(
-    'wheel',
-    (event) => {
-      // Past the roll the wheel belongs to whatever is being scrolled.
-      if (state.roll >= 1) return;
-      rollTo(event.deltaY > 0 ? 1 : 0);
-    },
-    { passive: true }
-  );
+  const onWheel = (event) => {
+    // Past the roll the wheel belongs to whatever is being scrolled.
+    if (state.roll >= 1) return;
+    rollTo(event.deltaY > 0 ? 1 : 0);
+  };
+  window.addEventListener('wheel', onWheel, { passive: true });
 
   const pageHasTheKey = (event) =>
     event.target === document.body || event.target === document.documentElement;
@@ -415,7 +519,7 @@ function flatGestures() {
       (node) => (node.checkVisibility ? node.checkVisibility() : node.offsetParent !== null)
     );
 
-  window.addEventListener('keydown', (event) => {
+  const onKeydown = (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
 
     if (event.key === 'Escape') {
@@ -432,7 +536,13 @@ function flatGestures() {
     if (event.key !== 'ArrowDown' && event.key !== 'PageDown') return;
     event.preventDefault();
     rollTo(1);
-  });
+  };
+  window.addEventListener('keydown', onKeydown);
+
+  return () => {
+    window.removeEventListener('wheel', onWheel);
+    window.removeEventListener('keydown', onKeydown);
+  };
 }
 
 // Nothing catches for boot(): if even the interface chunk cannot be had, the

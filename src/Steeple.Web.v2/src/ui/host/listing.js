@@ -49,6 +49,7 @@ import {
   todayIso,
   upsertPlacedVenue,
 } from '../../data/store.js';
+import { track } from '../../data/analytics.js';
 import { ACTIVITY_TYPES, CENTER, VENUES } from '../../data/venues.js';
 import { VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
@@ -474,7 +475,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     const description = el('textarea', {
       class: 'input input--area',
       id: 'place-description',
-      rows: '2',
+      rows: '3',
       placeholder: 'A parish hall and two meeting rooms, a short walk from the shops.',
       oninput: (event) => {
         draft.venue.description = event.target.value;
@@ -482,6 +483,170 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       },
     });
     description.value = draft.venue.description;
+
+    // Where the venue stands, redrawn on its own. A suggestion picked answers
+    // the address field's own question, so it must not cost the host the caret
+    // they are typing with — only this much of the step is drawn again.
+    const mark = el('div', { class: 'place__mark' });
+    const drawMark = () => replaceChildren(mark, [placedBlock(placeMark())].filter(Boolean));
+    drawMark();
+
+    // The street address suggests as it is typed. Steeple asks once the input
+    // could mean somewhere (three characters), 300ms after the last keystroke,
+    // and a suggestion picked fills all three address fields with parts the
+    // provider resolved — an address chosen here is one that geocodes.
+    function addressField() {
+      let items = [];
+      let active = -1;
+      let timer = 0;
+      let asking = null;
+
+      const list = el('ul', { class: 'suggest', id: 'place-address-suggest', role: 'listbox' });
+      list.hidden = true;
+      // Steeple being asked, said inside the field's own right edge: the room
+      // for it is reserved whether or not it shows, so nothing moves, and the
+      // CSS holds it back a quarter-second so a fast answer never flickers one.
+      const waitMark = el('span', { class: 'suggest__busy', 'aria-hidden': 'true' });
+      const input = el('input', {
+        class: 'input',
+        id: 'place-address',
+        type: 'text',
+        value: draft.venue.addressLine,
+        placeholder: '400 Maple Avenue West',
+        autocomplete: 'off',
+        role: 'combobox',
+        'aria-expanded': 'false',
+        'aria-autocomplete': 'list',
+        'aria-controls': 'place-address-suggest',
+        oninput: (event) => {
+          draft.venue.addressLine = event.target.value;
+          // The preview belongs to the address that was picked. A line edited by
+          // hand afterwards is an address nobody has resolved, so the preview
+          // goes with it rather than standing under a different address.
+          if (draft.picked) {
+            draft.picked = null;
+            drawMark();
+          }
+          renderFoot();
+          ask(event.target.value);
+        },
+        onkeydown: (event) => {
+          if (list.hidden) return;
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const step = event.key === 'ArrowDown' ? 1 : -1;
+            active = (active + step + items.length) % items.length;
+            draw();
+          } else if (event.key === 'Enter' && active >= 0) {
+            event.preventDefault();
+            pick(items[active]);
+          } else if (event.key === 'Escape') {
+            // With the list open, Escape is the list's alone — the sheet
+            // underneath must not read the same press as "leave the flow".
+            event.stopPropagation();
+            close();
+          }
+        },
+        // Delayed so a mousedown on a suggestion still lands before the list goes.
+        onblur: () => setTimeout(close, 150),
+      });
+
+      // Closed means nothing is coming: a question still in flight would
+      // otherwise answer after the press that dismissed it and open the list
+      // again, over a host who had moved on.
+      function close() {
+        clearTimeout(timer);
+        asking?.abort();
+        waiting(false);
+        items = [];
+        active = -1;
+        draw();
+      }
+
+      function waiting(on) {
+        waitMark.classList.toggle('is-on', on);
+        input.setAttribute('aria-busy', String(on));
+      }
+
+      function draw() {
+        const opening = list.hidden && items.length > 0;
+        list.hidden = items.length === 0;
+        input.setAttribute('aria-expanded', String(!list.hidden));
+        // The sheet body scrolls; a list opening near its bottom edge would be
+        // clipped until the host scrolled by hand. Once, on opening — never on
+        // the redraws that follow arrow keys.
+        if (opening) requestAnimationFrame(() => list.scrollIntoView({ block: 'nearest' }));
+        replaceChildren(
+          list,
+          items.map((s, i) =>
+            el(
+              'li',
+              {
+                class: `suggest__item${i === active ? ' suggest__item--active' : ''}`,
+                role: 'option',
+                'aria-selected': String(i === active),
+                onmousedown: (event) => {
+                  event.preventDefault();
+                  pick(s);
+                },
+              },
+              [el('span', { text: s.label })]
+            )
+          )
+        );
+      }
+
+      function pick(s) {
+        draft.venue.addressLine = s.addressLine ?? s.label;
+        if (s.suburb) draft.venue.suburb = s.suburb;
+        if (s.postcode) draft.venue.postcode = s.postcode;
+        input.value = draft.venue.addressLine;
+        const suburb = document.getElementById('place-suburb');
+        const postcode = document.getElementById('place-postcode');
+        if (suburb) suburb.value = draft.venue.suburb;
+        if (postcode) postcode.value = draft.venue.postcode;
+        // The provider resolved this suggestion to a coordinate before offering
+        // it, so where the address falls can be shown at once. It is the
+        // provider's reading and not steeple's answer — `placeMark` keeps the
+        // two apart, and nothing here is sent or stored as a position.
+        draft.picked =
+          Number.isFinite(s.latitude) && Number.isFinite(s.longitude)
+            ? { lat: s.latitude, lng: s.longitude }
+            : null;
+        track('address_suggestion_picked', {});
+        close();
+        drawMark();
+        renderFoot();
+      }
+
+      function ask(text) {
+        clearTimeout(timer);
+        asking?.abort();
+        waiting(false);
+        const q = text.trim();
+        if (q.length < 3) {
+          close();
+          return;
+        }
+        timer = setTimeout(async () => {
+          asking = new AbortController();
+          waiting(true);
+          const got = await manage.suggestAddresses(q, { signal: asking.signal });
+          // The field may have moved on while steeple was answering — and if it
+          // has, a newer question is the one being waited on, not this one.
+          if (input.value.trim() !== q) return;
+          waiting(false);
+          items = got;
+          active = -1;
+          draw();
+        }, 300);
+      }
+
+      return labelled(
+        'Street address',
+        el('div', { class: 'suggest__anchor' }, [input, waitMark, list])
+      );
+    }
 
     return [
       el('p', {
@@ -493,23 +658,44 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
           : 'Steeple puts the venue on the map from its address, so groups can see how far it is before they ask.',
       }),
       noticeBlock(),
-      el('div', { class: 'place__fields' }, [
-        field('place-name', 'name', 'Venue name', 'St Andrew’s Church'),
-        labelled('About the venue', description),
-        field('place-address', 'addressLine', 'Street address', '400 Maple Avenue West'),
-        el('div', { class: 'field__pair' }, [
-          field('place-suburb', 'suburb', 'Suburb or town', 'Vienna'),
-          field('place-postcode', 'postcode', 'ZIP code', '22180'),
+      // Two kinds of question, so two columns — the same reading as Describe.
+      // What groups read about the venue stands at the left, where the venue is
+      // stands at the right with the map under it. As one stack, a venue name
+      // was given the same long line as a paragraph about the place.
+      el('div', { class: 'place' }, [
+        el('div', { class: 'place__words' }, [
+          field('place-name', 'name', 'Venue name', 'St Andrew’s Church'),
+          labelled('About the venue', description),
+        ]),
+        el('div', { class: 'place__where' }, [
+          addressField(),
+          el('div', { class: 'field__pair' }, [
+            field('place-suburb', 'suburb', 'Suburb or town', 'Vienna'),
+            field('place-postcode', 'postcode', 'ZIP code', '22180'),
+          ]),
+          mark,
         ]),
       ]),
-      placedBlock(),
     ];
   }
 
-  /** Where steeple put it, once steeple has said. Quiet, and only then. */
-  function placedBlock() {
-    const at = draft.remote.position;
-    if (!at) return null;
+  /** Steeple's own answer for where the venue stands, when it has given one. */
+  const savedMark = () =>
+    draft.remote.position ? { at: draft.remote.position, sure: true } : null;
+
+  /**
+   * What the Place step can honestly draw. Steeple's answer whenever there is
+   * one — it is what the map is showing the world. Failing that, the coordinate
+   * the provider attached to the suggestion the host picked, which is a preview
+   * of where that address falls and is never called more than that. An address
+   * typed and left unpicked has no coordinate at all, and is not guessed at.
+   */
+  const placeMark = () => savedMark() ?? (draft.picked ? { at: draft.picked, sure: false } : null);
+
+  /** Where the venue stands, once somebody can say. Quiet, and only then. */
+  function placedBlock(mark = savedMark()) {
+    if (!mark) return null;
+    const { at, sure } = mark;
     const plan = el('div', { class: 'plan plan--still', 'aria-hidden': 'true' });
     for (const venue of VENUES) {
       const spot = toPlan(venue.lat, venue.lng);
@@ -524,13 +710,15 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     pin.style.top = `${Math.min(100, Math.max(0, here.y * 100))}%`;
     plan.append(el('span', { class: 'plan__north', text: 'N' }), pin);
 
-    return el('section', { class: 'placed' }, [
+    return el('section', { class: `placed${sure ? '' : ' placed--soft'}` }, [
       plan,
       el('div', { class: 'placed__words' }, [
-        el('p', { class: 'eyebrow', text: 'On the map' }),
+        el('p', { class: 'eyebrow', text: sure ? 'On the map' : 'About here' }),
         el('p', {
           class: 'prose prose--sm',
-          text: `Steeple found the address ${bearingLine(at.lat, at.lng)}. Everyone browsing sees it there.`,
+          text: sure
+            ? `Steeple found the address ${bearingLine(at.lat, at.lng)}. Everyone browsing sees it there.`
+            : `From the address you picked, ${bearingLine(at.lat, at.lng)}. Steeple confirms the exact spot when the venue is saved.`,
         }),
         el('p', {
           class: 'field__hint',
@@ -1470,6 +1658,9 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
         // does not confer one, and this browser cannot award itself a fact.
         verified: venue.verified === true,
         remote: { venueId: venue.remoteId ?? null, roomId: room?.remoteId ?? null, position: null },
+        // Where the address the host last picked from the suggestions falls —
+        // the provider's reading, shown as a preview until steeple answers.
+        picked: null,
         venue: {
           name: venue.name,
           description: venue.description ?? '',
@@ -1511,6 +1702,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
         offline: null,
         verified: manage.signedIn(),
         remote: { venueId: null, roomId: null, position: null },
+        picked: null,
         venue: { name: '', description: '', addressLine: '', suburb: '', postcode: '' },
         room: blankRoom(),
       };
@@ -1541,6 +1733,9 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     (event) => {
       if (element.hidden || event.key !== 'Escape') return;
       if (document.querySelector('.modal__layer:not([hidden])')) return;
+      // The open address-suggestion list is a layer of its own too: that press
+      // closes the list (the field's handler), never the flow underneath it.
+      if (document.querySelector('.suggest:not([hidden])')) return;
       event.stopPropagation();
       event.preventDefault();
       close();

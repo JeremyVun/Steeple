@@ -74,6 +74,14 @@ const churchIcon = (venue) =>
  */
 const FASTER = 1.3;
 
+// A compass mark for the near-me control: ringed dot, four ticks.
+const LOCATE_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+  '<circle cx="8" cy="8" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/>' +
+  '<circle cx="8" cy="8" r="1.4" fill="currentColor"/>' +
+  '<path d="M8 .8v2.4M8 12.8v2.4M.8 8h2.4M12.8 8h2.4" fill="none" stroke="currentColor" ' +
+  'stroke-width="1.5" stroke-linecap="round"/></svg>';
+
 export function createAtlas() {
   const element = el('div', { class: 'dm-map', role: 'application', 'aria-label': 'Map of the five venues. Drag to pan, scroll to zoom.' });
 
@@ -161,6 +169,56 @@ export function createAtlas() {
   map.on('zoomend', () => {
     if (performance.now() > framingUntil) track('map_interacted', { kind: 'zoom' });
   });
+
+  // ── near me ────────────────────────────────────────────────────────────────
+  //
+  // One press frames the map where the device says you are. No pin is planted —
+  // the header's rule stands: the map answers where the venues are, and a
+  // "you are here" dot would dress straight-line guesswork as an answer. The
+  // move it makes is the visitor's own: claimed like a hand pan, so the
+  // roster's next answer never reframes it away.
+  if (navigator.geolocation) {
+    const locate = L.control({ position: 'topright' });
+    locate.onAdd = () => {
+      const go = el('a', {
+        class: 'dm-locate__go',
+        href: '#',
+        role: 'button',
+        title: 'Near me',
+        'aria-label': 'Zoom to where you are',
+      });
+      go.innerHTML = LOCATE_ICON; // hand-written markup, never data
+      const bar = el('div', { class: 'leaflet-bar dm-locate' }, go);
+      L.DomEvent.disableClickPropagation(bar);
+      go.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (bar.classList.contains('is-waiting')) return;
+        bar.classList.add('is-waiting');
+        navigator.geolocation.getCurrentPosition(
+          ({ coords }) => {
+            bar.classList.remove('is-waiting');
+            framingUntil = performance.now() + 1600;
+            ownPan = true;
+            map.flyTo([coords.latitude, coords.longitude], Math.max(map.getZoom(), 14), {
+              animate: !state.reducedMotion,
+              duration: 1.2,
+            });
+            track('map_interacted', { kind: 'locate' });
+          },
+          () => {
+            // Refused or unreadable: the control says so where its name is
+            // read, and the next press asks again — permissions change.
+            bar.classList.remove('is-waiting');
+            go.setAttribute('title', 'Location is off for this site');
+            go.setAttribute('aria-label', 'Zoom to where you are — location is off for this site');
+          },
+          { timeout: 8000, maximumAge: 60000 }
+        );
+      });
+      return bar;
+    };
+    locate.addTo(map);
+  }
 
   function frameChurches({ animate = false } = {}) {
     framingUntil = performance.now() + (animate ? 900 : 80);
@@ -324,6 +382,48 @@ export function createAtlas() {
     map,
     /** The Leaflet map only knows its size once the panel has one. */
     resize: () => frameChurches(),
+    /**
+     * Frame a set of answer points — the venues a chosen suburb matched. An
+     * explicit ask, so it overrides any pan the visitor made earlier; the view
+     * it lands is then treated as theirs (roster growth must not pull back to
+     * the whole area behind it). Capped short of street level so one lone
+     * venue still shows its surroundings.
+     *
+     * The travel is flown, not cut: fitBounds only tweens a short hop and
+     * teleports past that, and a place changing under someone with no journey
+     * between here and there reads as a different map, not a moved one.
+     */
+    frameTo(points, { animate = !state.reducedMotion } = {}) {
+      const next = L.latLngBounds(points);
+      if (!next.isValid()) return;
+      map.invalidateSize({ animate: false });
+      const fit = {
+        paddingTopLeft: [PADDING[0], PADDING[1] + covered.top],
+        paddingBottomRight: [PADDING[0], PADDING[1] + covered.bottom],
+        maxZoom: 15,
+      };
+      framingUntil = performance.now() + (animate ? 2200 : 80);
+      if (animate) map.flyToBounds(next, fit);
+      else map.fitBounds(next, { ...fit, animate: false });
+      ownPan = true;
+    },
+    /**
+     * The way back out of a suburb: fly home to the whole area's framing.
+     * Same glide as frameTo; afterwards the view is the module's default
+     * again, free to grow with the roster.
+     */
+    flyHome({ animate = !state.reducedMotion } = {}) {
+      if (!bounds.isValid()) return;
+      map.invalidateSize({ animate: false });
+      const fit = {
+        paddingTopLeft: [PADDING[0], PADDING[1] + covered.top],
+        paddingBottomRight: [PADDING[0], PADDING[1] + covered.bottom],
+      };
+      framingUntil = performance.now() + (animate ? 2200 : 80);
+      if (animate) map.flyToBounds(bounds, fit);
+      else map.fitBounds(bounds, { ...fit, animate: false });
+      ownPan = false;
+    },
     /** A new page shape, but the visitor's own pan and zoom are theirs to keep. */
     remeasure: () => map.invalidateSize({ animate: false }),
     frameChurches,

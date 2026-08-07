@@ -286,6 +286,12 @@ circle, paper `title` count. One pre-rasterized bitmap per state (MOBILE_DESIGN 
   saved results". Non-blocking (MOBILE_DESIGN §5 offline stance).
 - **Snackbar/toast:** ink bg (dark: surfaceRaised), paper text, pill, bottom-floating;
   one at a time; only for transient confirmations ("Application withdrawn").
+- **In-field waiting mark (typeahead/inline request):** 13px ring inside the field's right
+  edge — `borderStrong` ring, `link` leading arc, 760ms linear spin. The field always
+  reserves the room for it, so it costs zero layout shift; it is held invisible for 260ms
+  after the request starts and hides the instant the answer lands, so a fast answer never
+  flickers one. Reduced motion drops the spin, not the mark. Web: `.suggest__busy.is-on`
+  (address autocomplete, host Place step).
 
 ### 8.8 Navigation chrome (mobile)
 

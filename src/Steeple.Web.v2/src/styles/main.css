@@ -96,7 +96,6 @@ body {
 #ui a,
 .sheet,
 .nav,
-.scenery,
 .porch {
   pointer-events: auto;
 }
@@ -104,7 +103,6 @@ body {
 /* Anything the visitor cannot see must not be in the way of the pointer. */
 .arrival:not(.is-open),
 .nav:not(.is-open),
-.scenery:not(.is-open),
 .porch:not(.is-open) {
   visibility: hidden;
   pointer-events: none;
@@ -197,12 +195,6 @@ body {
 
 .browse .porch {
   top: 19px;
-}
-
-/* Without a village there is no scenery to choose between, and an instrument
-   that changes nothing is worse than one that is not there (?world=off). */
-:root[data-world='off'] .scenery {
-  display: none;
 }
 
 /* ── Browse ambience ────────────────────────────────────────────────────────
@@ -601,6 +593,20 @@ body {
 
 .pill:active {
   transform: translateY(1px);
+}
+
+/* A pill that cannot be pressed does not pretend it can. */
+.pill:disabled {
+  cursor: default;
+  transform: none;
+}
+
+/* DESIGN_SYSTEM §8.1: disabled = borderStrong fill, tertiary label, any variant. */
+.pill--primary:disabled,
+.pill--primary:disabled:hover {
+  background: var(--line-strong);
+  border-color: var(--line-strong);
+  color: var(--ink-faint);
 }
 
 .pill--primary,
@@ -1013,31 +1019,7 @@ body {
   color: var(--line-strong);
 }
 
-/* ── Scenery switcher ───────────────────────────────────────────────────── */
-
-/* Both edges of the page are spoken for — discovery on the left, the property
-   sheet on the right — so the exploration flags stand under the world itself. */
-.scenery {
-  position: fixed;
-  z-index: 2;
-  left: 50%;
-  bottom: 26px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  opacity: 0;
-  transform: translate(-50%, 8px);
-  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
-    visibility 0s linear var(--dur);
-}
-
-.scenery.is-open {
-  opacity: 1;
-  transform: translate(-50%, 0);
-  visibility: visible;
-  transition-delay: 0s;
-}
+/* ── Segmented controls (host surfaces build on these) ──────────────────── */
 
 .segments {
   display: inline-flex;
@@ -1048,11 +1030,6 @@ body {
   border-radius: var(--radius-pill);
   background: var(--paper-sheet);
   box-shadow: var(--shadow-chip);
-}
-
-.segments__label {
-  margin-right: 5px;
-  font-size: 9.5px;
 }
 
 .segment {
@@ -1079,8 +1056,8 @@ body {
 }
 
 /* ── The printed layer's stacking order, said once ──────────────────────────
-   The browse surface is the page (z 1, set with .browse). The title sheet and
-   the scenery switch lie over it while the roll is still up top; a letter, a
+   The browse surface is the page (z 1, set with .browse). The title sheet
+   lies over it while the roll is still up top; a letter, a
    desk or a listing lies over all of it; the demo modal over everything. */
 
 .guest,
@@ -1376,6 +1353,11 @@ body {
 
   .account__who {
     display: none;
+  }
+
+  /* Signed out there is no monogram to keep — the word is the whole button. */
+  .account__wrap.is-out .account__who {
+    display: inline;
   }
 
   .account__mark {

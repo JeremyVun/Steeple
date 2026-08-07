@@ -14,3 +14,4 @@ media-store/
 dev-mailbox/
 runs/
 .DS_Store
+*.p8

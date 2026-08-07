@@ -23,7 +23,7 @@ public interface IRatingRepository
         Guid venueId, CancellationToken ct = default);
 
     /// <summary>Returns whether the venue currently has at least one public room inside the beachhead.</summary>
-    Task<bool> VenueHasPublishedRoomInBeachheadAsync(
+    Task<bool> VenueHasPublishedRoomInAreaAsync(
         Guid venueId, BoundingBox beachhead, CancellationToken ct = default);
 
     /// <summary>Adds a rating. Returns false when the booking already has that ratee direction.</summary>

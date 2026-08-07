@@ -28,6 +28,7 @@
 
 import {
   API,
+  agreeCurrent,
   apiIsUp,
   call,
   closeBrowsers,
@@ -76,6 +77,13 @@ const host = await mintVenue({
 // only stop §5 and §6 before the thing they are measuring.
 const guest = await mintGuest({ email: `hard-guest-${stamp}@example.org`, name: 'Nell Hardy' });
 const waiting = await mintGuest({ email: `hard-slow-${stamp}@example.org`, name: 'Wilf Slow' });
+
+// Minted accounts agree up front (the documented practice) — since 2026-08-07
+// the ask is a gate that rises over an un-agreed session's work, which is §6's
+// sheet mid-composition. `guest` deliberately does not: §4's subject is the
+// un-agreed state, and its "nothing recorded before it is pressed" depends on it.
+await agreeCurrent(host.token);
+await agreeCurrent(waiting.token);
 
 const browser = await launch();
 

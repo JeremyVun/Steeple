@@ -41,6 +41,21 @@ Recorded, deliberately not built — each needs an owner decision or a gated tri
   `?goto=` deep link reads its booking twice (judgment call left open); map/search paging
   is unbuilt — one page of 100, a venue beyond it has no pin or row (its sheet works by
   slug). Fix when touching the owning surface.
+- **Going beyond the beachhead is a product decision; the interfaces are now in place
+  (2026-08-07).** Owner intent on record: the single NoVA beachhead is a release strategy
+  for product-market fit, not the product's shape. The seams are ready — `IGeofencePolicy`
+  is the area-neutral served-area port (every clamp/rejection flows through it; swap the
+  implementation to serve more areas), the search wire already speaks center+radius /
+  viewport and echoes `appliedBounds` (= the client's "not served here" detector), venues
+  carry lat/lng + host-set IANA timezones, and geocoding country scope is
+  `Geocoding:LimitToCountries` (empty = worldwide; `Geocoding:Region` empty = no state
+  token). What the *decision* still buys before any new area opens: per-user/area
+  geocoding bias (IP country or client hint instead of one configured centre), currency
+  beyond the wire's existing `currency` field (pricing/payout are single-currency in
+  practice), search paging past one page of 100, out-of-area honesty copy in the clients
+  (today: silently empty), Where-box locality autocomplete (needs distance-ordered geo
+  search to be worth offering), Apple Maps quota if suggestions ever go on a public
+  surface, and Admin review capacity per new area.
 - **The booking race can deadlock instead of losing cleanly** (found by the sweep, once,
   under full-suite parallel load; `CounterOfferRaceTests` reproduces it rarely). Two
   simultaneous booking transactions each insert an occurrence and each GiST

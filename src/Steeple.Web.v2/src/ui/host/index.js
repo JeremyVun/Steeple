@@ -98,14 +98,20 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     askToSignIn,
     onChanged: () => desk.render(),
     onClose: () => {
-      setOpen(desk.element, state.view === 'desk' && state.mode === 'host');
+      // A close with no venue behind it is leaving hosting, not arriving at a
+      // desk — there is no desk to come back to, only the village.
+      setOpen(desk.element, state.view === 'desk' && state.mode === 'host' && Boolean(deskVenue()));
       setOpen(letterPage.element, state.view === 'letter' && state.mode === 'host');
       // A host who has just listed a venue is keeping that venue's door now,
       // so the desk they come back to is its own — and steeple is asked again,
       // because a venue that did not exist a minute ago is one of theirs now.
       readDesk({ again: true }).then(() => {
         const listed = deskVenue();
-        if (state.view === 'desk' && listed && listed !== state.venueId) {
+        if (!listed) {
+          if (state.mode === 'host') setView('village');
+          return;
+        }
+        if (state.view === 'desk' && listed !== state.venueId) {
           setView('desk', { venueId: listed });
         }
         desk.render();
@@ -200,7 +206,6 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     read = false;
     if (!held) {
       desk.setReading(false);
-      wanted = false;
       // Hosting belongs to whoever was signed in. Signing out leaves it, and
       // leaves it empty — a desk must never outlive the session that earned it.
       //
@@ -211,10 +216,6 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
         setMode('guest');
         setView('village');
       }
-      return;
-    }
-    if (wanted) {
-      enterHosting();
       return;
     }
     if (state.mode === 'host') readDesk().then(render);
@@ -248,12 +249,13 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     // request at all, and the first thing a desk owes them is what is confirmed.
     desk.setTab('bookings');
     if (!session.isSignedIn()) {
-      wanted = true;
       announce?.('Sign in to list a space.');
-      askToSignIn?.();
+      // Carried on only when the panel's whole question is answered — signed in
+      // *and* agreed. On the raw session event, the flow opened behind the
+      // agreement ask and outlived "Not now — sign out" (2026-08-07).
+      askToSignIn?.(() => enterHosting());
       return;
     }
-    wanted = false;
     readDesk().then(() => {
       if (!session.isSignedIn()) return;
       const venueId = deskVenue();
@@ -265,9 +267,6 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       setView('desk', { venueId });
     });
   }
-
-  /** Somebody pressed the switch while signed out; carry them on afterwards. */
-  let wanted = false;
 
   // Switching instrument redraws the desk and nothing else on the page.
   bus.on('desk:change', ({ desk: next }) => {
@@ -338,6 +337,15 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     if ((isDesk || isLetter) && !session.isSignedIn() && !listing.isOpen()) {
       queueMicrotask(() => {
         if (session.isSignedIn() || !HOST_VIEWS.has(state.view) || listing.isOpen()) return;
+        // Asking for the desk while signed out — the title page's "Host a
+        // space", a cold `#/desk` — is the porch switch's first case and gets
+        // its answer: the way in is signing in, and the press is held so once
+        // is enough. A letter is one person's correspondence; it just goes
+        // back to the map.
+        if (state.view === 'desk') {
+          announce?.('Sign in to list a space.');
+          askToSignIn?.(() => enterHosting());
+        }
         setMode('guest');
         setView('village');
       });

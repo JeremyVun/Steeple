@@ -64,6 +64,14 @@ services:
       Auth__Google__ClientIds__0: "${GOOGLE_CLIENT_ID:-}"
       Auth__Apple__ClientIds__0: "${APPLE_SERVICES_ID:-}"
       Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
+      # Apple Maps Server credentials (geocoding + address typeahead). All three or none:
+      # partial credentials fall back to the Google key, then the dev stub.
+      # APPLE_MAPS_PRIVATE_KEY is the .p8 body as one base64 line (strip the PEM armor).
+      Geocoding__AppleTeamId: "${APPLE_MAPS_TEAM_ID:-}"
+      Geocoding__AppleKeyId: "${APPLE_MAPS_KEY_ID:-}"
+      Geocoding__ApplePrivateKey: "${APPLE_MAPS_PRIVATE_KEY:-}"
+      # ISO country codes suggestions/geocoding are limited to; empty = worldwide.
+      Geocoding__LimitToCountries: "${GEOCODING_LIMIT_COUNTRIES:-US}"
       # Media (ROADMAP Phase 5): without Spaces settings (MEDIA_* below) uploads land on the
       # local-disk store and the API serves them itself at /media — which is why the api
       # publishes a loopback port here (browsers must reach the photo URLs). Production
@@ -107,6 +115,13 @@ services:
     build:
       context: .
       dockerfile: src/Steeple.Web.v2/Dockerfile
+      # Baked into the bundle at build time — the same .env names the api service
+      # reads, so one entry keys both sides (sso-and-turnstile.md: "both or neither").
+      args:
+        VITE_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+        VITE_APPLE_CLIENT_ID: "${APPLE_SERVICES_ID:-}"
+        VITE_APPLE_REDIRECT_URI: "${APPLE_REDIRECT_URI:-}"
+        VITE_TURNSTILE_SITE_KEY: "${TURNSTILE_SITE_KEY:-}"
     ports:
       - "${WEB_PORT:-8080}:8080"
     depends_on:

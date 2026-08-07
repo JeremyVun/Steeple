@@ -320,6 +320,10 @@ export function createComposer({ announce, onSent, onLeave }) {
   const scheduleNote = el('p', { class: 'field__note' });
 
   const errors = el('div', { class: 'letter__errors', role: 'status' });
+  // Why the send is not ready yet, said quietly: one thing at a time, in the
+  // store's own words. Nothing is wrong until a send is attempted, so this is
+  // never red — it is the button's caption, not a scolding.
+  const unready = el('p', { class: 'letter__unready' });
   const send = el('button', { type: 'submit', class: 'pill pill--primary pill--wide' }, 'Send request');
 
   // A venue that books instantly is not being asked a question, so the button
@@ -661,8 +665,15 @@ export function createComposer({ announce, onSent, onLeave }) {
 
   function renderFoot(problem) {
     if (problem !== undefined) refusal = problem ?? '';
-    if (!sending) send.textContent = sendLabel();
     const result = validate();
+    // A request that is not ready yet cannot be sent, and the button says so by
+    // being still — with the one thing it is waiting for printed beside it.
+    if (!sending) {
+      send.textContent = sendLabel();
+      send.disabled = !result.ok;
+    }
+    unready.textContent = result.ok ? '' : (Object.values(result.errors)[0] ?? '');
+    unready.hidden = result.ok;
     intentNote.textContent = fieldError('intentText') ?? '';
     activityNote.textContent = fieldError('activityType') ?? '';
     sizeNote.classList.toggle('is-wrong', Boolean(fieldError('groupSize')));
@@ -700,6 +711,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       // of asking for it — the only place a summary is worth the room.
       summary,
       errors,
+      unready,
       send,
     ]);
   }

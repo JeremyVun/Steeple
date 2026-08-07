@@ -145,6 +145,33 @@
   margin: 14px 14px 0 0;
 }
 
+/* Near me: one square under the zoom stack, same bar language. */
+.dm-map .dm-locate {
+  margin: 8px 14px 0 0;
+}
+
+.dm-map .dm-locate__go {
+  display: grid;
+  place-items: center;
+}
+
+.dm-map .dm-locate.is-waiting .dm-locate__go {
+  color: var(--terracotta-deep);
+  animation: dm-locate-pulse 1.1s var(--ease) infinite;
+}
+
+@keyframes dm-locate-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dm-map .dm-locate.is-waiting .dm-locate__go {
+    animation: none;
+  }
+}
+
 /* ── pins ───────────────────────────────────────────────────────────────── */
 
 .dm-pin {

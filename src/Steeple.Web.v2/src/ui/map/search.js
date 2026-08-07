@@ -170,7 +170,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     if (token !== run) return; // a later question has already been asked
     paint();
     publish(items);
-    onResults(items);
+    onResults(items, { suburb: query.suburb });
     clearTimeout(announceTimer);
     announceTimer = setTimeout(() => announce(`${resultLine(items)}.`), 350);
   }

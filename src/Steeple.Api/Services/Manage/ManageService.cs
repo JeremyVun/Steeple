@@ -50,6 +50,22 @@ public sealed class ManageService : IManageService
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<AddressSuggestionDto>> SuggestAddressesAsync(string query, CancellationToken ct = default)
+    {
+        var text = (query ?? "").Trim();
+        if (text.Length < 3)
+        {
+            return [];
+        }
+
+        var suggestions = await _geocoding.AutocompleteAsync(text, ct).ConfigureAwait(false);
+        return suggestions
+            .Take(6)
+            .Select(s => new AddressSuggestionDto(s.Label, s.Latitude, s.Longitude, s.AddressLine, s.Suburb, s.Postcode))
+            .ToList();
+    }
+
+    /// <inheritdoc />
     public async Task<ManageResult<ManagedVenueDetailDto>> GetVenueAsync(Guid callerId, Guid venueId, CancellationToken ct = default)
     {
         var (venue, error) = await LoadScopedVenueAsync(callerId, venueId, ct).ConfigureAwait(false);
@@ -88,7 +104,7 @@ public sealed class ManageService : IManageService
 
         var venueType = FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) ?? VenueType.Church;
 
-        var location = await GeocodeInsideBeachheadAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
+        var location = await GeocodeInServedAreaAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
         if (location.Error is not null)
         {
             return new ManageResult<CreateOutcome<ManagedVenueDetailDto>>(null, location.Error);
@@ -184,7 +200,7 @@ public sealed class ManageService : IManageService
 
         if (addressChanged)
         {
-            var location = await GeocodeInsideBeachheadAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
+            var location = await GeocodeInServedAreaAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
             if (location.Error is not null)
             {
                 return new ManageResult<ManagedVenueDetailDto>(null, location.Error);
@@ -624,10 +640,14 @@ public sealed class ManageService : IManageService
         return (room, null);
     }
 
-    private async Task<(GeoPoint? Point, ManageError? Error)> GeocodeInsideBeachheadAsync(
+    private async Task<(GeoPoint? Point, ManageError? Error)> GeocodeInServedAreaAsync(
         string addressLine, string suburb, string postcode, CancellationToken ct)
     {
-        var address = $"{addressLine}, {suburb}, {_geocodingOptions.Region} {postcode}";
+        // Region is a config hint (a US state token today); an area with no such token
+        // configures it empty and the address is sent without one.
+        var regionAndPostcode = $"{_geocodingOptions.Region} {postcode}".Trim();
+        var address = string.Join(", ",
+            new[] { addressLine, suburb, regionAndPostcode }.Where(part => part.Length > 0));
         var point = await _geocoding.GeocodeAsync(address, ct).ConfigureAwait(false);
         if (point is null)
         {
@@ -636,7 +656,7 @@ public sealed class ManageService : IManageService
                 "We couldn't find that address — check the street, suburb, and ZIP."));
         }
 
-        if (!_geofence.IsWithinBeachhead(point.Value.Latitude, point.Value.Longitude))
+        if (!_geofence.IsServed(point.Value.Latitude, point.Value.Longitude))
         {
             return (null, new ManageError(
                 ManageErrorCodes.GeofenceRejected,

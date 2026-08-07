@@ -14,7 +14,12 @@ Query: `centerLat, centerLng, radiusMeters` **or** `minLat/maxLat/minLng/maxLng`
 `amenities=parking`). **Matching semantics:** repeated values combine into one bitmask
 and a room matches only if it accepts/provides **all** requested values (AND — deliberate:
 "accepts children AND music", "has step-free access AND accessible restroom"). Geofence
-clamps all input to the beachhead (out-of-area → empty result, never an error).
+clamps all input to the served area (out-of-area → empty result, never an error). A client
+that wants to *say* "not served here" can already detect the clamp without a wire change:
+compare the bounds it asked for with the `appliedBounds` the response echoes back. The
+served area is one configured beachhead today by policy, not by contract — the geo query
+shape (center+radius / viewport) is the go-global interface, already live
+(SYSTEM_DESIGN §17, 2026-08-07; serving more areas evolves `GET /geofence` additively).
 
 Response `ListingSearchResult`:
 ```jsonc

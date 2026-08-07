@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Proxies;
@@ -37,29 +38,34 @@ public sealed class GoogleGeocodingGateway : IGeocodingGateway
             using var response = await _http.GetAsync(url, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
-            var status = doc.RootElement.GetProperty("status").GetString();
-            if (status != "OK")
+            var body = await response.Content.ReadFromJsonAsync<GeocodingResponse>(cancellationToken: ct)
+                .ConfigureAwait(false);
+            if (body is null)
+            {
+                _logger.LogWarning("Google geocoding returned an empty response.");
+                return null;
+            }
+
+            if (body.Status != "OK")
             {
                 // ZERO_RESULTS is a normal user-typo outcome; anything else is worth a warning.
-                if (status != "ZERO_RESULTS")
+                if (body.Status != "ZERO_RESULTS")
                 {
-                    _logger.LogWarning("Google geocoding returned status {Status}.", status);
+                    _logger.LogWarning("Google geocoding returned status {Status}.", body.Status);
                 }
 
                 return null;
             }
 
-            var location = doc.RootElement
-                .GetProperty("results")[0]
-                .GetProperty("geometry")
-                .GetProperty("location");
+            if (body.Results is not [{ Geometry.Location: { Lat: double latitude, Lng: double longitude } }, ..])
+            {
+                _logger.LogWarning("Google geocoding returned OK with no resolved location.");
+                return null;
+            }
 
-            return new GeoPoint(
-                location.GetProperty("lat").GetDouble(),
-                location.GetProperty("lng").GetDouble());
+            return new GeoPoint(latitude, longitude);
         }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or KeyNotFoundException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or TaskCanceledException)
         {
             _logger.LogWarning(ex, "Google geocoding call failed.");
             return null;
@@ -70,4 +76,34 @@ public sealed class GoogleGeocodingGateway : IGeocodingGateway
     public Task<IReadOnlyList<AddressSuggestion>> AutocompleteAsync(string text, CancellationToken ct = default) =>
         // Search-box autocomplete is a later, separately-metered Places concern (SYSTEM_DESIGN §10).
         Task.FromResult<IReadOnlyList<AddressSuggestion>>([]);
+
+    private sealed class GeocodingResponse
+    {
+        [JsonPropertyName("status")]
+        public string? Status { get; init; }
+
+        [JsonPropertyName("results")]
+        public List<GeocodingResult>? Results { get; init; }
+    }
+
+    private sealed class GeocodingResult
+    {
+        [JsonPropertyName("geometry")]
+        public Geometry? Geometry { get; init; }
+    }
+
+    private sealed class Geometry
+    {
+        [JsonPropertyName("location")]
+        public Location? Location { get; init; }
+    }
+
+    private sealed class Location
+    {
+        [JsonPropertyName("lat")]
+        public double? Lat { get; init; }
+
+        [JsonPropertyName("lng")]
+        public double? Lng { get; init; }
+    }
 }

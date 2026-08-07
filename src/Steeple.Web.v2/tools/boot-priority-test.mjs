@@ -233,9 +233,47 @@ try {
     const after = await s.resources();
     check('the catalog was asked, and answered', after.some((n) => /\/api\/v1\/listings\/search/.test(n)));
     check('map tiles were fetched', after.some((n) => /tile\.openstreetmap\.org/.test(n)));
-    check('no engine, world, journey or three, for the whole visit', noWorld(after));
+    check('no engine, world, journey or three before a return', noWorld(after));
     check('the debug API agrees there is no world', await s.page.evaluate(
       () => window.__steeple.engine === null && window.__steeple.world === null
+    ));
+
+    // The flat visit is not a dead end. Going back restores the cheap opening
+    // frame at once, then raises the live village only because it was asked for.
+    await s.press('.wordmark');
+    check('returning restores the poster synchronously', await s.page.evaluate(
+      () => Boolean(document.getElementById('poster'))
+    ));
+    await s.page.waitForFunction('__steeple.state.roll === 0', { timeout: 30000 });
+    check('the return lands on the arrival', (await s.view()) === 'arrival');
+
+    // They may change their mind before the world finishes building. A late
+    // engine must adopt the current product position and do zero hidden work.
+    await s.press('.arrival__cta');
+    await s.page.waitForFunction('__steeple.state.roll === 1', { timeout: 30000 });
+    await s.page.waitForFunction('__steeple.engine !== null', { timeout: 90000 });
+    check('a late engine stays paused if the visitor already went back down', await s.page.evaluate(
+      () => __steeple.engine.running === false
+    ));
+    await s.press('.wordmark');
+    await s.page.waitForFunction('__steeple.state.roll === 0', { timeout: 30000 });
+    await s.page.waitForFunction(
+      '__steeple.engine !== null && document.getElementById("scene")?.classList.contains("is-live")',
+      { timeout: 90000 }
+    );
+    check('the village is hydrated only after that return', await s.page.evaluate(
+      () => __steeple.world !== null && document.documentElement.dataset.world === 'on'
+    ));
+    await s.page.evaluate(() => { window.__hydratedEngine = __steeple.engine; });
+    await s.press('.arrival__cta');
+    await s.page.waitForFunction('__steeple.state.roll === 1', { timeout: 30000 });
+    check('the hydrated engine pauses back in the product', await s.page.evaluate(
+      () => __steeple.engine.running === false
+    ));
+    await s.press('.wordmark');
+    await s.page.waitForFunction('__steeple.state.roll === 0', { timeout: 30000 });
+    check('later returns reuse that engine rather than remounting it', await s.page.evaluate(
+      () => __steeple.engine === window.__hydratedEngine && __steeple.engine.running === true
     ));
     check('no page error along the way', s.errors.length === 0, s.errors.join(' · '));
     await s.close();

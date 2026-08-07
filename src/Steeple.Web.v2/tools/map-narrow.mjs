@@ -47,6 +47,24 @@ const rect = (selector) =>
     return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), bottom: Math.round(r.bottom) };
   }, selector);
 
+/** A sheet scrolled to its own end: does it stand on the foot of the page, and
+ *  is its last line above the fold? A sheet whose box hangs below the window
+ *  looks perfectly normal and cannot be read to the end (§9). */
+const foot = (selector) =>
+  page.evaluate((s) => {
+    const sheet = document.querySelector(s);
+    const tail = sheet.querySelector('.sheet__body').lastElementChild;
+    sheet.scrollTo(0, 99999);
+    return {
+      hangsBelow: Math.round(sheet.getBoundingClientRect().bottom - window.innerHeight),
+      lifted: document.querySelector('.rail').classList.contains('is-lifted'),
+      transform: sheet.style.transform || '',
+      at: sheet.scrollTop,
+      max: sheet.scrollHeight - sheet.clientHeight,
+      cut: Math.round(tail.getBoundingClientRect().bottom - window.innerHeight),
+    };
+  }, selector);
+
 const detent = () => page.evaluate('document.querySelector(".dm-panel").dataset.detent');
 const said = () => page.evaluate('document.getElementById("a11y").textContent');
 const roll = () => page.evaluate('__steeple.state.roll');
@@ -74,8 +92,8 @@ async function shot(name) {
 }
 
 /** One finger, on the handle, moved and let go — with a frame taken mid-way. */
-async function dragHandle(dy, { steps = 10, hold = 26, snapAt = null, snapName = '' } = {}) {
-  const grab = await rect('.dm-grab');
+async function dragHandle(dy, { steps = 10, hold = 26, snapAt = null, snapName = '', on = '.dm-grab' } = {}) {
+  const grab = await rect(on);
   const x = grab.x + grab.w / 2;
   const y = grab.y + grab.h / 2;
   await page.touchscreen.touchStart(x, y);
@@ -205,6 +223,117 @@ check(
   await page.evaluate('document.querySelector(".sheet--room .sheet__up").textContent')
 );
 await shot(`${w}x${h}-room`);
+
+// ── 8. the handle pulls both ways, and the sheet reads as one page ─────────
+// The handle used to be a one-way door: it put the sheet down and nothing else,
+// so the band of map was a wall you could not get past on a long listing. It
+// stands in two places now (ui/rail.js), and the sheet scrolls whole — the
+// photograph and the name go up with the reading, not just the part under them.
+const resting = await rect('.sheet--room');
+const scrolls = () =>
+  page.evaluate(() => {
+    const sheet = document.querySelector('.sheet--room');
+    const body = sheet.querySelector('.sheet__body');
+    const over = (n) => n.scrollHeight - n.clientHeight;
+    return { sheet: over(sheet), body: over(body), at: sheet.scrollTop };
+  });
+
+check('the sheet itself is the page that scrolls', (await scrolls()).sheet > 40, JSON.stringify(await scrolls()));
+check('...not a body scrolling under a fixed head', (await scrolls()).body === 0, JSON.stringify(await scrolls()));
+
+const headTop = () => rect('.sheet--room .dm-banner--hero').then((r) => r.y);
+const before = await headTop();
+await page.evaluate('document.querySelector(".sheet--room").scrollBy(0, 200)');
+await wait(400);
+check('the photograph goes up with the reading', (await headTop()) < before - 100, `hero ${before} → ${await headTop()}`);
+check('...and the handle stays put, the way back out of it', (await rect('.sheet--room .sheet__grab')).y <= resting.y + 2, JSON.stringify(await rect('.sheet--room .sheet__grab')));
+const roomEnd = await foot('.sheet--room');
+check('the room sheet stands on the foot of the page', roomEnd.hangsBelow === 0, JSON.stringify(roomEnd));
+check('...so its last line can be read', roomEnd.cut <= 0, JSON.stringify(roomEnd));
+await page.evaluate('document.querySelector(".sheet--room").scrollTo(0, 0)');
+await wait(300);
+
+await dragHandle(-260, { on: '.sheet--room .sheet__grab', snapAt: 6, snapName: `${w}x${h}-room-lifting` });
+const raised = await rect('.sheet--room');
+check('a pull up gives the sheet the whole page', raised.y < resting.y - 120, `sheet top ${resting.y} → ${raised.y}`);
+check('...all the way to the top line, and no further', raised.y > 20 && raised.y < 100, `sheet top ${raised.y}`);
+check('...so more of the listing can be read at once', (await scrolls()).sheet < 40 || raised.h > resting.h + 120, `${resting.h} → ${raised.h}`);
+await shot(`${w}x${h}-room-raised`);
+
+await dragHandle(200, { on: '.sheet--room .sheet__grab' });
+const back = await rect('.sheet--room');
+check('a pull down puts the band of map back', Math.abs(back.y - resting.y) < 4, `sheet top ${back.y}, was ${resting.y}`);
+check('...and leaves nothing of the gesture on the page', await page.evaluate('!document.querySelector(".rail").classList.contains("is-lifted") && !document.querySelector(".sheet--room").style.transform'));
+check('...without leaving the listing', await page.evaluate('__steeple.state.view === "room"'), await page.evaluate('__steeple.state.view'));
+
+await dragHandle(h * 0.6, { on: '.sheet--room .sheet__grab', steps: 12 });
+check('one more puts the sheet down, exactly one level', await page.evaluate('__steeple.state.view === "venue"'), await page.evaluate('__steeple.state.view'));
+
+// ── 9. the last line of a sheet can always be read ────────────────────────
+// The sheet's foot must be the page's foot whenever nobody is holding it. A
+// sheet left lifted by a gesture that was taken away rather than finished looks
+// exactly like one at rest — band of map above it and all — while its foot
+// hangs below the window, and the end of the listing quietly cannot be reached.
+// That shipped once. These are the checks that would have caught it.
+await wait(700);
+let end = await foot('.sheet--venue');
+check('the church sheet stands on the foot of the page', end.hangsBelow === 0, JSON.stringify(end));
+check('...and its last line can be read', end.cut <= 0, JSON.stringify(end));
+
+// A gesture that loses its pointer — a window blur, a capture handed elsewhere,
+// a context menu — lands the sheet anyway.
+const grabAt = await rect('.sheet--venue .sheet__grab');
+await page.touchscreen.touchStart(grabAt.x + grabAt.w / 2, grabAt.y + grabAt.h / 2);
+for (let i = 1; i <= 6; i += 1) {
+  await page.touchscreen.touchMove(grabAt.x + grabAt.w / 2, grabAt.y + grabAt.h / 2 - i * 10);
+  await wait(25);
+}
+await page.evaluate('document.querySelector(".sheet--venue .sheet__grab").dispatchEvent(new Event("lostpointercapture"))');
+await wait(700);
+end = await foot('.sheet--venue');
+check('a gesture that is taken away lands the sheet anyway', end.hangsBelow === 0 && !end.lifted, JSON.stringify(end));
+check('...leaving the last line reachable', end.cut <= 0, JSON.stringify(end));
+await page.touchscreen.touchEnd();
+await wait(400);
+
+// And by any road not thought of: found lifted at rest, it puts itself back the
+// next time anyone touches it.
+// From the top of the sheet: lifting it while it is scrolled to its end clamps
+// the scroll, and the clamp is itself a touch — the heal beats the probe to it.
+await page.evaluate('document.querySelector(".sheet--venue").scrollTo(0, 0)');
+await wait(300);
+await page.evaluate(() => {
+  document.querySelector('.rail').classList.add('is-lifted');
+  document.querySelector('.sheet--venue').style.transform = 'translate3d(0, 172px, 0)';
+});
+await wait(200);
+// Read, do not touch: this one is the proof the check above can bite, and the
+// heal is quick enough that measuring it through `foot` would cure it first.
+const hung = await page.evaluate(() => {
+  const sheet = document.querySelector('.sheet--venue');
+  return {
+    hangsBelow: Math.round(sheet.getBoundingClientRect().bottom - window.innerHeight),
+    lifted: document.querySelector('.rail').classList.contains('is-lifted'),
+  };
+});
+check('(a sheet stuck lifted does hang below the page)', hung.hangsBelow > 100, JSON.stringify(hung));
+await page.evaluate('document.querySelector(".sheet--venue").dispatchEvent(new WheelEvent("wheel", {deltaY: 40}))');
+await wait(300);
+end = await foot('.sheet--venue');
+check('...and the next touch of it puts it back', end.hangsBelow === 0 && !end.lifted, JSON.stringify(end));
+check('...with the last line reachable again', end.cut <= 0, JSON.stringify(end));
+await page.evaluate('document.querySelector(".sheet--venue").scrollTo(0, 0)');
+
+// The church sheet's own step back is a chip under the picture, not a caption
+// on the line under it: it needs air below it or it reads as part of that line.
+await wait(600);
+const air = await page.evaluate(() => {
+  const up = document.querySelector('.sheet--venue .sheet__up');
+  const eyebrow = document.querySelector('.sheet--venue .eyebrow');
+  return Math.round(eyebrow.getBoundingClientRect().top - up.getBoundingClientRect().bottom);
+});
+check('the step back stands clear of the line under it', air >= 10, `${air}px of air`);
+await shot(`${w}x${h}-venue`);
 
 await page.evaluate('__steeple.setView("village")');
 await wait(1000);

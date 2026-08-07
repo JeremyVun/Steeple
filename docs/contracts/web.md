@@ -25,7 +25,7 @@ with one owner each:
 | State | Owner | Contract |
 | --- | --- | --- |
 | **printed arrival** | `index.html` markup | the three controls are `<a href="#/browse">` / `#/desk` carrying `data-intent="village\|desk"`, styled as pills. Before any script, a press records its destination in `location.hash` — **the URL is the recovery truth across a reload**. Never a styled `<button>` with no behaviour. |
-| **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** hash deep link, `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. **The village is never started and never backfilled** — that visit is flat for its whole life, including a later return to the title page through the wordmark. |
+| **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** hash deep link, `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. No village work may delay the product. On the first wordmark return in a village-capable build, restore the poster synchronously, finish the return roll, then lazy-load and attach engine/world/journey to that same roll. `?world=off` and `build:flat` never hydrate or contain/request Three. |
 | **live-village boot** | `src/journey/roll.js` | no intent and no hash. Poster → canvas crossfade, then the 1.28s cinematic roll on a press. |
 
 - `src/core/intent.js` is the critical controller: **the entry's first import, importing

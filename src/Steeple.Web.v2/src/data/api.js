@@ -740,6 +740,16 @@ export function getManagedVenues(accessToken) {
   return get('/manage/venues', null, { accessToken });
 }
 
+/**
+ * `GET /manage/address-suggestions` — typeahead for the venue address form. Short input and a
+ * downed geocoding provider both answer `[]`, never an error (CONTRACTS §6).
+ *
+ * @returns {Promise<Array<{label:string,latitude:number,longitude:number,addressLine:?string,suburb:?string,postcode:?string}>>}
+ */
+export function suggestAddresses(q, accessToken, { signal = null } = {}) {
+  return get('/manage/address-suggestions', { q }, { accessToken, signal });
+}
+
 /** `GET /manage/venues/{id}` — the editor's whole view of one venue. */
 export function getManagedVenue(venueId, accessToken) {
   return get(`/manage/venues/${encodeURIComponent(venueId)}`, null, { accessToken });

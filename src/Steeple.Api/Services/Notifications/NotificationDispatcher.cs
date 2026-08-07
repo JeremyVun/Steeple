@@ -154,21 +154,20 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         }
     }
 
-    /// <summary>Reads the payload's own <c>deepLink</c> property back out of its serialized JSON.</summary>
+    /// <summary>Deserializes the payload's optional <c>deepLink</c> field.</summary>
     private static string? ExtractDeepLink(string payloadJson)
     {
         try
         {
-            using var doc = JsonDocument.Parse(payloadJson);
-            return doc.RootElement.TryGetProperty("deepLink", out var value) && value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : null;
+            return JsonSerializer.Deserialize<DeepLinkPayload>(payloadJson, PayloadJsonOptions)?.DeepLink;
         }
         catch (JsonException)
         {
             return null;
         }
     }
+
+    private sealed record DeepLinkPayload(string? DeepLink);
 
     private async Task TrackSafelyAsync(NotificationType type, int recipientCount, bool emailed)
     {

@@ -80,7 +80,7 @@ function flag(name, allowed, fallback) {
   return allowed.includes(asked) ? asked : fallback;
 }
 
-state.style = params.get('style') || 'diorama';
+state.style = params.get('style') || 'atlas';
 
 // Tilt-shift strength is a viewing preference, not a quality tier:
 // `?tilt=on|1|true` fakes the miniature hard, `?tilt=off|0|false` turns the

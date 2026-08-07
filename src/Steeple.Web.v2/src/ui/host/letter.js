@@ -61,22 +61,22 @@ function labelled(label, control, hint) {
 }
 
 export function createLetterPage({ announce, onBackToDesk }) {
-  const head = el('header', { class: 'letter__head' });
-  const left = el('div', { class: 'letter__left' });
-  const week = el('section', { class: 'letter__week' });
-  const actions = el('div', { class: 'letter__actions' });
-  const drawer = el('div', { class: 'letter__drawer' });
-  const right = el('div', { class: 'letter__right' }, [week, actions, drawer]);
-  const sheet = el('article', { class: 'letter__sheet' }, [
+  const head = el('header', { class: 'letterpage__head' });
+  const left = el('div', { class: 'letterpage__left' });
+  const week = el('section', { class: 'letterpage__week' });
+  const actions = el('div', { class: 'letterpage__actions' });
+  const drawer = el('div', { class: 'letterpage__drawer' });
+  const right = el('div', { class: 'letterpage__right' }, [week, actions, drawer]);
+  const sheet = el('article', { class: 'letterpage__sheet' }, [
     head,
-    el('div', { class: 'letter__cols' }, [left, right]),
+    el('div', { class: 'letterpage__cols' }, [left, right]),
   ]);
   const seal = el('div', { class: 'seal' });
   const element = el('div', { class: 'letterpage' }, [sheet, seal]);
 
   const ribbon = createRibbon();
   const verdict = el('div', { class: 'verdict' });
-  const scheduleText = el('p', { class: 'letter__when' });
+  const scheduleText = el('p', { class: 'letterpage__when' });
 
   let application = null;
   let mode = 'none'; // none | ask | decline | counter | clash
@@ -117,9 +117,9 @@ export function createLetterPage({ announce, onBackToDesk }) {
 
   /** A line from the service, printed where the decisions are. */
   function sayRefusal(text) {
-    let slip = actions.querySelector('.letter__refusal');
+    let slip = actions.querySelector('.letterpage__refusal');
     if (!slip) {
-      slip = el('p', { class: 'letter__refusal', role: 'alert' });
+      slip = el('p', { class: 'letterpage__refusal', role: 'alert' });
       actions.append(slip);
     }
     slip.textContent = text ?? '';
@@ -789,7 +789,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
       el('p', { class: 'eyebrow', text: `Request · ${STATUS_WORD[application.status]}` }),
       el('h1', { class: 'sheet__title', text: organizer.org ?? organizer.name }),
       el('p', {
-        class: 'letter__meta',
+        class: 'letterpage__meta',
         text: `${room?.name ?? application.roomId} · ${plural(
           application.groupSize,
           'person',

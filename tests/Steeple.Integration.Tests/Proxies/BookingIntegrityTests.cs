@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Steeple.Api.Contracts.Bookings;
 using Steeple.Integration.Tests.Fixtures;
 
@@ -73,21 +72,11 @@ public class BookingIntegrityTests
 
             var service = CreateBookingService(db);
             gate.SignalAndWait();
-            try
-            {
-                return await service.ConfirmFromApplicationAsync(application);
-            }
-            catch (InvalidOperationException ex)
-                when ((ex.InnerException as DbUpdateException)?.InnerException is PostgresException { SqlState: "40P01" })
-            {
-                // Postgres occasionally resolves the pile-up by picking a deadlock victim instead
-                // of firing the exclusion constraint; the victim rolled back, so it's a loser here.
-                return null;
-            }
+            return await service.ConfirmFromApplicationAsync(application);
         })));
 
         Assert.Equal(1, results.Count(r => r is { SlotTaken: false }));
-        Assert.Equal(contenders - 1, results.Count(r => r is null or { SlotTaken: true }));
+        Assert.Equal(contenders - 1, results.Count(r => r.SlotTaken));
 
         await using var verifyDb = CreateContext();
         var bookings = await verifyDb.Bookings
@@ -133,22 +122,11 @@ public class BookingIntegrityTests
 
             var service = CreateBookingService(db);
             gate.SignalAndWait();
-            try
-            {
-                return await service.ConfirmFromApplicationAsync(application);
-            }
-            catch (InvalidOperationException ex)
-                when ((ex.InnerException as DbUpdateException)?.InnerException is PostgresException { SqlState: "40P01" })
-            {
-                // Under the two-way barrier race Postgres occasionally picks a deadlock victim
-                // instead of firing the exclusion constraint. The victim's transaction rolled
-                // back, so for the invariant this test proves it is simply the loser.
-                return null;
-            }
+            return await service.ConfirmFromApplicationAsync(application);
         })));
 
         Assert.Equal(1, results.Count(r => r is { SlotTaken: false }));
-        Assert.Equal(1, results.Count(r => r is null or { SlotTaken: true }));
+        Assert.Equal(1, results.Count(r => r.SlotTaken));
 
         await using var verifyDb = CreateContext();
         var bookings = await verifyDb.Bookings

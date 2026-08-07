@@ -27,6 +27,12 @@ public interface IManageService
     Task<ManageResult<ManagedVenueDetailDto>> SubmitVenueVerificationAsync(
         Guid callerId, Guid venueId, SubmitVenueVerificationRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Address suggestions for partial venue-address input. Empty for short input or when the
+    /// geocoding provider is down — never an error (typeahead is an aid, not a gate).
+    /// </summary>
+    Task<IReadOnlyList<AddressSuggestionDto>> SuggestAddressesAsync(string query, CancellationToken ct = default);
+
     /// <summary>Manager view of a room, or NotFound when the caller doesn't manage its venue.</summary>
     Task<ManageResult<ManagedRoomDto>> GetRoomAsync(Guid callerId, Guid roomId, CancellationToken ct = default);
 

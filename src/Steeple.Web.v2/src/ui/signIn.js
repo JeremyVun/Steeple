@@ -17,8 +17,7 @@ import { el } from './dom.js';
 const WORDS = {
   eyebrow: 'Your account',
   title: 'Sign in to Steeple',
-  blurb:
-    'Signing in keeps your requests and everything the hosts say back in one place. Steeple confirms a person once, so a host knows a real neighbour is asking; your name and your group travel with a request, and nothing else about you is shared.',
+  agreeTitle: 'Before you carry on',
   carryOn: (name) => `Continue as ${name}`,
   cancel: 'Not now',
   formEyebrow: 'Sign in',
@@ -30,15 +29,30 @@ const WORDS = {
 export function createSignInPanel({ announce } = {}) {
   let opener = null;
 
+  /**
+   * What the opener is waiting on, if anything. It runs only when the panel's
+   * whole question is answered — a session *and* nothing left to agree to —
+   * never on the session alone: a flow that opened on the raw session event
+   * used to be standing there after "Not now — sign out" (2026-08-07).
+   * Declining, dismissing, or opening the panel again drops it unrun.
+   */
+  let done = null;
+
+  function finish() {
+    const carryOn = done;
+    close();
+    carryOn?.();
+  }
+
   const identity = createIdentityStep({
     announce,
     words: WORDS,
-    onVerify: () => close(),
+    onVerify: () => finish(),
     onCancel: () => close(),
     // Signing in from the shelf asks one question, so the panel leaves the
     // moment it is answered — unless the answer left something to agree to,
     // which is the panel's own business to finish first.
-    onSettled: () => close(),
+    onSettled: () => finish(),
   });
 
   // No chrome of its own: the identity panel is already a sheet of paper, and
@@ -61,9 +75,12 @@ export function createSignInPanel({ announce } = {}) {
    * @param trigger  what brought them here — the shelf's own chip, a flow that
    *                 needs a name before it can start, or a document still owed
    *                 an acceptance. Reported, not rendered.
+   * @param onDone   run only if the person carries all the way through —
+   *                 signed in with nothing left to agree to. Never on decline.
    */
-  function open(from = null, { trigger = 'account' } = {}) {
+  function open(from = null, { trigger = 'account', onDone = null } = {}) {
     track('sso_started', { surface: 'header', trigger });
+    done = onDone;
     opener = from ?? document.activeElement;
     element.hidden = false;
     // A transition needs a frame to start from, and the layer has only just
@@ -81,13 +98,26 @@ export function createSignInPanel({ announce } = {}) {
     element.hidden = true;
     opener?.focus?.();
     opener = null;
+    done = null;
   }
 
   const isOpen = () => !element.hidden;
 
+  // Walking away from an owed acceptance is declining it: an un-agreed account
+  // does not stay signed in and working, whichever way the panel was left
+  // (owner decision 2026-08-07). The buttons say so; the quiet exits — Escape,
+  // the paper around the panel — must not say otherwise.
+  function dismiss() {
+    if (identity.owesAcceptance()) {
+      session.signOut();
+      announce?.('Signed out. You can agree next time you sign in.');
+    }
+    close();
+  }
+
   // The way out that costs nothing: the paper around the panel.
   element.addEventListener('pointerdown', (event) => {
-    if (event.target === element) close();
+    if (event.target === element) dismiss();
   });
 
   // Escape belongs to whatever is open, and while this is open it is this.
@@ -98,7 +128,7 @@ export function createSignInPanel({ announce } = {}) {
       if (event.key !== 'Escape' || !isOpen()) return;
       event.preventDefault();
       event.stopPropagation();
-      close();
+      dismiss();
     },
     { capture: true }
   );
@@ -112,7 +142,7 @@ export function createSignInPanel({ announce } = {}) {
     // which is what asking steeple who you are does — is not an answer to
     // anything it asked, and closing on it shut the agreement prompt before it
     // had rendered.
-    if (held && reason === session.REASON.signedIn && isOpen() && identity.settled()) close();
+    if (held && reason === session.REASON.signedIn && isOpen() && identity.settled()) finish();
   });
 
   // A layer of its own has to stop its own events reaching the world behind,

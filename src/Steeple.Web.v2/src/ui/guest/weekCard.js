@@ -8,7 +8,9 @@
 //     rule, on every day: a bare click never carries hours over from somewhere
 //     else, and never moves a booking to a time nobody aimed at.
 //   · click a day not selected → weekly only: add that weekday, band unchanged
-//   · click inside the band    → weekly only: drop that weekday (never the last)
+//   · click inside the band    → weekly: drop that weekday; on the last day
+//     (and always, for a one-off) it clears the chosen hours entirely — the
+//     same press that painted them takes them away
 //   · keyboard: arrows move the cursor, Enter paints or toggles, Shift+↑/↓
 //     trims or extends the end, PageUp/PageDown change week
 //
@@ -188,6 +190,23 @@ export function createWeekCard({ announce, onChange, onWeek }) {
     if (spoken) announce?.(spoken);
   }
 
+  /** The chosen hours, taken away by the same press that painted them. */
+  function clearBand() {
+    dayDates = new Map();
+    const next = {
+      ...schedule,
+      startDate: null,
+      startTime: null,
+      endTime: null,
+      daysOfWeekMask: 0,
+    };
+    if (next.frequency !== 'weekly') next.endDate = null;
+    schedule = next;
+    onChange?.(next);
+    render();
+    announce?.('Hours cleared. Pick a time whenever you are ready.');
+  }
+
   /** Trim a band so it never runs into a booking or past the room's open hours. */
   function fit(day, from, to) {
     let end = from + 1;
@@ -222,10 +241,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
     if (schedule.frequency !== 'weekly') {
       const days = selectedDays();
       const inBand = days.includes(day) && slot >= band.from && slot < band.to;
-      if (inBand) {
-        say('These are the hours you have chosen. Drag the column to change them.');
-        return;
-      }
+      if (inBand) return clearBand();
       return paint(day, slot, slot + 1);
     }
 
@@ -245,7 +261,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
       const kept = days.filter((d) => d !== day);
       return commit(kept, band.from, band.to, `${DAY_LABELS[day]} removed.`);
     }
-    say('This is the only day chosen. Pick another day to add one.');
+    clearBand();
   }
 
   function say(text) {
@@ -322,6 +338,10 @@ export function createWeekCard({ announce, onChange, onWeek }) {
     element.classList.remove('is-painting');
     if (drag.moved) paint(drag.day, drag.from, drag.to);
     else tapped(drag.day, drag.from);
+    // A press that changed nothing still previewed something: put the marks
+    // back to the schedule's own truth, or the dashed preview stands forever
+    // over hours the summary still claims.
+    drawMarks();
   }
 
   grid.addEventListener('pointerup', endDrag);

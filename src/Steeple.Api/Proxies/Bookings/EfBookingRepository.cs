@@ -6,9 +6,10 @@ namespace Steeple.Api.Proxies.Bookings;
 /// <summary>
 /// EF Core adapter for <see cref="IBookingRepository"/>. Loads carry the full display graph
 /// (room + venue, organizer, occurrences) — terms are bounded at ≤53 occurrences, so eager
-/// loading beats a query per row. The one Postgres-specific translation lives here: the
-/// btree_gist exclusion constraint's violation (SQLSTATE 23P01) becomes a <c>false</c> return
-/// from <see cref="TrySaveNewAsync"/>.
+/// loading beats a query per row. Booking creates take a transaction-scoped row lock on their
+/// room before touching the btree_gist exclusion index: same-room contenders queue in one order
+/// instead of deadlocking inside GiST. The constraint remains authoritative, and its violation
+/// (SQLSTATE 23P01) becomes a <c>false</c> return from <see cref="TrySaveNewAsync"/>.
 /// </summary>
 public class EfBookingRepository : IBookingRepository
 {
@@ -21,16 +22,28 @@ public class EfBookingRepository : IBookingRepository
     public async Task<bool> TrySaveNewAsync(Booking booking, CancellationToken ct = default)
     {
         _db.Bookings.Add(booking);
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         try
         {
-            // A single SaveChanges is one database transaction: the booking, its occurrences,
-            // and any tracked mutations riding along (the application's Approved flip) commit
-            // or abort together — the exclusion constraint makes overlap-approval impossible.
+            // Concurrent inserts into a GiST exclusion index can make both transactions wait on
+            // one another, yielding SQLSTATE 40P01 instead of the expected 23P01 loser. Locking the
+            // exact room row first gives every booking path the same order without serializing
+            // unrelated rooms. ExecuteSql is intentional: SELECT still acquires the row lock and
+            // Npgsql reports no affected-row count.
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"""SELECT 1 FROM rooms WHERE "Id" = {booking.RoomId} FOR UPDATE""", ct)
+                .ConfigureAwait(false);
+
+            // The booking, its occurrences, and tracked mutations riding along (the application's
+            // Approved flip) commit or abort together.
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
             return true;
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation })
+        catch (Exception ex) when (HasSqlState(ex, PostgresErrorCodes.ExclusionViolation))
         {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+
             // Slot already held. Nothing was written; detach the stillborn booking so the
             // caller's follow-up save (auto-decline) doesn't retry the same insert.
             // (Snapshot the list first — detaching triggers EF fixup that mutates the navigation.)
@@ -42,6 +55,19 @@ public class EfBookingRepository : IBookingRepository
             _db.Entry(booking).State = EntityState.Detached;
             return false;
         }
+    }
+
+    private static bool HasSqlState(Exception exception, string sqlState)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is PostgresException postgres && postgres.SqlState == sqlState)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <inheritdoc />

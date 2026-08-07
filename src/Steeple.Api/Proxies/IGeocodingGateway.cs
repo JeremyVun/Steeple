@@ -17,9 +17,19 @@ public interface IGeocodingGateway
 }
 
 /// <summary>
-/// A single address autocomplete suggestion with its resolved coordinate.
+/// A single address autocomplete suggestion with its resolved coordinate. The structured parts
+/// are null when the provider doesn't break the address down — clients fall back to the label.
 /// </summary>
 /// <param name="Label">Human-readable address label.</param>
 /// <param name="Latitude">Latitude in decimal degrees.</param>
 /// <param name="Longitude">Longitude in decimal degrees.</param>
-public record AddressSuggestion(string Label, double Latitude, double Longitude);
+/// <param name="AddressLine">Street address part (number + street).</param>
+/// <param name="Suburb">Suburb / town / locality part.</param>
+/// <param name="Postcode">Postal code part.</param>
+public record AddressSuggestion(
+    string Label,
+    double Latitude,
+    double Longitude,
+    string? AddressLine = null,
+    string? Suburb = null,
+    string? Postcode = null);
