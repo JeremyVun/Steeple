@@ -61,9 +61,13 @@ export function createLetterPage({ announce, onBackToDesk }) {
   const head = el('header', { class: 'letterpage__head' });
   const left = el('div', { class: 'letterpage__left' });
   const week = el('section', { class: 'letterpage__week' });
+  // What this letter asks of the host once there is nothing left to decide.
+  // Above the decisions rather than among them: the decision row is sticky and
+  // is a row of pills, and a form is neither.
+  const invitation = el('div', { class: 'letterpage__invite' });
   const actions = el('div', { class: 'letterpage__actions' });
   const drawer = el('div', { class: 'letterpage__drawer' });
-  const right = el('div', { class: 'letterpage__right' }, [week, actions, drawer]);
+  const right = el('div', { class: 'letterpage__right' }, [week, invitation, actions, drawer]);
   const sheet = el('article', { class: 'letterpage__sheet' }, [
     head,
     el('div', { class: 'letterpage__cols' }, [left, right]),
@@ -80,6 +84,20 @@ export function createLetterPage({ announce, onBackToDesk }) {
   let counter = null;
   let sealTimer = 0;
   let working = false;
+
+  // The rating being written, held out of the redraw. The two-step confirm
+  // rebuilds this column, and a redraw that takes the stars and the words with
+  // it would be a form that forgets what it was told (the guest letter holds
+  // its own the same way). The ids are the host's alone — both letters are
+  // mounted at once, and two `letter-rate-3` on one page is one id.
+  let stars = 0;
+  let confirmingRate = false;
+  const rateNote = el('textarea', {
+    class: 'input input--area',
+    id: 'host-rate-note',
+    rows: '3',
+    maxlength: '1000',
+  });
 
   /**
    * One decision, at steeple.
@@ -524,6 +542,15 @@ export function createLetterPage({ announce, onBackToDesk }) {
     }, 3600);
   }
 
+  /**
+   * Nothing is being decided any more — but a booking that has run its course
+   * may still owe this venue a word about how it went, and the right-hand
+   * column is where a host looks for what this letter asks of them.
+   */
+  function renderInvitation() {
+    replaceChildren(invitation, UNDECIDED.has(application.status) ? [] : [ratingBlock()].filter(Boolean));
+  }
+
   function renderActions() {
     if (!UNDECIDED.has(application.status)) {
       replaceChildren(actions, []);
@@ -551,16 +578,288 @@ export function createLetterPage({ announce, onBackToDesk }) {
     ]);
   }
 
+  // ── how it went ───────────────────────────────────────────────────────────
+
+  /** The group, as this venue would name them out loud. */
+  const theirName = () => {
+    const organizer = organizerOf(application);
+    return organizer.org ?? organizer.name;
+  };
+
+  const starGlyphs = (n) => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
+
+  /**
+   * The venue's half of a rating, on the letter of the request it came from.
+   *
+   * Every judgement here is steeple's: whether a rating may still be written
+   * (`canRate`, computed for whoever asked), and whether the organizer's own is
+   * revealed yet — it is present, or it is not. No arithmetic on `rateByUtc`,
+   * no local reveal rule, and nothing at all when the booking carries no
+   * `ratings` block: a booking mirrored before this existed renders as silence,
+   * never as a greyed-out invitation (D3, D4).
+   *
+   * The gate is narrower than the API's on purpose. Steeple would take a rating
+   * from the first past date, but there is one rating per side and no edits —
+   * so the invitation waits for the booking to be over. Cancelled counts:
+   * a no-show that became a cancellation is exactly when a warning is worth
+   * writing (D2).
+   *
+   * Note what is *not* here: any test of whether the organizer has rated. Under
+   * the double blind their rating is withheld until this venue has written its
+   * own, so "they rated first" and "they have not rated" are the same wire on
+   * this side of it. The nudge to rate back arrives as a notification instead.
+   */
+  function ratingBlock() {
+    const booking = bookingFor(application.id);
+    const ratings = booking?.ratings ?? null;
+    if (!ratings) return null;
+    // On this letter the reader keeps the venue: `byVenue` is theirs to write,
+    // `byOrganizer` is the one that has to be earned back.
+    const mine = ratings.byVenue ?? null;
+    const theirs = ratings.byOrganizer ?? null;
+    const settled = booking.status === 'completed' || booking.status === 'cancelled';
+
+    if (settled && ratings.canRate === true && !mine) return rateForm(booking, theirs);
+    if (mine || theirs) {
+      return el(
+        'section',
+        {
+          class: 'ratemark ratemark--done',
+          dataset: { state: mine ? (theirs ? 'both' : 'mine') : 'theirs' },
+        },
+        [
+          el('h2', { class: 'eyebrow', text: 'How it went' }),
+          mine && ratingFact('Your rating', mine),
+          theirs && ratingFact(`${theirName()}'s rating`, theirs),
+          // Only said while there is still something to arrive.
+          mine && !theirs
+            ? el('p', {
+                class: 'ratemark__reveal',
+                text: `${theirName()}'s rating arrives when it's revealed.`,
+              })
+            : null,
+        ].filter(Boolean)
+      );
+    }
+    return null;
+  }
+
+  /** A rating already written, printed as the fact it now is. */
+  function ratingFact(who, rating) {
+    return el('div', { class: 'ratemark__fact' }, [
+      el('p', { class: 'ratemark__factline' }, [
+        el('span', { class: 'ratemark__who', text: who }),
+        el('span', {
+          class: 'ratemark__glyphs',
+          'aria-hidden': 'true',
+          text: starGlyphs(rating.stars),
+        }),
+        el('span', { class: 'visually-hidden', text: `${rating.stars} out of 5 stars` }),
+      ]),
+      rating.comment
+        ? el('p', { class: 'prose prose--sm ratemark__comment', text: rating.comment })
+        : null,
+    ].filter(Boolean));
+  }
+
+  /**
+   * Five stars, an optional note, and a commit that says it is final.
+   *
+   * Native radios in reading order, so the row is arrow-key navigable and
+   * announced as a group without a line of script: the labels carry the words
+   * ("3 stars") and the glyph is decoration over them. The fill is painted on
+   * change rather than through a redraw, which would take the words already
+   * typed into the note with it. Shape changes as well as colour — a pale
+   * *filled* star reads as a rating already given and greyed out.
+   */
+  function rateForm(booking, theirs) {
+    const who = theirName();
+    const labels = [];
+    const glyphs = [];
+    const radios = [];
+    const paint = () =>
+      labels.forEach((node, at) => {
+        const lit = at < stars;
+        node.classList.toggle('is-on', lit);
+        glyphs[at].textContent = lit ? '★' : '☆';
+      });
+    const inputs = [1, 2, 3, 4, 5].flatMap((n) => {
+      const id = `host-rate-${n}`;
+      const glyph = el('span', { class: 'ratemark__glyph', 'aria-hidden': 'true', text: '☆' });
+      const label = el('label', { class: 'ratemark__star', for: id }, [
+        glyph,
+        el('span', { class: 'visually-hidden', text: n === 1 ? '1 star' : `${n} stars` }),
+      ]);
+      labels.push(label);
+      glyphs.push(glyph);
+      const input = el('input', {
+        type: 'radio',
+        class: 'ratemark__input',
+        name: 'host-rate',
+        id,
+        value: String(n),
+        checked: stars === n ? 'checked' : null,
+        onchange: () => {
+          stars = n;
+          paint();
+        },
+      });
+      radios.push(input);
+      return [input, label];
+    });
+    paint();
+
+    return el('section', { class: 'ratemark', dataset: { state: theirs ? 'invited' : 'open' } }, [
+      el('h2', { class: 'ratemark__ask', text: 'How was the group?' }),
+      el('fieldset', { class: 'ratemark__stars' }, [
+        el('legend', { class: 'visually-hidden', text: 'How was the group?' }),
+        ...inputs,
+      ]),
+      el('label', {
+        class: 'eyebrow ratemark__notelabel',
+        for: 'host-rate-note',
+        text: 'A few words, if you like (optional)',
+      }),
+      rateNote,
+      confirmingRate
+        ? el('div', { class: 'ratemark__confirm' }, [
+            el('p', {
+              class: 'prose prose--sm',
+              text: "Your rating is final — steeple doesn't allow edits.",
+            }),
+            el('div', { class: 'ratemark__actions' }, [
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'pill pill--primary',
+                  dataset: { action: 'rate-send' },
+                  onclick: async () => {
+                    const sent = await move(() =>
+                      wire.rateBooking(booking.id, { stars, comment: rateNote.value })
+                    );
+                    // Only a rating steeple took empties the form. A refusal
+                    // leaves it exactly as it stands, under the line explaining
+                    // why (the refusal slip lives in this same column).
+                    if (!sent) return;
+                    stars = 0;
+                    rateNote.value = '';
+                    confirmingRate = false;
+                    announce?.('Your rating is in.');
+                    show(application.id);
+                  },
+                },
+                'Yes, send it'
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'linkish',
+                  dataset: { action: 'rate-cancel' },
+                  onclick: () => {
+                    confirmingRate = false;
+                    renderInvitation();
+                    // Back where they were, not at the top of a rebuilt column.
+                    invitation.querySelector('[data-action="rate-open"]')?.focus();
+                  },
+                },
+                'Not yet'
+              ),
+            ]),
+          ])
+        : el('div', { class: 'ratemark__actions' }, [
+            el(
+              'button',
+              {
+                type: 'button',
+                class: 'pill',
+                dataset: { action: 'rate-open' },
+                onclick: () => {
+                  // Never choose for them: the ask moves to the stars and waits.
+                  if (!stars) {
+                    announce?.('Choose a star rating first.');
+                    radios[0]?.focus();
+                    return;
+                  }
+                  confirmingRate = true;
+                  renderInvitation();
+                  // That redraw drops keyboard focus on the floor, and the step
+                  // that just appeared is what was asked for.
+                  invitation.querySelector('[data-action="rate-send"]')?.focus();
+                },
+              },
+              'Rate this group'
+            ),
+          ]),
+      el('p', {
+        class: 'ratemark__reveal',
+        text: theirs
+          ? `${who} has rated this booking — rate back to see it.`
+          : `${who} sees your rating once they've rated you back, or after the window closes.`,
+      }),
+    ]);
+  }
+
+  /** Whatever the rating block is currently saying, said aloud. */
+  function ratingSpoken() {
+    const ratings = bookingFor(application.id)?.ratings ?? null;
+    if (!ratings) return '';
+    const mine = ratings.byVenue ?? null;
+    const theirs = ratings.byOrganizer ?? null;
+    const said = [
+      mine ? `Your rating: ${mine.stars} out of 5.` : '',
+      theirs ? `${theirName()} rated this ${theirs.stars} out of 5.` : '',
+    ].filter(Boolean);
+    if (said.length) return said.join(' ');
+    const booking = bookingFor(application.id);
+    const settled = booking.status === 'completed' || booking.status === 'cancelled';
+    return settled && ratings.canRate === true ? 'This booking has finished — you can rate the group.' : '';
+  }
+
   // ── the left-hand page ────────────────────────────────────────────────────
 
-  /** What the platform can honestly say about the person, worn as chips. */
+  /**
+   * What the platform can honestly say about the person, worn as chips.
+   *
+   * The rating summary is steeple's and it arrives whole or not at all: an
+   * organizer nobody has rated yet has no summary, and no chip — not "no
+   * ratings", not an empty row of stars. A group's first booking should not
+   * read as a warning about them, and the no-show count rides the same rule,
+   * which is why it is invisible until there is a rating to put it beside (D4).
+   */
   function trustChips(organizer) {
+    const rated = organizer.ratingSummary ?? null;
     const chips = [
       organizer.verified
         ? el('span', { class: 'verified verified--sm' }, [
             el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
             VERIFIED_LABEL,
           ])
+        : null,
+      rated
+        ? el('span', { class: 'chip ratemark__chip' }, [
+            // The mark is decoration over the sentence beside it: read as a
+            // glyph it is a noise, read as the sentence it is the fact.
+            el('span', { 'aria-hidden': 'true' }, [
+              el('span', { class: 'ratemark__mark', text: '★' }),
+              ` ${rated.averageStars.toFixed(1)} · ${plural(rated.ratingCount, 'rating', 'ratings')}`,
+            ]),
+            el('span', {
+              class: 'visually-hidden',
+              text: `Rated ${rated.averageStars.toFixed(1)} out of 5 from ${plural(
+                rated.ratingCount,
+                'rating',
+                'ratings'
+              )}`,
+            }),
+          ])
+        : null,
+      rated && rated.noShowCount > 0
+        ? el('span', {
+            class: 'chip ratemark__chip ratemark__chip--flag',
+            text: `${plural(rated.noShowCount, 'no-show', 'no-shows')} this year`,
+          })
         : null,
       joinedText(organizer) ? el('span', { class: 'chip', text: joinedText(organizer) }) : null,
     ].filter(Boolean);
@@ -737,8 +1036,17 @@ export function createLetterPage({ announce, onBackToDesk }) {
   // ── show ──────────────────────────────────────────────────────────────────
 
   function show(applicationId, { refresh = false } = {}) {
+    // A different letter is a different rating. A redraw of the same one is not
+    // — the detail read landing behind an open letter must not take the stars
+    // somebody has already chosen with it.
+    const another = application?.id !== applicationId;
     application = getApplication(applicationId);
     if (!application) return false;
+    if (another) {
+      stars = 0;
+      rateNote.value = '';
+      confirmingRate = false;
+    }
     // The desk's list read carries no thread — only the detail read does. Asked
     // once when the letter is opened, never on the redraws a decision causes.
     if (refresh) {
@@ -799,6 +1107,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
     ]);
 
     refreshWeek();
+    renderInvitation();
     renderActions();
     return true;
   }
@@ -813,13 +1122,24 @@ export function createLetterPage({ announce, onBackToDesk }) {
       `${room?.name ?? ''} for ${plural(application.groupSize, 'person', 'people')}, ${application.activityType}.`,
       scheduleLine(application),
       organizer.verified ? `${VERIFIED_LABEL}.` : '',
+      organizer.ratingSummary
+        ? `Rated ${organizer.ratingSummary.averageStars.toFixed(1)} out of 5 from ${plural(
+            organizer.ratingSummary.ratingCount,
+            'rating',
+            'ratings'
+          )}${
+            organizer.ratingSummary.noShowCount > 0
+              ? `, with ${plural(organizer.ratingSummary.noShowCount, 'no-show', 'no-shows')} this year`
+              : ''
+          }.`
+        : '',
       joinedText(organizer) ? `${joinedText(organizer)}.` : '',
       application.intentText,
       ribbonSpoken(application.venueId, application.roomId, scheduleOf(application), application.id),
       read.notes.map((n) => n.text).join(' '),
       UNDECIDED.has(application.status)
         ? 'You can approve, decline, suggest another time, or write back on the thread.'
-        : '',
+        : ratingSpoken(),
     ]
       .filter(Boolean)
       .join(' ');

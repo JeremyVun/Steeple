@@ -849,15 +849,21 @@ export function createComposer({ announce, onSent, onLeave }) {
     columns.removeAttribute('inert');
     sheet.classList.add('is-away');
     // Instant venues answer the submit with the booking itself, so the sentence
-    // is what happened, not what is about to.
+    // is what happened, not what is about to. An instant venue can still answer
+    // "pending": a guest holding several upcoming bookings with no card on file
+    // is asked for the host's approval this time (the spam cap, booking-modes.md)
+    // — the sheet says why rather than quietly downgrading the promise.
+    const held = bookingMode === 'instant' && !result.instant;
     announce?.(
       result.instant
         ? `Booked. ${room.name} at ${venue.shortName} is yours — it is in your inbox.`
-        : `Your request is on its way to ${venue.shortName}. It is waiting in your inbox.`
+        : held
+          ? `You have a few bookings coming up already, so this one has gone to ${venue.shortName} to approve. It is waiting in your inbox.`
+          : `Your request is on its way to ${venue.shortName}. It is waiting in your inbox.`
     );
     const settle = () => {
       sheet.classList.remove('is-away');
-      onSent?.(result.application, { instant: result.instant });
+      onSent?.(result.application, { instant: result.instant, held });
     };
     setTimeout(settle, document.documentElement.classList.contains('reduced-motion') ? 60 : 900);
   }

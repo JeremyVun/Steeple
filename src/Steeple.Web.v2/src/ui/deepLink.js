@@ -23,7 +23,7 @@
 // reload should land where the person now is, not where the email pointed a
 // week ago.
 
-import { rollTo, setView, state } from '../core/bus.js';
+import { rollTo, setMode, setView, state } from '../core/bus.js';
 import * as api from '../data/api.js';
 import { openApplication } from '../data/correspondence.js';
 import * as session from '../data/session.js';
@@ -90,10 +90,27 @@ async function follow(path) {
   return false;
 }
 
+/**
+ * One request, opened — as whichever letter this reader's copy of it is.
+ *
+ * There is one request and two letters, and which one a link means is a fact
+ * about who followed it, not about the link. Steeple only ever answers a
+ * request to one of its two parties, so a reader who is not the organizer is
+ * the venue's keeper, and the host's letter is the one that carries their
+ * decisions, their thread and — since ratings — the group they are being asked
+ * about. The lens is flipped before the view changes, exactly as the inbox's
+ * hosting rows do it, so the guest letter never flashes over somebody else's
+ * request on the way (D12).
+ */
 async function openLetter(applicationId) {
   const answer = await openApplication(applicationId);
   if (!answer.ok && !getApplication(applicationId)) return false;
   const app = getApplication(applicationId);
+  const me = session.currentUser()?.id ?? null;
+  const hosting = Boolean(app?.organizerId && me && app.organizerId !== me);
+  // Said both ways round: a host following a link to their own request must
+  // come back out of the host lens, or the guest letter never appears at all.
+  setMode(hosting ? 'host' : 'guest');
   setView('letter', {
     applicationId,
     venueId: app?.venueId ?? null,

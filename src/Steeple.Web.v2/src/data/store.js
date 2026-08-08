@@ -545,6 +545,11 @@ export function fromWireApplication(dto) {
     venueName: dto.venueName ?? null,
     organizerId: dto.organizer?.id ?? null,
     organizerName: dto.organizer?.displayName ?? null,
+    // `{averageStars, ratingCount, noShowCount, completedBookings}` — the
+    // organizer's earned standing, sent on manager-facing reads only and null
+    // until they have a revealed rating. Null is the honest answer for a person
+    // nobody has rated yet, and it renders as nothing at all.
+    organizerRating: dto.organizer?.ratingSummary ?? null,
     organizationName: dto.organizationName ?? null,
     hasPaymentMethod: dto.hasPaymentMethod === true,
     activityType: ACTIVITY_LABELS[String(dto.activityType ?? '').toLowerCase()] ?? dto.activityType,
@@ -715,6 +720,16 @@ export function mirrorBooking(dto) {
     cancelReason: dto.cancelReason ?? null,
     venueTimezone: dto.venueTimezone ?? null,
     payment: dto.payment ?? null,
+    // How each side said it went, exactly as steeple scoped it for this viewer:
+    // `{byOrganizer?, byVenue?, canRate, rateByUtc?}`, where the names say who
+    // WROTE it. `canRate` and whether the other side's rating is present at all
+    // are computed at read time for the caller — so this is copied and never
+    // reasoned about here, and a row that never carried the block (a booking
+    // mirrored before this existed) stays null and renders as silence.
+    //
+    // Unlike `occurrences`, list and detail reads carry the identical block, so
+    // there is no thin-over-thick hazard in mirroring it from a page.
+    ratings: dto.ratings ?? null,
   };
   upsertBy(data.bookings, booking);
 
@@ -786,10 +801,6 @@ export function mirrorManagedVenues(venues) {
       lng: venue.longitude,
       verified: venue.isIdentityVerified === true,
       bookingMode: venue.bookingMode ?? null,
-      // Whether "instant" is in effect platform-wide (it rides on payments being
-      // enabled). Absent on an older answer means active — the note below is
-      // only ever shown on the server's explicit word.
-      instantBookingActive: venue.instantBookingActive !== false,
       rooms,
     });
     // A venue the village already carries as scenery keeps its own rooms; what

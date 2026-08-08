@@ -55,11 +55,10 @@ geofence on the venue's address). Then:
   venueType, addressLine, suburb, postcode, contactEmail?, parkingInfo, transitInfo, latitude,
   longitude, timezone, isIdentityVerified, verificationStatus, verificationRequestedAtUtc?,
   rooms: [ManagedRoomSummaryDto], bookingMode /* additive 2026-08-05: "instant"|"manual" —
-  the host's stored choice (the public read emits the effective mode, `discovery.md`) */,
-  instantBookingActive /* additive 2026-08-07: whether "instant" is in effect platform-wide —
-  false while `payments.enabled` is off (instant book's commitment gate is the card at
-  request), in which case a venue stored as instant still receives requests. Clients show the
-  stored choice plus this truth; the web desk prints a note when they disagree. */}`.
+  the host's stored choice, in effect as stored (2026-08-08 — no longer gated on
+  `payments.enabled`; the public read emits it verbatim, `discovery.md`). The short-lived
+  `instantBookingActive` field (2026-08-07) was removed with the decoupling, one day old,
+  no released clients. */}`.
   `verificationStatus` ∈ `unverified | pending | verified |
   declined` and summarizes the latest host verification request plus the venue's verified flag.
 - `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address required on

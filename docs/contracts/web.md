@@ -83,14 +83,16 @@ and behind a stripped proxy prefix.
 | `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
 | `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
-| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
+| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `submitRating` (2026-08-08), `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
 | `suggestAddresses`, `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 | `getRoomAvailabilityRules` | `correspondence.js` (the desk's hours read) |
 | `acceptAgreement` (what is owed rides on `getMe`) | `agreements.js` |
 | `postEvents` | `analytics.js` (the interaction batcher) |
 
 **Not present in `api.js` at all** (no client function exists yet): occurrence no-show
-(`POST /occurrences/{id}/no-show`), ratings, `POST /me/devices`.
+(`POST /occurrences/{id}/no-show`), the public reviews read (`GET /venues/{id}/ratings` —
+deferred with the reviews block, and v2 holds no venue GUID to address it with),
+`POST /me/devices`.
 
 A request whose body is `undefined` carries no body and declares no content type — the
 revocations below are the only such calls; `null` still means the empty JSON document that

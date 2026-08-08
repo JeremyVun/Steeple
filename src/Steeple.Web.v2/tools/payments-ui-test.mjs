@@ -34,13 +34,17 @@
 // World-OFF is the documented state — this suite is about money, not village.
 //
 // Rate limits are per-account, and `auth` is per-IP (10/min): every sign-in
-// here goes through paceAuth().
+// here goes through paceAuth(). Every minted account also accepts the shipping
+// agreements up front — an account that never agreed meets the P4 ask over the
+// page and is signed out by dismissing it, which reads from here as a desk that
+// never opened.
 //
 // The fixtures — the host who keeps a venue, the guest with a card, the weekly
 // ask — are `tools/fixtures.mjs`, shared with every other wire-era suite.
 
 import {
   API,
+  agreeCurrent,
   apiIsUp,
   apply,
   call,
@@ -298,6 +302,14 @@ const decliner = await mintGuest({
   name: 'Tom Reddick',
   last4: '0002',
 });
+
+// Every minted account accepts the shipping agreements before any browser signs
+// in as it. The P4 ask (2026-08-07) otherwise opens over the page at the first
+// quiet moment, swallows whichever click was aimed at what is underneath it, and
+// **signs the account out** when it is dismissed — which is the product working,
+// and looks from here like a desk that never opened. `hardening-test` §4 owns
+// the un-agreed state; this suite is about money.
+for (const person of [instant, manual, payer, decliner]) await agreeCurrent(person.token);
 
 const paidApplication = await apply(payer, instant, { dow: 3 });
 eq('an instant venue books the ask on the spot', paidApplication.status, 'approved');
@@ -733,6 +745,15 @@ const payload = JSON.stringify({
 sql(
   `insert into notifications ("Id","UserId","Type","PayloadJson","CreatedAtUtc") values (gen_random_uuid(), '${decliner.user.id}', 21, '${payload}', now());`
 );
+
+// Every browser this suite still has open is put down first, and this section
+// is the reason. A fade is the one claim here that a *rendered frame* has to
+// carry, and headless Chromes share whatever the machine has: measured on this
+// machine, a slip reaches opacity 1 with one browser in flight and peaks at
+// 0.26 with three — so the strict instrument below was failing on the suite's
+// own company rather than on anything the app did. Nothing after this line
+// reads any earlier page.
+await closeBrowsers();
 
 const visitor = await openPage('reminded');
 await boot(visitor);

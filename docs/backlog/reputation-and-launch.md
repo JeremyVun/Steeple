@@ -20,12 +20,17 @@ the day real users arrive: renewal loop closed, SEO finished, production config 
 > rating aggregates, booking/application/listing/mobile surfaces, public review pagination,
 > Admin comment moderation, and `rating_submitted` are built.
 >
-> **Caveat (2026-08-05):** the *web* half of those surfaces was built on `Web.v1`, now
-> retired. Web v2 carries the `rating` field in `src/data/api.js` typedefs and renders no
-> rating UI at all — no rate form, no reviews block, no summary chip. The API, mobile, and
-> Admin hide/unhide sides are unaffected; rebuilding the three web surfaces on v2 is
-> outstanding launch work (not owned by `v2_migration/`, which is scoped to the migration
-> itself — see its design §5 "out of scope").
+> **Web v2 rebuilt 2026-08-08** (`docs/backlog/ratings/` — design + build plan). The web
+> half had been built on `Web.v1`, now retired; v2 now carries the two-way loop end to end:
+> the rate form on both letters, the inbox nudges and tally, the organizer trust chip, the
+> ★ average on search cards and the room-sheet headline, `ratingReceived` ambience, and the
+> role-forked `/bookings/{id}` deep link. No API, schema, Admin or mobile change was needed.
+>
+> **Still open on web:** the public **reviews block** (paginated comments on the room sheet
+> — `GET /venues/{id}/ratings` exists but v2 holds no venue GUID) and the **no-show marking
+> UI** (`POST /occurrences/{id}/no-show` exists). Both are deliberately deferred with the
+> route back written down in `docs/backlog/ratings/design.md` § "Deferred, with the map
+> back".
 
 The centerpiece. Seams already reserved: `IRatingRepository` module slot (SYSTEM_DESIGN
 §4), `bookings 1─* ratings` (§5), `POST /api/v1/bookings/{id}/ratings` ✅ (CONTRACTS §5),
@@ -170,20 +175,19 @@ lazy-sweep entry).
 
 ## Slice 5 — SEO completion (`SEO.md` owns the checklist)
 
-> **Re-scoped 2026-08-05:** SEO.md's ✅ marks were earned by `Web.v1`'s server-rendered
-> pages and are **not true of web v2** (client-rendered: no per-listing meta, OG, JSON-LD,
-> canonicals, robots.txt or sitemap route today). The **crawler-rendering decision and the
-> re-implementation are owned by `docs/backlog/v2_migration/` (D9, build plan Phase 5)** —
-> this slice consumes that outcome. What stays phase-6's own: the area landing page, the
-> `lastmod` reconciliation, and the operational submissions below.
+> **Re-scoped 2026-08-08:** web v2's site-level floor (robots, sitemap, site metadata) is
+> built. Clean canonical routes, per-listing HTML/metadata/JSON-LD and real 404s are owned by
+> `docs/backlog/seo/`: the listing URL progressively opens the existing map product rather than
+> becoming a separate landing page. The owner explicitly deferred the area landing page,
+> Search Console/Bing submission and Core Web Vitals field pass from that build.
 
 - **Area landing page** — `/halls/{area-slug}` (SEO.md item 7) backed by
   `GET /api/v1/areas/{slug}` (CONTRACTS §3 planned addition): area name, copy, listing
   grid. Implemented off the single `Geofence` config section — the `areas` *table*
   arrives only with Area #2 (Phase 7); don't build it early.
-- Close the **sitemap `lastmod` caveat** (SEO.md item 1) — verify rooms/venues
-  `UpdatedAtUtc` is actually threaded into `SitemapEntry` (ARCHITECTURE says built,
-  SEO.md's caveat predates it; reconcile and tick).
+- ~~Close the **sitemap `lastmod` caveat**~~ — the current repository already emits the later
+  room/venue `UpdatedAtUtc`; the SEO build adds regression coverage and reconciles the stale
+  checklist text, with no schema change.
 - **Search Console + Bing** verification and sitemap submission (item 9); re-validate
   JSON-LD on a couple of real listings (the "free vs paid" pair predates the 2026-07-07
   removal of free listings); CWV field pass against the deployed environment.

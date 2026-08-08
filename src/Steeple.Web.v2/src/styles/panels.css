@@ -262,6 +262,21 @@
   color: var(--ink-faint);
 }
 
+/* What everyone who has been here says. Set as the same quiet fact as the
+   capacity, with only the mark itself in the accent — a rating is a fact about
+   the space, not a prize it won. Absent entirely until there is one (D4). */
+.headline__rating {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.headline__star {
+  color: var(--terracotta);
+}
+
 .block {
   margin: 0;
 }

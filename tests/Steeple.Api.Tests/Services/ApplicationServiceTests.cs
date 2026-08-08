@@ -17,6 +17,7 @@ public class ApplicationServiceTests
     public async Task SubmitAsync_HappyPath_CreatesPendingApplicationAndNotifiesManagers()
     {
         var (repo, managers, venue, room, organizer, manager) = NewScenario();
+        venue.BookingMode = BookingMode.Manual; // this is the request→approve path's happy case
         var service = CreateService(repo, managers, out var notifications, out _, out var analytics);
 
         var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: "1.2.3.4");
@@ -171,8 +172,10 @@ public class ApplicationServiceTests
     public async Task SubmitAsync_IdempotencyInsertRaceLost_ReturnsTheWinnerAsReplay()
     {
         // Both retries miss the pre-insert lookup; the loser's insert hits the unique index and
-        // must answer with the winner's application, not a 500.
-        var (repo, managers, _, room, organizer, _) = NewScenario();
+        // must answer with the winner's application, not a 500. (Manual venue: this is the
+        // AddAsync insert race — the instant path's twin lives in the integration suite.)
+        var (repo, managers, venue, room, organizer, _) = NewScenario();
+        venue.BookingMode = BookingMode.Manual;
         var key = Guid.NewGuid();
         var winner = NewApplication(room, organizer);
         winner.IdempotencyKey = key;
@@ -1124,20 +1127,71 @@ public class ApplicationServiceTests
     }
 
     [Fact]
-    public async Task SubmitAsync_PaymentsOff_NoGateAndNoInstantBook_EvenOnInstantVenue()
+    public async Task SubmitAsync_PaymentsOff_InstantVenue_StillConfirmsInstantly()
     {
+        // The host's "instant" choice no longer rides on payments.enabled (booking-modes.md,
+        // 2026-08-08): with the flag off, no 402 gate runs and the submit is still the booking.
         var (repo, managers, venue, room, organizer, _) = NewScenario();
         Assert.Equal(BookingMode.Instant, venue.BookingMode);
         var bookings = new FakeBookingService();
         var service = CreateService(repo, managers, out _, out _, out _,
             bookings: bookings,
-            payments: new StubPaymentService { HasMethod = false }); // no flag, no card — still fine
+            payments: new StubPaymentService { HasMethod = false }); // no flag, no card — still books
 
         var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
 
         Assert.Null(result.Error);
-        Assert.Equal(ApplicationStatus.Pending, Assert.Single(repo.Applications).Status);
-        Assert.Empty(bookings.Confirmed);
+        Assert.Equal("approved", result.Value!.Application.Status);
+        Assert.Single(bookings.Confirmed);
+    }
+
+    [Theory]
+    [InlineData(3, 3, true)]   // at the per-venue cap → falls back to request→approve
+    [InlineData(0, 10, true)]  // at the overall cap → falls back too
+    [InlineData(2, 9, false)]  // under both caps → still instant
+    public async Task SubmitAsync_UncardedGuest_InstantCapFallsBackToRequestApprove(
+        int atVenue, int total, bool expectPending)
+    {
+        // The uncarded instant-book caps (booking-modes.md, 2026-08-08): a guest with no payment
+        // method may only hold so many upcoming bookings before an instant submit becomes a
+        // pending request — the guest-side spam guard that replaced the payments coupling.
+        var (repo, managers, venue, room, organizer, _) = NewScenario();
+        Assert.Equal(BookingMode.Instant, venue.BookingMode);
+        var bookings = new FakeBookingService { Upcoming = new UpcomingBookingCounts(atVenue, total) };
+        var service = CreateService(repo, managers, out _, out _, out _,
+            bookings: bookings,
+            payments: new StubPaymentService { HasMethod = false });
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        if (expectPending)
+        {
+            Assert.Equal("pending", result.Value!.Application.Status);
+            Assert.Empty(bookings.Confirmed);
+        }
+        else
+        {
+            Assert.Equal("approved", result.Value!.Application.Status);
+            Assert.Single(bookings.Confirmed);
+        }
+    }
+
+    [Fact]
+    public async Task SubmitAsync_GuestWithMethodOnFile_CapsLifted_EvenOverTheNumbers()
+    {
+        // A verified payment method is the trust signal: the caps only bind uncarded guests.
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var bookings = new FakeBookingService { Upcoming = new UpcomingBookingCounts(50, 50) };
+        var service = CreateService(repo, managers, out _, out _, out _,
+            bookings: bookings,
+            payments: new StubPaymentService { HasMethod = true }); // payments flag still off
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Equal("approved", result.Value!.Application.Status);
+        Assert.Single(bookings.Confirmed);
     }
 
     [Fact]
@@ -1358,7 +1412,14 @@ public class ApplicationServiceTests
     {
         public bool SlotTaken { get; set; }
 
+        /// <summary>What <see cref="CountUpcomingForOrganizerAsync"/> answers (the uncarded cap read).</summary>
+        public UpcomingBookingCounts Upcoming { get; set; } = new(0, 0);
+
         public List<Application> Confirmed { get; } = [];
+
+        public Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+            Guid organizerId, Guid venueId, CancellationToken ct = default) =>
+            Task.FromResult(Upcoming);
 
         /// <summary>The schedule the last confirmation booked (the counter's, or null for the ask).</summary>
         public ScheduleSpec? LastSpec { get; private set; }

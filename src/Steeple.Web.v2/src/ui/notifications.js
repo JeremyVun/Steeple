@@ -42,6 +42,7 @@ const AMBIENT = new Set([
   'applicationMessage',
   'applicationApproved',
   'applicationDeclined',
+  'ratingReceived',
 ]);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -90,9 +91,32 @@ export function lineFor(row) {
     }
     case 'applicationDeclined':
       return `Your request for ${where || 'a space'} wasn\u2019t accepted.`;
+    case 'ratingReceived':
+      // Content-free by design: under the double blind the rating itself is
+      // withheld until this person rates back, so saying what it was here would
+      // be either a lie or a leak. The nudge and the honest truth are the same
+      // sentence (D10).
+      return `${ratedBy(at) ?? 'Someone'} rated a booking with you \u2014 rate back to see it.`;
     default:
       return null;
   }
+}
+
+/**
+ * Who wrote the rating that just arrived.
+ *
+ * Steeple sends the same payload to both sides \u2014 the room, the venue and the
+ * organizer, never a rater \u2014 because the notification is content-free on
+ * purpose. The one thing that distinguishes the two readers is which of those
+ * names is their own: a person told that a rating landed on a booking they
+ * organized was rated by the venue, and everybody else on that booking keeps
+ * its doors. Unsure is answered by naming nobody rather than by guessing.
+ */
+function ratedBy(payload) {
+  const me = session.currentUser()?.displayName ?? null;
+  if (!me) return null;
+  if (payload.organizerName && payload.organizerName === me) return payload.venueName ?? null;
+  return payload.organizerName ?? null;
 }
 
 /** Whether this build deliberately surfaces this row in the inbox and as a slip. */
@@ -110,6 +134,7 @@ const ACTION_LABEL = {
   applicationMessage: 'Read message',
   applicationApproved: 'See your booking',
   applicationDeclined: 'See request',
+  ratingReceived: 'Open the booking',
 };
 
 export function actionLabelFor(row) {

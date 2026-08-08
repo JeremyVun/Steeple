@@ -40,17 +40,27 @@ rooms with no availability rules), `409 slot_taken` *(instant venues only, below
 `429 rate_limited` (per-account `apply` policy, shared with messages — **not** with card
 setup, which has its own `payments` policy since 2026-08-05; see `api-ports.md`).
 
-**Instant book ✅ *(2026-08-05 — `docs/backlog/booking-modes.md`; behind `payments.enabled`)*:**
+**Instant book ✅ *(2026-08-05 — `docs/backlog/booking-modes.md`; decoupled from
+`payments.enabled` 2026-08-08)*:**
 when the room's venue is in `instant` mode (`RoomDetail.bookingMode`, `discovery.md`), the
 submit **is the booking transaction** — the same one-SaveChanges machinery approval uses, under
 the same exclusion constraint; first valid request wins. The `201` response is the application
 with `status: "approved"` and `bookingId` set; losing a race answers `409 slot_taken` and
 **nothing persists** (no application row — unlike approval's auto-decline, there was nothing to
-decline). Post-commit, the first occurrence charges (`payments.md`); the organizer gets the
+decline). Post-commit, the first occurrence charges (`payments.md`; a no-op while payments are
+off — the booking is simply offline); the organizer gets the
 booking-confirmed notification/email (`applicationApproved`, `deepLink: /bookings/{id}`) and
 the venue's managers get a `bookingReceived` notice. The host's lever is **rescind** = the
 normal booking cancel, which refunds in full any time. `manual` venues keep the entire
 request→approve flow below unchanged; counter-offers exist only in manual mode.
+
+**Uncarded instant-book caps *(2026-08-08 — booking-modes.md "Decoupled from payments")*:**
+a guest with **no payment method on file** may hold at most **3 upcoming bookings at the
+venue / 10 overall** (confirmed bookings with scheduled time still ahead). An over-cap
+instant submit is not an error — it **falls back to request→approve** and answers `201` with
+`status: "pending"`, so clients must read the outcome from the response's status, never from
+`bookingMode` alone. A verified payment method lifts both caps; while `payments.enabled` the
+402 gate has already proven one, so the caps only bind in the payments-off era.
 
 `Application` ✅: `{ id, roomId, roomName, venueName, venueSlug, roomSlug,
 organizer{id, displayName, ratingSummary?{averageStars, ratingCount, noShowCount,

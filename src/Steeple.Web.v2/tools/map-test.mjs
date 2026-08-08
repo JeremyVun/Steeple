@@ -231,7 +231,10 @@ await realClick('.dm-seg--many');
 await realClick('.pill--capacity[data-capacity="100"]');
 check('a size takes the small rooms out', (await text('.dm-count')) === '3 spaces across 3 venues', await text('.dm-count'));
 check('the segment says what it is holding', (await text('.dm-seg--many .dm-seg__value')) === '100+ people', await text('.dm-seg--many .dm-seg__value'));
-check('every row left is big enough', await page.evaluate('[...document.querySelectorAll(".dm-row__meta")].every(n=>Number(n.textContent.replace(/\\D/g,"")) >= 100)'));
+// The seats are read off the front of the meta line, not by stripping every
+// non-digit from it: that line carries a rating too once a venue has earned one
+// ("Seats 120 · ★ 4.6 (12)"), and a strip turns that into 1204612.
+check('every row left is big enough', await page.evaluate('[...document.querySelectorAll(".dm-row__meta")].every(n=>Number((n.textContent.match(/^Seats\\s+(\\d+)/) ?? [])[1]) >= 100)'));
 check('the churches that cannot hold you rest, and stay pinned', (await count('.dm-pin.is-resting')) === 2, `${await count('.dm-pin.is-resting')} resting`);
 check('the world is told the same thing', (await page.evaluate('__steeple.state.matching.size')) === 3, String(await page.evaluate('__steeple.state.matching.size')));
 await shot(`capacity-${tag}`);

@@ -77,10 +77,11 @@ API's `discovery` 120/min/IP plus global 300/min/account-or-IP limits; it is not
 
 `RoomDetail` also carries additive `openHours?` (the `days` shape from the availability rules
 in `manage.md`; null when the room has no rules rows) and additive `bookingMode` ✅
-*(2026-08-05 — booking-modes.md)*: the **effective** mode, `"instant"` (a valid request
-confirms immediately — the apply UI must say so) or `"manual"` (request → approve). Emits
-`manual` while `payments.enabled` is off regardless of the host's stored choice, so the UI
-never promises an instant confirmation the server won't give (`payments.md`).
+*(2026-08-05 — booking-modes.md)*: the host's stored choice, `"instant"` (a valid request
+confirms immediately — the apply UI must say so) or `"manual"` (request → approve). Since
+2026-08-08 it is **no longer masked by `payments.enabled`** — but an instant submit from an
+uncarded guest over the spam caps still answers `status: "pending"` (`applications.md`), so
+clients read the outcome from the submit response, never from this field alone.
 
 ### `GET /api/v1/venues/{id}/ratings` ✅
 Public, revealed venue review comments, newest first. `page` defaults to 1; `pageSize` defaults

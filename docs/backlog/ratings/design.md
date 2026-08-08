@@ -257,6 +257,21 @@ journal's "Lately" block picks it up automatically from the same cache.
   availability; every verification loop must mint its own booking and push its occurrence
   into the past (recipe in `build_plan.md`).
 
+## Build deviations (recorded 2026-08-08, P1/P2 round)
+
+- **State 4 is unreachable, verified against `RatingService.IsRevealed`:** the wire
+  carries no "the other side has rated" hint — their rating is withheld until you rate
+  back (or the window closes), so "they rated first" is indistinguishable from "they
+  haven't". The branch ships as written (it's one ternary) but cannot fire; the
+  reciprocity nudge rides D10's `ratingReceived` notification instead. **Host letter:
+  do not gate anything on `byOrganizer` presence pre-reveal** — it is null for the host
+  until they rate back, by design. Harnesses assert the non-leak, not the leak.
+- **A fifth state the design missed:** window-closed time-reveal where theirs is
+  visible and you never rated — renders as a fact block (`theirs`), not silence.
+- Fact states carry heading "How it went" (`h2.eyebrow`); the form asks via
+  `h2.rate__ask`. Guest block state machine: `.rate[data-state]` ∈
+  `open · invited · mine · both · theirs`.
+
 ## Deferred, with the map back
 
 - **Public reviews block** (the cut): `GET /api/v1/venues/{id}/ratings?page&pageSize`

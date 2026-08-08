@@ -209,6 +209,11 @@ function summaryFrom(item) {
     activities: labels(item.activities, ACTIVITIES),
     amenities: labels(item.amenities, AMENITIES),
     accessibility: labels(item.accessibility, ACCESSIBILITY),
+    // What the venue has earned: `{averageStars, count}`, venue-level, and null
+    // until there is at least one revealed, unhidden rating. Null stays null —
+    // the bundled catalog carries no rating data, because a fallback that
+    // invents stars is worse than one that shows none.
+    rating: item.rating ?? null,
   };
 }
 
@@ -290,6 +295,9 @@ function listingFrom(detail) {
     accessibility: labels(detail.accessibility, ACCESSIBILITY),
     description: detail.description,
     houseRules: detail.houseRules,
+    // Venue-level `{averageStars, count}` — the same block the summary carries,
+    // null until a rating is revealed (see `summaryFrom`).
+    rating: detail.rating ?? null,
     photos,
     venue: profileFrom(venue),
   };

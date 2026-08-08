@@ -33,15 +33,27 @@
 // upserts and deletes nothing. §9 answers for steeple with a fabricated page,
 // because the shape of a page is the contract and a thousand real rows are not.
 //
+// §10 is the ratings loop (docs/backlog/ratings/), which needs a booking that
+// has finished — no seed booking qualifies, so it mints its own single evening
+// and pushes it into the past in Postgres. What it holds the seam to is the
+// double blind: after the organizer has rated, the host's letter must show
+// nothing at all, and each side sees the other's only once it has written its
+// own. The wire carries no "they have rated" hint, so the assertion is the
+// **absence**, never the leak.
+//
 // Needs: the API (STEEPLE_API, default http://localhost:5200/api/v1) with
 // Auth:DevLoginEnabled and payments.enabled, this app on the given origin with
 // its proxy pointed at that same API, and `psql` reachable at the dev database.
-// psql stands in for exactly one thing: the operator's approve on a new host's
-// first listing (docs/backlog/v2_migration D2), which has no API of its own.
+// psql stands in for two things: the operator's approve on a new host's first
+// listing (docs/backlog/v2_migration D2), which has no API of its own, and
+// pushing §10's booking into the past, which is the clock and not a feature.
 // World-OFF is the documented state — this suite is about paper, not village.
 //
-// The five-a-minute `apply` rate limit is shared by setup, mock-confirm, submit
-// and messages, so each scenario mints its own account.
+// The five-a-minute `apply` rate limit is **shared** by setup, mock-confirm,
+// submit, messages, cancel and **a rating** — five writes a minute for the whole
+// account, not five of each. Each scenario mints its own account for that
+// reason; a section that would spend more than five in a minute must pace
+// itself (~65s, the window's own length) rather than blame the app for a 429.
 
 import {
   API,
@@ -51,6 +63,7 @@ import {
   call,
   closeBrowsers,
   launch,
+  mintGuest,
   mintVenue,
   nextWeekday,
   signIn,
@@ -104,6 +117,12 @@ const eq = (label, actual, wanted) =>
 // hard — stalls the other, and a suite that cannot tell those apart is a suite
 // that reports the wrong thing. Separate browsers is also what "two browsers"
 // means in the acceptance script.
+//
+// It is a browser per *page*, not merely per person: §10 gives one person two
+// browsers because only the page in front of a renderer keeps advancing its CSS
+// transitions. A second page of the same browser opens a surface that then sits
+// at opacity 0 for as long as anybody is willing to wait, and `steady` reads
+// that — correctly — as a surface that never came in.
 async function openPage(label) {
   const browser = await launch();
   const page = await browser.newPage();
@@ -938,6 +957,330 @@ await until(
   'a whole list is still the whole truth'
 );
 check('a list that really ended still clears what steeple no longer holds', true);
+
+// ── 10. how it went, said twice and shown once ───────────────────────────────
+//
+// The rating loop, end to end and on both sides of it (docs/backlog/ratings/).
+// A booking that has finished asks each party, from the inbox, how it went; the
+// letter is where it is written; and steeple holds each answer back until the
+// other one is in.
+//
+// Nothing in the seed can be rated — seed venues are instant-book with
+// future-only availability — so the section mints one evening, books it, and
+// pushes it into the past in Postgres. The occurrence and the booking's own
+// dates both move: the sweep that settles a booking reads the occurrences, and
+// the exclusion constraint on the room means the shift has to be to a time
+// nothing else holds. Every authed booking read then runs the sweep, so no
+// restart is needed to make both sides eligible.
+//
+// The blind is the point. The wire carries no hint that the other side has
+// written anything — their rating is simply withheld — so what is asserted here
+// is the **absence** of the organizer's rating from a host who has not rated
+// back, and the arrival of both the moment they do.
+//
+// Rate limit: the rating POST spends the same five-a-minute budget as `apply`.
+// This section spends three on the organizer (the request, the rating, the
+// duplicate) and one on the venue, so it never has to wait — a section that
+// added a fourth to either account would.
+
+console.log('\n10 · how it went, said twice and shown once');
+
+const rateHost = kept(
+  await mintVenue({
+    email: `host-rate-${stamp}@example.org`,
+    name: 'Miriam Oyelaran',
+    venueName: `Fold Street Chapel ${stamp}`,
+    roomName: 'Upper Room',
+    bookingMode: null,
+  })
+);
+await agreeCurrent(rateHost.token);
+
+const rateGuest = await mintGuest({ email: `guest-rate-${stamp}@example.org`, name: 'Callum Devereux' });
+await agreeCurrent(rateGuest.token);
+
+const oneEvening = await call('POST', `/listings/${rateHost.roomId}/applications`, {
+  token: rateGuest.token,
+  key: `rate-${stamp}`,
+  body: {
+    activityType: 'community',
+    groupSize: 10,
+    intentText: 'A single evening of carol practice, and then we will know how it went.',
+    turnstileToken: null,
+    schedule: {
+      frequency: 'oneOff',
+      startDate: nextWeekday(3, 7),
+      endDate: null,
+      daysOfWeek: null,
+      startTime: '18:00',
+      endTime: '20:00',
+    },
+  },
+});
+check(
+  'fixture: an instant venue books the one evening on the spot',
+  oneEvening.status === 200 || oneEvening.status === 201,
+  `status ${oneEvening.status} ${JSON.stringify(oneEvening.body)}`
+);
+const rateApp = oneEvening.body;
+check('fixture: and names the booking it made', Boolean(rateApp?.bookingId));
+
+// The clock, which is the one thing the product cannot be asked to fake.
+sql(
+  `update booking_occurrences set "StartUtc" = now() - interval '3 days', ` +
+    `"EndUtc" = now() - interval '3 days' + interval '2 hours', ` +
+    `"LocalDate" = (now() - interval '3 days')::date where "BookingId" = '${rateApp.bookingId}';`
+);
+sql(
+  `update bookings set "StartDate" = (now() - interval '3 days')::date, ` +
+    `"EndDate" = (now() - interval '3 days')::date where "Id" = '${rateApp.bookingId}';`
+);
+
+const swept = await call('GET', `/bookings/${rateApp.bookingId}`, { token: rateGuest.token });
+eq('a booking whose only evening has passed sweeps to completed', swept.body?.status, 'completed');
+eq('and steeple invites the organizer to rate it', swept.body?.ratings?.canRate, true);
+check(
+  'with neither side having written anything yet',
+  !swept.body?.ratings?.byOrganizer && !swept.body?.ratings?.byVenue,
+  JSON.stringify(swept.body?.ratings)
+);
+
+// The inbox is where a person learns they have something to do.
+const ratePage = await openPage('rate-guest');
+await boot(ratePage);
+await signInPage(ratePage, rateGuest.email, rateGuest.name);
+await ratePage.evaluate(() => window.__steeple.setView('journal'));
+await until(
+  ratePage,
+  (id) => Boolean(document.querySelector(`.jrow[data-id="${id}"][data-nudge="rate"]`)),
+  rateApp.id,
+  30000,
+  'the finished booking carries the nudge to rate'
+);
+check('the inbox row asks how it went', true);
+const guestRow = await ratePage.evaluate(
+  (id) => ({
+    note: document.querySelector(`.jrow[data-id="${id}"] .jrow__note`)?.textContent ?? null,
+    tally: document.querySelector('.journal__tally')?.textContent ?? null,
+  }),
+  rateApp.id
+);
+eq('in the row’s own words', guestRow.note, 'Finished — how was the space?');
+eq('and the top line counts it, without calling it a request', guestRow.tally, '1 waiting on you');
+
+// The same person's other browser, parked on the same letter with the form
+// still open — the only honest way to press send on a rating that has already
+// been written, which is what a duplicate is. A browser of its own, because a
+// second page of this one would stop advancing its transitions the moment it
+// went behind (see `openPage`).
+const stalePage = await openPage('rate-guest-stale');
+await boot(stalePage);
+await signInPage(stalePage, rateGuest.email, rateGuest.name);
+await stalePage.evaluate((id) => window.__steeple.setView('letter', { applicationId: id }), rateApp.id);
+await until(
+  stalePage,
+  () => document.querySelector('.rate')?.dataset.state === 'open',
+  null,
+  30000,
+  'the second browser holds the form too'
+);
+await press(stalePage, '.guest__surface--opened .rate__stars label[for="letter-rate-2"]');
+
+// ── the organizer rates the space ────────────────────────────────────────────
+
+await ratePage.evaluate((id) => window.__steeple.setView('letter', { applicationId: id }), rateApp.id);
+await until(
+  ratePage,
+  () => document.querySelector('.rate')?.dataset.state === 'open',
+  null,
+  30000,
+  'the letter invites a rating'
+);
+const askedFirst = await ratePage.evaluate(() => ({
+  ask: document.querySelector('.rate__ask')?.textContent ?? null,
+  facts: document.querySelectorAll('.rate__fact').length,
+}));
+eq('the letter asks the question in one line', askedFirst.ask, 'How was the space?');
+eq('and nothing is shown as already rated', askedFirst.facts, 0);
+
+// The stars are labels over hidden radios, so the label is what a pointer can
+// land on — and `.guest__surface--opened` scopes it, because the host letter
+// mounts its own inert copy of this block on the same page when it is open.
+await press(ratePage, '.guest__surface--opened .rate__stars label[for="letter-rate-4"]');
+await write(ratePage, '#letter-rate-note', 'Warm room, easy to find, and the kettle worked.');
+await press(ratePage, '.guest__surface--opened [data-action="rate-open"]');
+await until(
+  ratePage,
+  () => Boolean(document.querySelector('.rate__confirm')),
+  null,
+  30000,
+  'the commit says it is final'
+);
+check('a rating is committed in two steps, because it cannot be undone', true);
+await press(ratePage, '.guest__surface--opened [data-action="rate-send"]');
+await until(
+  ratePage,
+  () => document.querySelector('.rate')?.dataset.state === 'mine',
+  null,
+  30000,
+  'the letter became the fact of the rating'
+);
+
+const guestSide = await ratePage.evaluate(() => ({
+  who: [...document.querySelectorAll('.rate__who')].map((n) => n.textContent),
+  glyphs: document.querySelector('.rate__glyphs')?.textContent ?? null,
+  comment: document.querySelector('.rate__comment')?.textContent ?? null,
+  reveal: document.querySelector('.rate__reveal')?.textContent ?? null,
+  form: Boolean(document.querySelector('.rate__stars')),
+}));
+eq('the organizer’s own rating is now a fact on the letter', guestSide.who.join('|'), 'Your rating');
+eq('at the number of stars they chose', guestSide.glyphs, '★★★★☆');
+eq('with the words they wrote', guestSide.comment, 'Warm room, easy to find, and the kettle worked.');
+eq('and the form is spent', guestSide.form, false);
+check(
+  'the venue’s half is said to be still coming, not shown',
+  /arrives when it's revealed/.test(guestSide.reveal ?? ''),
+  guestSide.reveal
+);
+
+const guestRead = await call('GET', `/bookings/${rateApp.bookingId}`, { token: rateGuest.token });
+eq('steeple holds the organizer’s rating', guestRead.body?.ratings?.byOrganizer?.stars, 4);
+eq('and tells the organizer nothing about the venue’s', guestRead.body?.ratings?.byVenue ?? null, null);
+
+// ── the same rating, sent twice ──────────────────────────────────────────────
+
+await press(stalePage, '.guest__surface--opened [data-action="rate-open"]');
+await press(stalePage, '.guest__surface--opened [data-action="rate-send"]');
+await until(
+  stalePage,
+  () => Boolean(document.querySelector('.opened__refusal')?.textContent?.trim()),
+  null,
+  30000,
+  'the second send was answered'
+);
+const refused = await stalePage.$eval('.opened__refusal', (n) => n.textContent.trim());
+check('a rating sent twice is refused in steeple’s own words', /already rated/i.test(refused), refused);
+check(
+  'and never as "not available here yet" — a 409 is not a missing feature',
+  !/not available here yet/i.test(refused),
+  refused
+);
+eq('one send, one rating', sql(`select count(*) from ratings where "BookingId" = '${rateApp.bookingId}';`), '1');
+await stalePage.browser().close();
+
+// ── the venue is asked the same question, and told nothing ───────────────────
+
+const rateHostPage = await openPage('rate-host');
+await boot(rateHostPage);
+await signInPage(rateHostPage, rateHost.email, rateHost.name);
+await rateHostPage.evaluate(() => window.__steeple.setView('journal'));
+await until(
+  rateHostPage,
+  (id) => Boolean(document.querySelector(`.jrow--hosting[data-id="${id}"][data-nudge="rate"]`)),
+  rateApp.id,
+  30000,
+  'the finished booking returned to the host’s inbox'
+);
+const hostRow = await rateHostPage.evaluate(
+  (id) => ({
+    label: document.querySelector(`.jrow--hosting[data-id="${id}"] .jrow__status span:last-child`)?.textContent ?? null,
+    note: document.querySelector(`.jrow--hosting[data-id="${id}"] .jrow__note`)?.textContent ?? null,
+    tally: document.querySelector('.journal__tally')?.textContent ?? null,
+  }),
+  rateApp.id
+);
+eq('a decided request comes back, once, as Finished', hostRow.label, 'Finished');
+eq('asking after the group rather than the room', hostRow.note, 'How was the group? You can rate them.');
+eq('and it counts on the host’s top line too', hostRow.tally, '1 waiting on you');
+
+await press(rateHostPage, `.jrow--hosting[data-id="${rateApp.id}"]`);
+await until(
+  rateHostPage,
+  () => Boolean(document.querySelector('.letterpage.is-open')),
+  null,
+  30000,
+  'the hosting row opened the host letter'
+);
+await until(
+  rateHostPage,
+  () => Boolean(document.querySelector('.letterpage .ratemark')),
+  null,
+  30000,
+  'the host letter carries the rating block'
+);
+const blind = await rateHostPage.evaluate(() => ({
+  state: document.querySelector('.letterpage .ratemark')?.dataset.state ?? null,
+  ask: document.querySelector('.letterpage .ratemark__ask')?.textContent ?? null,
+  facts: document.querySelectorAll('.letterpage .ratemark__fact').length,
+  chips: document.querySelectorAll('.letterpage__chips .ratemark__chip').length,
+  said: document.body.textContent.includes('Warm room, easy to find'),
+}));
+eq('the host is invited to rate the group', blind.state, 'open');
+eq('in the letter’s own words', blind.ask, 'How was the group?');
+eq('and is shown nothing the organizer wrote — the blind is absolute', blind.facts, 0);
+eq('not even the comment, anywhere on the page', blind.said, false);
+eq('a group nobody has rated wears no chip — silence, not a zero', blind.chips, 0);
+
+await press(rateHostPage, '.letterpage .ratemark__stars label[for="host-rate-5"]');
+await write(rateHostPage, '#host-rate-note', 'They left it cleaner than they found it.');
+await press(rateHostPage, '.letterpage [data-action="rate-open"]');
+await until(
+  rateHostPage,
+  () => Boolean(document.querySelector('.letterpage .ratemark__confirm')),
+  null,
+  30000,
+  'the host’s commit says it is final too'
+);
+await press(rateHostPage, '.letterpage [data-action="rate-send"]');
+await until(
+  rateHostPage,
+  () => document.querySelector('.letterpage .ratemark')?.dataset.state === 'both',
+  null,
+  30000,
+  'rating back revealed the organizer’s'
+);
+const hostBoth = await rateHostPage.evaluate(() => ({
+  who: [...document.querySelectorAll('.letterpage .ratemark__who')].map((n) => n.textContent),
+  glyphs: [...document.querySelectorAll('.letterpage .ratemark__glyphs')].map((n) => n.textContent),
+  comments: [...document.querySelectorAll('.letterpage .ratemark__comment')].map((n) => n.textContent),
+}));
+eq('rating back is what reveals — the host now sees both halves', hostBoth.who.length, 2);
+eq('their own first', hostBoth.who[0], 'Your rating');
+eq('and the organizer’s at the stars it was written at', hostBoth.glyphs[1], '★★★★☆');
+check(
+  'with the words that came with it',
+  hostBoth.comments.includes('Warm room, easy to find, and the kettle worked.'),
+  JSON.stringify(hostBoth.comments)
+);
+
+// ── and the organizer, next time they look ───────────────────────────────────
+
+await ratePage.evaluate(() => window.__steeple.setView('journal'));
+await ratePage.evaluate((id) => window.__steeple.setView('letter', { applicationId: id }), rateApp.id);
+await until(
+  ratePage,
+  () => document.querySelector('.rate')?.dataset.state === 'both',
+  null,
+  30000,
+  'the organizer’s letter revealed the venue’s rating'
+);
+const guestBoth = await ratePage.evaluate(() => ({
+  who: [...document.querySelectorAll('.rate__who')].map((n) => n.textContent),
+  glyphs: [...document.querySelectorAll('.rate__glyphs')].map((n) => n.textContent),
+  reveal: document.querySelectorAll('.rate__reveal').length,
+}));
+eq('the reveal reaches both sides', guestBoth.who.length, 2);
+eq('and it is the venue’s, at five', guestBoth.glyphs[1], '★★★★★');
+eq('nothing is still said to be coming', guestBoth.reveal, 0);
+
+// The database is the referee: two rows, one per direction, written the way
+// round the two people meant them. 1 = the organizer was rated (by the venue),
+// 2 = the venue was rated (by the organizer) — db/changelog/008-ratings.sql.
+const ratingRows = sql(
+  `select "RateeType" || ':' || "Stars" from ratings where "BookingId" = '${rateApp.bookingId}' order by "RateeType";`
+);
+eq('two rows, one per direction, and no more', ratingRows.split('\n').filter(Boolean).length, 2);
+eq('written the way round the two people meant them', ratingRows.replace(/\s+/g, ' '), '1:5 2:4');
 
 // ── done ─────────────────────────────────────────────────────────────────────
 

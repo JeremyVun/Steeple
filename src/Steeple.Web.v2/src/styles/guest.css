@@ -1432,6 +1432,14 @@
   color: var(--ink-soft);
 }
 
+/* A finished booking still owed a rating. It keeps its bucket, its tone and its
+   seal — the only difference is that its note is a question, so it is set as
+   one: darker than the other notes, and nothing more (D9). Never terracotta,
+   which on this row means "waiting on you" in the sense of overdue. */
+.jrow[data-nudge='rate'] .jrow__note {
+  color: var(--ink);
+}
+
 .jrow[data-tone='yours'] .jrow__note {
   color: var(--terracotta-deep);
 }
@@ -1814,6 +1822,146 @@
 
 .held__failed .prose {
   margin: 0;
+}
+
+/* ── How it went ────────────────────────────────────────────────────────────
+   The organizer's half of a rating, on the letter of the booking it is about.
+   A ruled section rather than a tinted box: this is an invitation, not an
+   alarm, and it should read like the next line of the same printed form.
+
+   Guest-side only. Host.css loads after this file, so its rating styles live
+   under `.ratemark__*` and these names appear nowhere else.
+
+   Stars are native radios: the input carries the keyboard and the semantics,
+   the label carries the glyph, and the fill is a class the letter paints on
+   change — no `:checked ~` sibling trick, because that needs the row reversed
+   in the DOM and arrow keys then run backwards. */
+
+.rate {
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.rate__ask {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.rate__stars {
+  margin: 11px 0 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  gap: 2px;
+}
+
+/* Focusable, and out of the way: the ring is drawn on the label instead. */
+.rate__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rate__star {
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+/* Unlit is `☆` in the rule colour, lit is `★` in the accent — the glyph itself
+   changes, so an unrated form can never be read as a rating already given. */
+.rate__glyph {
+  display: block;
+  font-size: 27px;
+  line-height: 1;
+  color: var(--line-strong);
+  transition: color 140ms var(--ease);
+}
+
+.rate__star:hover .rate__glyph {
+  color: color-mix(in srgb, var(--terracotta) 55%, var(--line-strong));
+}
+
+.rate__star.is-on .rate__glyph {
+  color: var(--terracotta);
+}
+
+.rate__input:focus-visible + .rate__star {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.rate__notelabel {
+  margin-top: 15px;
+}
+
+.rate__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 13px;
+}
+
+.rate__confirm {
+  margin-top: 13px;
+  padding: 13px 16px 14px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+}
+
+.rate__confirm .prose {
+  margin: 0;
+}
+
+.rate__confirm .rate__actions {
+  margin-top: 10px;
+}
+
+/* What the other side will see of this, and when — said once, quietly, under
+   the thing it is about. */
+.rate__reveal {
+  margin: 13px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* A rating already written is no longer a control: it is printed. */
+.rate__fact + .rate__fact {
+  margin-top: 11px;
+}
+
+.rate__fact:first-of-type {
+  margin-top: 11px;
+}
+
+.rate__factline {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.rate__who {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.rate__glyphs {
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--terracotta);
+}
+
+.rate__comment {
+  margin: 4px 0 0;
+  color: var(--ink);
 }
 
 /* ── The thread ─────────────────────────────────────────────────────────── */

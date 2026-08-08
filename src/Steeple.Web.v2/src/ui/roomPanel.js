@@ -19,6 +19,23 @@ import { createPutDown, sheetScroller } from './rail.js';
 const said = (values) =>
   Object.fromEntries(Object.entries(values).filter(([, v]) => v !== null && v !== undefined));
 
+/** What everyone who has been here says, in one line beside the price. */
+function ratingLine(room) {
+  const rating = room.rating ?? null;
+  if (!rating) return null;
+  const count = `${rating.count} ${rating.count === 1 ? 'rating' : 'ratings'}`;
+  const average = rating.averageStars.toFixed(1);
+  return el('p', { class: 'headline__rating' }, [
+    // Printed once and read once: the glyph is decoration over the sentence
+    // below it, not a word anybody wants spelled out.
+    el('span', { 'aria-hidden': 'true' }, [
+      el('span', { class: 'headline__star', text: '★' }),
+      ` ${average} · ${count}`,
+    ]),
+    el('span', { class: 'visually-hidden', text: `Rated ${average} out of 5 from ${count}` }),
+  ]);
+}
+
 export function createRoomPanel({ onRequest }) {
   const hero = createBanner('dm-banner dm-banner--hero');
   const head = el('header', { class: 'sheet__head' });
@@ -85,6 +102,10 @@ export function createRoomPanel({ onRequest }) {
           unit && el('span', { class: 'price__unit', text: unit }),
         ]),
         el('p', { class: 'headline__capacity', text: seatsText(room) }),
+        // Steeple sends no rating at all until a space has a revealed one, and
+        // nothing is what an unrated space says here: no "0", no empty stars,
+        // no "not rated yet". Absence of signal is not negative signal (D4).
+        ratingLine(room),
       ]),
     ]);
 

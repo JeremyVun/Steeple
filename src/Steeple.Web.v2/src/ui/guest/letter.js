@@ -83,6 +83,17 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     maxlength: '2000',
   });
 
+  // The rating being written, held out of the redraw. `render()` rebuilds this
+  // page on every move, and a two-step confirm is a redraw — so the stars and
+  // the words have to survive one, exactly as the reply box does.
+  let stars = 0;
+  const rateNote = el('textarea', {
+    class: 'field__input field__input--note',
+    id: 'letter-rate-note',
+    rows: '3',
+    maxlength: '1000',
+  });
+
   // ── pieces ────────────────────────────────────────────────────────────────
 
   function letterhead(app, venue, room) {
@@ -356,6 +367,217 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     ].filter(Boolean));
   }
 
+  /**
+   * How it went — the one place an organizer rates a space.
+   *
+   * Everything here is steeple's call and none of it is this browser's: whether
+   * a rating may still be written (`canRate`), and whether the venue's own
+   * rating has been revealed yet (it is simply present, or it is not). No date
+   * arithmetic on `rateByUtc`, no local reveal rule, and nothing at all when the
+   * booking carries no `ratings` block — a booking mirrored before this existed,
+   * or one steeple has said nothing about, renders as silence rather than as a
+   * greyed-out invitation (D3, D4).
+   *
+   * The gate is deliberately narrower than the API's: steeple would take a
+   * rating from the first past date, but a rating is immutable and there is only
+   * one, so a year's term would be judged in week one. The invitation waits for
+   * the booking to be over — cancelled included, because a no-show that became a
+   * cancellation is exactly when a warning is worth writing (D2).
+   */
+  function ratingBlock(app, venue, booking) {
+    const ratings = booking?.ratings ?? null;
+    if (!ratings) return null;
+    // On this letter the reader is the organizer: `byOrganizer` is theirs to
+    // write, `byVenue` is the one that has to be earned back.
+    const mine = ratings.byOrganizer ?? null;
+    const theirs = ratings.byVenue ?? null;
+    const settled = booking.status === 'completed' || booking.status === 'cancelled';
+
+    if (settled && ratings.canRate === true && !mine) return rateForm(app, venue, booking, theirs);
+    if (mine || theirs) {
+      return el(
+        'section',
+        { class: 'rate rate--done', dataset: { state: mine ? (theirs ? 'both' : 'mine') : 'theirs' } },
+        [
+          el('h2', { class: 'eyebrow', text: 'How it went' }),
+          mine && ratingFact('Your rating', mine),
+          theirs && ratingFact(`${venue.shortName}'s rating`, theirs),
+          // Only said while there is something still to arrive. A rating that
+          // was never written has nothing to wait for and says nothing (D9).
+          mine && !theirs
+            ? el('p', {
+                class: 'rate__reveal',
+                text: `${venue.shortName}'s rating arrives when it's revealed.`,
+              })
+            : null,
+        ].filter(Boolean)
+      );
+    }
+    return null;
+  }
+
+  /** A rating already written, printed as the fact it now is. */
+  function ratingFact(who, rating) {
+    return el('div', { class: 'rate__fact' }, [
+      el('p', { class: 'rate__factline' }, [
+        el('span', { class: 'rate__who', text: who }),
+        el('span', { class: 'rate__glyphs', 'aria-hidden': 'true', text: starGlyphs(rating.stars) }),
+        el('span', { class: 'visually-hidden', text: `${rating.stars} out of 5 stars` }),
+      ]),
+      rating.comment ? el('p', { class: 'prose prose--sm rate__comment', text: rating.comment }) : null,
+    ].filter(Boolean));
+  }
+
+  const starGlyphs = (n) => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
+
+  /**
+   * The form: five stars, an optional note, and a commit that says it is final.
+   *
+   * `theirs` sharpens the closing line when the venue's rating is already in
+   * hand. Note that under the double-blind rule it cannot be, from this data:
+   * steeple withholds the other side's rating until you have written yours, and
+   * the wire carries no "they have rated" hint — so a venue that rates first is
+   * invisible here by design, and the reciprocity nudge reaches the organizer as
+   * a `ratingReceived` notification instead (D10). The branch stays because it
+   * is one ternary and it is the truth the moment either of those changes.
+   *
+   * Native radios, in reading order, so the stars are arrow-key navigable and
+   * announced as a group without a line of script — the labels carry the words
+   * ("3 stars") and the glyph is decoration over them. The fill is painted on
+   * change rather than through a redraw, because a redraw here would take the
+   * words already typed into the note with it.
+   */
+  function rateForm(app, venue, booking, theirs) {
+    const labels = [];
+    const glyphs = [];
+    const radios = [];
+    // Shape as well as colour. A pale *filled* star reads as a rating already
+    // given and greyed out — the empty ones have to be a different glyph, which
+    // is also how the fact lines print a rating.
+    const paint = () =>
+      labels.forEach((node, at) => {
+        const lit = at < stars;
+        node.classList.toggle('is-on', lit);
+        glyphs[at].textContent = lit ? '★' : '☆';
+      });
+    const inputs = [1, 2, 3, 4, 5].flatMap((n) => {
+      const id = `letter-rate-${n}`;
+      const glyph = el('span', { class: 'rate__glyph', 'aria-hidden': 'true', text: '☆' });
+      const label = el('label', { class: 'rate__star', for: id }, [
+        glyph,
+        el('span', { class: 'visually-hidden', text: n === 1 ? '1 star' : `${n} stars` }),
+      ]);
+      labels.push(label);
+      glyphs.push(glyph);
+      const input = el('input', {
+        type: 'radio',
+        class: 'rate__input',
+        name: 'letter-rate',
+        id,
+        value: String(n),
+        checked: stars === n ? 'checked' : null,
+        onchange: () => {
+          stars = n;
+          paint();
+        },
+      });
+      radios.push(input);
+      return [input, label];
+    });
+    paint();
+
+    const asked = confirming === 'rate';
+    return el('section', { class: 'rate', dataset: { state: theirs ? 'invited' : 'open' } }, [
+      el('h2', { class: 'rate__ask', text: 'How was the space?' }),
+      el('fieldset', { class: 'rate__stars' }, [
+        el('legend', { class: 'visually-hidden', text: 'How was the space?' }),
+        ...inputs,
+      ]),
+      el('label', {
+        class: 'field__label rate__notelabel',
+        for: 'letter-rate-note',
+        text: 'A few words, if you like (optional)',
+      }),
+      rateNote,
+      asked
+        ? el('div', { class: 'rate__confirm' }, [
+            el('p', {
+              class: 'prose prose--sm',
+              text: "Your rating is final — steeple doesn't allow edits.",
+            }),
+            el('div', { class: 'rate__actions' }, [
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'pill pill--primary',
+                  dataset: { action: 'rate-send' },
+                  onclick: () =>
+                    move(
+                      () => wire.rateBooking(booking.id, { stars, comment: rateNote.value }),
+                      () => 'Your rating is in.'
+                    ).then((sent) => {
+                      // Only a rating steeple took empties the form. What comes
+                      // back is the booking re-read, so the block below has
+                      // already become the fact of it.
+                      if (sent) {
+                        stars = 0;
+                        rateNote.value = '';
+                      }
+                    }),
+                },
+                'Yes, send it'
+              ),
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'linkish',
+                  onclick: () => {
+                    confirming = null;
+                    render();
+                    // Back where they were, not at the top of a rebuilt page.
+                    body.querySelector('[data-action="rate-open"]')?.focus();
+                  },
+                },
+                'Not yet'
+              ),
+            ]),
+          ])
+        : el('div', { class: 'rate__actions' }, [
+            el(
+              'button',
+              {
+                type: 'button',
+                class: 'pill',
+                dataset: { action: 'rate-open' },
+                onclick: () => {
+                  // Never choose for them: the ask moves to the stars and waits.
+                  if (!stars) {
+                    announce?.('Choose a star rating first.');
+                    radios[0]?.focus();
+                    return;
+                  }
+                  confirming = 'rate';
+                  render();
+                  // The page is rebuilt by that redraw, which drops keyboard
+                  // focus on the floor. The step that just appeared is what
+                  // was asked for, so it is what receives it.
+                  body.querySelector('[data-action="rate-send"]')?.focus();
+                },
+              },
+              'Rate this space'
+            ),
+          ]),
+      el('p', {
+        class: 'rate__reveal',
+        text: theirs
+          ? `${venue.shortName} has rated this booking — rate back to see it.`
+          : `${venue.shortName} sees your rating once they've rated you back, or after the window closes.`,
+      }),
+    ]);
+  }
+
   function threadBlock(app, venue) {
     const messages = threadFor(app.id);
     if (!messages.length && !UNDECIDED.has(app.status)) return null;
@@ -506,6 +728,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       letterhead(app, venue, room),
       el('p', { class: 'opened__state', text: statusNote(app, {
         occurrences: booking ? occurrencesFor(booking.id).length : 0,
+        booking,
       }) }),
       // What steeple said the last time this page asked it for something. It
       // stands above the request because it is about the request, not about a
@@ -514,6 +737,8 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       particulars(app),
       counter && counterBlock(app, venue, counter),
       booking && occurrenceBlock(app),
+      // After what this booking was, before anything still being said about it.
+      booking && ratingBlock(app, venue, booking),
       intentBlock(app, venue),
       threadBlock(app, venue),
       closingBlock(app, venue),
@@ -537,6 +762,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       `Your request for ${room?.name} at ${venue?.name}.`,
       `${statusLabel(app.status)}. ${statusNote(app, {
         occurrences: booking ? occurrencesFor(booking.id).length : 0,
+        booking,
       })}`,
       booking ? (paymentLine(booking, 'guest') ?? '') : '',
       booking ? (nextChargeLine(booking) ?? '') : '',
@@ -559,6 +785,8 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
         confirming = null;
         refusal = '';
         reply.value = '';
+        stars = 0;
+        rateNote.value = '';
       }
       applicationId = id;
       fetching = true;

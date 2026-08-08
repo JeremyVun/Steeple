@@ -473,16 +473,6 @@ export function createDesk({
     const mode = venue?.bookingMode === 'manual' ? 'manual' : 'instant';
     return el('section', { class: 'settings', 'aria-label': 'How this venue takes bookings' }, [
       el('p', { class: 'eyebrow', text: 'How this venue takes bookings' }),
-      // Instant book rides on payments being enabled at Steeple. While it is
-      // not, a venue set to "instant" still receives requests — saying so here
-      // is what keeps the radio honest (the setting binds the moment it turns on).
-      venue?.instantBookingActive === false && mode === 'instant'
-        ? el('p', {
-            class: 'settings__note',
-            text:
-              'Instant booking is not switched on at Steeple yet. Until it is, each request comes to you to approve — your choice here takes effect the moment it turns on.',
-          })
-        : null,
       el(
         'div',
         { class: 'settings__modes' },

@@ -228,11 +228,14 @@ threads/withdraw/counters, all four host decisions (on the letter: Approve · De
 a reply box **on the thread** · a quiet "Suggest another time" link; `409 slot_taken`
 renders as the product moment — "Already taken", steeple declined it as it happened), the
 desk (only when `GET /manage/venues` answers; Bookings ·
-Requests · Spaces, Requests only for manual venues or live leftovers; hours are steeple's;
-Spaces says when a stored "instant" choice is not in effect — `instantBookingActive`),
+Requests · Spaces, Requests only for manual venues or live leftovers; hours are steeple's),
 the hosting chain (venue → room → photo → hours → publish; first listing → Admin review,
 later rooms self-serve), payments truth both sides (frozen price, per-date charge state,
-failure ladder + card panel, rescind → auto-refund, mock payout onboarding),
+failure ladder + card panel, rescind → auto-refund, mock payout onboarding), ratings once a
+booking is over (both letters ask, the inbox nudges and counts it, the double blind holds
+until both have written, and the earned ★ average then rides the search cards, the room
+sheet and the organizer's trust chip — a venue nobody has rated shows nothing, never a zero;
+`docs/backlog/ratings/`, 2026-08-08),
 `GET /me/notifications` as ambience (one slip + quiet inbox lines, no bell), and `?goto=`
 email CTAs at boot. Counter-offers behind a server flag render "not available here yet"
 when off, never an error. Mock-era residue: the dev provider locally, the mock card step
@@ -271,6 +274,13 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   the run — computed opacity then reads 0 forever, which mimics a broken affordance. For
   timing claims assert on DOM state (`aria-busy`, class dwell), shoot last; each
   `deviceScaleFactor:2` shot costs 1–2.5s, so tight sampling loops silently span seconds.
+- **A fade needs a rendered frame, and headless Chromes share the machine** (2026-08-08).
+  Two *pages of one browser* freeze each other outright — the one not in front stops
+  advancing transitions, so an opened surface sits at opacity 0 forever and `steady()`
+  correctly calls it never-arrived (one browser per page, not per person). And concurrent
+  *browsers* starve it: a slip measured at opacity 1 with one in flight peaked at 0.26 with
+  three. Put finished browsers down before any section whose claim is a fade
+  (`payments-ui-test` §6 does).
 
 **Hazards (each verified against code, 2026-08-07):**
 - Class names are never shared across guest and host surfaces: stylesheets load

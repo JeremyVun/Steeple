@@ -2,7 +2,9 @@
 
 > **Status: IMPLEMENTED 2026-08-05** (mock-gateway era — as-built wire truth:
 > `docs/contracts/payments.md`; schema 013/014; behind the `payments.enabled` flag, on in
-> dev, off in prod until rollout). The chronic-rescinder signal (§3) and the deferred items
+> dev, off in prod until rollout). **Amended 2026-08-08:** instant book no longer rides on
+> `payments.enabled` — see "Decoupled from payments" below. The chronic-rescinder signal
+> (§3) and the deferred items
 > below remain future work. Adopted 2026-08-05 (owner decision, in-session). Supersedes the
 > request→approve-only model for the parts it names; `payments.md` §5's
 > charge-at-T−48h-only rule is **superseded in part** by the charge timing below —
@@ -48,9 +50,36 @@
   platform-balance limit breaks far-future bookings; clawback already handles the
   rescind case).
 
+## Decoupled from payments (owner decision, 2026-08-08)
+
+The original design gated instant book on `payments.enabled` (the card-at-request was the
+commitment gate standing in for host approval), so with the flag off — the production
+default — every venue silently fell back to request→approve. **Rejected by the owner:**
+the abuse risk is guest-side (spam-booking a calendar), and that answer punished the host
+by disabling the feature they chose. Reversed as follows:
+
+1. **Instant book honors the host's stored choice regardless of the payments flag.** The
+   public `bookingMode` is no longer masked to `manual` while payments are off
+   (`ListingService`), and an instant submit confirms at submit with or without a charge
+   (`ApplicationService` — the charge kick stays a no-op without a price snapshot).
+2. **Uncarded instant-book caps** (the guest-side spam guard): a guest with **no payment
+   method on file** may hold at most **3 upcoming bookings per venue / 10 overall**
+   (confirmed bookings with scheduled time still ahead — same effective-status predicate
+   as `?status=confirmed`). An over-cap instant submit **falls back to request→approve**
+   (a pending application, never an error; the web says why). A **verified payment method
+   lifts both caps** — while payments are on, the 402 gate has already proven it, so the
+   caps only ever bind in the payments-off era. Constants live in `ApplicationService`;
+   tuning is a Phase 6 item.
+3. What still limits spam besides the caps: SSO sign-in, the per-account `apply` rate
+   limit, Turnstile, the geofence/beachhead, and the host's rescind lever as backstop.
+4. `ManagedVenueDetailDto.instantBookingActive` (additive 2026-08-07, one day old, no
+   released clients) and the desk's honesty note are **removed** — the setting is simply
+   in effect now.
+
 ## Also deferred
 
-- Per-user cap on concurrent upcoming bookings + cancellation-rate tracking — the
+- ~~Per-user cap on concurrent upcoming bookings~~ — **built 2026-08-08** as the uncarded
+  instant-book caps above. Cancellation-rate tracking remains deferred — the
   real economic lever against serial book-and-cancel (upfront charging alone doesn't
   punish it: a full refund returns their money and costs *us* the processing fee).
 - Partial-refund / cancellation-fee policies — only with evidence of abuse.

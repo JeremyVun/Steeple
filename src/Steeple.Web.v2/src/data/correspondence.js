@@ -309,8 +309,11 @@ export async function refreshManaged(venueSlugs = [], { withBookings = true } = 
     mirrorApplications(read.items, {
       scope: scoped.size && read.whole ? (a) => scoped.has(a.venueId) : null,
     });
-    // The desk needs what each yes made; the inbox's hosting rows do not, and
-    // reading the bookings for both is exactly the double read §8 forbids.
+    // The desk needs what each yes made **in full** — every occurrence and its
+    // charge state — one detail read per application. The inbox's hosting rows
+    // need only what a list row already carries, and take it from
+    // `refreshHosted`'s single list pass instead; doing both is exactly the
+    // double read §8 forbids.
     if (withBookings) await together(read.items, (dto) => pullBooking(dto, open));
     return { ok: true, value: read.items.length };
   } finally {
@@ -324,6 +327,13 @@ export async function refreshManaged(venueSlugs = [], { withBookings = true } = 
  * still gets their letters — and a person who keeps no venue costs one list
  * read that answers empty. The desk's own read (`ui/host/index.js`) remains the
  * fuller one: hours, bookings and payouts belong to it alone.
+ *
+ * Two reads, not one, since ratings: the applications say which requests are
+ * undecided, and a **list-only** pass over the managed bookings says which
+ * finished ones are still owed a rating. The second costs one page walk and no
+ * detail reads at all (`limit: 0`), because a list row already carries the whole
+ * `ratings` block and the status — everything a row nudge needs. Reading each
+ * booking in full is still the desk's alone (the §8 double-read rule stands).
  */
 export async function refreshHosted() {
   if (!session.isSignedIn()) return { ok: true, value: 0 };
@@ -334,7 +344,12 @@ export async function refreshHosted() {
     .filter((v) => v.remoteId)
     .map((v) => v.id);
   if (!slugs.length) return { ok: true, value: 0 };
-  return refreshManaged(slugs, { withBookings: false });
+  const answer = await refreshManaged(slugs, { withBookings: false });
+  if (!answer.ok) return answer;
+  // A failure here costs the rate nudges, not the inbox: the requests are
+  // already mirrored and the letters already open.
+  await refreshManagedBookings({ limit: 0 });
+  return answer;
 }
 
 /** One request in full — the thread included. This is what opens a letter. */
@@ -418,6 +433,29 @@ export async function withdraw(applicationId) {
   const answer = await attempt((token) => api.postWithdraw(applicationId, { accessToken: token }));
   if (!answer.ok) return answer;
   return { ok: true, value: await hold(answer.value, { thread: true }) };
+}
+
+/**
+ * Say how a finished booking went — one rating, in whichever direction steeple
+ * infers from who is asking, and there is no second one and no edit.
+ *
+ * The answer carries nothing (204), so the booking is **re-read** rather than
+ * patched: whether the other side's rating is now revealed is steeple's to
+ * decide, and only a read can tell us. What comes back is the refreshed booking,
+ * which is exactly what the letter re-renders from.
+ *
+ * No analytics call here — `rating_submitted` is server-emitted at submission
+ * (`docs/contracts/analytics.md`), and a client copy would double-count it.
+ *
+ * @param {string} bookingId
+ * @param {{stars:number, comment?:string|null}} rating
+ */
+export async function rateBooking(bookingId, { stars, comment = null } = {}) {
+  const answer = await attempt((token) =>
+    api.submitRating(bookingId, { stars, comment: comment?.trim() || null }, { accessToken: token })
+  );
+  if (!answer.ok) return answer;
+  return openBooking(bookingId);
 }
 
 /**

@@ -20,8 +20,10 @@ surface. Startup also fails when `payments.enabled=true` while
 `Payments:Gateway=mock`, and migration 017 removes synthetic provider state before rollout.
 
 **Behavioral switch:** config flag **`payments.enabled`** (off in base config, on in
-Development). Off = the pre-payments request→approve loop exactly as before: no 402 gate, no
-instant book, no price snapshot, sweeper idle, `RoomDetail.bookingMode` emits `manual`.
+Development). Off = no 402 gate, no price snapshot, sweeper idle. Since 2026-08-08 the flag
+no longer touches booking modes: instant book confirms either way (offline, uncharged) and
+`RoomDetail.bookingMode` emits the host's stored choice — the uncarded spam caps in
+`applications.md` are the guest-side guard the card was standing in for.
 Bookings confirmed while the flag was off have no price snapshot and **stay offline forever**;
 bookings confirmed while on keep charging even if the flag later flips off (mode is frozen at
 confirmation — payments.md §4).

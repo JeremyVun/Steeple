@@ -108,16 +108,21 @@ export function organizerOf(application) {
       verified: true,
       joined: null,
       hasPaymentMethod: application.hasPaymentMethod === true,
+      // Steeple's, or nothing: null until this organizer has a revealed rating
+      // somewhere, which is also why their no-show count stays invisible until
+      // then. Absence of a reputation is not a bad one (D4).
+      ratingSummary: application.organizerRating ?? null,
     };
   }
-  return (
-    ORGANIZERS[application.organizerId] ?? {
-      name: 'An organizer',
-      org: null,
-      verified: false,
-      joined: null,
-    }
-  );
+  return {
+    name: 'An organizer',
+    org: null,
+    verified: false,
+    joined: null,
+    ...(ORGANIZERS[application.organizerId] ?? {}),
+    // The village's fixture people have no standing at steeple to report.
+    ratingSummary: null,
+  };
 }
 
 export function joinedText(organizer) {

@@ -133,7 +133,32 @@ export const statusTone = (status) => STATUS[status]?.tone ?? 'waiting';
 /** Whether this request is waiting on the guest rather than on the host. */
 export const isYourMove = (status) => statusTone(status) === 'yours';
 
-export function statusNote(app, { occurrences = 0 } = {}) {
+/**
+ * Whether this booking is over and still owes the organizer's rating.
+ *
+ * Steeple decides both halves — `canRate` is computed for whoever asked — so
+ * this only reads the answer. A booking with no `ratings` block at all (never
+ * read, or nothing to say) is not eligible and not ineligible: it is silent.
+ */
+export function invitesGuestRating(booking) {
+  const ratings = booking?.ratings;
+  if (!ratings || ratings.byOrganizer) return false;
+  return (
+    ratings.canRate === true &&
+    (booking.status === 'completed' || booking.status === 'cancelled')
+  );
+}
+
+/**
+ * @param {object} app
+ * @param {{occurrences?: number, booking?: object|null}} context — `booking` is
+ *   what `bookingFor(app.id)` holds, and it is what turns a finished booking's
+ *   note into the question the rating loop starts with.
+ */
+export function statusNote(app, { occurrences = 0, booking = null } = {}) {
+  // Asked before the status, because a finished booking is still `approved` and
+  // "3 dates held" is the least interesting true thing to say about one.
+  if (invitesGuestRating(booking)) return 'Finished — how was the space?';
   switch (app.status) {
     case 'pending':
       return 'Waiting for an answer.';

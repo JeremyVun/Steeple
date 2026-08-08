@@ -42,10 +42,10 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
   const composer = createComposer({
     announce,
     onLeave: () => setView('room', { venueId: state.venueId, roomId: state.roomId }),
-    onSent: (application, { instant = false } = {}) => {
+    onSent: (application, { instant = false, held = false } = {}) => {
       // Out of the way: the world flies the envelope, the guest keeps their place.
       setView('room', { venueId: application.venueId, roomId: application.roomId });
-      showConfirmation(application, instant);
+      showConfirmation(application, instant, held);
     },
   });
 
@@ -90,18 +90,21 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
   let confirmationTimer = null;
   let confirmationView = null;
 
-  function showConfirmation(application, instant = false) {
+  function showConfirmation(application, instant = false, held = false) {
     confirmationView = state.view;
     const venue = heldVenue(application.venueId);
     const where = venue?.shortName ?? application.venueName ?? 'the venue';
     replaceChildren(confirmation, [
       // An instant venue answered the send with the booking itself. Saying it is
-      // "on its way" would be describing something that has already arrived.
+      // "on its way" would be describing something that has already arrived —
+      // and an instant send held for approval (the uncarded spam cap) says why.
       el('p', {
         class: 'sent__line',
         text: instant
           ? `Booked. ${application.roomName ?? 'The space'} at ${where} is yours.`
-          : `Your request is on its way to ${where}.`,
+          : held
+            ? `With a few bookings already coming up, this one has gone to ${where} to approve.`
+            : `Your request is on its way to ${where}.`,
       }),
       el(
         'button',

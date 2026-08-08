@@ -20,15 +20,16 @@
 > oversight: **per-listing** metadata, OG images, `Place`/`BreadcrumbList` JSON-LD, canonicals,
 > id→slug 301s and real 404s — all of which need per-URL rendered HTML, which is the item below.
 
-## The crawler-rendering decision (D9) — recommended, not yet built
+## The crawler-rendering decision (D9) — adopted, not yet built
 
-**Recommendation: serve real HTML for the one URL family that matters — the listing page —
-from the API, and route `/space/{venueSlug}/{roomSlug}` to it at the edge.** The API already
-holds everything such a page needs (`ListingService`, `RoomDetailDto`, photos, price, geo), so
-this is a renderer over existing data, not a new system: one controller, no headless browser,
-no second runtime, no vendor. Humans get the same document as crawlers — it links straight
-into the app — so it is not cloaking. Scoped as its own backlog entry
-(`docs/backlog/seo-crawlable-listings.md`), deliberately **not** smuggled into the migration.
+**Serve real HTML for `/space/{venueSlug}/{roomSlug}` from the API, then progressively open the
+existing map product at that same clean URL.** The map opens the room sheet and centres its venue;
+without JavaScript, the semantic listing document remains useful. This supersedes the earlier
+standalone-landing-page proposal: the SEO document and the product are two stages of one URL, not
+two destinations. The API already holds everything the renderer needs (`ListingService`,
+`RoomDetailDto`, photos, price, geo), so this adds no runtime, headless browser or vendor. The
+adopted architecture and execution order live in `docs/backlog/seo/design.md` and
+`docs/backlog/seo/build_plan.md`.
 
 Rejected, with reasons:
 
@@ -76,9 +77,9 @@ Rejected, with reasons:
 - Served at `/sitemap.xml` by `Steeple.Web/Controllers/SeoController.cs` (`Sitemap` action):
   home page + every published listing's canonical `/space/{venue}/{room}` URL, `<changefreq>`/
   `<priority>`, `ResponseCache`-d for an hour.
-- **Caveat still open:** `<lastmod>` is sourced from `Steeple.Web.Models.SitemapEntry.LastModifiedUtc`,
-  which the API currently populates from the listing's row-created time — it won't move on edits
-  until an `UpdatedAtUtc` column is added to `rooms` and threaded through. Not done.
+- `<lastmod>` is the later of the room's and venue's existing `UpdatedAtUtc`; manage/Admin writes
+  stamp those records. The SEO build plan adds regression coverage and removes remaining stale
+  documentation rather than adding another schema change.
 - Not done: sitemap index (moot below 50k URLs) and Search Console/Bing submission — see item 9.
 
 ### 2. `robots.txt` — ✅ v1 (retired) / ✅ v2 *(2026-08-07)*
@@ -176,6 +177,6 @@ Rejected, with reasons:
 per-listing meta description · per-listing OG/Twitter · image width/height for CLS · JSON-LD on
 listing pages. On v1 these were view/controller additions over server-rendered pages; on a
 client-rendered v2 the remaining ones are blocked on the D9 rendering decision above
-(`docs/backlog/seo-crawlable-listings.md`).
-Still open regardless of surface: area landing pages (item 7), Search Console/Bing submission
-and sitemap `lastmod` accuracy (item 9 / item 1 caveat).
+(`docs/backlog/seo/`).
+Still open regardless of surface: area landing pages (item 7) and Search Console/Bing submission
+(item 9); both are explicitly deferred from the clean-route/listing-document build.

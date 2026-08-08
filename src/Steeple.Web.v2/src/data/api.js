@@ -600,6 +600,30 @@ export function cancelBooking(bookingId, { reason = null } = {}, { accessToken }
   return send('POST', `/bookings/${encodeURIComponent(bookingId)}/cancel`, { reason }, { accessToken });
 }
 
+/**
+ * `POST /bookings/{id}/ratings` — how one party says it went. `204 No Content`,
+ * which `send()` already answers as null: the rating that comes back is read
+ * from the booking, never assembled here, because reveal is steeple's to decide.
+ *
+ * Direction is inferred server-side — the organizer rates the venue, the venue's
+ * keeper rates the organizer — so nothing about the subject travels in the body.
+ * One rating per direction per booking, and no edits, ever.
+ *
+ * Body `{ stars: 1..5, comment?: string ≤1000 }`.
+ * `400 invalid_rating` · `409 invalid_state` (not eligible, window closed, or
+ * already rated) · `404 not_found` (a booking that is not yours — never "the
+ * feature is off") · `429` at 5/min per account.
+ * @returns {Promise<null>}
+ */
+export function submitRating(bookingId, { stars, comment = null } = {}, { accessToken } = {}) {
+  return send(
+    'POST',
+    `/bookings/${encodeURIComponent(bookingId)}/ratings`,
+    { stars, comment },
+    { accessToken }
+  );
+}
+
 // ─── payments: the method on file a request cannot be sent without ───────────
 //
 // No card number ever travels here. `setup` opens the intent, the mock confirm

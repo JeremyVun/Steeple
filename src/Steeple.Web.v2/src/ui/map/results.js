@@ -24,6 +24,28 @@ function priceText(item) {
   return { text: unit ? `${amount}${unit}` : amount, free };
 }
 
+/**
+ * The earned average, folded into the line it belongs on rather than given a
+ * node of its own — a sixth part would mean laying the row out twice again.
+ *
+ * Steeple sends nothing at all until a space has a revealed rating, and nothing
+ * is what this prints: no "0", no empty stars, no "not rated yet". A space
+ * nobody has rated is not a space that was rated badly (D4).
+ */
+function ratingText(item) {
+  const rating = item.rating ?? null;
+  if (!rating) return null;
+  return `★ ${rating.averageStars.toFixed(1)} (${rating.count})`;
+}
+
+function ratingSpoken(item) {
+  const rating = item.rating ?? null;
+  if (!rating) return '';
+  return ` Rated ${rating.averageStars.toFixed(1)} out of 5 from ${rating.count} ${
+    rating.count === 1 ? 'rating' : 'ratings'
+  }.`;
+}
+
 export function createResults({ onRetry = () => {} } = {}) {
   const rowFor = new Map();
 
@@ -117,12 +139,16 @@ export function createResults({ onRetry = () => {} } = {}) {
       row.banner.show({ url: item.primaryPhotoUrl, name: item.name });
       row.name.textContent = item.name;
       row.where.textContent = `${item.venueShortName} · ${item.suburb}`;
-      row.meta.textContent = `Seats ${item.capacity}`;
+      row.meta.textContent = [`Seats ${item.capacity}`, ratingText(item)]
+        .filter(Boolean)
+        .join(' · ');
       row.price.textContent = text;
       row.price.classList.toggle('is-free', free);
       row.row.setAttribute(
         'aria-label',
-        `${item.name} at ${item.venueName}, ${item.suburb}. Seats ${item.capacity}, ${spokenPrice(item)}.`
+        `${item.name} at ${item.venueName}, ${item.suburb}. Seats ${item.capacity}, ${spokenPrice(
+          item
+        )}.${ratingSpoken(item)}`
       );
 
       list.append(row.item);

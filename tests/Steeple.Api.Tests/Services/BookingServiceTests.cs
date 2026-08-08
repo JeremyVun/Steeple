@@ -709,6 +709,17 @@ public class BookingServiceTests
             IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
             Page(Bookings.Where(b => venueIds.Contains(b.Room!.VenueId)), status, now, page, pageSize);
 
+        public Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+            Guid organizerId, Guid venueId, DateTimeOffset now, CancellationToken ct = default)
+        {
+            var upcoming = Bookings.Where(b =>
+                b.OrganizerId == organizerId
+                && b.Status == BookingStatus.Confirmed
+                && b.Occurrences.Any(o => o.Status == OccurrenceStatus.Scheduled && o.EndUtc > now)).ToList();
+            return Task.FromResult(new UpcomingBookingCounts(
+                upcoming.Count(b => b.Room!.VenueId == venueId), upcoming.Count));
+        }
+
         public Task SaveAsync(CancellationToken ct = default)
         {
             SaveCount++;

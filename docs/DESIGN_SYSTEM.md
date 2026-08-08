@@ -452,6 +452,84 @@ availability client-side; the card always renders exactly what the server return
   and clear it — never leave a "your request is still here" banner over silently missing
   state.
 
+### 8.14 Ratings — stars, the earned average, and the rate form (2026-08-08)
+
+Ratings are 1–5 stars with an optional note, immutable, and **double-blind**: you see the
+other side's when you have rated back or when steeple's window closes. The whole component
+family follows one rule before any other.
+
+**8.14.0 Cold start renders as silence.** A null `rating` / `ratings` / `ratingSummary`
+renders **nothing** — no "0", no "No ratings yet", no row of empty stars, no greyed-out
+invitation. Absence of signal must never read as negative signal: a space nobody has rated
+yet is not a space that was rated badly. Every surface below is absent, not empty, until
+steeple sends a value. Eligibility is steeple's too (`canRate`) — no client date maths on
+`rateByUtc`, no local reveal rule.
+
+**8.14.1 The star glyph.** Text `★` (U+2605) and `☆` (U+2606), never an icon from data.
+Lit is `★` in `--terracotta`; unlit is `☆` in `--line-strong`. **Shape changes as well as
+colour** — a pale *filled* star reads as "already rated, greyed out", which is a different
+statement and a wrong one. Hover on an interactive star:
+`color-mix(in srgb, var(--terracotta) 55%, var(--line-strong))`.
+
+**8.14.2 The star row (input).** Native radios in reading order — the input carries the
+keyboard and the group semantics, the label carries the glyph, the label text is the words
+("1 star" … "5 stars", visually hidden). The fill is painted by script on `change`, **not**
+by a `:checked ~` sibling selector: that trick needs the row reversed in the DOM, which
+makes the arrow keys run backwards. Glyph 26–27px; label padding `2px 3px`, radius 3px;
+focus ring `2px solid var(--terracotta-strong)` at `outline-offset: 2px`, drawn on the
+label. Nothing is pre-selected — pressing the commit with no star chosen moves focus to the
+first star and says "Choose a star rating first."
+
+**8.14.3 The star row (fact).** A rating already written is not a control: it is printed.
+One line — who wrote it (13.5px `--ink-soft`), the five glyphs at 16px / `0.06em` in
+`--terracotta` (`aria-hidden`, with a visually-hidden "N out of 5 stars" beside it), and the
+note below in `prose prose--sm` when there is one.
+
+**8.14.4 The rate form.** A ruled section (`border-top: 1px solid var(--rule|--line)`,
+`padding-top ~15px`), never a tinted box or an alert: this is an invitation, not a task that
+has gone wrong. Serif ask at 18–19px ("How was the space?" / "How was the group?"), the star
+row, an optional note labelled "A few words, if you like (optional)" (≤1000), then a
+**two-step commit**: a `pill` ("Rate this space" / "Rate this group") opens a confirm panel
+(`--paper-deep` at 70%, radius 4px) reading "Your rating is final — steeple doesn't allow
+edits." with `pill pill--primary` "Yes, send it" and a `linkish` "Not yet". Under the form,
+one quiet 12.5px `--ink-faint` line saying what the other side will see and when. Each step
+hands focus deliberately (open → the confirm's send; cancel → back to the opener), because
+the redraw drops it otherwise. Refusals print steeple's own `detail` on the surface's
+existing refusal line — **never** the "not available here yet" copy, which means a feature
+that is off, not a rating that was refused.
+
+**8.14.5 States.** Exactly one renders, keyed on `data-state`:
+`open` (form, nobody rated) · `invited` (form, theirs already known) · `mine` (fact +
+"…arrives when it's revealed") · `both` (two facts) · `theirs` (fact only — the window
+closed and time revealed theirs while yours was never written). `invited` is currently
+unreachable by design: the wire carries no "the other side has rated" hint, so the
+reciprocity nudge rides the `ratingReceived` notification instead.
+
+**8.14.6 The trust chip (host-facing).** The organizer's earned summary, worn as a `chip`
+(§8.2) beside the identity chips: `★ 4.7 · 12 ratings`, mark in `--terracotta`, the rest in
+the chip's own ink. A second chip — `3 no-shows this year`, `--terracotta-deep` on
+`--terracotta-tint` — appears **only** when `noShowCount > 0` **and** the summary exists at
+all. Stated, not alarmed: it is a fact a host weighs, not a verdict.
+
+**8.14.7 Discovery.** Search cards fold the average into the existing meta line —
+`Seats 40 · ★ 4.6 (12)` — and into the row's `aria-label`, so the accessible row and the
+visible one agree; no sixth layout node. The room sheet prints `★ 4.6 · 12 ratings` in
+`.headline` beside price and capacity, 13px `--ink-soft` with the mark in `--terracotta`,
+the visible text `aria-hidden` behind one spoken sentence ("Rated 4.6 out of 5 from 12
+ratings"). Map pins carry nothing.
+
+**8.14.8 Row nudges.** A finished booking still owed a rating keeps its inbox bucket, its
+tone and its seal — nothing moves, nothing reddens, nothing says "expired" when the window
+closes (it simply stops asking). The only difference is that the note becomes a question
+("Finished — how was the space?" / "How was the group? You can rate them.") set one step
+darker (`--ink`), and the row carries `data-nudge="rate"`. Never `--terracotta-deep`, which
+on these rows means overdue.
+
+**8.14.9 Namespacing.** Web v2 loads `main → map → panels → guest → host`, so the two rating
+surfaces cannot share class names: guest-side is `.rate__*` (guest.css), host-side is
+`.ratemark__*` (host.css). Shared primitives (`.chip`, `.pill`, `.prose`, `.eyebrow`) are
+borrowed, never redefined.
+
 ## 9. Accessibility contract (hard rules, all surfaces)
 
 1. WCAG 2.2 AA minimum; text pairs only from §2.4 or newly validated.

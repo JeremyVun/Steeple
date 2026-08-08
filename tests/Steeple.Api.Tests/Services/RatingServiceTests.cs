@@ -470,6 +470,10 @@ public class RatingServiceTests
             IReadOnlyList<Guid> venueIds, BookingStatus? status, DateTimeOffset now, int page, int pageSize, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<UpcomingBookingCounts> CountUpcomingForOrganizerAsync(
+            Guid organizerId, Guid venueId, DateTimeOffset now, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task SaveAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

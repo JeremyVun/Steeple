@@ -1476,6 +1476,177 @@
   margin-left: 6px;
 }
 
+/* ── how it went ────────────────────────────────────────────────────────────
+   The venue's half of a rating, on the letter of the request it came from.
+
+   Host-side only. This stylesheet loads last and silently restyles anything it
+   shares a name with, so every name below is `.ratemark__*` and appears nowhere
+   in main / map / panels / guest — the guest letter's own rating block is
+   `.rate__*` and the two never meet.
+
+   Stars are native radios: the input carries the keyboard and the semantics,
+   the label carries the glyph, and the fill is a class the letter paints on
+   change — no `:checked ~` sibling trick, which needs the row reversed in the
+   DOM and makes the arrow keys run backwards. */
+
+.letterpage__invite:empty {
+  display: none;
+}
+
+/* The column's own bottom padding is 0 — the sticky decision row supplies it.
+   With nothing left to decide there is no row, so the invitation carries its
+   own, or the last line of it sits on the edge of the sheet. */
+.letterpage__invite:not(:empty) {
+  padding-bottom: 20px;
+}
+
+.ratemark {
+  margin: 4px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.ratemark__ask {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.ratemark__stars {
+  margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  gap: 2px;
+}
+
+/* Focusable, and out of the way: the ring is drawn on the label instead. */
+.ratemark__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ratemark__star {
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+/* Unlit is `☆` in the rule colour, lit is `★` in the accent — the glyph itself
+   changes, so an unrated form can never be read as a rating already given. */
+.ratemark__glyph {
+  display: block;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--line-strong);
+  transition: color 140ms var(--ease);
+}
+
+.ratemark__star:hover .ratemark__glyph {
+  color: color-mix(in srgb, var(--terracotta) 55%, var(--line-strong));
+}
+
+.ratemark__star.is-on .ratemark__glyph {
+  color: var(--terracotta);
+}
+
+.ratemark__input:focus-visible + .ratemark__star {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.ratemark__notelabel {
+  display: block;
+  margin: 14px 0 5px;
+}
+
+.ratemark .input--area {
+  min-height: 0;
+}
+
+.ratemark__actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+/* The decision row's quiet third way is nudged along; inside this form the gap
+   already does that work. */
+.ratemark__actions .linkish {
+  margin-left: 0;
+}
+
+.ratemark__confirm {
+  margin-top: 12px;
+  padding: 12px 14px 13px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+}
+
+.ratemark__confirm .prose {
+  margin: 0;
+}
+
+.ratemark__confirm .ratemark__actions {
+  margin-top: 10px;
+}
+
+/* What the other side will see of this, and when — said once, quietly, under
+   the thing it is about. */
+.ratemark__reveal {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* A rating already written is no longer a control: it is printed. */
+.ratemark__fact {
+  margin-top: 10px;
+}
+
+.ratemark__factline {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.ratemark__who {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.ratemark__glyphs {
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--terracotta);
+}
+
+.ratemark__comment {
+  margin: 4px 0 0;
+  color: var(--ink);
+}
+
+/* The earned average, worn in the head beside the name it is about. A chip like
+   the others — a fact about the person, not a badge awarded to them. */
+.ratemark__mark {
+  color: var(--terracotta);
+}
+
+/* No-shows are only ever shown beside a rating, and only when there are some.
+   Stated, not alarmed: this is a fact a host weighs, not a verdict. */
+.ratemark__chip--flag {
+  color: var(--terracotta-deep);
+  background: var(--terracotta-tint);
+}
+
 .letterpage__drawer {
   display: none;
   padding: 15px 0 22px;

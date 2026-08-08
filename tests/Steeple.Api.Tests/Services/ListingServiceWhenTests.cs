@@ -75,7 +75,7 @@ public class ListingServiceWhenTests
     // ----- helpers -----------------------------------------------------------------------------
 
     private static ListingService CreateService(StubRepo repo, StubAvailability avail) =>
-        new(repo, CreatePolicy(), new FakeRatings(), avail, new SetFeatureFlags(), new NullAnalytics(), new FixedClock());
+        new(repo, CreatePolicy(), new FakeRatings(), avail, new NullAnalytics(), new FixedClock());
 
     private static Room Room(string venueName, string roomSlug)
     {

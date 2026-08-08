@@ -169,7 +169,9 @@ mutates occurrences), and re-runs the refund rule crash-safely. **Booking modes*
 same slice: `venues.BookingMode` (instant default, host-set via Manage) makes an instant
 venue's submit *be* the booking transaction — same one-`SaveChanges` machinery and exclusion
 constraint as approval; a lost race answers `409 slot_taken` with nothing persisted. Public
-listing detail emits the *effective* mode (manual while the flag is off).
+listing detail emits the host's stored mode verbatim (2026-08-08 — instant no longer rides
+on `payments.enabled`; an uncarded guest over the spam caps falls back to request→approve
+at submit, `docs/contracts/applications.md`).
 The Payments controller is removed from endpoint discovery outside Development while mock is
 the only gateway. Production startup rejects `payments.enabled=true` with `Payments:Gateway=mock`, and changeset
 017 clears synthetic provider state before a real gateway can use the tables.
