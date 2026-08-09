@@ -60,7 +60,7 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
 
 - `guest-test` 41/45 (map-first hit-test drift: canvas-topmost at village, venue, and room;
   porch reachability behind an open request) ·
-  `world-test` Atlas-only: 6 stale (header has the exact set) · `booking-flow-test` fails
+  `booking-flow-test` fails
   from §5 (seed venues became instant-book; correspondence-test is the live gate for both
   flows). `world-off-test` §7 is **not a "load flake"**: it was the agreements gate
   standing over the wordmark, and the suite now answers it on the wire and waits on the

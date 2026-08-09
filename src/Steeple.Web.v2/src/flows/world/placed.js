@@ -55,7 +55,7 @@ export function fitDataToStage(venues, layout) {
   };
 }
 
-export function createPlacedVenues({ parent, store, heightAt, project, anchors, onChange }) {
+export function createPlacedVenues({ parent, store, heightAt, project, anchors }) {
   const built = new Map();
 
   function build(venue) {
@@ -74,15 +74,6 @@ export function createPlacedVenues({ parent, store, heightAt, project, anchors, 
     const glowMesh = glow.mesh(glowMaterial('#FFD9A0'), { cast: false, receive: false });
     if (glowMesh) group.add(glowMesh);
 
-    const pick = new THREE.Mesh(
-      new THREE.BoxGeometry(44, 60, 44),
-      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
-    );
-    pick.position.y = 24;
-    pick.userData = { venueId: venue.id };
-    pick.renderOrder = -1;
-    group.add(pick);
-
     parent.add(group);
     group.updateMatrixWorld(true);
     const box = new THREE.Box3()
@@ -92,9 +83,6 @@ export function createPlacedVenues({ parent, store, heightAt, project, anchors, 
     anchors.set(venue.id, {
       position: new THREE.Vector3(at.x, y, at.z),
       box,
-      grounds: box.clone(),
-      rooms: new Map(),
-      placed: true,
       door: new THREE.Vector3(
         at.x + Math.sin(group.rotation.y) * 16,
         y + 7,
@@ -102,20 +90,17 @@ export function createPlacedVenues({ parent, store, heightAt, project, anchors, 
       ),
     });
 
-    built.set(venue.id, { group, pick });
-    return built.get(venue.id);
+    built.set(venue.id, { group });
   }
 
   return {
     refresh() {
-      let changed = false;
       const live = new Set();
       for (const venue of store.placedVenues()) {
         if (typeof venue.lat !== 'number' || typeof venue.lng !== 'number') continue;
         live.add(venue.id);
         if (!built.has(venue.id)) {
           build(venue);
-          changed = true;
         }
       }
       // A demo reset takes the placed churches away again.
@@ -124,17 +109,7 @@ export function createPlacedVenues({ parent, store, heightAt, project, anchors, 
         parent.remove(entry.group);
         anchors.delete(id);
         built.delete(id);
-        changed = true;
       }
-      if (changed) onChange?.();
-      return changed;
-    },
-
-    /** Pick targets for the world's raycast list. */
-    picks() {
-      const out = [];
-      for (const entry of built.values()) out.push(entry.pick);
-      return out;
     },
 
     get count() {

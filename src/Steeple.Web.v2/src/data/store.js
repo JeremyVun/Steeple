@@ -275,7 +275,7 @@ export function guestBookings() {
     .sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
 }
 
-/** Live occurrences a room is committed to — the ribbons on its week. */
+/** Live occurrences a room is committed to, used by schedule conflict checks. */
 export function roomOccurrences(venueId, roomId) {
   const key = roomKey(venueId, roomId);
   return load()

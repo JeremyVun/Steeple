@@ -17,7 +17,7 @@
 //     and takes nothing else with it
 //   · board ↔ ledger switches where it stands: no reload, one render
 //   · Esc closes what has focus; Esc never rolls
-//   · the title page still answers to a drag of the world, and to nothing else
+//   · the title scene stays view-only under pointer drags
 //   · a click inside the desk is the desk's own, and the porch switch still
 //     works with a desk standing over the page
 //   · nothing dead overlays the surface, the map, or the property sheet
@@ -314,7 +314,7 @@ await wait(800);
 check('a wheel up at the list\'s own top stays in the product', (await state('roll')) === 1, String(await state('roll')));
 check('...and the view stands where it was', (await state('view')) === 'village', String(await state('view')));
 
-// ── 7. the title page still answers to the world's own input ───────────────
+// ── 7. the title scene is view-only ───────────────────────────────────────────────
 await ready(url);
 await wait(4000);
 const baseline = await drift(900);
@@ -323,12 +323,14 @@ console.log(`  ambient camera drift over 900ms: ${baseline.toFixed(3)}`);
 const camBeforeWorld = await camera();
 await dragFrom({ x: 1000, y: 640 }, -140, 0);
 const worldTravel = travel(camBeforeWorld, await camera());
-check('dragging the world moves the world', worldTravel > baseline * 4, `camera travelled ${worldTravel.toFixed(3)}`);
+check(
+  'dragging the scene leaves the camera to its own drift',
+  worldTravel < baseline * 3 + 0.5,
+  `camera travelled ${worldTravel.toFixed(3)} vs drift ${baseline.toFixed(3)}`
+);
 check('...and does not read as the roll', (await state('roll')) === 0, String(await state('roll')));
 
-// The camera used to sway with the pointer and dolly on the wheel, so reaching
-// across the screen for a control felt like the ground moving under you. Only a
-// deliberate drag may move it.
+// Neither a drag nor an unpressed pointer steers the camera.
 await wait(2500);
 const settledDrift = await drift(900);
 const camBeforeSweep = await camera();

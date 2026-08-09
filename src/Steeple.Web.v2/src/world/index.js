@@ -1,53 +1,27 @@
-// WORLD — sky, ground, the five churches, their rooms, and the quiet life around
-// them. Atlas lays the village out across rolling country.
+// WORLD — sky, ground, the five churches, and the quiet life around them. Atlas
+// lays the village out across rolling country.
 //
 // Contract: CONTRACT.md §4 — buildWorld(engine) -> World.
 
 import * as THREE from 'three';
 import { VENUES } from '../data/venues.js';
-import { state, bus } from '../core/bus.js';
+import { state } from '../core/bus.js';
 import { Builder } from './builder.js';
-import { C } from './palette.js';
 import { paperMaterial, glowMaterial, timeUniform } from './materials.js';
 import { buildSky } from './sky.js';
 import { buildBackdrop } from './backdrop.js';
 import { buildChurch } from './churches.js';
 import { buildAnnexShell, buildAnnexScaffold, buildParking, buildMetro } from './props.js';
-import { createRoomCard } from './rooms.js';
 import { buildClouds, buildBirds, buildMotes } from './ambient.js';
-import { damp } from './rng.js';
 import * as atlas from './stage-atlas.js';
-import { effectiveRoom } from '../data/store.js';
 import { createCorrespondence } from '../flows/world/index.js';
 
 const LIT = new THREE.Color('#FFC271');
 const RESTING_GLOW = new THREE.Color('#9AA69C');
-// Tone mapping flattens small differences, so "resting" has to be a real step
-// down in linear space to read as visibly at rest without ever hiding anything.
 const FULL = new THREE.Color(1.04, 1.0, 0.94);
 const RESTING_BODY = new THREE.Color(0.30, 0.35, 0.34);
 
-const _lo = new THREE.Vector3();
-const _hi = new THREE.Vector3();
-
 const METRO_SITE = { x: 318, z: 34, ry: 0.16 };
-
-function haloMesh(radius, color, opacity) {
-  const mesh = new THREE.Mesh(
-    new THREE.RingGeometry(radius * 0.72, radius, 44),
-    new THREE.MeshBasicMaterial({
-      color: new THREE.Color(color),
-      transparent: true,
-      opacity,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      fog: false,
-    })
-  );
-  mesh.rotation.x = -Math.PI / 2;
-  mesh.renderOrder = 3;
-  return mesh;
-}
 
 export async function buildWorld(engine) {
   const { scene } = engine;
@@ -58,95 +32,17 @@ export async function buildWorld(engine) {
   const backdrop = buildBackdrop();
   scene.add(backdrop.group);
 
-  const stage = atlas.buildStage(scene, { quality });
-  const heightAt = stage.heightAt;
-  const layout = stage.layout;
+  const { heightAt, layout } = atlas.buildStage(scene, { quality });
 
   const root = new THREE.Group();
   scene.add(root);
 
   const anchors = new Map();
-  const pickables = [];
-  const churchPicks = [];
   const churches = new Map();
-  const roomCards = new Map(); // venueId -> Map(roomId -> card)
-  const allCards = []; // flat, so the update loop never allocates an iterator entry
   const sites = []; // where letters arrive: each church's door and lantern spot
-  const plots = new Map(); // venueId -> what a room card needs to be placed later
   let annex = null;
 
-  let presentedVenue = null;
-  let hoverVenue = null;
-  let hoverRoom = null;
-  let matching = new Set(VENUES.map((v) => v.id));
   let correspondence = null;
-  const placedPicks = [];
-
-  /**
-   * Put one room's card out on the grass at the offset its church reserved for
-   * it. Called at build for everything already published, and again live when a
-   * host publishes a listing — the world gains a room without being rebuilt.
-   */
-  function addRoomCard(venueId, roomId) {
-    const plot = plots.get(venueId);
-    if (!plot) return null;
-    if (plot.rooms.has(roomId)) return plot.rooms.get(roomId);
-    const room = effectiveRoom(venueId, roomId);
-    if (!room) return null;
-
-    const { l, meta, anchorRooms } = plot;
-    const slot = meta.rooms[roomId] ?? { x: 0, z: 56, ry: 0 };
-    const cos = Math.cos(l.ry);
-    const sin = Math.sin(l.ry);
-    const wx = l.x + slot.x * cos + slot.z * sin;
-    const wz = l.z - slot.x * sin + slot.z * cos;
-    const wy = heightAt(wx, wz);
-
-    const card = createRoomCard(venueId, room);
-    card.group.position.set(wx, wy + 0.5, wz);
-    card.group.rotation.y = l.ry + slot.ry;
-    card.setOpen(0);
-    card.open = 0;
-    card.target = presentedVenue === venueId ? 1 : 0;
-    card.hover = 0;
-    card.venueId = venueId;
-    card.roomId = roomId;
-    root.add(card.group);
-    plot.rooms.set(roomId, card);
-    allCards.push(card);
-
-    // The card faces its own open side; that is where the camera belongs.
-    const facing = l.ry + slot.ry;
-    anchorRooms.set(roomId, {
-      position: new THREE.Vector3(wx, wy + card.centerY, wz),
-      normal: new THREE.Vector3(Math.sin(facing), 0.2, Math.cos(facing)).normalize(),
-      radius: card.radius,
-    });
-    growGrounds(venueId);
-    refreshPickables();
-    return card;
-  }
-
-  /** The grounds the camera frames: the building plus every card it presents. */
-  function growGrounds(venueId) {
-    const anchor = anchors.get(venueId);
-    if (!anchor) return;
-    const grounds = anchor.grounds.copy(anchor.box);
-    for (const spot of anchor.rooms.values()) {
-      const r = spot.radius;
-      // Conservative below: a card may stand on ground lower than the church's.
-      grounds.expandByPoint(
-        _lo.set(
-          spot.position.x - r,
-          Math.min(anchor.position.y, spot.position.y - r),
-          spot.position.z - r
-        )
-      );
-      grounds.expandByPoint(
-        _hi.set(spot.position.x + r, spot.position.y + r * 0.4, spot.position.z + r)
-      );
-    }
-  }
 
   for (const venue of VENUES) {
     const l = layout[venue.id];
@@ -164,25 +60,12 @@ export async function buildWorld(engine) {
     group.rotation.y = l.ry;
 
     const bodyMat = paperMaterial({ warmth: 0.46 });
+    bodyMat.color.copy(RESTING_BODY).lerp(FULL, 0.9);
     const glowMat = glowMaterial('#FFD9A0');
     const bodyMesh = body.mesh(bodyMat);
     const glowMesh = glow.mesh(glowMat, { cast: false, receive: false });
     group.add(bodyMesh);
     if (glowMesh) group.add(glowMesh);
-
-    const halo = haloMesh(Math.max(meta.footprint.x, meta.footprint.z) * 0.92, C.terracotta, 0);
-    halo.position.y = 0.6;
-    group.add(halo);
-
-    const pick = new THREE.Mesh(
-      new THREE.BoxGeometry(meta.footprint.x + 26, 74, meta.footprint.z + 26),
-      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
-    );
-    pick.position.y = 30;
-    pick.userData = { venueId: venue.id };
-    pick.renderOrder = -1;
-    group.add(pick);
-    churchPicks.push(pick);
 
     root.add(group);
 
@@ -216,19 +99,6 @@ export async function buildWorld(engine) {
       };
     }
 
-    // Room cards, laid out at the offsets each church design reserved for them
-    const roomMap = new Map();
-    const anchorRooms = new Map();
-    roomCards.set(venue.id, roomMap);
-    plots.set(venue.id, { l, meta, groundY, rooms: roomMap, anchorRooms });
-
-    for (const room of venue.rooms) {
-      // The host's own edits decide what stands in the world: a room published
-      // in an earlier session is out on the grass when the visitor arrives.
-      if ((effectiveRoom(venue.id, room.id) ?? room).status !== 'published') continue;
-      addRoomCard(venue.id, room.id);
-    }
-
     // What this church actually occupies, in world space, so the camera can
     // frame a broad campus and a tall spire on their own terms.
     group.updateMatrixWorld(true);
@@ -254,25 +124,14 @@ export async function buildWorld(engine) {
     anchors.set(venue.id, {
       position: new THREE.Vector3(l.x, groundY, l.z),
       box, // the building itself
-      grounds: box.clone(), // the building and the rooms it presents
-      rooms: anchorRooms,
       door: sites[sites.length - 1].door,
       // Which way the door faces: the direction a host looks when they step out.
       doorNormal: new THREE.Vector3(Math.sin(l.ry), 0, Math.cos(l.ry)),
     });
-    growGrounds(venue.id);
-
     churches.set(venue.id, {
       id: venue.id,
-      group,
-      halo,
-      bodyMat,
       glowMat,
       baseY: groundY,
-      lit: 1,
-      litTarget: 1,
-      hover: 0,
-      hoverTarget: 0,
     });
   }
 
@@ -299,110 +158,35 @@ export async function buildWorld(engine) {
   const motes = quality === 'low' ? null : buildMotes(quality, timeUniform);
   if (motes) scene.add(motes);
 
-  // ---- World surface -------------------------------------------------------
-
-  pickables.push(...churchPicks);
-
-  function refreshPickables() {
-    pickables.length = 0;
-    pickables.push(...churchPicks);
-    for (let i = 0; i < placedPicks.length; i++) pickables.push(placedPicks[i]);
-    if (presentedVenue) {
-      const rooms = roomCards.get(presentedVenue);
-      if (rooms) for (const card of rooms.values()) pickables.push(card.pick);
-    }
-  }
-
-  function present(venueId) {
-    if (presentedVenue === venueId) return;
-    presentedVenue = venueId;
-    for (const [id, rooms] of roomCards) {
-      for (const card of rooms.values()) card.target = id === venueId ? 1 : 0;
-    }
-    stage.presentVenue?.(venueId);
-    refreshPickables();
-  }
-
   const world = {
     anchors,
-    pickables,
     /** Radius of the nearest scenery ring — how far the camera may pull back. */
     horizon: backdrop.inner,
-
-    setHighlight(venueId = null, roomId = null) {
-      hoverVenue = venueId;
-      hoverRoom = roomId;
-      for (const [id, ch] of churches) {
-        ch.hoverTarget = id === venueId && !roomId ? 1 : 0;
-      }
-    },
-
-    setFiltered(ids) {
-      matching = ids && ids.size ? ids : new Set(VENUES.map((v) => v.id));
-      for (const [id, ch] of churches) ch.litTarget = matching.has(id) ? 1 : 0;
-    },
-
-    setView(view, venueId = null) {
-      // 'apply' and 'letter' keep the room cards presented: the correspondence
-      // happens at the church, not over a folded-away world.
-      const presenting = ['venue', 'room', 'apply', 'letter', 'desk'].includes(view);
-      present(presenting ? venueId : null);
-    },
 
     update(dt, elapsed) {
       timeUniform.value = elapsed;
 
       for (const { ring, speed } of clouds.rings) ring.rotation.y += speed * dt;
       birds.update(elapsed);
-      stage.update?.(dt, elapsed);
       correspondence?.update(dt, elapsed, restingFor);
 
       for (const ch of churches.values()) {
-        ch.lit = damp(ch.lit, ch.litTarget, 4.5, dt);
-        ch.hover = damp(ch.hover, ch.hoverTarget, 9, dt);
-
-        // Filters own the body of the building; correspondence owns the light
-        // in its windows. A church with a booking burns steady, not flickering.
         const settled = correspondence ? correspondence.windowWarmth(ch.id) : 0;
         const flicker = Math.sin(elapsed * 0.6 + ch.baseY) * (1 - settled) + settled;
         const pulse = 0.94 + 0.06 * flicker;
-        const warmth =
-          (0.24 + 0.76 * ch.lit) * pulse + ch.hover * 0.42 + settled * 0.5 * (0.4 + 0.6 * ch.lit);
-        ch.glowMat.color.copy(RESTING_GLOW).lerp(LIT, Math.min(1, warmth)).multiplyScalar(0.46 + 0.5 * warmth);
-        ch.bodyMat.color.copy(RESTING_BODY).lerp(FULL, Math.min(1, ch.lit * 0.9 + ch.hover * 0.16));
-        ch.group.position.y = ch.baseY + ch.hover * 2.2;
-        ch.halo.material.opacity = ch.hover * 0.45;
-        ch.halo.scale.setScalar(0.94 + ch.hover * 0.08);
-      }
-
-      for (let i = 0; i < allCards.length; i++) {
-        const card = allCards[i];
-        const hovered = card.venueId === hoverVenue && card.roomId === hoverRoom;
-        card.hover = damp(card.hover, hovered ? 1 : 0, 9, dt);
-        if (Math.abs(card.open - card.target) > 0.0008) {
-          card.open = damp(card.open, card.target, 5.5, dt);
-          card.setOpen(card.open);
-        }
-        if (card.open > 0.002) {
-          const flicker = 0.92 + 0.08 * Math.sin(elapsed * 1.3 + i);
-          const k = (0.82 + card.hover * 0.5) * flicker;
-          for (let m = 0; m < card.glowMats.length; m++) {
-            card.glowMats[m].color.copy(LIT).multiplyScalar(k);
-          }
-          card.halo.material.opacity = (0.2 + card.hover * 0.26) * card.open;
-          card.group.scale.setScalar(1 + card.hover * 0.035);
-        }
+        const warmth = pulse + settled * 0.5;
+        ch.glowMat.color
+          .copy(RESTING_GLOW)
+          .lerp(LIT, Math.min(1, warmth))
+          .multiplyScalar(0.46 + 0.5 * warmth);
       }
     },
   };
 
-  /** How lit a church is under the current filter — the lanterns rest with it. */
-  function restingFor(venueId) {
-    return churches.get(venueId)?.lit ?? 1;
-  }
+  const restingFor = () => 1;
 
-  // The correspondence layer: lanterns, ribbons, the post, and the churches a
-  // host has placed. It reads data/store.js and stages the world's reaction.
+  // The correspondence layer: lanterns, the post, and churches a host has
+  // placed. It reads data/store.js and stages the splash's visible reaction.
   correspondence = createCorrespondence({
     engine,
     parent: root,
@@ -411,29 +195,9 @@ export async function buildWorld(engine) {
     venues: VENUES,
     layout,
     heightAt,
-    roomCards,
-    addRoomCard,
     annex,
-    onWorldChange() {
-      // Fires synchronously during createCorrespondence, before the
-      // assignment above lands; the initial sync below covers that pass.
-      if (!correspondence) return;
-      placedPicks.length = 0;
-      for (const pick of correspondence.placedPicks()) placedPicks.push(pick);
-      refreshPickables();
-    },
   });
   world.correspondence = correspondence;
-  world.addRoomCard = addRoomCard;
-  correspondence.placedPicks().forEach((pick) => placedPicks.push(pick));
-  refreshPickables();
-
-  bus.on('view:change', ({ view, venueId }) => world.setView(view, venueId));
-  bus.on('filters:change', ({ matching: m }) => world.setFiltered(m));
-  bus.on('hover:change', ({ venueId, roomId }) => world.setHighlight(venueId, roomId));
-
-  world.setFiltered(state.matching);
-  if (state.view === 'venue' || state.view === 'room') present(state.venueId);
 
   return world;
 }

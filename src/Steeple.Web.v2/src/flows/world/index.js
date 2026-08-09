@@ -2,20 +2,18 @@
 //
 // Both lenses (guest and host) look at the same village, so the village itself
 // carries the state of every conversation: a lantern by the door where letters
-// are waiting, steady window light where a booking is in the book, a week
-// ribbon on the room that is spoken for, a letter that folds and flies when one
-// is sent, wax and a bell when one is answered, and the scaffolding coming off
-// the annex the moment its listing is published.
+// are waiting, steady window light where a booking is in the book, a letter that
+// folds and flies when one is sent, wax and a bell when one is answered, and the
+// scaffolding coming off the annex the moment its listing is published.
 //
 // Nothing here is invented: every signal is read from data/store.js, and it is
 // re-derived on every 'store:change'.
 
 import { bus, state } from '../../core/bus.js';
-import { store, todayIso, weekdayOf } from '../../data/store.js';
+import { store } from '../../data/store.js';
 import { createLanterns } from './lanterns.js';
 import { createPost } from './envelope.js';
 import { createBell } from './bell.js';
-import { createRibbons } from './ribbons.js';
 import { createPlacedVenues, fitDataToStage } from './placed.js';
 
 const SCAFFOLD_STRIKE = 1.6; // seconds for the scaffolding to be lifted away
@@ -29,10 +27,7 @@ export function createCorrespondence(kit) {
     venues,
     layout,
     heightAt,
-    roomCards,
-    addRoomCard,
     annex,
-    onWorldChange,
   } = kit;
 
   // `?lantern=lamp|window` (state.lantern) — how a church shows what its post
@@ -40,14 +35,12 @@ export function createCorrespondence(kit) {
   const lanterns = createLanterns({ parent, sites, variant: state.lantern });
   const post = createPost({ parent, camera: engine.camera });
   const bell = createBell({ reducedMotion: state.reducedMotion });
-  const ribbons = createRibbons({ store, todayIso, weekdayOf });
   const placed = createPlacedVenues({
     parent,
     store,
     heightAt,
     project: fitDataToStage(venues, layout),
     anchors,
-    onChange: onWorldChange,
   });
 
   // Where the post is actually delivered: a step out from the door and a little
@@ -60,13 +53,6 @@ export function createCorrespondence(kit) {
     drop.z += Math.cos(site.facing) * 11;
     drop.y += 7;
     doors.set(site.venueId, drop);
-  }
-
-  // ── ribbons on every card the world has already put out ────────────────────
-  function attachRibbons() {
-    for (const [venueId, rooms] of roomCards) {
-      for (const [roomId, card] of rooms) ribbons.attach(venueId, roomId, card);
-    }
   }
 
   // ── lanterns ───────────────────────────────────────────────────────────────
@@ -85,14 +71,6 @@ export function createCorrespondence(kit) {
   function annexPublished() {
     const room = store.effectiveRoom('oakton-baptist', 'renovation-annex');
     return room?.status === 'published';
-  }
-
-  function joinAnnexToWorld() {
-    const card = addRoomCard?.('oakton-baptist', 'renovation-annex');
-    if (card) {
-      ribbons.attach('oakton-baptist', 'renovation-annex', card);
-      onWorldChange?.();
-    }
   }
 
   function strikeScaffolding({ animate }) {
@@ -156,7 +134,6 @@ export function createCorrespondence(kit) {
       case 'room-edit':
         if (event.published && event.venueId === 'oakton-baptist' && event.roomId === 'renovation-annex') {
           strikeScaffolding({ animate: true });
-          joinAnnexToWorld();
         }
         break;
       case 'venue-placed':
@@ -167,10 +144,8 @@ export function createCorrespondence(kit) {
         break;
     }
     deriveSignals();
-    ribbons.refresh();
   });
 
-  attachRibbons();
   deriveSignals();
   placed.refresh();
   // The store persists: an annex published in an earlier session is simply
@@ -179,7 +154,6 @@ export function createCorrespondence(kit) {
 
   return {
     variant: state.lantern,
-    placedPicks: () => placed.picks(),
 
     windowWarmth(venueId) {
       return lanterns.windowWarmth(venueId);
@@ -203,7 +177,6 @@ export function createCorrespondence(kit) {
           bloom: Number(lamp.bloom.material.opacity.toFixed(3)),
         };
       },
-      ribbonMask: (venueId, roomId) => ribbons.maskOf(venueId, roomId),
       get envelopeFlying() {
         return post.busy;
       },

@@ -4,7 +4,7 @@
 // never built and the renderer draws straight to the canvas.
 //
 // A paper-coloured fullscreen quad rides on top of both paths — it is the
-// crossfade used instead of camera flights under prefers-reduced-motion.
+// crossfade used instead of the roll crane under prefers-reduced-motion.
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';

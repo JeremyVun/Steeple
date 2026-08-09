@@ -186,7 +186,7 @@ export function createDiscovery({ announce = () => {} } = {}) {
     search.close();
   });
 
-  // ── scene sync ─────────────────────────────────────────────────────────────
+  // ── row/pin sync ──────────────────────────────────────────────────────────
 
   // On a phone a property sheet stands over the map's foot exactly as the
   // results sheet does, leaving a band of it above (CONTRACT6 §2.2). Whichever

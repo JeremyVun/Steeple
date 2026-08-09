@@ -109,7 +109,7 @@ store.resetDemo();
 
 // ---- the demo fixture is scenery, and cannot be mistaken for a person -------
 //
-// It still lights the village's lanterns and draws its ribbons, so it is still
+// It still lights the village's lanterns, so it is still
 // here outside a production build. What it must never do is look like the
 // signed-in person's correspondence: its letters are written under the seed's
 // own ids, and a real account's id is steeple's GUID.
@@ -486,7 +486,7 @@ expect(
   store.bookingFor(APPLICATION_ID)?.payment?.nextChargeAtUtc,
   '2026-08-15T22:00:00Z'
 );
-expect('booking: the room it holds is the ribbon’s', store.roomOccurrences('vienna-presbyterian', 'music-room').length, 2);
+expect('booking: the room exposes its live occurrences', store.roomOccurrences('vienna-presbyterian', 'music-room').length, 2);
 
 // ---- a page is the whole of its scope --------------------------------------
 //

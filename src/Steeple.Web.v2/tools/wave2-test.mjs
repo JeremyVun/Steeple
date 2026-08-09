@@ -225,9 +225,6 @@ if (listing.status !== 200) {
     quietBefore && quietBefore.waiting < 0.05 && quietBefore.settled < 0.05,
     JSON.stringify(quietBefore)
   );
-  const ribbonBefore = await world(`ribbonMask('${VENUE}','${ROOM}')`);
-  check('the room carries no week ribbon yet', ribbonBefore === 0, `mask ${ribbonBefore}`);
-
   // ── 2. a request, written and sent with real input ───────────────────────
   console.log('\n2. a request, written by hand and sent for real');
   await clickText('.sheet--room .pill--primary', /(Request this space|Book this space|Book )/, 'the room CTA');
@@ -312,18 +309,11 @@ if (listing.status !== 200) {
   const calls = await page.evaluate('__steeple.engine.renderer.info.render.calls');
   check('draw calls with the village awake stay under budget', calls < 300, `${calls} < 300`);
 
-  // ── 4. and the room's week carries the booking steeple made ──────────────
-  console.log('\n4. the room’s week ribbon carries steeple’s own answer');
+  // ── 4. steeple and the local mirror agree on the booking ────────────────
+  console.log('\n4. steeple and the local mirror agree on the booking');
   const booked = await call('GET', `/bookings/${application?.bookingId}`, { token: guest.token });
   const firstDate = booked.body?.occurrences?.[0]?.localDate ?? null;
   check('steeple materialized the dates', Boolean(firstDate), JSON.stringify(booked.body?.occurrences?.slice(0, 2)));
-  const weekday = firstDate ? new Date(`${firstDate}T00:00:00`).getDay() : null;
-  const mask = await world(`ribbonMask('${VENUE}','${ROOM}')`);
-  check(
-    'the ribbon carries the weekday steeple booked',
-    weekday !== null && (mask & (1 << weekday)) !== 0,
-    `mask ${mask} for weekday ${weekday} (${firstDate})`
-  );
   check(
     'and the local mirror agrees with steeple about it',
     (await store(`guestApplications()[0].status`)) === 'approved',

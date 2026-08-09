@@ -4,7 +4,7 @@
 // steps, the flight is one calm arc with no bounce at either end, and the whole
 // journey is under two seconds. Both objects are built once and reused, and both
 // hold roughly the same size on screen at any depth, so the moment reads from
-// the room card and from a mile up.
+// the church door and from a mile up.
 
 import * as THREE from 'three';
 import { Builder, roundedRectShape } from '../../world/builder.js';

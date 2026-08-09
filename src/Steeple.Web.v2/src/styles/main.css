@@ -473,7 +473,6 @@ body {
 }
 
 .rail,
-.label,
 .arrival {
   pointer-events: none;
 }
@@ -972,50 +971,6 @@ body {
 
 .crumbs__sep {
   font-size: 11px;
-  color: var(--line-strong);
-}
-
-/* ── Hovered venue label ────────────────────────────────────────────────── */
-
-.label {
-  position: fixed;
-  z-index: 3;
-  top: 30px;
-  left: 50%;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 8px 18px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--paper-sheet);
-  box-shadow: var(--shadow-chip);
-  opacity: 0;
-  transform: translate(-50%, -8px);
-  transition: opacity 160ms var(--ease), transform 180ms var(--ease);
-}
-
-.label.is-open {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
-.label__title {
-  font-family: var(--serif);
-  font-size: 19px;
-  line-height: 1.1;
-  color: var(--ink);
-}
-
-.label__meta {
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  color: var(--ink-faint);
-}
-
-.label__meta::before {
-  content: '·';
-  margin-right: 9px;
   color: var(--line-strong);
 }
 

@@ -7,24 +7,20 @@ beachhead — the demo's five real listings are all churches today — but a
 venue is a venue: the same funnel fits a library or a community center just
 as well.
 
-This is that discovery funnel with the pages taken away. Instead of separate
-pages for search, results, listing and request form, there is one continuous
-Three.js scene: a painted miniature of Vienna, Northern Virginia at golden
-hour, where five real churches stand at their true relative positions. A real
-map takes the page and the results read beside it. Searching lights the churches
-that answer. Choosing one flies you to it. Choosing a space opens it like a page
-in a pop-up book, and the sheet beside it carries the whole listing.
+The title is a view-only Three.js miniature of Vienna, Northern Virginia at
+golden hour, where five churches stand at their true relative positions. The
+product beyond it is a real map with results, listing sheets and request flows;
+the scene never selects, highlights, or navigates between venues.
 
-The funnel does not stop at the listing. Asking for a space opens a request, the
-requests you have sent live in an inbox, and the same village turns around into
-the view of the church answering them — one world, seen through two lenses.
+The funnel does not stop at the listing. Asking for a space opens a request and
+the requests you have sent live in an inbox. The splash remains scenery behind
+that product and costs no frames while the product is open.
 
 Every capacity, price, amenity, accessibility feature, house rule and address
 comes from `src/data/venues.js`, transcribed from steeple's production seed
 data. Nothing is invented, and nothing the real funnel shows is left out — the
 Renovation Annex at Oakton Baptist stands in the world under scaffolding
-because it is still a draft, unlisted and unpickable, until a host finishes its
-listing and publishes it.
+because it is still a draft; publishing it strikes that visible scaffolding.
 
 ## Running it
 
@@ -141,14 +137,13 @@ reads or writes a location (2026-08-08, `docs/backlog/seo/design.md` SEO-D1):
 
 - `/` — the title page over the village
 - `/browse` — the map, listing results, and discovery panel
-- `/venue/<venueSlug>` — one church and the spaces it rents
-- `/space/<venueSlug>/<roomSlug>` — one space, framed and detailed. **The
+- `/venue/<venueSlug>` — one venue and the spaces it rents
+- `/space/<venueSlug>/<roomSlug>` — one space, detailed. **The
   canonical listing URL**: the server renders it as a real document with the
   room's own metadata, and it is the only indexable route besides `/`
-- `/apply/<venueSlug>/<roomSlug>` — writing the request, at the room's own distance
+- `/apply/<venueSlug>/<roomSlug>` — writing the request
 - `/journal` — the guest's inbox
-- `/desk[/<venueSlug>]` — hosting: requests waiting, spaces listed, their
-  church at their shoulder
+- `/desk[/<venueSlug>]` — hosting: requests waiting and spaces listed
 - `/letter/<applicationId>` — one request opened, in whichever lens it belongs to
   (a cold link carries only the application; the store is asked where that is)
 
@@ -173,7 +168,7 @@ and travel afterwards — `fixtures.goRoute(page, path)`, which writes the entry
 and sends the popstate the browser would have; setting `location.hash` does
 nothing at all now, because nothing listens to it.
 
-## What the village says about your requests
+## What the splash says about your requests
 
 The world is the status board. Nothing here is decoration for its own sake —
 every mark is read from the demo store and re-derived on every change.
@@ -181,18 +176,14 @@ every mark is read from the demo store and re-derived on every change.
 - **A lantern by the door** burns where a church has requests still undecided
   (pending, needs-info or counter-offered). It breathes slowly; it never blinks.
 - **Steady window light** means a booking is in the book — no flicker, warmer
-  glass, and light spilled on the path. A church that has said no is simply
-  quiet. Filters still own the body of the building: a church resting under a
-  filter keeps its lantern, dimmed.
-- **A week ribbon** is printed on the front lip of a room's card, Sunday to
-  Saturday, with the weekdays it is committed to painted terracotta.
+  glass, and light spilled on the path. A church that has said no is simply quiet.
 - **Sending** folds a request into an envelope in a handful of visible steps and
   flies it to the church door in under two seconds; the lantern lights when it
   lands.
 - **Approving** presses wax at the door and rings one soft bell — never before
   the visitor's first gesture, never under `prefers-reduced-motion`.
 - **Publishing** the Renovation Annex strikes its scaffolding like scenery
-  between acts, and the room takes its place on the grass, pickable like the rest.
+  between acts.
 - **Placing** a church puts it at its own projected lat/lng, mapped into the
   village by the same fit that carries the five.
 
@@ -425,8 +416,8 @@ node tools/input-test.mjs "http://localhost:5173/?q=low"
 # real clicks through the printed layer: pills, space cards, modal, switcher
 node tools/ui-test.mjs "http://localhost:5173/?q=low"
 
-# the request layer in the world: lanterns, ribbons, a sent
-# request in flight, wax at the door, the annex published, a church placed
+# the request layer in the world: lanterns, a sent request in flight,
+# wax at the door, the annex published, a church placed
 node tools/world-test.mjs "http://localhost:5173"
 
 # the demo store's status machine and validation
@@ -512,11 +503,10 @@ src/core/
   bus.js              state machine, events, hash deep links, URL flags
 src/data/venues.js    the five churches and their spaces — the only source of truth
 src/world/            everything you look at
-  index.js            builds the world, exposes anchors/pickables/highlight/filter/view
+  index.js            builds the view-only splash and exposes framing anchors
   sky.js backdrop.js  golden-hour light, paper sky, silhouette ridges
   stage-atlas.js      terrain, roads, pond, scatter
   churches.js         the five landmarks, each a character built from its data
-  rooms.js            a space as a pop-up model of itself
   props.js ambient.js annex, parking, metro motif, clouds, birds, motes
   builder.js materials.js palette.js  merged geometry, paper shading, brand color
 src/flows/world/      the requests, in the world
@@ -524,21 +514,19 @@ src/flows/world/      the requests, in the world
   lanterns.js         lantern by the door, light in the windows (?lantern=)
   envelope.js         a sent request's fold and flight, and the wax seal
   bell.js             one soft bell, gesture-gated and reduced-motion aware
-  ribbons.js          the committed week, printed on a room's doorstep
   placed.js           churches a host has placed, at their projected lat/lng
 src/journey/          everything you feel but never see
-  composition.js      where the camera wants to be at each depth
-  rig.js              flights, retargeting, the reduced-motion cut
-  input.js            pointer, wheel, keyboard, and the way back out of a request
+  composition.js      the poster-matched splash framing
+  rig.js              the splash camera and cinematic roll crane
+  input.js            roll gestures and the way back out of a request
   post.js             bloom, tilt-shift, warm grade, vignette
 src/ui/               the printed layer over the world
-  arrival.js nav.js venuePanel.js roomPanel.js
-  hoverBanner.js announcer.js copy.js dom.js
+  arrival.js nav.js venuePanel.js roomPanel.js announcer.js copy.js dom.js
   account.js          who you are, on the porch — and the way to stop being them
   rail.js             the phone's way back: a property sheet you can put down,
                       and pull up — two places it stands, one handle for both
   map/                the discovery surface — the product past the roll
-    index.js          the surface: head, count, scene sync, withdrawal
+    index.js          the surface: head, count, row/pin sync, withdrawal
     atlas.js          Leaflet + OSM tiles, pins, framing around what can be seen
     search.js         the segmented search pill; the one caller of searchListings
     banner.js         a room's photograph, or a lettered plate in its place

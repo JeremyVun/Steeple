@@ -2,7 +2,7 @@
 // geography, roads that actually go somewhere, a pond catching the low sun.
 
 import * as THREE from 'three';
-import { C, rgb, mix } from './palette.js';
+import { C, rgb } from './palette.js';
 import { fbm, smoothstep, clamp, makeRng, rngRange } from './rng.js';
 import { paperMaterial, smoothPaperMaterial } from './materials.js';
 import { pathsMesh } from './paths.js';
@@ -39,7 +39,7 @@ function baseHeight(x, z) {
 
 const pads = [];
 for (const [id, l] of Object.entries(LAYOUT)) {
-  // Flat enough that the church and every room card it presents stand level.
+  // Flat enough that each church stands level.
   pads.push({ id, x: l.x, z: l.z, h: baseHeight(l.x, l.z), r0: 96, r1: 168 });
 }
 const pondBase = baseHeight(POND.x, POND.z);
@@ -300,12 +300,8 @@ export function buildStage(scene, { quality }) {
   for (const m of buildCarInstances(cars)) group.add(m);
 
   return {
-    group,
     heightAt,
     layout: LAYOUT,
-    sampled,
-    presentVenue() {},
-    update() {},
   };
 }
 
@@ -316,5 +312,3 @@ export function rotateAbout(x, z, cx, cz, ry) {
   const s = Math.sin(ry);
   return { x: cx + dx * c + dz * s, z: cz - dx * s + dz * c };
 }
-
-void mix;

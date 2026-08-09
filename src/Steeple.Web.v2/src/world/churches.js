@@ -147,11 +147,6 @@ function grace(b, g) {
   planter(b, 9.5, 32);
 
   return {
-    footprint: { x: 46, z: 46 },
-    rooms: {
-      'fellowship-hall': { x: -46, z: 42, ry: 0.1 },
-      'youth-activity-room': { x: 36, z: 34, ry: -0.55 },
-    },
     // Where correspondence arrives: the front door, and the patch of ground
     // beside it where a lantern can stand without fouling the portico.
     door: { x: 0, y: 6, z: 27 },
@@ -252,11 +247,6 @@ function viennaPres(b, g) {
   b.slab(0.6, 0.5, 4, C.timber, { x: 12, y: 6.5, z: -27.5 });
 
   return {
-    footprint: { x: 48, z: 46 },
-    rooms: {
-      'music-room': { x: -46, z: 26, ry: 0.55 },
-      'garden-meeting-room': { x: 36, z: -46, ry: 2.55 },
-    },
     door: { x: 0, y: 6, z: 20 },
     lantern: { x: -10.5, z: 23 },
   };
@@ -310,14 +300,6 @@ function oaktonBaptist(b, g) {
   b.slab(11, 1.0, 10, ROOF_TERRA, { x: -3, y: 9, z: 4 });
 
   return {
-    footprint: { x: 62, z: 48 },
-    rooms: {
-      'gymnasium': { x: 56, z: 34, ry: -0.62 },
-      'classroom-b': { x: -20, z: -52, ry: 3.34 },
-      // Kept clear of the lot and the sanctuary: the annex's card stands on the
-      // grass in front of the annex itself, for the day its listing goes up.
-      'renovation-annex': { x: -68, z: 22, ry: 0.75 },
-    },
     annex: { x: -44, z: -26 },
     parking: { x: 8, z: 54 },
     door: { x: -14, y: 6, z: 17 },
@@ -369,11 +351,6 @@ function dunnLoring(b, g) {
   hedge(b, 18, 8, 14, 2.0, Math.PI / 2);
 
   return {
-    footprint: { x: 46, z: 44 },
-    rooms: {
-      'art-studio': { x: -46, z: 24, ry: 0.62 },
-      'community-lounge': { x: 36, z: 34, ry: -0.62 },
-    },
     door: { x: 0, y: 6, z: 17 },
     lantern: { x: -11.5, z: 21 },
   };
@@ -431,10 +408,6 @@ function merrifield(b, g) {
   for (const sx of [-9, 9]) b.slab(1.6, 12.4, 1.6, ['#B0A38A', '#D4CBB6'], { x: 42 + sx, z: 2 });
 
   return {
-    footprint: { x: 52, z: 44 },
-    rooms: {
-      'main-hall': { x: 2, z: 52, ry: 0 },
-    },
     door: { x: 0, y: 6, z: 16 },
     lantern: { x: 11, z: 19 },
   };

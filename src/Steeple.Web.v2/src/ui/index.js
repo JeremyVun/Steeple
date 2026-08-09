@@ -27,7 +27,6 @@ import { createSignInPanel } from './signIn.js';
 import { createAnnouncer } from './announcer.js';
 import { createArrival } from './arrival.js';
 import { createBrowse } from './browse.js';
-import { createHoverBanner } from './hoverBanner.js';
 import { createMetadata } from './metadata.js';
 import { createNav } from './nav.js';
 import { SHEET_BAND } from './rail.js';
@@ -56,7 +55,6 @@ export function createUI(_engine, _world) {
   const announcer = createAnnouncer();
   const arrival = createArrival();
   const nav = createNav();
-  const banner = createHoverBanner();
   const venuePanel = createVenuePanel();
   const roomPanel = createRoomPanel({
     onRequest: () => setView('apply', { venueId: state.venueId, roomId: state.roomId }),
@@ -197,7 +195,6 @@ export function createUI(_engine, _world) {
   root.append(
     browse.element,
     arrival.element,
-    banner.element,
     guest.element,
     host.element,
     // The account's card is a layer, not a child of the shelf: the shelf rides
@@ -305,9 +302,6 @@ export function createUI(_engine, _world) {
     saidUnavailable = unavailable;
     nav.update();
 
-    // The banner names what the pointer is over *in the world*; on the browse
-    // surface the pin says its own name.
-    if (rolled || (view !== 'village' && view !== 'venue')) banner.hide();
     document.documentElement.dataset.view = view;
     document.documentElement.dataset.mode = state.mode;
 
@@ -351,12 +345,6 @@ export function createUI(_engine, _world) {
   bus.on('store:change', ({ type }) => {
     if (type !== 'room-edit' && type !== 'reset' && type !== 'identity') return;
     render({ rebuild: true });
-  });
-
-  bus.on('hover:change', ({ venueId, roomId }) => {
-    if (!venueId || state.roll > 0 || (state.view !== 'village' && state.view !== 'venue')) {
-      banner.hide();
-    } else banner.show({ venueId, roomId });
   });
 
   render();

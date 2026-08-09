@@ -47,6 +47,13 @@ with one owner each:
 | **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** non-root route (`/space/…`, `/browse`, `/journal`, … — or an old `#/…` entrance), `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. No village work may delay the product. On the first wordmark return in a village-capable build, restore the poster synchronously, finish the return roll, then lazy-load and attach engine/world/journey to that same roll. `?world=off` and `build:flat` never hydrate or contain/request Three. |
 | **live-village boot** | `src/journey/roll.js` | no intent and the root route. Poster → canvas crossfade, then the 1.28s cinematic roll on a press. **Two independent readers of the address** decide this: `main.js` (is a village raised at all) and `journey/roll.js` (does the overture play) — both ask `router.isProductEntry()`; teaching only one of them a route family gives a `/space/…` visitor the cinematic over the listing they asked for. |
 
+The live village is view-only (2026-08-09). Its camera keeps the poster-matched
+arrival composition and the roll crane; it has no raycast targets, venue/room
+camera depths, hover response, filter response, room cards, or drag orbit. The
+map, rows and property sheets own every selection. Canvas click, wheel, touch
+scrub and arrival keys still start the roll, and Escape keeps its product
+navigation meaning. The renderer remains stopped for the whole product act.
+
 - `src/core/intent.js` is the critical controller: **the entry's first import, importing only
   `core/router.js`, which imports nothing** — no bus, no roll, no session/store, no Leaflet,
   no panels, no Three, no world. It records `{destination, requestedAt}`, sets
@@ -410,7 +417,7 @@ A change of person drops the in-memory copy and emits `store:change {type:'ident
 surfaces re-read from whoever is here now.
 
 **The demo fixture** loads only when `import.meta.env.PROD !== true`. It is scenery for the
-3D village — the lanterns and ribbons read `venueSignals()`/`roomOccurrences()` from it — and
+3D village — the lanterns read `venueSignals()` from it — and
 it is contained by construction: its letters are written under the seed's own ids
 (`maria-alvarez`…), a real account's id is a GUID, and the desk is scoped to
 `GET /manage/venues`, so no signed-in person ever inherits it and no desk ever shows it.
@@ -677,7 +684,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   the moving box has slid off.
 - E2E suites mint real accounts/venues/applications against the local API each run.
 - Known-stale failure sets (verified at HEAD 2026-08-08, not slice regressions): guest-test
-  11 (map-first drift), world-test Atlas-only 6 (exact set in its header),
+  11 (map-first drift),
   booking-flow-test from §5,
   discovery-test 2 (data-shaped), map-test §10 (asserts a pre-zoom row count), surface-test 3,
   ui-test 1, wave2-test, session-tabs-test §3 (the two-pages-one-browser freeze hazard;
@@ -772,7 +779,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   app-time ~6× slow, so a check that only asks whether it exists passes on something nobody
   could have read. Wait on computed opacity.
 - Builds: `npm run dev` (vite :5173) · `npm run build` · `npm run build:flat`
-  (`VITE_WORLD=off`, ~310kB vs ~988kB — three.js compiled out, no query can ask for a world
+  (`VITE_WORLD=off`; three.js is compiled out, so no query can ask for a world
   that was never shipped).
 - A/B alternatives are **query params, never branches**, read once at boot into `state`
   (`src/core/bus.js`): `?map= ?tilt= ?world=on|off ?letter=stationery|ledger
