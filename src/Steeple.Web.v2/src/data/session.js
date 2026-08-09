@@ -15,7 +15,7 @@ import * as api from './api.js';
 const LEGACY_KEY = 'steeple-village-session';
 const CHANNEL = 'steeple-village-session';
 
-/** Remove the profile/tombstone written by versions before cleanup P2. */
+/** Remove the profile/tombstone written before identity became memory-only. */
 function purgeLegacyProfile() {
   for (const area of [globalThis.localStorage, globalThis.sessionStorage]) {
     try {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A LISTING, OPENED (docs/backlog/seo/design.md SEO-D5/D6/D7/D10, build_plan P4).
+// A LISTING, OPENED (docs/contracts/seo.md SEO-D5/D6/D7/D10).
 //
 // tools/seo-route-test.mjs proves the layer between a URL and the application:
 // what the server says and what the handoff does with it. This suite is the

@@ -21,8 +21,10 @@
 ```
 `displayName` is an optional hint honored only when the account is first created — Apple sends
 the person's name once, in the authorization response, never in the ID token. `turnstileToken`
-is required wherever Turnstile is enabled (deployed env); environments without a configured
-secret skip the check. Rate limited per IP (`auth`; refresh has its own policy below).
+is required when Turnstile is explicitly enabled; missing, rejected, or unreachable verification
+fails closed. Explicit disabled mode bypasses it (Development and the accepted pre-release
+Production posture; general release enables it — `infra.md`). Rate limited per IP (`auth`;
+refresh has its own policy below).
 
 **Development only:** provider `"dev"` accepts `idToken` = `email` or `email|Display Name`
 (no signature) for the local dev loop and automated playtests. Its verifier is registered

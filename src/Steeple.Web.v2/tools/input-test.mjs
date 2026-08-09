@@ -110,7 +110,7 @@ function check(label, ok, detail = '') {
 }
 
 async function ready(target) {
-  // A cold route is a product-first flat boot (build_plan P3.3): no engine, no
+  // A cold route is a product-first flat boot (docs/contracts/seo.md SEO-D6): no engine, no
   // world, nothing to ask about a camera. This suite is the world's suite, so
   // it loads the title bare — where a village is raised — and then travels to
   // the route the way the browser does, with a real history entry and the

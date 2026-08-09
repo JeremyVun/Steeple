@@ -3,7 +3,7 @@
 //   node tools/router-test.mjs
 //
 // What this suite is for: the router is the one translator between a browser
-// location and product state (docs/backlog/seo/design.md SEO-D1), and almost
+// location and product state (docs/contracts/seo.md SEO-D1), and almost
 // everything it can get wrong is silent. A dropped query string is a lost
 // `?world=off`; a base resolved twice is every asset and `api/v1` call re-rooted
 // under `/space/`; a legacy `#/room/...` that pushes instead of replacing is a

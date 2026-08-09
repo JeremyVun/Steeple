@@ -2,7 +2,8 @@ namespace Steeple.Api.Services.Seo;
 
 /// <summary>
 /// Where the public reaches this deployment: an origin plus the sub-path prefix an edge proxy
-/// strips before the request arrives (docs/backlog/seo/design.md §7). Everything crawler-facing
+/// strips before the request arrives (docs/contracts/seo.md, Public base and sub-path deployment).
+/// Everything crawler-facing
 /// — canonicals, <c>og:url</c>, the document <c>&lt;base&gt;</c>, handoff/shell URLs, absolute
 /// photo URLs and the sitemap's <c>loc</c> — is derived from one of these, so the whole surface
 /// moves together when a deployment moves.

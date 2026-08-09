@@ -9,7 +9,7 @@ namespace Steeple.Api.Tests.Controllers;
 /// <summary>
 /// What comes back over the wire for the two addresses this controller owns: the listing document
 /// with one canonical address and a 404 that is a designed page rather than the framework's
-/// ProblemDetails (docs/backlog/seo/design.md SEO-D9, D10), and the crawl policy whose whole reason
+/// ProblemDetails (docs/contracts/seo.md SEO-D9, D10), and the crawl policy whose whole reason
 /// for being rendered is that its sitemap URL must be absolute. The discoverability rules are
 /// <see cref="ListingService"/>'s and are tested there — here every non-public reason simply
 /// arrives as the same null.

@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// CLEAN ROUTES — THE TRANSPORT AND THE HANDOFF (docs/backlog/seo/design.md
-// SEO-D3/D4, build_plan P2.5).
+// CLEAN ROUTES — THE TRANSPORT AND THE HANDOFF (docs/contracts/seo.md SEO-D3/D4).
 //
 // The subject here is the layer between a URL and the application: what the
 // server says when a clean route is asked for, and what happens to that answer

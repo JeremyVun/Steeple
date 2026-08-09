@@ -74,7 +74,7 @@ public sealed class PublicBaseResolver : IPublicBaseResolver
         }
 
         _log.LogWarning(
-            "{Section}:{Key} is not configured — canonical URLs, og:url and sitemap locs will name whatever origin each request arrives on. Set it per deployment (docs/backlog/seo/design.md §7).",
+            "{Section}:{Key} is not configured — canonical URLs, og:url and sitemap locs will name whatever origin each request arrives on. Set it per deployment (docs/contracts/seo.md).",
             SeoOptions.SectionName,
             nameof(SeoOptions.PublicBaseUrl));
     }

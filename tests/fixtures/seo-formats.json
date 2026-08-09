@@ -13,7 +13,7 @@
     "  · tests/Steeple.Api.Tests/Services/Seo/SeoFormatGoldenTests.cs",
     "  · src/Steeple.Web.v2/tools/metadata-test.mjs  (part of `npm test`)",
     "",
-    "Adopted 2026-08-08 with docs/backlog/seo/ (SEO-D7, build_plan P4.2)."
+    "Adopted 2026-08-08; docs/contracts/seo.md SEO-D7 owns the formatting contract."
   ],
 
   "labels": {

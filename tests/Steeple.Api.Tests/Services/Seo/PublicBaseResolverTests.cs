@@ -10,7 +10,7 @@ namespace Steeple.Api.Tests.Services.Seo;
 /// One canonical origin for the whole crawler surface. The tests that matter here are the ones
 /// about trust: <c>X-Forwarded-Host</c>/<c>-Prefix</c> are unvalidated client input (Program.cs
 /// trust-bounds only <c>For</c>/<c>Proto</c>), and before this resolver the sitemap built its
-/// absolute URLs out of them (docs/backlog/seo/design.md §7).
+/// absolute URLs out of them (docs/contracts/seo.md, Public base and sub-path deployment).
 /// </summary>
 public class PublicBaseResolverTests
 {

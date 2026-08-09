@@ -1,4 +1,4 @@
-// Focused WCAG smoke over the four product surfaces named by cleanup P9.
+// Focused WCAG smoke over browse, room detail, inbox, and opened correspondence.
 // Starts its own flat dev server and supplies only the identity response needed
 // to reach private correspondence; no external API or database is required.
 

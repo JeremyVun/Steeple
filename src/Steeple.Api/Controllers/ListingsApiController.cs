@@ -139,7 +139,7 @@ public sealed class ListingsApiController : ControllerBase
     /// <remarks>
     /// URLs are absolute and come from the configured public base — the same resolver the listing
     /// documents use, so the two crawler surfaces can never advertise different origins for the
-    /// same room (docs/backlog/seo/design.md §7).
+    /// same room (docs/contracts/seo.md, Public base and sub-path deployment).
     /// </remarks>
     [HttpGet("sitemap.xml")]
     [ResponseCache(Duration = 3600)]

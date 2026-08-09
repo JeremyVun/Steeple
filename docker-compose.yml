@@ -86,7 +86,7 @@ services:
       Media__AccessKey: "${MEDIA_ACCESS_KEY:?MEDIA_ACCESS_KEY must be set}"
       Media__SecretKey: "${MEDIA_SECRET_KEY:?MEDIA_SECRET_KEY must be set}"
       # The canonical public origin every crawler-facing absolute URL is built from — sitemap
-      # <loc>, listing canonicals, og:url and the document <base> (docs/backlog/seo/design.md §7,
+      # <loc>, listing canonicals, og:url and the document <base> (docs/contracts/seo.md,
       # which requires a deployment behind a stripped prefix to set it). Empty falls back to the
       # request's own origin and earns a startup warning outside Development.
       Seo__PublicBaseUrl: "${SEO_PUBLIC_BASE_URL:?SEO_PUBLIC_BASE_URL must be set}"

@@ -3,7 +3,7 @@ namespace Steeple.Api.Services.Seo;
 /// <summary>
 /// The one place the API decides what its public origin is. Both crawler surfaces — the sitemap
 /// and the listing documents — resolve through this, so they can never disagree about the URL
-/// family they advertise (docs/backlog/seo/design.md §7).
+/// family they advertise (docs/contracts/seo.md, Public base and sub-path deployment).
 /// </summary>
 public interface IPublicBaseResolver
 {

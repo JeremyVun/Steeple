@@ -8,7 +8,7 @@ using System.Text.Unicode;
 namespace Steeple.Api.Services.Seo;
 
 /// <summary>
-/// The listing document and its not-found counterpart (docs/backlog/seo/design.md SEO-D3, D5,
+/// The listing document and its not-found counterpart (docs/contracts/seo.md SEO-D3, D5,
 /// D7–D10). A crawler, a scraper and a person with JavaScript switched off all read this response
 /// and nothing else, so it carries the whole listing in words before any script runs.
 /// </summary>
@@ -165,7 +165,7 @@ public sealed class WebDocumentRenderer : IWebDocumentRenderer
         # alone. The sitemaps.org protocol reads Sitemap: as a fully-qualified URL and
         # ignores a relative one, autodiscovery is how this deployment's sitemap is
         # found at all, and only the API knows the origin the public reaches it at
-        # (Seo:PublicBaseUrl — docs/backlog/seo/design.md §7). The edge aliases
+        # (Seo:PublicBaseUrl — docs/contracts/seo.md). The edge aliases
         # /robots.txt onto this route exactly as it aliases /sitemap.xml — see nginx.conf.
 
         User-agent: *
@@ -238,7 +238,7 @@ public sealed class WebDocumentRenderer : IWebDocumentRenderer
 
         // Enough of the design system to make an unstyled-by-P2 document presentable, every rule
         // scoped under body.rd-body so none of it can reach the application: this <style> survives
-        // the body handoff, and the app drops the class (see docs/backlog/seo/design.md SEO-D4).
+        // the body handoff, and the app drops the class (see docs/contracts/seo.md SEO-D4).
         html.Append("<style>")
             .Append("body.rd-body{margin:0;background:#FBF7F0;color:#2A2620;")
             .Append("font:16px/1.65 -apple-system,BlinkMacSystemFont,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif}")

@@ -8,7 +8,7 @@
       may be written above this line.
 
       `./` is what makes one build deployable at either / or a stripped prefix
-      (docs/backlog/seo/design.md SEO-D4, §7): the document resolves it against
+      (docs/contracts/seo.md SEO-D4, Public base and sub-path deployment): the document resolves it against
       its own address, so this file loaded at /index.html bases on / and the
       same file loaded at /steeple/index.html bases on /steeple/. That is what
       holds `assets/…`, the poster, and data/api.js's document-relative
@@ -80,11 +80,10 @@
     <!--
       The share card and the crawler's first read (docs/contracts/seo.md).
 
-      This is the app's *one* set of tags: every route here is a hash route over
-      the same document, so nothing below can be per-listing without the
-      rendering layer D9 defers (docs/backlog/seo-crawlable-listings.md). What it
-      does buy is that a link to Steeple unfurls as Steeple rather than as a bare
-      URL, and that a crawler which runs no JavaScript still learns what this is.
+      This is the static root document's one set of site-level tags. Listing
+      routes receive their per-listing head from the API-rendered document
+      (docs/contracts/seo.md SEO-D3/D7). These tags make a root Steeple link
+      unfurl as Steeple and tell a crawler that runs no JavaScript what the site is.
 
       No og:image and no og:url on purpose: the image would be one listing's
       photograph standing for all of them, and the URL is not knowable in a

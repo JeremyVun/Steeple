@@ -133,7 +133,7 @@ default. Atlas is the canonical village presentation.
 ### Routes
 
 Clean History-API paths, translated by `src/core/router.js` — the one file that
-reads or writes a location (2026-08-08, `docs/backlog/seo/design.md` SEO-D1):
+reads or writes a location (2026-08-08, `docs/contracts/seo.md` SEO-D1):
 
 - `/` — the title page over the village
 - `/browse` — the map, listing results, and discovery panel

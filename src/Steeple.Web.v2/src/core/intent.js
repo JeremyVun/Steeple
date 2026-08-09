@@ -14,7 +14,7 @@
 //      script that never arrives, the press is an ordinary navigation to a real
 //      document, and the boot that follows opens there. The URL is the recovery
 //      truth, and since the routes became real paths it is a truth the *server*
-//      can answer too (docs/backlog/seo/design.md SEO-D1/D3).
+//      can answer too (docs/contracts/seo.md SEO-D1/D3).
 //   2. this module. An external same-origin module — the CSP forbids an inline
 //      script — and the entry's first import, armed before main.js's own body
 //      runs and long before the 105KB interface chunk that used to own these

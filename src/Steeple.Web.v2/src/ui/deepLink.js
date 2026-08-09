@@ -4,7 +4,7 @@
 // `{WebBaseUrl}/?goto=<encoded deepLink>` — a query parameter rather than a
 // path. It began as a way around a web host that soft-404ed anything it had no
 // file for; that is no longer true (the clean routes are real documents now —
-// docs/backlog/seo/design.md SEO-D3), and `/space/{venue}/{room}` in particular
+// docs/contracts/seo.md SEO-D3), and `/space/{venue}/{room}` in particular
 // is a link that lands directly. `?goto=` stays because the rest of this
 // grammar is *steeple's*, not the web app's: `/inbox/applications/{id}` is what
 // a notification row and an email CTA both carry, and it is deliberately not a

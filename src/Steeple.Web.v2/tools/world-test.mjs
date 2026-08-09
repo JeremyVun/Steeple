@@ -225,7 +225,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   // this page is nobody (D4). The village is where this half of the story is.
   //
   // Loaded at the root, and put past the roll afterwards: a cold *route* is a
-  // product-first boot (build_plan P3.3) — no engine, no world, nothing for a
+  // product-first boot (docs/contracts/seo.md SEO-D6) — no engine, no world, nothing for a
   // world suite to ask about — while the village's own arrival still raises
   // one. Same place, through the door this suite is about.
   await page.goto(`${base}/?q=low`, { waitUntil: 'networkidle0' });

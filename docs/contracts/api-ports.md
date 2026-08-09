@@ -34,12 +34,13 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 |---|---|---|
 | Discovery | search, listing detail by id/slug, suburbs, sitemap, geofence endpoint (`Controllers/ListingsApiController.cs`, route `api/v1`) | `IListingService`, `IRoomRepository`, `IGeofencePolicy` |
 | Identity | SSO verification, own token issue/rotation, `/me`, agreements, deletion, devices (`Controllers/Identity/`) | `IIdentityService`, `IIdentityRepository`, `IIdTokenVerifier` (×2, +dev), `IAccessTokenIssuer`, `ITurnstileVerifier` |
-| Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
+| Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `ApplicationService` orchestrates `ApplicationTransitionRules`, `ApplicationSchedulePolicy`, `ApplicationExpiryPolicy`, `ApplicationNotifications`, and `ApplicationPresentation`; ports: `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
 | Bookings | confirmation transaction (instant submit/manual approval/counter acceptance), occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
 | Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `ChargePlanner` (pure) |
 | Notifications | inbox rows (= truth), cursor paging, transactional email/push outbox + delivery worker (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `NotificationOutboxWorker`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
 | Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller; its worker is enabled by `ReminderOptions.Enabled`) | `IBookingReminderService`, `IBookingReminderRepository` |
+| Retention | daily bounded deletion/redaction of terminal tokens, notifications, replay keys, private correspondence, and terminal outbox rows (no controller) | `IDataRetentionService`, `DataRetentionService`, `DataRetentionWorker` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
 | Availability | open hours + blackouts; free-window computation for guests, hosts, and the publish gate | `IAvailabilityService`, `IAvailabilityRepository`, `AvailabilityCalculator` (pure) |
 | Media | photo upload pipeline + storage | `IMediaService`, `IMediaRepository`, `IImageProcessor`, `IMediaStore` |
@@ -77,7 +78,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IBookingReminderRepository` | `EfBookingReminderRepository` (read-only over bookings/occurrences; claims via `INSERT … ON CONFLICT DO NOTHING`) |
 | `IPushGateway` | Explicit `Push:Mode`: `fcm` selects `FcmPushGateway`; `disabled` selects `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
-| `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-process concurrency cap, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 keys; ImageSharp 3.1.x) |
+| `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-process concurrency cap, auto-orient, full metadata strip, 400/800/1600px JPEG variants, source SHA-256 retained for diagnostics only; ImageSharp 3.1.x) |
 | `IMediaRepository` | `EfMediaRepository` (manager-scoped room/photo rows) |
 | `IMediaStore` | Explicit `Media:Mode`: `objectStorage` selects `S3MediaStore`; Development local-disk mode selects `LocalDiskMediaStore` served at `/media` |
 | `IFeatureFlags` | `ConfigFeatureFlags` (reads the `Flags:` config section — never a network call) |
@@ -88,6 +89,9 @@ Lifetimes follow one rule: anything touching `SteepleDbContext` is **scoped**; p
 and cache-holding things (geofence policy, analytics sink, token issuer, JWKS verifiers, image
 processor, media store, flags) are **singletons**. `NotificationOutboxWorker` opens one fresh scope
 per bounded batch, so its transient email gateway and EF context live through every delivery stamp.
+`DataRetentionWorker` likewise opens a fresh scope for one config-backed daily pass;
+`DataRetentionService` processes each data class oldest-first with a hard ceiling of 500 rows per
+class per pass. Financial graph rows and legal acceptances are never deletion targets.
 
 ## Rate-limit policies (`Extensions/RateLimitingExtensions.cs`)
 

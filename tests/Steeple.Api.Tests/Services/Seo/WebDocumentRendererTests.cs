@@ -7,7 +7,7 @@ namespace Steeple.Api.Tests.Services.Seo;
 /// JavaScript ever sees, so these tests read the rendered text rather than a model: unique
 /// metadata, prefix-correct URLs, structured data that parses and says only what
 /// <see cref="RoomDetailDto"/> knows, and host text that cannot break out of the nodes it sits in
-/// (docs/backlog/seo/design.md SEO-D5, D7–D10).
+/// (docs/contracts/seo.md SEO-D5, D7–D10).
 /// </summary>
 public class WebDocumentRendererTests
 {

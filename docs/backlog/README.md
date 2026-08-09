@@ -16,6 +16,7 @@ Use these status markers consistently:
 
 | Document | Remaining work |
 |---|---|
+| `ratings/build_plan.md` | Public review comments on room sheets and web no-show marking. |
 | `reputation-and-launch.md` | Response-rate signals, renewal, expiry tuning, area SEO, and launch operations. Ratings and clean-route SEO are already complete. |
 | `phase-7-growth-seams.md` | Trigger-gated expansion: verification, vouching, area two, trust step-ups, insurance, and safeguarding. |
 | `payments.md` | Stripe adapter, webhooks, and launch-time legal/policy work; the mock-gateway rails are built. |
@@ -26,8 +27,4 @@ Use these status markers consistently:
 
 | Area | Record |
 |---|---|
-| Cleanup and hardening (completed 2026-08-09) | `cleanup/design.md`, `cleanup/build_plan.md` |
-| Ratings on web v2 (completed 2026-08-08) | `ratings/design.md`, `ratings/build_plan.md` |
-| Crawlable listings and clean routes (completed 2026-08-08) | `seo/design.md`, `seo/build_plan.md` |
-| Original SEO brief | `seo-crawlable-listings.md` (move notice only) |
-
+| Ratings on web v2 core (completed 2026-08-08) | `ratings/design.md` |

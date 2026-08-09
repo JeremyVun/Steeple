@@ -60,7 +60,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// The crawler surface (docs/backlog/seo/design.md): the one canonical-public-base resolver
+    /// The crawler surface (docs/contracts/seo.md): the one canonical-public-base resolver
     /// that the sitemap and the listing documents share, and the document renderer. Both are
     /// stateless over configuration and contracts -> singletons.
     /// </summary>

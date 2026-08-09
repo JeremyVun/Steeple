@@ -5,11 +5,14 @@
 > `catalog.js` (product vocabulary + offline fallback),
 > `store.js` (the per-person server mirror), plus harness truths and environment-gated integrations.
 > Wire shapes themselves live in the endpoint seam files; conventions: `conventions.md`.
-> Verified against `src/Steeple.Web.v2/src/` and `tools/` (2026-08-08).
+> Verified against `src/Steeple.Web.v2/src/` and `tools/` (2026-08-09).
 
 Vite + vanilla JS + Leaflet SPA with a Three.js village splash; nginx serves the built assets
 in containers and proxies same-origin `/api` to the API (the API emits **no CORS** by design —
 the proxy is the missing BFF; in dev, `vite.config.js` does the same to `:5200`).
+Web v1 and the diorama renderer are retired; Atlas is the sole village/map presentation. The
+supported `?world=off`/flat path is the performance, accessibility, and deep-link fallback, not a
+second art direction.
 Layout: `src/{core,data,ui,flows,journey,world,styles}`. **Clean History-API routes own
 navigation** (2026-08-08, SEO-D1 — `src/core/router.js` is the one translator, `setView` in
 `src/core/bus.js` is still the state transition):
@@ -658,6 +661,10 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   A missing figure means *unknown*, never free (free listings were removed 2026-07-07) — and
   `priceParts` answers "Free" to a price it was not given, which is how a host-listed room's
   letterhead used to say Free above a $40-a-session booking.
+
+`npm run check` is the standard static gate: unit tests, ESLint, JSDoc/checkJs, the Production
+dependency audit, and the focused axe accessibility pass. `tools/surface-scope-test.mjs` remains
+the live ownership gate for guest/host/shared CSS after markup or style changes.
 
 ## Harness truths (`tools/*.mjs`)
 

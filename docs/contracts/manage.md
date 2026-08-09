@@ -214,8 +214,11 @@ never crossing midnight.
   before the pipeline runs) + optional `caption`. Server decodes (decode failure → `400
   invalid_image`). It identifies headers before decoding and rejects animation, dimensions over
   12,000px, or more than 30 MP; processing is capped at two concurrent images. Accepted images
-  auto-orient from EXIF, strip **all** metadata (EXIF/XMP/IPTC — GPS included), encode JPEG variants at 400/800/1600px (no upscaling smaller sources), and key
-  them by a SHA-256 content hash. `201 RoomPhotoDto`. Web v2 sends an already-prepared
+  auto-orient from EXIF, strip **all** metadata (EXIF/XMP/IPTC — GPS included), and encode JPEG
+  variants at 400/800/1600px (no upscaling smaller sources). Each photo row owns its immutable
+  `rooms/{roomId}/{photoId}` object prefix; identical bytes are not deduplicated. A partial variant
+  upload or later database failure deletes every object written by that attempt. `201 RoomPhotoDto`.
+  Web v2 sends an already-prepared
   1600px JPEG (`docs/contracts/web.md` → `data/photo.js`); the cap and every check above are
   still the gate, because no client's word about its own bytes is worth anything.
 - `PATCH /api/v1/manage/photos/{photoId}` ✅ — `UpdatePhotoRequest {caption?, isPrimary?,
@@ -227,7 +230,9 @@ never crossing midnight.
   `sortOrder` leaves the order (gaps included) exactly as it was.
 - `DELETE /api/v1/manage/photos/{photoId}` ✅ — deletes the row first, then best-effort deletes
   the stored variants. `204`. Deleting the cover promotes the next photo by display order and
-  leaves the surviving positions untouched (a gap is legal).
+  leaves the surviving positions untouched (a gap is legal). Legacy rows that once shared
+  content-hash objects retain their render URLs but have `StorageKey = null`, so deleting either
+  row never deletes bytes another row still renders.
 - `RoomPhotoDto` ✅: `{id, url, thumbUrl?, cardUrl?, caption?, isPrimary, sortOrder}` — `id`,
   `thumbUrl`, `cardUrl` are additive (`conventions.md` §1 rule); `url` stays the full-size image
   for both new and legacy (seeded) rows. Cards prefer `cardUrl`, falling back to `url` when

@@ -216,7 +216,7 @@ export function createRoll(engine, { beforeReturn = null } = {}) {
   // in main.js on purpose: main.js decides whether a village is raised at all,
   // this decides whether the overture plays. Teach only one of them about clean
   // routes and a /space/… visitor gets the title page's cinematic over the
-  // listing they asked for (build_plan P3.3).
+  // listing they asked for (docs/contracts/seo.md SEO-D6).
   if (isProductEntry()) {
     p = 1;
     setRoll(1);

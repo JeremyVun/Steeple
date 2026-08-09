@@ -20,10 +20,10 @@ follow the governance checklist in `conventions.md`.
 | `manage.md` | Provider self-service: venue/room CRUD, the moderation model, availability rules (open hours + blackouts), guest availability reads, host review & calendar, photos. |
 | `payments.md` | Method-on-file, the apply payment gate, per-occurrence charging and failure handling, refunds, and payout onboarding. |
 | `analytics.md` | The event ingest endpoint and the full event taxonomy (name → source → props). |
-| `infra.md` | Deployed-infra contracts: feature-flags service + client flags proxy; edge auth, sub-path hosting, deep links, push payload. |
+| `infra.md` | Deployed-infra contracts: feature flags, Production configuration gates, edge auth, sub-path hosting, deep links, push payload, and media-object ownership. |
 | `api-ports.md` | `Steeple.Api`'s internal architecture contract: module map, port → adapter table, module rules. |
 | `persistence.md` | Domain model, DB-enforced invariants, geofence, and the Liquibase-owns-schema / database-first EF recipe. |
-| `seo.md` | The crawler surface: `robots.txt`, sitemap policy + `lastmod` truth, site metadata/JSON-LD, index/canonical policy. As-built vs the clean-route build (`docs/backlog/seo/`). |
+| `seo.md` | The crawler surface: clean routes and listing documents, `robots.txt`, sitemap + `lastmod` truth, metadata/JSON-LD, index/canonical policy, and deferred work. |
 | `web.md` | `Steeple.Web.v2` seams: `api.js` (the wire), `session.js`, `catalog.js`, `store.js`, harness truths, environment-gated integrations. |
 | `mobile.md` | `/mobile` in-app seams: Dart interfaces, error model, wire models, router registry, repositories/providers, shared widgets, fixtures. Was `docs/MOBILE_CONTRACTS.md`. |
 
@@ -33,7 +33,15 @@ Code comments across the repo cite `CONTRACTS §n` and `MOBILE_CONTRACTS §n`. T
 numbering is preserved: `docs/CONTRACTS.md` is now a thin index mapping §1–§10 onto the files
 above, and `docs/MOBILE_CONTRACTS.md` points at `mobile.md` (which keeps its own §1–§12).
 
-## Completed migration notes
+## Completed migration and hardening notes
 
 The v2 production migration completed on 2026-08-07. Its decisions are represented here as
 as-built behavior; there are no pending `superseded-by-adopted-decision` markers.
+
+The cleanup and hardening program completed on 2026-08-09. Its durable outcomes are now owned by
+the relevant seams: memory-only browser identity and correspondence (`identity.md`, `web.md`),
+row-owned photo objects (`manage.md`, `infra.md`), effective application expiry and durable
+notification delivery (`applications.md`), bounded discovery (`discovery.md`), retention and
+service boundaries (`api-ports.md`, `persistence.md`), Production fail-closed configuration
+(`infra.md`), and the shared wire-token registry (`conventions.md`). The retired plans are not
+contract sources; Git history retains their execution detail.

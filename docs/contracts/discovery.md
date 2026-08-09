@@ -62,9 +62,13 @@ set for one-off searches, absent for recurring ones.
   `matchedWindow`).
 - One anonymous When search evaluates at most the first 300 SQL-prefiltered rooms. The candidate
   query is deterministically ordered before truncation; `totalCount` is the number of matching
-  survivors inside that bounded set, not an unbounded inventory count.
+  survivors inside that bounded set, not an unbounded inventory count. Availability remains an
+  in-memory refinement until inventory pressure makes this bound inadequate; then move it into
+  queryable/materialized data rather than removing the bound.
 
 ### `GET /api/v1/listings/by-slug/{venueSlug}/{roomSlug}` ✅ · `GET /api/v1/listings/{id}` ✅
+Slugs are canonical lowercase values fixed at write time; lookups compare them directly against
+the indexed columns and must not wrap those columns in `LOWER()`.
 Response `RoomDetail`: summary fields + `description, houseRules, amenities[],
 photos[{id, url, thumbUrl?, cardUrl?, caption?, isPrimary, sortOrder}]`,
 `venue{venueId, name, slug, venueType, addressLine,
@@ -99,7 +103,7 @@ are excluded. Response:
 `suburbs` includes only localities with a Published, non-taken-down room inside the configured
 discovery geofence.
 
-### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07; clean-route completion record: `docs/backlog/seo/build_plan.md`)*
+### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07; crawler contract: `seo.md` SEO-D12)*
 The same rows as `sitemap`, as sitemaps.org XML (`application/xml`, `Cache-Control` 1h): the home
 page plus every published listing's `/space/{venueSlug}/{roomSlug}` URL with `lastmod`,
 `changefreq` and `priority`. The only endpoint here that answers XML — web v2 is a static bundle

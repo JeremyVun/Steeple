@@ -211,7 +211,7 @@ try {
     // therefore answered by core/intent.js, in the document, which is why an
     // arrival settles for it. The markup's own promise is only visible when the
     // script is refused outright, and since the routes became real documents
-    // (build_plan P3.3) that promise is stronger than it was: the press is an
+    // (docs/contracts/seo.md SEO-D6) that promise is stronger than it was: the press is an
     // ordinary navigation to a page the server will answer, not a fragment on a
     // shell that has to boot before it means anything.
     const bare = await stage({ block: [ENTRY], cpu: 1, network: null });

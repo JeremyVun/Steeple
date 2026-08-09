@@ -7,7 +7,7 @@
  * need this file. What this file does is turn that page into the ordinary Vite
  * application, at the same URL, with no redirect, no iframe, no second runtime
  * and no copy of Vite's generated asset names anywhere on the server
- * (docs/backlog/seo/design.md SEO-D3, SEO-D4).
+ * (docs/contracts/seo.md SEO-D3, SEO-D4).
  *
  * The shape of it:
  *

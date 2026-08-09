@@ -12,7 +12,7 @@ namespace Steeple.Api.Services.Seo;
 public sealed record WebDocument(int StatusCode, string Html, string CacheControl, string? Robots);
 
 /// <summary>
-/// Renders the crawler-facing web documents the API owns (docs/backlog/seo/design.md SEO-D3).
+/// Renders the crawler-facing web documents the API owns (docs/contracts/seo.md SEO-D3).
 /// It depends on the public contracts and a <see cref="PublicBase"/> only: no EF, no repositories,
 /// no knowledge of nginx, and no second copy of the listing-visibility rules.
 /// </summary>

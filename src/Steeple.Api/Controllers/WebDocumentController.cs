@@ -5,7 +5,7 @@ namespace Steeple.Api.Controllers;
 
 /// <summary>
 /// The crawler-facing documents the API renders at the root of the public origin
-/// (docs/backlog/seo/design.md SEO-D3): the listing document, and the crawl policy that names its
+/// (docs/contracts/seo.md SEO-D3): the listing document, and the crawl policy that names its
 /// sitemap. Deliberately outside <c>/api/v1</c> — these are web documents at the addresses the
 /// public asks for, not a new JSON wire contract. nginx proxies these two paths and serves every
 /// other clean route as a static file itself.

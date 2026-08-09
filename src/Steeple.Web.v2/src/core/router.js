@@ -4,7 +4,7 @@
 // adapter around it, never a second state machine. It reads a location and says
 // what the product should be showing; it takes what the product is showing and
 // says what the address bar should read. Nothing else in the app may parse or
-// write a URL (docs/backlog/seo/design.md SEO-D1, §6).
+// write a URL (docs/contracts/seo.md SEO-D1, Delivery ownership).
 //
 // It imports nothing — not the bus, not the store, not a byte of the interface
 // — for two reasons. core/intent.js is armed before anything else in the entry

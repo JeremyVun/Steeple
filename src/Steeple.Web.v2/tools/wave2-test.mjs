@@ -141,7 +141,7 @@ if (listing.status !== 200) {
   }
 
   async function ready(target) {
-    // A cold *route* is a product-first flat boot (build_plan P3.3): main.js
+    // A cold *route* is a product-first flat boot (docs/contracts/seo.md SEO-D6): main.js
     // reads the address before anything else and, for somebody who has already
     // chosen a place, never fetches a village behind their back. This suite is
     // the village's own suite — `__steeple.world` is its whole subject — so it

@@ -1,6 +1,7 @@
 namespace Steeple.Api.Configuration;
 /// <summary>
-/// The canonical public origin of the deployment (docs/backlog/seo/design.md §7). Every crawler-
+/// The canonical public origin of the deployment (docs/contracts/seo.md, Public base and sub-path
+/// deployment). Every crawler-
 /// facing absolute URL — the sitemap's <c>loc</c>, a listing document's canonical, <c>og:url</c>,
 /// its <c>&lt;base&gt;</c> and its JSON-LD — is built from this one value.
 /// </summary>

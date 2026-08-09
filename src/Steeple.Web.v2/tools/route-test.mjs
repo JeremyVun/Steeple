@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// THE CLEAN ROUTES, DRIVEN (docs/backlog/seo/design.md SEO-D1/D2/D6, P3.5).
+// THE CLEAN ROUTES, DRIVEN (docs/contracts/seo.md SEO-D1/D2/D6).
 //
 // tools/router-test.mjs proves the grammar in plain node — every route, every
 // old fragment, every hostile segment. This suite proves the half that only a

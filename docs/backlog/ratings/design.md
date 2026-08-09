@@ -5,8 +5,8 @@
 > and Admin sides shipped 2026-07-05 and were re-verified against the current tree
 > 2026-08-08. **The backend needs zero changes for this MVP** — every field and endpoint
 > below already exists and is already served on reads web v2 makes today.
-> `build_plan.md` beside this file is the completion record; current wire truth lives in
-> `docs/contracts/applications.md` and `docs/contracts/discovery.md`.
+> `build_plan.md` beside this file now contains only the remaining web work; current wire
+> truth lives in `docs/contracts/applications.md` and `docs/contracts/discovery.md`.
 >
 > File:line references were verified against the 2026-08-08 working tree (which includes
 > the uncommitted host-letter/unified-inbox work). Treat them as strong hints, not
@@ -256,7 +256,7 @@ journal's "Lately" block picks it up automatically from the same cache.
   record, never sample the live element.
 - **No seed booking is rateable.** Seed venues are instant-book with future-only
   availability; every verification loop must mint its own booking and push its occurrence
-  into the past (recipe in `build_plan.md`).
+  into the past (`tools/correspondence-test.mjs` §10 is the current executable recipe).
 
 ## Build deviations (recorded 2026-08-08, P1/P2 round)
 

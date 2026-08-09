@@ -5,7 +5,7 @@
 > `/space/{v}/{r}`, `/apply/{v}/{r}`, `/journal`, `/desk[/{v}]`, `/letter/{id}`);
 > every `#/…` shape it names still *opens* and is replaced in place by its clean
 > path, with no deadline for removal. This brief is kept as the record of what
-> was asked for at the time — see `docs/backlog/seo/design.md` SEO-D1/D2 and
+> was asked for at the time — see `docs/contracts/seo.md` SEO-D1/D2 and
 > `docs/contracts/web.md` for what is true now.
 
 

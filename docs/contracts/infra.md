@@ -46,6 +46,14 @@ explicitly `disabled`. The gate also requires an HTTPS SEO base, a non-developme
 password, a non-repository JWT key, and `payments.enabled=false` while the gateway is mock.
 Development is exempt and retains credential inference for local adapter testing.
 
+General release requires Turnstile enabled on both web and API; token rejection or verifier
+failure must fail sign-in/application submission closed. Apple SSO is a required Production
+provider: the web build needs its Services ID and exact HTTPS redirect URI, the API must accept
+that same Services ID as an audience, and the domain/return URL must match Apple Developer.
+`src/Steeple.Web.v2/tools/provider-smoke-test.mjs` is the build gate proving the Production graph
+exposes both Google and Apple controls; real-provider sign-in remains a deployment smoke because
+it depends on the provider configuration outside this repository.
+
 ## 9. Non-API integration contracts
 
 - **Admin edge auth (authelia):** Admin is only reachable through the authelia-gated

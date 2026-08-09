@@ -42,7 +42,7 @@ const FLUSH_AFTER_MS = 4000;
 
 const SESSION_KEY = 'steeple-analytics-session';
 
-// Storage classification (cleanup P2): this is an anonymous random visit id,
+// Storage classification: this is an anonymous random visit id,
 // not a profile/client id, and is the only durable value in this module. It
 // contains no free text, identity, or location; event batches remain memory-
 // only. sessionStorage may therefore keep this presentation-neutral telemetry

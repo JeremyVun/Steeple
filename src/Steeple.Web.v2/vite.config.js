@@ -11,7 +11,7 @@
 // would be a dev origin every route bug hides in — so the same route table,
 // the same depth-correct boot documents and the same 502-with-a-body contract
 // are implemented here for `vite dev` and `vite preview` alike
-// (docs/backlog/seo/design.md SEO-D3 · build_plan P2.4).
+// (docs/contracts/seo.md SEO-D3, Delivery ownership).
 //
 // One thing is deliberately NOT mirrored: the unknown-path 404. Vite's own
 // fallback serves index.html, and this file does not fight it — production
