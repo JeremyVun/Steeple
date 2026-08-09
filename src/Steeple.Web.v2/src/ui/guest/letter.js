@@ -15,7 +15,8 @@ import {
   threadFor,
   todayIso,
 } from '../../data/store.js';
-import { heldVenue } from '../../data/catalog.js';
+import { getListing, heldVenue } from '../../data/catalog.js';
+import { addressCopy } from '../addressCopy.js';
 import { priceParts } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import {
@@ -37,8 +38,14 @@ import {
   timeAgo,
 } from './copy.js';
 
-export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
+export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFixPayment }) {
   let applicationId = null;
+  // The space this letter is about, as the catalog knows it: the photograph,
+  // the seats, the price, and the venue's street address. A request carries
+  // none of that — it carries ids and what was asked — so the listing is read
+  // once per letter (memoised per room in data/catalog.js, and free when the
+  // room has already been opened) and the page redraws when it lands.
+  let listing = null;
   let confirming = null; // 'withdraw' | 'declineCounter' | null
   // What steeple said when it last refused something here. It is not the
   // store's, so it is held apart and cleared the moment anything is tried again.
@@ -147,17 +154,73 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     ]);
   }
 
-  function particulars(app) {
+  function particulars(app, venue) {
     const group = organizationOf(app);
+    const where = addressOf(venue);
     const rows = [
       ['When', scheduleSentence(app)],
+      // Where you are actually going on the day. The street is the venue's
+      // own, from the listing — until that lands, the suburb is a true,
+      // smaller answer, and it is one press away either way because an address
+      // is the one thing on this page meant to leave it (ui/addressCopy.js).
+      where ? ['Where', addressCopy(where, { textClass: 'particulars__address' })] : null,
       ['Who', [plural(app.groupSize, 'person', 'people'), group].filter(Boolean).join(' · ')],
       ['What', app.activityType],
-    ];
+    ].filter(Boolean);
     return el('dl', { class: 'particulars' }, rows.flatMap(([term, value]) => [
       el('dt', { class: 'eyebrow', text: term }),
-      el('dd', { class: 'particulars__value', text: value }),
+      typeof value === 'string'
+        ? el('dd', { class: 'particulars__value', text: value })
+        : el('dd', { class: 'particulars__value' }, [value]),
     ]));
+  }
+
+  /**
+   * The venue's street when steeple has said it, its suburb until then, and
+   * nothing at all when neither is known — a letter that cannot say where does
+   * not print a "Where" with a guess in it.
+   */
+  function addressOf(venue) {
+    // `address` is the whole line as the catalog holds it (data/catalog.js
+    // `noteListing`); `addressLine` is the same line on a listing's own venue.
+    return listing?.venue?.addressLine ?? venue.address ?? (venue.suburb ? `${venue.suburb}, Virginia` : null);
+  }
+
+  /**
+   * Which space this is, with its photograph — the card the guest pressed to
+   * ask for it in the first place, and the way back to it (owner review,
+   * 2026-08-09: there was no way from a request to the space it is about).
+   *
+   * Its own class, never the host letter's `.spacecard`: host.css loads after
+   * guest.css, and a shared name is a surface silently restyled by the other.
+   */
+  function spaceCard(app, venue, room) {
+    const photo = listing?.primaryPhotoUrl ?? listing?.photos?.[0]?.cardUrl ?? null;
+    const capacity = listing?.capacity ?? room.capacity ?? null;
+    const price = listing?.pricePerHour ?? room.pricePerHour ?? null;
+    const facts = [
+      venue.shortName ?? venue.name,
+      capacity ? `Seats ${capacity}` : null,
+      price == null ? null : `$${price}/hr`,
+    ].filter(Boolean);
+    return el(
+      'button',
+      {
+        type: 'button',
+        class: 'openedspace',
+        'aria-label': `Open ${listing?.name ?? room.name}`,
+        onclick: () => onOpenRoom?.(app.venueId, app.roomId),
+      },
+      [
+        photo
+          ? el('img', { class: 'openedspace__photo', src: photo, alt: '' })
+          : el('span', { class: 'openedspace__photo openedspace__photo--none', 'aria-hidden': 'true' }),
+        el('span', { class: 'openedspace__body' }, [
+          el('span', { class: 'openedspace__name', text: listing?.name ?? room.name }),
+          el('span', { class: 'openedspace__meta', text: facts.join(' · ') }),
+        ]),
+      ]
+    );
   }
 
   function intentBlock(app, venue) {
@@ -748,6 +811,9 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
 
     const held = scroller.scrollTop;
     replaceChildren(scroller, [
+      // The space first, as on the host's own letter: which room this is about
+      // is the first question, and a photograph answers it faster than words.
+      spaceCard(app, venue, room),
       counter && counterBlock(app, venue, counter),
       booking && occurrenceBlock(app),
       // After what this booking was, before anything still being said about it.
@@ -766,7 +832,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       // stands above the request because it is about the request, not about a
       // field in it.
       refusal ? el('p', { class: 'opened__refusal', role: 'alert', text: refusal }) : null,
-      particulars(app),
+      particulars(app, venue),
       scroller,
     ]);
     // Being taken out of the page and put back is what a redraw is; the reader's
@@ -775,6 +841,27 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     // Set from the flag, never only to true: the page is rebuilt here, but the
     // habit is what keeps a control from staying dead after a redraw that is not.
     for (const control of body.querySelectorAll('button')) control.disabled = working;
+  }
+
+  /**
+   * The space this letter is about, asked of the catalog.
+   *
+   * A request that is still only in the mirror has no venue and no room to read
+   * yet; the wire's own answer brings both, so this is tried again from there.
+   * A room the catalog cannot answer for — unlisted since, or steeple down —
+   * leaves the card with what the request itself carries and no photograph,
+   * which is the honest smaller version of it, never an error on a letter.
+   */
+  function readSpace(id) {
+    const app = getApplication(id);
+    if (!app?.venueId || !app?.roomId || listing) return;
+    getListing(app.venueId, app.roomId)
+      .then((answer) => {
+        if (applicationId !== id || !answer) return;
+        listing = answer;
+        render();
+      })
+      .catch(() => {});
   }
 
   function spoken() {
@@ -816,11 +903,13 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
         reply.value = '';
         stars = 0;
         rateNote.value = '';
+        listing = null;
       }
       applicationId = id;
       fetching = true;
       toBottom = true;
       render();
+      readSpace(id);
       // The thread lives behind the detail read, and only steeple has it. The
       // mirror draws the page at once; this makes it true a moment later — and
       // a cold link with nothing mirrored yet waits here rather than bouncing.
@@ -830,6 +919,9 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
         if (!answer.ok) refusal = answer.problem;
         render();
         toBottom = false;
+        // A cold link arrives with nothing mirrored, so the room to read was
+        // not known a moment ago. Now it is.
+        readSpace(id);
       });
       return true;
     },

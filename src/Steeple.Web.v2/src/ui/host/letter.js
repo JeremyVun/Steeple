@@ -58,7 +58,7 @@ function labelled(label, control, hint) {
   ]);
 }
 
-export function createLetterPage({ announce, onLeave, origin = () => 'desk' }) {
+export function createLetterPage({ announce, onLeave, onListing, origin = () => 'desk' }) {
   const head = el('header', { class: 'letterpage__head' });
   const left = el('div', { class: 'letterpage__left' });
   const week = el('section', { class: 'letterpage__week' });
@@ -1104,6 +1104,11 @@ export function createLetterPage({ announce, onLeave, origin = () => 'desk' }) {
    * Which space this is, identifiable at a glance — a host with many rooms
    * knows them by sight, not by re-reading their own listing copy. Photo, name,
    * the two facts a decision leans on, and nothing echoed back.
+   *
+   * It is a button because it looked like one and was not (owner review,
+   * 2026-08-09): a card naming a space is a way to that space, and the one
+   * place a host keeps a space is its listing — the same rail the desk's
+   * "Edit listing" opens.
    */
   function spaceBlock(room, venue) {
     const facts = [
@@ -1111,15 +1116,25 @@ export function createLetterPage({ announce, onLeave, origin = () => 'desk' }) {
       `Seats ${room.capacity}`,
       room.pricePerHour == null ? 'Free' : `$${room.pricePerHour}/hr`,
     ].filter(Boolean);
-    return el('section', { class: 'spacecard' }, [
-      room.photo
-        ? el('img', { class: 'spacecard__photo', src: room.photo, alt: '' })
-        : el('span', { class: 'spacecard__photo spacecard__photo--none', 'aria-hidden': 'true' }),
-      el('span', { class: 'spacecard__body' }, [
-        el('span', { class: 'spacecard__name', text: room.name }),
-        el('span', { class: 'spacecard__meta', text: facts.join(' · ') }),
-      ]),
-    ]);
+    return el(
+      'button',
+      {
+        type: 'button',
+        class: 'spacecard',
+        'aria-label': `Open the listing for ${room.name}`,
+        onclick: () =>
+          onListing?.({ venueId: application.venueId, roomId: application.roomId, step: 'describe' }),
+      },
+      [
+        room.photo
+          ? el('img', { class: 'spacecard__photo', src: room.photo, alt: '' })
+          : el('span', { class: 'spacecard__photo spacecard__photo--none', 'aria-hidden': 'true' }),
+        el('span', { class: 'spacecard__body' }, [
+          el('span', { class: 'spacecard__name', text: room.name }),
+          el('span', { class: 'spacecard__meta', text: facts.join(' · ') }),
+        ]),
+      ]
+    );
   }
 
   function outcomeBlock() {

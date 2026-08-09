@@ -14,7 +14,7 @@ public interface IImageProcessor
 
 /// <summary>The processed variant set, all metadata-stripped JPEG.</summary>
 /// <param name="Variants">One entry per <see cref="MediaVariants.Widths"/> width, largest last.</param>
-/// <param name="ContentHash">Hex SHA-256 of the source bytes — the content-addressed storage key.</param>
+/// <param name="ContentHash">Hex SHA-256 of the source bytes, retained for diagnostics (not object ownership).</param>
 public record ProcessedImage(IReadOnlyList<ImageVariant> Variants, string ContentHash);
 
 /// <summary>A single encoded rendition.</summary>

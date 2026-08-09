@@ -17,8 +17,8 @@ public class RoomPhoto
     public string Url { get; set; } = "";
 
     /// <summary>
-    /// Object-store key prefix for uploaded photos (variants live at <c>{key}-{width}.jpg</c>);
-    /// null for legacy external-URL rows.
+    /// Object-store key prefix for uploaded photos (new variants live at <c>{key}/{width}.jpg</c>);
+    /// null for legacy external-URL or repaired formerly-shared rows.
     /// </summary>
     public string? StorageKey { get; set; }
 

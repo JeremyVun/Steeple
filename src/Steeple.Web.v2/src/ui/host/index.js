@@ -101,6 +101,9 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     announce,
     origin: () => letterOrigin,
     onLeave: leaveLetter,
+    // The space card names a space; pressing it opens that space where a host
+    // keeps one, which is the listing rail the desk opens too.
+    onListing: (options) => openListing(options),
   });
 
   const listing = createListingFlow({

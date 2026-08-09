@@ -129,7 +129,7 @@ presentation preferences. No `sessionStorage` anywhere for private data.
 reload mid-draft and confirm the draft is gone but the session holds; inspect both
 storages by hand and find nothing private.
 
-## [ ] P3 — Photo object integrity (High)
+## [X] P3 — Photo object integrity (High)
 
 1. **Changeset `019-photo-integrity.sql`:** unique index on the photo storage key;
    `UNIQUE (RoomId, SortOrder)`; partial unique index enforcing one
@@ -360,7 +360,7 @@ watch all three sides go red, revert.
 - [X] No private data in browser storage: memory-only mirror, BroadcastChannel
       cross-tab, purge on boot and sign-out, proven by browser tests that try to
       recover it and fail.
-- [ ] Photos: per-row object keys, compensation on failure, DB constraints (unique
+- [X] Photos: per-row object keys, compensation on failure, DB constraints (unique
       key, unique sort order, one primary) — each proven to bite.
 - [ ] Expiry, agreements, refresh rotation, and bulk-read caps fixed with tests that
       were shown to fail before the fix.

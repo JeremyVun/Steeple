@@ -70,3 +70,10 @@ public `mobile.*` rows. All default **off** in `appsettings.json` and are **on**
   record. `deepLink` is a **path-only canonical path** from the client deep-link registry
   (`mobile.md` §7): `/inbox/applications/{id}`, `/bookings/{id}`, `/inbox`,
   `/space/{venueSlug}/{roomSlug}`. Clients route unknown values to browse, never an error.
+- **Media object ownership** ✅ *(hardened 2026-08-09)*: each uploaded `room_photos` row
+  owns one immutable prefix, `rooms/{roomId}/{photoId}`, with `400.jpg`, `800.jpg`, and
+  `1600.jpg` beneath it. Upload writes are compensated on partial variant or database failure.
+  PostgreSQL enforces unique non-null `StorageKey`, unique `(RoomId, SortOrder)`, and at most
+  one `IsPrimary` row per room; concurrent placement retries only those named position
+  conflicts. Changelog 019 preserves formerly shared content-hash images as URL-only legacy
+  rows (`StorageKey = null`), so deleting either row cannot delete bytes another row renders.

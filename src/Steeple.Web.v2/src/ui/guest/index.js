@@ -76,6 +76,9 @@ export function createGuestFlows({
     announce,
     onBack: () => setView('journal'),
     onBrowse: () => setView('village'),
+    // The space card is the way back to the space: the room sheet, exactly as
+    // it was met before the request was ever written.
+    onOpenRoom: (venueId, roomId) => setView('room', { venueId, roomId }),
     // A failed charge on a booked date is the one thing on this page that is
     // fixed somewhere else. The panel is the shelf's, so it is handed in.
     onFixPayment,

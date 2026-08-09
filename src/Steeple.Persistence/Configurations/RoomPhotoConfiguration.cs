@@ -20,7 +20,16 @@ public class RoomPhotoConfiguration : IEntityTypeConfiguration<RoomPhoto>
         // Mirror 006-manage.sql's DEFAULT now() (pre-pipeline rows inherited it the same way).
         builder.Property(p => p.CreatedAtUtc).HasDefaultValueSql("now()");
 
-        // Photos load and render in display order.
-        builder.HasIndex(p => new { p.RoomId, p.SortOrder });
+        // Every uploaded row owns one object prefix. Legacy external-URL rows keep null.
+        builder.HasIndex(p => p.StorageKey)
+            .IsUnique()
+            .HasFilter("\"StorageKey\" IS NOT NULL");
+
+        // Photos load and render in display order, with one position and at most one cover per room.
+        builder.HasIndex(p => new { p.RoomId, p.SortOrder }).IsUnique();
+        builder.HasIndex(p => p.RoomId)
+            .IsUnique()
+            .HasDatabaseName("IX_room_photos_RoomId_IsPrimary")
+            .HasFilter("\"IsPrimary\" = true");
     }
 }

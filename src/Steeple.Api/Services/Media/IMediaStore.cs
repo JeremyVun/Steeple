@@ -1,8 +1,8 @@
 namespace Steeple.Api.Services.Media;
 /// <summary>
 /// Object-storage port (SYSTEM_DESIGN §9): DO Spaces (S3-compatible, public-read + CDN) in
-/// production, local disk served by the API in dev. Keys are content-addressed paths like
-/// <c>rooms/{roomId}/{hash}-{width}.jpg</c>.
+/// production, local disk served by the API in dev. Uploaded-photo keys are row-owned paths like
+/// <c>rooms/{roomId}/{photoId}/{width}.jpg</c>.
 /// </summary>
 public interface IMediaStore
 {

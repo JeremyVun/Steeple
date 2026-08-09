@@ -34,7 +34,7 @@ public sealed class S3MediaStore : IMediaStore, IDisposable
                 InputStream = stream,
                 ContentType = contentType,
                 CannedACL = S3CannedACL.PublicRead,
-                // Content-hashed keys never change content — let the CDN cache them forever.
+                // Row-owned variant keys never change content — let the CDN cache them forever.
                 Headers = { CacheControl = "public, max-age=31536000, immutable" },
             },
             ct).ConfigureAwait(false);

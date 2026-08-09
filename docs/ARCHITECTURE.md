@@ -246,7 +246,11 @@ identifies headers before decoding and rejects multi-frame, >12,000px, or >30 MP
 only two images process concurrently. Accepted files auto-orient from EXIF, strip all metadata
 (EXIF/XMP/IPTC — GPS included), and re-encode JPEG
 variants at 400/800/1600px (`ImageSharpImageProcessor`, never upscaling a smaller source), and
-keys the stored objects by a SHA-256 content hash. `IMediaStore` is `S3MediaStore` (DO Spaces,
+stores each row's variants under its UUID-owned `rooms/{roomId}/{photoId}/` prefix. A partial
+variant write or later database failure compensates every attempted object write. Placement is
+database-derived and retried on concurrent sort-order/primary conflicts. PostgreSQL enforces a
+unique non-null storage prefix, unique `(RoomId, SortOrder)`, and at most one primary per room;
+changelog 019 repairs earlier collisions before adding the guards. `IMediaStore` is `S3MediaStore` (DO Spaces,
 public-read/CDN) when `Media:ServiceUrl`/bucket/keys are configured, else `LocalDiskMediaStore`
 (dev; the API serves `/media`, while clients receive origin-independent `media/...` paths and
 resolve/proxy them through their current first-party origin). `RoomPhotoDto` carries
@@ -397,7 +401,9 @@ Venue 1─* Room 1─* RoomPhoto
                         PublishRequestedAtUtc / FirstPublishedAtUtc / ProviderEditedAtUtc
                         (Phase 5 moderation state — CONTRACTS §6)
                                 RoomPhoto: legacy Url (full-size, always populated) +
-                                StorageKey/ThumbUrl/CardUrl/CreatedAtUtc (Phase 5 uploads)
+                                StorageKey/ThumbUrl/CardUrl/CreatedAtUtc (Phase 5 uploads);
+                                unique non-null StorageKey, unique (RoomId, SortOrder),
+                                at most one IsPrimary per Room
 
 users 1─* user_logins (unique (Provider, Subject))    users 1─* refresh_tokens (hashed, rotating)
 users 1─* user_agreements (per-version ToS/Privacy)   users 1─* notifications (inbox = truth)

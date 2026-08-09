@@ -2,12 +2,13 @@ using Steeple.Api.Contracts.Manage;
 
 namespace Steeple.Api.Services.Media;
 /// <summary>
-/// Default <see cref="IMediaService"/>. Variant keys are content-addressed
-/// (<c>rooms/{roomId}/{hash}-{width}.jpg</c>) so re-uploads are naturally deduplicated and CDN
-/// caching can be immutable. The first photo on a room becomes its cover automatically.
+/// Default <see cref="IMediaService"/>. Every photo owns immutable variant keys beneath
+/// <c>rooms/{roomId}/{photoId}/</c>. The first photo on a room becomes its cover automatically.
 /// </summary>
 public sealed class MediaService : IMediaService
 {
+    private const int MaxPlacementAttempts = 4;
+
     private readonly IManageRepository _rooms;
     private readonly IMediaRepository _photos;
     private readonly IVenueManagerRepository _venueManagers;
@@ -57,34 +58,59 @@ public sealed class MediaService : IMediaService
                 MediaErrorCodes.InvalidImage, "That file isn't an image we can read — use a JPEG, PNG, or WebP photo.");
         }
 
-        var keyBase = $"rooms/{roomId}/{processed.ContentHash}";
-        var puts = processed.Variants
-            .Select(async variant => (variant.Width, Url: await _store
-                .PutAsync($"{keyBase}-{variant.Width}.jpg", variant.Bytes, "image/jpeg", ct)
-                .ConfigureAwait(false)))
-            .ToList();
-        var urls = (await Task.WhenAll(puts).ConfigureAwait(false)).ToDictionary(p => p.Width, p => p.Url);
-
+        var photoId = Guid.NewGuid();
+        var keyBase = $"rooms/{roomId}/{photoId}";
+        var attemptedKeys = new List<string>(processed.Variants.Count);
+        var urls = new Dictionary<int, string>(processed.Variants.Count);
         var photo = new RoomPhoto
         {
-            Id = Guid.NewGuid(),
+            Id = photoId,
             RoomId = roomId,
-            Url = urls[1600],
-            ThumbUrl = urls[400],
-            CardUrl = urls[800],
             StorageKey = keyBase,
             Caption = string.IsNullOrWhiteSpace(caption) ? null : caption.Trim(),
-            IsPrimary = room.Photos.Count == 0, // first photo = cover
-            SortOrder = room.Photos.Count == 0 ? 0 : room.Photos.Max(p => p.SortOrder) + 1,
             CreatedAtUtc = _clock.GetUtcNow(),
         };
 
-        _photos.AddPhoto(photo);
-        room.UpdatedAtUtc = photo.CreatedAtUtc; // photos change the public listing (sitemap lastmod)
-        await _photos.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            // Sequential writes make the compensation set unambiguous. Three fixed variants keep
+            // the latency bounded, and each attempted key is safe to delete idempotently.
+            foreach (var variant in processed.Variants)
+            {
+                var key = $"{keyBase}/{variant.Width}.jpg";
+                attemptedKeys.Add(key);
+                urls[variant.Width] = await _store
+                    .PutAsync(key, variant.Bytes, "image/jpeg", ct)
+                    .ConfigureAwait(false);
+            }
 
-        await TrackSafelyAsync("photo_uploaded", new { roomId, photoId = photo.Id }).ConfigureAwait(false);
-        return ManageResult<RoomPhotoDto>.Ok(photo.ToDto());
+            photo.Url = urls[1600];
+            photo.ThumbUrl = urls[400];
+            photo.CardUrl = urls[800];
+            room.UpdatedAtUtc = photo.CreatedAtUtc; // photos change the public listing (sitemap lastmod)
+
+            for (var attempt = 1; attempt <= MaxPlacementAttempts; attempt++)
+            {
+                var placement = await _photos.GetNextPlacementAsync(roomId, ct).ConfigureAwait(false);
+                photo.SortOrder = placement.SortOrder;
+                photo.IsPrimary = placement.IsPrimary;
+                _photos.AddPhoto(photo);
+
+                if (await _photos.TrySaveAddedPhotoAsync(photo, ct).ConfigureAwait(false))
+                {
+                    await TrackSafelyAsync("photo_uploaded", new { roomId, photoId = photo.Id }).ConfigureAwait(false);
+                    return ManageResult<RoomPhotoDto>.Ok(photo.ToDto());
+                }
+            }
+
+            throw new InvalidOperationException(
+                $"Could not assign a photo position after {MaxPlacementAttempts} concurrent attempts.");
+        }
+        catch
+        {
+            await DeleteObjectsSafelyAsync(attemptedKeys).ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <inheritdoc />
@@ -159,7 +185,7 @@ public sealed class MediaService : IMediaService
             try
             {
                 await _store
-                    .DeleteAsync(MediaVariants.Widths.Select(w => $"{keyBase}-{w}.jpg").ToList(), ct)
+                    .DeleteAsync(VariantKeys(photo, keyBase), ct)
                     .ConfigureAwait(false);
             }
             catch
@@ -169,6 +195,34 @@ public sealed class MediaService : IMediaService
         }
 
         return ManageResult<DeletedPhoto>.Ok(new DeletedPhoto(photoId));
+    }
+
+    private static IReadOnlyList<string> VariantKeys(RoomPhoto photo, string keyBase)
+    {
+        var rowOwnedSuffix = $"/{photo.Id}";
+        var rowOwned = keyBase.EndsWith(rowOwnedSuffix, StringComparison.OrdinalIgnoreCase);
+        return MediaVariants.Widths
+            .Select(width => rowOwned ? $"{keyBase}/{width}.jpg" : $"{keyBase}-{width}.jpg")
+            .ToList();
+    }
+
+    private async Task DeleteObjectsSafelyAsync(IReadOnlyList<string> keys)
+    {
+        if (keys.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            // Request cancellation must not strand bytes written before the cancellation arrived.
+            await _store.DeleteAsync(keys, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Preserve the upload/database exception. Storage cleanup is idempotent and can be
+            // retried operationally if the provider itself is unavailable.
+        }
     }
 
     private async Task<(RoomPhoto? Photo, Room? Room, ManageError? Error)> LoadScopedPhotoAsync(

@@ -1274,6 +1274,14 @@
 .letterpage__left {
   display: grid;
   align-content: start;
+  /* Content-sized rows, said out loud. This column is a scroller with a
+     definite height, and grid's own answer to "the rows do not fit" is to sit
+     every one of them at its *min-content* size — which for the space card is
+     its padding, because the photograph's height is specified rather than
+     intrinsic. The card came out 20px tall on a phone with the picture spilling
+     out of it (owner review, 2026-08-09), and every other block was quietly
+     squeezed too. Rows keep their size; the column scrolls, which is its job. */
+  grid-auto-rows: max-content;
   gap: 17px;
   padding: 18px 22px 22px 26px;
   border-right: 1px solid var(--line);
@@ -1376,20 +1384,39 @@
 }
 
 /* Which space this is, at a glance: photo, name, the two deciding facts. */
+/* A card that names a space is a way to that space: it is a button, and it is
+   the full width of the column so the press target is the whole card. */
 .spacecard {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
-  padding: 9px 11px;
+  gap: 13px;
+  width: 100%;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--card);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease);
 }
 
+.spacecard:hover,
+.spacecard:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-chip);
+}
+
+.spacecard:hover .spacecard__name {
+  color: var(--terracotta-deep);
+}
+
+/* Big enough to recognise the room in — a thumbnail the size of a stamp is a
+   colour, not a photograph (owner review, 2026-08-09). */
 .spacecard__photo {
-  width: 64px;
-  height: 48px;
+  width: 104px;
+  height: 78px;
   border-radius: 5px;
   object-fit: cover;
   background: var(--paper-deep);

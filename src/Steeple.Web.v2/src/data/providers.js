@@ -145,6 +145,7 @@ export async function mountGoogleButton(container, { onCredential, onError } = {
     shape: 'pill',
     text: 'continue_with',
     logo_alignment: 'center',
+    width: '200',
   });
   return true;
 }
