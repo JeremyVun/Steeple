@@ -1,11 +1,11 @@
 # Crawlable listings and clean web routes — design
 
-> **Status:** Adopted 2026-08-08; **built 2026-08-08** (`build_plan.md` is the completion
-> record; `docs/contracts/seo.md` is the as-built contract). This replaces
+> **Status: historical rationale, completed 2026-08-08.** `build_plan.md` is the completion
+> record and `docs/contracts/seo.md` is the as-built contract. This replaced
 > `docs/backlog/seo-crawlable-listings.md` as the implementation source of truth for the
 > unfinished web-v2 SEO work. The former `docs/SEO.md` was dissolved 2026-08-08: its as-built
 > crawler-surface facts live in `docs/contracts/seo.md`, and everything unbuilt lives here.
-> `build_plan.md` beside this file is the execution order.
+> `build_plan.md` beside this file records the execution order that landed.
 >
 > **Product decision:** a canonical listing URL opens the existing map product, with that room's
 > sheet open and the map centred on its venue. It is not a separate SEO landing page. The server

@@ -16,7 +16,7 @@
 // stands; §2.5 fakes an origin that answers 404 on the listing endpoints, which
 // is what a static host or an unwired proxy does.
 
-import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
+import { agreeCurrent, at, closeBrowsers, launch, routes, signIn } from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5331/';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -252,6 +252,12 @@ async function press(page, sel, { touch = false } = {}) {
   );
   await page.keyboard.press('Escape');
   await wait(400);
+  // This section is about the shelf card, not the first-sign-in agreement
+  // gate. Accept on the wire before the browser signs the same person in or
+  // Escape would dismiss the gate, sign her out, and move the correspondence
+  // view back to the village (HARNESS.md — product behavior, not card state).
+  const ruth = await signIn('ruth.abara@example.org', 'Ruth Abara');
+  await agreeCurrent(ruth.accessToken);
   await page.evaluate(async () => (await import('/src/data/session.js')).signIn({ email: 'ruth.abara@example.org', displayName: 'Ruth Abara' }));
   await wait(900);
   check('signed in, the person is on the shelf', await shownIn(page, '.account'));

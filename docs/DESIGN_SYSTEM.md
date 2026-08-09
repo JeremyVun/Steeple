@@ -310,8 +310,12 @@ focus = `focus` ring + sage border. Labels above inputs (`label` style), helper/
 below (`caption`; error in `danger` fg + icon — color never alone). The intent textarea
 is the apply flow's hero: give it room (min 5 lines), placeholder written as a friendly
 example ("Toddler playgroup, about 15 of us, Tuesday mornings…"), live character guidance
-only if a server limit exists. ~~Group size / schedule pickers use native platform pickers~~
-**Superseded (availability plan, 2026-07-05):** date/time selection uses the availability
+only if a server limit exists.
+
+> **Superseded 2026-07-05 → §8.10–8.13:** the original schedule-picker rule used native
+> platform pickers.
+
+Date/time selection uses the availability
 calendar family below (§8.10–8.13); native pickers remain only as the no-JS fallback and
 for group size. The underlying form inputs stay real `<input>`/`<select>` elements the
 picker writes into — never JS-only state.

@@ -13,7 +13,7 @@ follow the governance checklist in `conventions.md`.
 
 | File | Answers |
 |---|---|
-| `conventions.md` | How does a contract change, and what conventions hold for **every** `/api/v1` endpoint (casing, times, IDs, enums, pagination, errors, auth, idempotency, rate limits)? Includes the wire enum token registry. |
+| `conventions.md` | How does a contract change, and what conventions hold for **every** `/api/v1` endpoint (casing, times, IDs, enums, pagination, errors, auth, idempotency, rate limits)? Points to the authoritative `tests/fixtures/wire-tokens.json` registry. |
 | `discovery.md` | Public read surface: search (incl. the When filter), listing detail by id/slug, venue ratings, suburbs, sitemap, geofence. |
 | `identity.md` | SSO sessions, token pair + rotation, `/me`, agreements, account deletion, device registration. |
 | `applications.md` | Apply → message → counter-offer → decision, bookings & occurrences, ratings writes, the notification inbox. |

@@ -109,6 +109,10 @@ Mapping (exhaustive — anything unlisted → `server`, retryable):
   (`bool acceptsChildren`) and a shared token→label humanizer live in `core/models/wire_tokens.dart`
   (token registry: CONTRACTS.md §2). Unknown tokens flow through and humanize
   (`camelCase` → "Camel case") — forward-compatible by construction.
+- **Golden registry:** `core/models/wire_tokens.dart` mirrors every enum-backed API token and
+  feature-flag name from the authoritative root `tests/fixtures/wire-tokens.json` table.
+  `test/wire_token_contract_test.dart` checks the complete registry and every typed enum map;
+  the trailing `unknown` cases remain mandatory for additive server values newer than the app.
 - **Paged responses:** `Paged<T> { items, totalCount, page, pageSize }` generic;
   inbox uses `CursorPage<T> { items, nextCursor? }`.
 - **Schedules:** `ProposedSchedule` keeps dates as `String` (`yyyy-MM-dd`) and times as
@@ -388,6 +392,9 @@ view is created key-less, so any widget that mounts a `GoogleMap` must gate on t
 provider and render a placeholder when it is false; channel errors count as false.
 
 ## 11. Fixtures & fakes (offline development and deterministic tests)
+
+The repository-level `tests/fixtures/wire-tokens.json` is shared directly with API and web; it is
+not copied into this package. `test/wire_token_contract_test.dart` reads it during the mobile gate.
 
 - `test/fixtures/<name>.json` — copied **verbatim from CONTRACTS.md examples** (fixture
   names: `listing_search.json`, `room_detail.json`, `auth_session.json`,

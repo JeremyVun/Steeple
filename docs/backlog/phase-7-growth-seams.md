@@ -149,11 +149,9 @@ Option A) — that's a founder/legal decision, not an engineering one.
 | Item | Owning doc / note |
 |---|---|
 | WebP variants + `<picture>` negotiation | SYSTEM_DESIGN §17 (2026-07-04) — deferred until serving side can negotiate |
-| Web client-side analytics (a v2 batcher → `POST /events`) | CONTRACTS §7 footnote ¹. **Escalated 2026-08-05:** this stopped being a migration and became a *gap* — the emitter lived in the retired v1 BFF, so web v2 emits nothing at all. The PRD's "nothing user-visible ships un-instrumented" commitment is currently unmet on the web surface |
-| Search day/time availability filters | **Built** (2026-07-05 availability work — `AvailabilityFilter` + `WhenFilterBinder` in the API). Row kept only to retire the stale "planned" claim |
 | Mobile client-side Turnstile | ARCHITECTURE "not built yet" — only enforced where a secret is configured |
-| `Idempotency-Key` on `auth/sessions` | CONTRACTS §4 deviation note — harmless replay today. **Note:** the *manage* creates (`POST /manage/venues`, `…/rooms`) are no longer deferred — idempotency there is adopted work (D8, `v2_migration` Phase 5), because a timed-out create retried by the user double-creates a venue |
-| ~~Admin defence-in-depth auth (local Identity + TOTP behind authelia)~~ | **Dropped 2026-08-05** (SYSTEM_DESIGN §17, D3): authelia at the edge is the auth story; the non-functional login/MFA screens are being deleted rather than finished. Not deferred — decided against |
+| `Idempotency-Key` on `auth/sessions` | CONTRACTS §4 deviation note — harmless replay today. Manage creates already honor idempotency keys (`docs/contracts/manage.md`). |
+| ~~Admin defence-in-depth auth (local Identity + TOTP behind authelia)~~ | **Dropped 2026-08-05** (SYSTEM_DESIGN §17, D3): authelia at the edge is the auth story; the non-functional login/MFA screens were deleted. Not deferred — decided against. |
 | Cross-provider account linking | SYSTEM_DESIGN §6 — `409 use_original_provider` stands |
 | Host-voiced empty inbox | **Pre-existing web v2 gap, found 2026-08-08** during `docs/backlog/ratings/`: a venue keeper whose requests have all been decided sees the organizer's empty state — "Nothing here yet. Find a space that suits your group…" and a *Find a space* button (`ui/guest/journal.js` `render()`, the `!total` branch). Ratings narrowed it (a finished booking returns while its rating is invited) but did not close it. Wants a hosting-voiced empty state, or none at all for a keeper |
 | Reciprocity / free-supply credits | PRD hypothesis — untested "prosumer" population; needs founder appetite + data |

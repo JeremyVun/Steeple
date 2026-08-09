@@ -1,6 +1,7 @@
 # Live inbox delivery over SSE — design
 
-> **Status:** Recorded 2026-08-09, not scheduled. Written the day the inbox became the one
+> **Status: active backlog, recorded 2026-08-09, not scheduled.** This is a current proposal,
+> not a historical completion record. Written the day the inbox became the one
 > in-app channel (unread-until-opened messages, porch badge — `docs/contracts/web.md`,
 > `docs/contracts/applications.md` "Notifications"). Everything here is additive; nothing
 > in the shipped inbox needs reshaping first — that was checked deliberately before this

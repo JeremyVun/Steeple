@@ -21,17 +21,28 @@ abstract class FlagsService {
 
 /// Registry — add here when a flag ships; clean up when it stabilizes.
 abstract final class FlagKeys {
+  static const paymentsEnabled = 'payments.enabled';
   static const applyEnabled = 'mobile.apply_enabled';
   static const manageEnabled = 'mobile.manage_enabled';
 
   /// Server evaluates against `?build=` (a rule over `build < N`); the client
   /// just sees `true` → unskippable upgrade screen.
   static const forceUpgrade = 'mobile.force_upgrade';
+
+  static const all = [
+    paymentsEnabled,
+    applyEnabled,
+    manageEnabled,
+    forceUpgrade,
+  ];
 }
 
 class ApiFlagsService implements FlagsService {
-  ApiFlagsService(this._api, {required this.buildNumber, void Function()? onSnapshot})
-      : _onSnapshot = onSnapshot;
+  ApiFlagsService(
+    this._api, {
+    required this.buildNumber,
+    void Function()? onSnapshot,
+  }) : _onSnapshot = onSnapshot;
 
   static const _cacheKey = 'steeple.flags.snapshot';
 
@@ -70,8 +81,9 @@ class ApiFlagsService implements FlagsService {
           'platform': Platform.isIOS ? 'ios' : 'android',
           'build': buildNumber,
         },
-        decode: (data) =>
-            (data as Map<String, dynamic>).map((k, v) => MapEntry(k, v == true)),
+        decode: (data) => (data as Map<String, dynamic>).map(
+          (k, v) => MapEntry(k, v == true),
+        ),
       );
       _snapshot = flags;
       _onSnapshot?.call();
@@ -86,7 +98,7 @@ class ApiFlagsService implements FlagsService {
 /// Fakes/tests: a settable in-memory map.
 class FakeFlagsService implements FlagsService {
   FakeFlagsService([Map<String, bool>? flags])
-      : flags = flags ?? {FlagKeys.applyEnabled: true};
+    : flags = flags ?? {FlagKeys.applyEnabled: true};
 
   final Map<String, bool> flags;
 

@@ -424,14 +424,18 @@ export async function closeBrowsers() {
  * not contain those bytes. Suites went red on that alone with every check line
  * green.
  *
- * What is deliberately still counted: a failed call to `/api/v1`. That is the
- * app talking to steeple, and if it could not, the suite should say so.
+ * What is deliberately still counted: a failed call to `/api/v1`, except the
+ * refresh endpoint's 401 on a fresh anonymous document. P2 made that probe the
+ * only honest way to discover whether an httpOnly session cookie exists; no
+ * cookie is an ordinary signed-out boot, not a console regression.
  *
  * @param {import('puppeteer').ConsoleMessage} message
  */
 export function isEnvironmentNoise(message) {
   const text = message.text();
+  const from = message.location?.().url ?? '';
   if (/GL Driver Message|GPU stall/.test(text)) return true;
+  if (from.includes('/api/v1/auth/refresh') && /401/.test(text)) return true;
   if (!/Failed to load resource|net::ERR_/.test(text)) return false;
-  return !(message.location?.().url ?? '').includes('/api/v1');
+  return !from.includes('/api/v1');
 }

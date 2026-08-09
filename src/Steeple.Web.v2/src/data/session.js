@@ -36,6 +36,8 @@ let held = null;
 let access = null;
 /** Explicit sign-out suppresses cookie probing until a new sign-in event. */
 let suppressed = false;
+/** The cookie probe has already been refused; only a sign-in can change that. */
+let cookieRefused = false;
 /** Invalidates network answers that return after sign-out or an identity change. */
 let generation = 0;
 let refreshing = null;
@@ -133,6 +135,7 @@ export async function signInWithProvider({
 
   generation += 1;
   suppressed = false;
+  cookieRefused = false;
   refreshing = null;
   restoring = null;
   access = answer.accessToken;
@@ -166,21 +169,38 @@ export async function signOut() {
   }
 }
 
-/** Rotate the cookie-backed pair once per tab. Refusal is null; outage rejects. */
+/**
+ * Rotate the cookie-backed pair once per tab. Refusal is null; outage rejects.
+ *
+ * A refusal is also an answer worth keeping. The probe is the only honest way
+ * to learn whether an httpOnly cookie exists, but the answer cannot change on
+ * its own: nothing but a sign-in in this browser mints one, and both ways that
+ * can happen — here, or in a sibling tab over the channel — clear this. Without
+ * it, every panel that asks who you are re-probes and the console fills with
+ * 401s that were never news (2026-08-09).
+ */
 function refresh() {
-  if (suppressed) return Promise.resolve(null);
+  if (suppressed || cookieRefused) return Promise.resolve(null);
   if (refreshing) return refreshing;
 
   const started = generation;
-  const request = api
-    .refreshSession({})
+  // Scheduled rather than called, so that `refreshing` below is assigned before
+  // the request goes out. Called straight through, two callers in the same tick
+  // both found the single-flight slot still empty and both reached the wire —
+  // which is why a signed-out boot probed the cookie twice in the built bundle,
+  // where ui/index.js runs inside session.js's own evaluation tick. The dev
+  // graph orders those two apart and never showed it.
+  const request = Promise.resolve()
+    .then(() => api.refreshSession({}))
     .then((pair) => {
       if (started !== generation || suppressed) return null;
       access = pair.accessToken;
       return access;
     })
     .catch((error) => {
+      // An outage is not an answer: it rethrows, and the cookie stays unknown.
       if (!error?.status) throw error;
+      cookieRefused = true;
       if (started === generation) access = null;
       return null;
     })
@@ -318,6 +338,9 @@ if (channel) {
     const replaced = Boolean(held);
     generation += 1;
     suppressed = false;
+    // A sibling tab signed in, so there is a cookie now whatever this tab was
+    // last told.
+    cookieRefused = false;
     access = null;
     held = null;
     refreshing = null;

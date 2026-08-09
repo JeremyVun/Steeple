@@ -87,7 +87,7 @@ public static class ServiceCollectionExtensions
         services.Configure<PaymentsOptions>(configuration.GetSection(PaymentsOptions.SectionName));
 
         var payments = configuration.GetSection(PaymentsOptions.SectionName).Get<PaymentsOptions>() ?? new PaymentsOptions();
-        var paymentsEnabled = configuration.GetValue<bool>("Flags:payments.enabled");
+        var paymentsEnabled = configuration.GetValue<bool>($"Flags:{FeatureFlagKeys.PaymentsEnabled}");
         if (!string.Equals(payments.Gateway, PaymentsOptions.MockGateway, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Unsupported payment gateway '{payments.Gateway}'.");

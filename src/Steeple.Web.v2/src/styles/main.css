@@ -1241,6 +1241,419 @@ body {
   color: var(--ink-faint);
 }
 
+/* ── Shared chrome ───────────────────────────────────────────────────────────
+   Everything under this heading is worn by markup that mounts OUTSIDE both
+   `.guest` and `.hostdesk`, or by markup both surfaces render: the shelf's
+   sign-in and card modals (ui/signIn.js, ui/cardPanel.js — children of #ui),
+   the porch (ui/index.js), and the form primitives the desk borrows from the
+   request sheet. postcss.config.js scopes every rule authored in guest.css and
+   host.css to its surface root, so a rule for shared markup can only reach it
+   from an unscoped sheet — this one. Rendering a class on a second surface
+   means moving its base here; tools/surface-scope-test.mjs is what notices when
+   that has not been done, because the failure is silent everywhere else. */
+
+/* Fields: a printed form, not a web form. The base the request sheet
+   (guest/letter.js) and the desk (host/desk.js) both write on; each surface
+   refines it in its own sheet, and host.css deliberately blockifies `.field`
+   into a grid. */
+.field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: block;
+}
+
+.field + .field,
+.field + .field--choices,
+.field--choices + .field {
+  margin-top: 18px;
+}
+
+.field__label {
+  display: block;
+  margin: 0 0 7px;
+  padding: 0;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.field__input {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  border: 1px solid var(--rule-firm);
+  border-radius: 3px;
+  padding: 11px 13px;
+  width: 100%;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease);
+}
+
+.field__input::placeholder {
+  color: color-mix(in srgb, var(--ink-faint) 62%, transparent);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--terracotta-strong);
+  background: var(--card);
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.field__input--note {
+  resize: vertical;
+  min-height: 92px;
+}
+
+/* ── The identity beat ───────────────────────────────────────────────────────
+   One panel (ui/guest/sso.js), rendered in three places: inside the request
+   sheet, inside the listing flow, and alone in the shelf's modal. The absolute
+   centring below is the in-a-letter case; `.signin .identity` and
+   `.cardpanel .identity` above stand it up on its own instead. */
+
+.identity {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(430px, calc(100% - 56px));
+  /* Above the foot, which is sticky and carries a z-index of its own. */
+  z-index: 2;
+  max-height: 78vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 26px 22px;
+  border: 1px solid var(--rule-firm);
+  border-radius: 4px;
+  background: var(--paper);
+  box-shadow: var(--lift);
+}
+
+.identity[hidden] {
+  display: none;
+}
+
+.identity:focus {
+  outline: none;
+}
+
+.identity__title {
+  margin: 7px 0 10px;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 25px;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.identity__card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 16px 0 0;
+  padding: 13px 15px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+}
+
+.identity__initials {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font-family: var(--serif);
+  font-size: 16px;
+}
+
+.identity__name {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.identity__org {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.identity__since {
+  margin: 3px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+}
+
+.identity .verified {
+  width: 100%;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.identity__actions {
+  display: grid;
+  justify-items: center;
+  gap: 11px;
+  margin-top: 18px;
+}
+
+.identity.is-signing .identity__card {
+  opacity: 0.6;
+}
+
+/* Signing in: the people this village already knows, offered by name, and a
+   plain pair of fields for anyone else. Three rows of the same card the signed
+   -in state shows, so choosing one is visibly choosing who the host will see. */
+.identity__eyebrow {
+  margin: 18px 0 8px;
+}
+
+.identity__people {
+  display: grid;
+  gap: 7px;
+}
+
+.identity__person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 72%, transparent);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease), background 150ms var(--ease),
+    transform 150ms var(--ease);
+}
+
+.identity__person:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+
+.identity__person:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.identity__person:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.identity__person .identity__initials {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.identity__person .identity__name {
+  font-size: 15.5px;
+}
+
+.identity__personwords {
+  display: grid;
+}
+
+.identity__form {
+  display: grid;
+  gap: 12px;
+}
+
+.identity__form .pill {
+  justify-self: start;
+}
+
+.identity__fineprint {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-faint);
+}
+
+.identity__problem {
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--terracotta-deep);
+}
+
+/* The providers. Two buttons at most, stacked at Google's 200px control width
+   and centred in the card. Google renders its own button; Apple's is ours to
+   draw to the same measure, with its own brand weight and colour. */
+.identity__providers {
+  display: grid;
+  grid-template-columns: minmax(0, 200px);
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.identity__google {
+  display: grid;
+  justify-items: center;
+  min-height: 40px;
+}
+
+.identity__google > div {
+  max-width: 100%;
+}
+
+.provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: opacity 150ms var(--ease), transform 150ms var(--ease);
+}
+
+.provider--apple {
+  background: #000;
+  color: #fff;
+}
+
+.provider--apple svg {
+  margin-top: -2px;
+}
+
+.provider:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.provider:focus-visible {
+  outline: 2px solid var(--terracotta-strong);
+  outline-offset: 2px;
+}
+
+.provider:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* The two documents, said where they are agreed to. */
+.identity__legal {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+}
+
+/* Turnstile's own widget, in the only part of this panel that never redraws. */
+.identity__check {
+  display: grid;
+  justify-items: center;
+  margin-top: 16px;
+}
+
+.identity__check[hidden] {
+  display: none;
+}
+
+.identity__actions--quiet {
+  margin-top: 14px;
+}
+
+/* ── The porch ───────────────────────────────────────────────────────────────
+   The top-right shelf (ui/index.js) stands in `.browse`, on neither surface,
+   and carries an affordance from each: the letters tab the guest surface fills
+   and the mode switch the desk owns. */
+
+.letters {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.letters:hover {
+  border-color: var(--sage);
+  color: var(--sage-deep);
+}
+
+.letters.is-on {
+  border-color: var(--ink);
+}
+
+.letters[hidden] {
+  display: none;
+}
+
+.letters__count {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-pill);
+  background: var(--terracotta);
+  color: var(--card);
+  font-size: 10.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.letters__count[hidden] {
+  display: none;
+}
+
+.porchswitch {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper-sheet);
+  box-shadow: var(--shadow-chip);
+  padding: 7px 15px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.porchswitch:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta-deep);
+}
+
+.porchswitch.is-host {
+  color: var(--ink-faint);
+}
+
 /* ── A word about something that happened to you ─────────────────────────────
    Set in the same hand as the request sheet's confirmation slip (.sent), which
    is the one other thing on the page that speaks without being asked. */

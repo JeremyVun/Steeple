@@ -10,7 +10,7 @@
 The API, web v2, and mobile app implement the full two-sided loop: geo-fenced discovery →
 SSO → apply (or instant book) → decision → booking with DB-enforced no-double-booking,
 payments (mock-gateway era), notifications, reminders, cancellation with auto-refund, and
-no-show handling. Web v2's `v2_migration` completed 2026-08-07: identity, correspondence,
+no-show handling. Web v2's real-API migration completed 2026-08-07: identity, correspondence,
 payments, hosting and moderation all run on the wire; the only demo data left is the 3D
 village's scenery in dev builds. Google/Apple/Turnstile code paths are shipped and
 env-gated — a build with no client id offers no button — and go live by configuration
@@ -18,9 +18,9 @@ alone (`docs/runbooks/sso-and-turnstile.md`). Admin moderates the first listing 
 newly claimed venue; later rooms at that venue publish themselves.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
-screen, FCM push, and the analytics/flags client proxies. The deprecated web v1 source still
-contains the `/.well-known` deep-link endpoints; web v2 does not yet serve replacements.
-Remaining Phase 4 work includes that move plus release/ops (Firebase project, store setup).
+screen, FCM push, and the analytics/flags client proxies. Mobile association files at
+`/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` are not yet served;
+that deployment seam plus release/ops (Firebase project, store setup) remains.
 
 **Phase 5 (code) as of 2026-07-04:** provider self-service — the **Manage** module (venue/room
 CRUD, host ownership/lease-authority verification requests, real Google geocoding,
@@ -185,8 +185,8 @@ rule (every charge on a cancelled occurrence refunds in full — host rescinds a
 cancels both reduce to it), and the venue payout-onboarding stub. Double-charge is impossible
 by construction: a charge *claims* its occurrence with a Pending `payments` row under the
 partial unique index before the gateway is called, and the gateway idempotency key is the
-occurrence id. **`PaymentSweeper` is the system's first background worker** (SYSTEM_DESIGN
-§17): ~5-min `IHostedService` under a Postgres advisory lock — charges due occurrences,
+occurrence id. **`PaymentSweeper`** runs as a ~5-min `IHostedService` under a Postgres advisory
+lock — charges due occurrences,
 returns the ladder's auto-cancels (executed through the Bookings service — Payments never
 mutates occurrences), and re-runs the refund rule crash-safely. **Booking modes** ride the
 same slice: `venues.BookingMode` (instant default, host-set via Manage) makes an instant
@@ -239,7 +239,7 @@ room apply immediately but stamp `ProviderEditedAtUtc`, which is Admin's after-t
 signal, not a block. Both timestamp columns (006-manage.sql) carry partial indexes so the
 Admin queue/feed scans stay cheap. Writes run behind the `manage` rate-limit policy
 (30/min/account).
-**Idempotent creates** (`v2_migration` D2's sibling D8, 2026-08-05): both create endpoints
+**Idempotent creates** (web-v2 migration D8, 2026-08-05): both create endpoints
 honor `Idempotency-Key`; a replay by the same user returns the original as `200` (first create
 is `201`). The store is `idempotency_records` (016), keyed `(UserId, Scope, Key) → ResourceId`,
 written in the same `SaveChanges` as the resource — so the primary key is the race guard and a
@@ -287,7 +287,7 @@ edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/
 10 MB cap enforced by Kestrel before the pipeline runs.
 
 **Web SPA** — `Steeple.Web.v2` is the deployed web surface; its real-API migration
-completed 2026-08-07 (`docs/backlog/v2_migration/design.md`, D1–D9). Vite produces static
+completed 2026-08-07 (decision record: `SYSTEM_DESIGN.md` §17). Vite produces static
 assets and the nginx host serves them while proxying same-origin `/api` and local `/media`
 requests to the API
 container; the API still emits no CORS headers. **Clean History-API routes own navigation**
@@ -308,9 +308,10 @@ ships with the map (a grid-layer-less Leaflet map settles NaN zoom and dies on t
 *Seams* (`src/data/`): `api.js` — the wire, `/api/v1` names verbatim, read timeout 4s,
 writes 15s, and a timeout is classified as "unknown", never "unreachable". `session.js` —
 identity: the refresh token is an **httpOnly cookie** the API sets
-(`refreshTransport: "cookie"`), the access token lives in module memory, localStorage holds
-only `{user, reason, stamp}` for cross-tab `storage` sync; refresh is single-flight per tab
-with one 401 retry, simultaneous tabs are made safe by the API's rotation grace
+(`refreshTransport: "cookie"`), while the access token and fetched profile live only in
+module memory. Tabs exchange opaque signed-in/out events through `BroadcastChannel` and each
+fetches its own profile; legacy profile/storage keys are purged. Refresh is single-flight per
+tab with one 401 retry, and simultaneous tabs are made safe by the API's rotation grace
 (`contracts/identity.md`). `providers.js` — Google/Apple, the only file that knows a third
 party exists; a provider with no `VITE_*` client id is not offered, SDKs load on first
 sign-in attempt, nonces bind tokens per attempt. `turnstile.js` — the widget, off without
@@ -380,7 +381,7 @@ config (see `mobile/README.md`).
 
 **Admin** — HTMX dashboard over Postgres via Persistence; no in-app auth **by design**
 (authelia at the edge; trusts the forwarded `Remote-User` header for audit attribution).
-Reduced 2026-08-05 to what an operator actually does (`v2_migration` D3) — three action
+Reduced 2026-08-05 to what an operator actually does (web-v2 migration D3) — three action
 surfaces plus one takedown lever, over four screens:
 
 - **Review queue** (`/admin/review`) — the steady-state screen. One card per room with a

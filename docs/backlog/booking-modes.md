@@ -6,9 +6,10 @@
 > `payments.enabled` — see "Decoupled from payments" below. The chronic-rescinder signal
 > (§3) and the deferred items
 > below remain future work. Adopted 2026-08-05 (owner decision, in-session). Supersedes the
-> request→approve-only model for the parts it names; `payments.md` §5's
-> charge-at-T−48h-only rule is **superseded in part** by the charge timing below —
-> fold the corrective pass into `payments.md` in the commit that implements this.
+> request→approve-only model for the parts it names.
+>
+> **Superseded 2026-08-05 → "Charge timing" below:** `payments.md` §5's original
+> charge-at-T−48h-only rule no longer governs the first occurrence.
 > Non-negotiables inherited unchanged from `payments.md` §1: Steeple never stores or
 > custodies card data (Stripe holds payment identity); booking-integrity invariants
 > stand; no payment call inside the approval transaction.

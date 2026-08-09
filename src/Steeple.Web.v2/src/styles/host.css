@@ -1336,6 +1336,16 @@
   background: var(--card);
 }
 
+/* The desk's letter draws its own thread rows, but the container around them
+   was guest.css's until postcss.config.js stopped that sheet reaching here.
+   Same measure, in the desk's own hairline: `--rule` is a `.guest` token and
+   was resolving to currentColor over here, which is not what a rule is. */
+.thread {
+  margin: 22px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
 .thread__list,
 .counters__list {
   margin: 8px 0 0;
@@ -2870,32 +2880,6 @@
 }
 
 .blackouts__empty {
-  color: var(--ink-faint);
-}
-
-/* ── the porch switch ───────────────────────────────────────────────────── */
-
-.porchswitch {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--paper-sheet);
-  box-shadow: var(--shadow-chip);
-  padding: 7px 15px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 550;
-  letter-spacing: 0.01em;
-  color: var(--ink);
-  cursor: pointer;
-  transition: color 150ms var(--ease), border-color 150ms var(--ease);
-}
-
-.porchswitch:hover {
-  border-color: var(--terracotta);
-  color: var(--terracotta-deep);
-}
-
-.porchswitch.is-host {
   color: var(--ink-faint);
 }
 

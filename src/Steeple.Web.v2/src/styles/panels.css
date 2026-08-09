@@ -819,8 +819,15 @@
    down; and the step back is at the top of the sheet in words. The wordmark's
    chevron is left to mean the one thing it has always meant. */
 @media (max-width: 900px) {
+  /* The rail is measured against the page a visitor can see, not the page the
+     document thinks it has. `bottom: 0` is the foot of the initial containing
+     block, and on a phone that sits under the browser's own toolbar: the sheet
+     then believes it ends where the window does, gives itself scroll for
+     exactly that, and the last section of a listing lands in a strip no scroll
+     can reach. `dvh` follows the chrome as it comes and goes. */
   .rail {
     top: calc(var(--browse-bar) + var(--sheet-band, 172px));
+    height: calc(100dvh - var(--browse-bar) - var(--sheet-band, 172px));
   }
 
   /* Pulled up by its handle, the sheet is given the page band and all — which
@@ -829,6 +836,7 @@
      of its own; the sheet fills it and answers for itself. */
   .rail.is-lifted {
     top: var(--browse-bar);
+    height: calc(100dvh - var(--browse-bar));
     pointer-events: none;
   }
 
@@ -881,6 +889,21 @@
   .sheet--room .sheet__body {
     flex: 1 0 auto;
     overflow: visible;
+  }
+
+  /* A reading ends with a margin. The sheet's foot is the foot of the window,
+     and a phone keeps its own furniture down there — a home indicator, a
+     toolbar that comes and goes — so the last line of a church is set clear of
+     that edge rather than flush against it. It is also the slack: the venue
+     sheet's practicalities used to end 18px off the bottom of a 430×932 page
+     with 19px of scroll behind them, which is a listing that reads as though
+     it cannot be scrolled to the end the moment anything covers that strip. */
+  .sheet--venue .sheet__body {
+    padding-bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .sheet--room .sheet__foot {
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Both ends hold their place over the moving page, so they are opaque: the

@@ -1,5 +1,9 @@
 # Cleanup and hardening backlog
 
+> **Status: historical rationale, completed 2026-08-09.** This is the evidence and owner-decision
+> record that produced `build_plan.md`; it does not describe open work. Current behavior lives in
+> `docs/ARCHITECTURE.md` and `docs/contracts/`.
+
 Verified against the dirty worktree on 2026-08-09. This review excludes Admin and mobile.
 No `.env` file was read.
 
@@ -40,12 +44,12 @@ A later browser user or malicious same-origin script can still read it.
 
 Evidence:
 
-- [`store.js`](../../src/Steeple.Web.v2/src/data/store.js) describes and implements the
+- [`store.js`](../../../src/Steeple.Web.v2/src/data/store.js) describes and implements the
   `steeple-village-store:{userId}` mirror.
 - `load()` and `save()` persist the whole store with `localStorage`.
 - The session-change handler drops only the in-memory reference and deliberately leaves other
   users' keys untouched.
-- [`session.js`](../../src/Steeple.Web.v2/src/data/session.js) signs out without deleting the
+- [`session.js`](../../../src/Steeple.Web.v2/src/data/session.js) signs out without deleting the
   user's store namespace.
 
 Action:
@@ -81,9 +85,9 @@ Other integrity gaps:
 
 Evidence:
 
-- [`MediaService.cs`](../../src/Steeple.Api/Services/Media/MediaService.cs) builds keys as
+- [`MediaService.cs`](../../../src/Steeple.Api/Services/Media/MediaService.cs) builds keys as
   `rooms/{roomId}/{contentHash}`, uploads before saving, and deletes every variant for a row's key.
-- [`RoomPhotoConfiguration.cs`](../../src/Steeple.Persistence/Configurations/RoomPhotoConfiguration.cs)
+- [`RoomPhotoConfiguration.cs`](../../../src/Steeple.Persistence/Configurations/RoomPhotoConfiguration.cs)
   defines only a non-unique `(RoomId, SortOrder)` index.
 
 Action:
@@ -106,9 +110,9 @@ may turn the building off while they are still leaving.
 
 Evidence:
 
-- [`NotificationDispatcher.cs`](../../src/Steeple.Api/Services/Notifications/NotificationDispatcher.cs)
+- [`NotificationDispatcher.cs`](../../../src/Steeple.Api/Services/Notifications/NotificationDispatcher.cs)
   assigns both channel sends to `_ = ...` after writing inbox rows.
-- [`ServiceCollectionExtensions.cs`](../../src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs)
+- [`ServiceCollectionExtensions.cs`](../../../src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs)
   registers the email gateway as a transient typed client.
 
 Action:
@@ -130,11 +134,11 @@ around it.
 
 Evidence:
 
-- [`ApplicationService.cs`](../../src/Steeple.Api/Services/Applications/ApplicationService.cs)
+- [`ApplicationService.cs`](../../../src/Steeple.Api/Services/Applications/ApplicationService.cs)
   contains the lazy expiry sweep.
-- [`EfAvailabilityRepository.cs`](../../src/Steeple.Api/Proxies/Availability/EfAvailabilityRepository.cs)
+- [`EfAvailabilityRepository.cs`](../../../src/Steeple.Api/Proxies/Availability/EfAvailabilityRepository.cs)
   loads calendar applications without an expiry predicate.
-- [`EfApplicationRepository.cs`](../../src/Steeple.Api/Proxies/Applications/EfApplicationRepository.cs)
+- [`EfApplicationRepository.cs`](../../../src/Steeple.Api/Proxies/Applications/EfApplicationRepository.cs)
   does the same for competing demand.
 
 Action:
@@ -155,13 +159,13 @@ the person it was filed.
 
 Evidence:
 
-- [`AcceptAgreementRequest.cs`](../../src/Steeple.Api/Contracts/Identity/AcceptAgreementRequest.cs)
+- [`AcceptAgreementRequest.cs`](../../../src/Steeple.Api/Contracts/Identity/AcceptAgreementRequest.cs)
   has no length validation.
-- [`IdentityService.cs`](../../src/Steeple.Api/Services/Identity/IdentityService.cs) trims the version
+- [`IdentityService.cs`](../../../src/Steeple.Api/Services/Identity/IdentityService.cs) trims the version
   but does not enforce its maximum length.
-- [`EfIdentityRepository.cs`](../../src/Steeple.Api/Proxies/Identity/EfIdentityRepository.cs) catches
+- [`EfIdentityRepository.cs`](../../../src/Steeple.Api/Proxies/Identity/EfIdentityRepository.cs) catches
   every `DbUpdateException`.
-- [`UserAgreementConfiguration.cs`](../../src/Steeple.Persistence/Configurations/UserAgreementConfiguration.cs)
+- [`UserAgreementConfiguration.cs`](../../../src/Steeple.Persistence/Configurations/UserAgreementConfiguration.cs)
   limits versions to 50 characters.
 
 Action:
@@ -186,9 +190,9 @@ recording fails, the customer holds a ticket the system does not recognize.
 
 Evidence:
 
-- [`IdentityService.cs`](../../src/Steeple.Api/Services/Identity/IdentityService.cs) calls
+- [`IdentityService.cs`](../../../src/Steeple.Api/Services/Identity/IdentityService.cs) calls
   `Claim(...)` before `TryReplaceRefreshTokenAsync(...)` and lets non-owning callers return early.
-- [`MemoryRefreshRotationGrace.cs`](../../src/Steeple.Api/Proxies/Identity/MemoryRefreshRotationGrace.cs)
+- [`MemoryRefreshRotationGrace.cs`](../../../src/Steeple.Api/Proxies/Identity/MemoryRefreshRotationGrace.cs)
   stores the raw successor response for the grace period.
 
 Action:
@@ -210,11 +214,11 @@ possible book to the desk and then chooses ten.
 
 Evidence:
 
-- [`ListingService.cs`](../../src/Steeple.Api/Services/ListingService.cs) uses `SearchAllAsync` for
+- [`ListingService.cs`](../../../src/Steeple.Api/Services/ListingService.cs) uses `SearchAllAsync` for
   `when` searches and applies `Skip`/`Take` after availability filtering.
-- [`RoomRepository.cs`](../../src/Steeple.Api/Proxies/RoomRepository.cs) materializes the full
+- [`RoomRepository.cs`](../../../src/Steeple.Api/Proxies/RoomRepository.cs) materializes the full
   prefiltered room/venue/photo graph.
-- [`AvailabilityService.cs`](../../src/Steeple.Api/Services/Availability/AvailabilityService.cs)
+- [`AvailabilityService.cs`](../../../src/Steeple.Api/Services/Availability/AvailabilityService.cs)
   batches availability reads and calculations across the complete candidate set.
 
 Related defects:
@@ -254,11 +258,11 @@ Other configuration hygiene gaps:
 
 Evidence:
 
-- [`docker-compose.yml`](../../docker-compose.yml)
-- [`.gitignore`](../../.gitignore)
-- [`.dockerignore`](../../.dockerignore)
-- [`Program.cs`](../../src/Steeple.Api/Program.cs)
-- [`ServiceCollectionExtensions.cs`](../../src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs)
+- [`docker-compose.yml`](../../../docker-compose.yml)
+- [`.gitignore`](../../../.gitignore)
+- [`.dockerignore`](../../../.dockerignore)
+- [`Program.cs`](../../../src/Steeple.Api/Program.cs)
+- [`ServiceCollectionExtensions.cs`](../../../src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs)
 
 Action:
 
@@ -295,14 +299,14 @@ value was not inspected because `.env` files must not be read without owner appr
 
 Evidence:
 
-- [`providers.js`](../../src/Steeple.Web.v2/src/data/providers.js) hides Apple unless both build-time
+- [`providers.js`](../../../src/Steeple.Web.v2/src/data/providers.js) hides Apple unless both build-time
   values exist and implements the popup flow.
-- [`sso.js`](../../src/Steeple.Web.v2/src/ui/guest/sso.js) renders the Apple button when configured.
-- [`AppleIdTokenVerifier.cs`](../../src/Steeple.Api/Proxies/Identity/AppleIdTokenVerifier.cs) verifies
+- [`sso.js`](../../../src/Steeple.Web.v2/src/ui/guest/sso.js) renders the Apple button when configured.
+- [`AppleIdTokenVerifier.cs`](../../../src/Steeple.Api/Proxies/Identity/AppleIdTokenVerifier.cs) verifies
   Apple tokens server-side.
-- [`docker-compose.yml`](../../docker-compose.yml) maps the Apple Services ID and redirect URI into
+- [`docker-compose.yml`](../../../docker-compose.yml) maps the Apple Services ID and redirect URI into
   both sides.
-- [`nginx.conf`](../../src/Steeple.Web.v2/nginx.conf) already permits the required Apple script,
+- [`nginx.conf`](../../../src/Steeple.Web.v2/nginx.conf) already permits the required Apple script,
   popup, and form origins.
 
 Action:
@@ -327,9 +331,9 @@ truckload.
 
 Evidence:
 
-- [`NotificationsController.cs`](../../src/Steeple.Api/Controllers/Notifications/NotificationsController.cs)
-- [`NotificationDto.cs`](../../src/Steeple.Api/Contracts/Notifications/NotificationDto.cs)
-- [`EfNotificationRepository.cs`](../../src/Steeple.Api/Proxies/Notifications/EfNotificationRepository.cs)
+- [`NotificationsController.cs`](../../../src/Steeple.Api/Controllers/Notifications/NotificationsController.cs)
+- [`NotificationDto.cs`](../../../src/Steeple.Api/Contracts/Notifications/NotificationDto.cs)
+- [`EfNotificationRepository.cs`](../../../src/Steeple.Api/Proxies/Notifications/EfNotificationRepository.cs)
 
 Action:
 
@@ -349,8 +353,8 @@ finished product.
 
 Evidence:
 
-- [`package-lock.json`](../../src/Steeple.Web.v2/package-lock.json) resolves `nanoid@3.3.16`.
-- [`Dockerfile`](../../src/Steeple.Web.v2/Dockerfile) copies only built assets into the final image.
+- [`package-lock.json`](../../../src/Steeple.Web.v2/package-lock.json) resolves `nanoid@3.3.16`.
+- [`Dockerfile`](../../../src/Steeple.Web.v2/Dockerfile) copies only built assets into the final image.
 
 Action:
 

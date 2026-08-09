@@ -1,6 +1,6 @@
 # Crawlable listing pages — moved
 
-This brief is superseded by:
+> **Superseded 2026-08-08 →** the adopted design and completion record:
 
 - [`seo/design.md`](seo/design.md) — adopted behaviour and architecture; and
 - [`seo/build_plan.md`](seo/build_plan.md) — implementation order and verification.

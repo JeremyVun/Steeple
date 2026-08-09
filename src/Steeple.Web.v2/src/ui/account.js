@@ -18,6 +18,7 @@
 import { CORRESPONDENCE_VIEWS, setView, state } from '../core/bus.js';
 import { paymentState } from '../data/correspondence.js';
 import { isEnabled } from '../data/flags.js';
+import { FEATURE_FLAG_KEYS } from '../data/wireTokens.js';
 import * as session from '../data/session.js';
 import { el, replaceChildren } from './dom.js';
 import { cardLine } from './guest/payment.js';
@@ -106,7 +107,7 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
   }
 
   async function readPaymentsFlag() {
-    paymentsEnabled = await isEnabled('payments.enabled');
+    paymentsEnabled = await isEnabled(FEATURE_FLAG_KEYS.paymentsEnabled);
     if (!open) return;
     render();
     if (paymentsEnabled) readPayments();

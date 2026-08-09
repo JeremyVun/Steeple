@@ -13,9 +13,6 @@ namespace Steeple.Api.Services.Manage;
 /// </summary>
 public sealed class ManageService : IManageService
 {
-    /// <summary>Flag gating the "open hours required to publish" rule (config-backed, off by default).</summary>
-    private const string OpenHoursRequiredFlag = "manage.open_hours_required";
-
     private readonly IManageRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IGeocodingGateway _geocoding;
@@ -462,7 +459,7 @@ public sealed class ManageService : IManageService
                 }
 
                 // Open-hours gate (flag-gated, off by default) — like no_photos, only on publish.
-                if (_flags.IsEnabled(OpenHoursRequiredFlag)
+                if (_flags.IsEnabled(FeatureFlagKeys.ManageOpenHoursRequired)
                     && !await _availability.HasOpenHoursAsync(room.Id, ct).ConfigureAwait(false))
                 {
                     return ManageResult<ManagedRoomDto>.Fail(

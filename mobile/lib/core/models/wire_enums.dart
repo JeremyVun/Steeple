@@ -138,6 +138,14 @@ enum NotificationType {
   bookingCancelled,
   renewalDue,
   ratingReceived,
+  listingApproved,
+  listingDeclined,
+  counterOfferReceived,
+  counterOfferAccepted,
+  counterOfferDeclined,
+  paymentFailed,
+  occurrenceRefunded,
+  bookingReceived,
   bookingReminder,
   unknown;
 
@@ -149,6 +157,14 @@ enum NotificationType {
     'bookingCancelled': NotificationType.bookingCancelled,
     'renewalDue': NotificationType.renewalDue,
     'ratingReceived': NotificationType.ratingReceived,
+    'listingApproved': NotificationType.listingApproved,
+    'listingDeclined': NotificationType.listingDeclined,
+    'counterOfferReceived': NotificationType.counterOfferReceived,
+    'counterOfferAccepted': NotificationType.counterOfferAccepted,
+    'counterOfferDeclined': NotificationType.counterOfferDeclined,
+    'paymentFailed': NotificationType.paymentFailed,
+    'occurrenceRefunded': NotificationType.occurrenceRefunded,
+    'bookingReceived': NotificationType.bookingReceived,
     'bookingReminder': NotificationType.bookingReminder,
   };
 }

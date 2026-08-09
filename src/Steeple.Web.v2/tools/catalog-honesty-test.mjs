@@ -34,9 +34,10 @@
 // hot-reloaded anything, the app's own graph holds `catalog.js?t=…` and a bare
 // import is answered with a **second instance**, pristine — `isLive()` on it
 // reads `true` however long the real one has been on the seed. What the seed is
-// answering is visible on the page instead: nine spaces across five venues is
-// the seed and nothing else (the local database carries far more), and the
-// one-time `console.info` is the catalog's own account of the fallback.
+// answering is visible on the page and in its one-time fallback account. A
+// fresh database can legitimately hold the same five venues and nine rooms as
+// the bundle, so equal counts do not prove which source won; a successful wire
+// answer with no fallback notice does.
 
 import { closeBrowsers, launch } from './fixtures.mjs';
 
@@ -122,8 +123,9 @@ try {
   const troubled = (page) =>
     page.evaluate('document.querySelector(".dm-trouble")?.hidden === false');
 
-  // What the bundled seed answers a bare search with, and the local database
-  // never does — five churches is the village, and one room in it is a Draft.
+  // What the bundled seed answers a bare search with. A fresh database can
+  // honestly answer the same count, so this identifies fallback output only
+  // in the failure sections where the fallback notice is also asserted.
   const SEED_COUNT = '9 spaces across 5 venues';
 
   /** A real press, by pointer, on whatever is at the element's middle. */
@@ -138,12 +140,15 @@ try {
   // ═══ 1. live ═══════════════════════════════════════════════════════════════
   console.log('\n1. the API answers, and the surface is the answer');
   {
-    const { page, state } = await surface(live);
+    const { page, state, said } = await surface(live);
     check('rows on the page', (await rows(page)) > 0, `${await rows(page)} rows`);
     check('the count is a count', /space/.test(await text(page, '.dm-count')), await text(page, '.dm-count'));
     check('nothing is troubled', (await troubled(page)) === false);
     check('the search itself was answered by the API', state.answered.some((a) => a === '200 /api/v1/listings/search'), state.answered.join(' · '));
-    check('...and what is on the page is not the seed', (await text(page, '.dm-count')) !== SEED_COUNT, await text(page, '.dm-count'));
+    check(
+      '...and the catalog did not fall back from that answer',
+      !said.some((s) => s.includes('[catalog] steeple API unavailable'))
+    );
     await page.close();
   }
 

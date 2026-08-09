@@ -23,12 +23,6 @@ public sealed class ApplicationService : IApplicationService
     private const int UncardedUpcomingCapPerVenue = 3;
     private const int UncardedUpcomingCapTotal = 10;
 
-    /// <summary>Feature flag gating the submit-time availability hard block (CONTRACTS §6).</summary>
-    private const string AvailabilityFlag = "listing.availability";
-
-    /// <summary>Feature flag gating the host counter-offer surface (CONTRACTS §5).</summary>
-    private const string CounterOffersFlag = "booking.counter_offers";
-
     private readonly IApplicationRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IBookingService _bookings;
@@ -387,7 +381,7 @@ public sealed class ApplicationService : IApplicationService
             : null;
         var conflicts = callerIsManager
             && ApplicationExpiryPolicy.IsUndecided(application.Status)
-            && _flags.IsEnabled(AvailabilityFlag)
+            && _flags.IsEnabled(FeatureFlagKeys.ListingAvailability)
             ? await BuildConflictsAsync(application, ct).ConfigureAwait(false)
             : null;
         return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true, summary, conflicts));
@@ -702,7 +696,7 @@ public sealed class ApplicationService : IApplicationService
         Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct)
     {
         // Flag off → indistinguishable from an unknown route (404), like listing.availability's endpoints.
-        if (!_flags.IsEnabled(CounterOffersFlag))
+        if (!_flags.IsEnabled(FeatureFlagKeys.BookingCounterOffers))
         {
             return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.NotFound, "Application not found.");
         }
@@ -821,7 +815,7 @@ public sealed class ApplicationService : IApplicationService
     private async Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferCoreAsync(
         Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct)
     {
-        if (!_flags.IsEnabled(CounterOffersFlag))
+        if (!_flags.IsEnabled(FeatureFlagKeys.BookingCounterOffers))
         {
             return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.NotFound, "Application not found.");
         }
@@ -1070,7 +1064,7 @@ public sealed class ApplicationService : IApplicationService
     /// </summary>
     private async Task<ApplicationError?> CheckAvailabilityBlockAsync(Guid roomId, ScheduleDto schedule, CancellationToken ct)
     {
-        if (!_flags.IsEnabled(AvailabilityFlag))
+        if (!_flags.IsEnabled(FeatureFlagKeys.ListingAvailability))
         {
             return null;
         }

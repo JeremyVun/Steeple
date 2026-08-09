@@ -6,7 +6,17 @@
 //
 //   node tools/map-test.mjs "http://localhost:5322/?q=low"
 //   node tools/map-test.mjs "http://localhost:5322/?q=low&map=dusk" dusk
-import { agreeCurrent, at, closeBrowsers, launch, routes, signIn, signInPage, stamp } from './fixtures.mjs';
+import {
+  agreeCurrent,
+  at,
+  closeBrowsers,
+  isEnvironmentNoise,
+  launch,
+  routes,
+  signIn,
+  signInPage,
+  stamp,
+} from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -29,7 +39,7 @@ let failures = 0;
 const errors = [];
 page.on('pageerror', (e) => errors.push(`[pageerror] ${e.message}`));
 page.on('console', (m) => {
-  if (m.type() === 'error' && !m.text().includes('GL Driver')) errors.push(`[console] ${m.text()}`);
+  if (m.type() === 'error' && !isEnvironmentNoise(m)) errors.push(`[console] ${m.text()}`);
 });
 page.on('requestfailed', (r) => {
   if (r.url().includes('tile.openstreetmap.org')) errors.push(`[tiles] ${r.url()} ${r.failure()?.errorText ?? ''}`);
@@ -51,11 +61,48 @@ async function ready(target) {
   // Navigating to the URL the page is already on only moves the hash, and a
   // search left over from the last section would quietly poison the next one.
   await page.goto('about:blank');
+  // The bundled catalog paints immediately, then the live search reconciles it
+  // and may re-frame the map. `__steepleReady` only means the shell is mounted;
+  // measuring before this answer lands races that second frame.
+  const liveSearch = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/listings/search') && response.ok(),
+    { timeout: 25000 }
+  );
   await page.goto(target, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
+  await liveSearch;
   // The product lives past the roll; the harness lands there without the tween.
   await page.evaluate('__steeple.roll.set(1)');
+  // The results sheet reports its settled cover after the roll, which can ask
+  // Leaflet for one final reframe. Do not mistake the quiet before that report
+  // for the finished map; then require stable geometry as the real readiness
+  // signal so a slow browser is not governed by the minimum alone.
   await wait(2600);
+  let previous = null;
+  let stable = 0;
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const snapshot = await page.evaluate(() => {
+      const pin = (id) => document.querySelector(`.dm-pin[data-venue="${id}"]`)?.getBoundingClientRect();
+      const grace = pin('grace-community-vienna');
+      const oakton = pin('oakton-baptist');
+      return {
+        rows: document.querySelectorAll('.dm-row').length,
+        count: document.querySelector('.dm-count')?.textContent?.trim() ?? '',
+        spread: grace && oakton ? Math.hypot(grace.x - oakton.x, grace.y - oakton.y) : 0,
+      };
+    });
+    const unchanged =
+      previous &&
+      snapshot.rows === previous.rows &&
+      snapshot.count === previous.count &&
+      Math.abs(snapshot.spread - previous.spread) < 0.25;
+    stable = snapshot.rows === 9 && snapshot.spread > 0 && unchanged ? stable + 1 : 0;
+    if (stable >= 4) return;
+    previous = snapshot;
+    await wait(250);
+  }
+  throw new Error('the live discovery answer did not settle');
 }
 
 async function box(selector) {
@@ -314,6 +361,10 @@ const wheelLevels = Math.log2((await pinSpread()) / beforeWheel);
 check('one notch of the wheel moves 0.65 of a level, where it moved half', wheelLevels > 0.62 && wheelLevels < 0.68, `${wheelLevels.toFixed(2)} levels`);
 
 // ── 10. a church placed but not published: shown, never clickable ───────────
+// The wheel gesture above deliberately clips the result list to the visible
+// map. A placed venue must not change that rentable answer; the exact number is
+// whatever the visitor could see immediately before placing it.
+const rentableRowsBeforePlacement = await count('.dm-row');
 await page.evaluate(
   '__steeple.store.upsertPlacedVenue({ id: "new-church-test", name: "New Church", shortName: "New Church", lat: 38.884, lng: -77.28 })'
 );
@@ -321,7 +372,12 @@ await wait(700);
 check('a placed church appears as a quiet mark', (await count('.dm-newpin')) === 1);
 check('it says who it is', (await text('.dm-newpin__name')) === 'New Church');
 check('it is not clickable', await page.evaluate('!document.querySelector(".dm-newpin").classList.contains("leaflet-interactive")'));
-check('and it is not among the spaces for rent', (await count('.dm-row')) === 9);
+const rentableRows = await count('.dm-row');
+check(
+  'and it is not among the spaces for rent',
+  rentableRows === rentableRowsBeforePlacement,
+  `${rentableRowsBeforePlacement} before, ${rentableRows} after`
+);
 
 // ── 11. the surface withdraws where it has nothing to answer ────────────────
 //

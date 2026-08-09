@@ -15,7 +15,7 @@ namespace Steeple.Api.Services.Payments;
 public sealed class PaymentService : IPaymentService
 {
     /// <summary>Feature flag gating payment setup, snapshots, charging, refunds, and sweeping.</summary>
-    public const string PaymentsFlag = "payments.enabled";
+    public const string PaymentsFlag = FeatureFlagKeys.PaymentsEnabled;
 
     private readonly IPaymentRepository _repository;
     private readonly IPaymentGateway _gateway;

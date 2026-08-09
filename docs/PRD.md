@@ -2,11 +2,11 @@
 
 > **Status:** Draft — sections resolved through discovery; the **POC scope, architecture, and stack are decided.** One **Open Question** remains (demand channels — needs founder input); other deferred items are recorded as **Deferred Decisions**. Pending product-owner sign-off.
 
-> **⚠️ Update (2026-07-07): free listings are removed.** Founder decision — free venues aren't
+> **Superseded 2026-07-07 → `SYSTEM_DESIGN.md` §17:** free listings are removed. Free venues aren't
 > going to be a thing. Every room carries a required, host-set hourly price; there is no
 > "free vs. paid" filter and no FREE badge anywhere in the product. References to free-first
 > positioning, $0 pricing, free inventory as the acquisition engine, and the budget-constrained
-> free-seeker below are **historical context, superseded** — see SYSTEM_DESIGN §17 (2026-07-07).
+> free-seeker below are historical context.
 
 ---
 
@@ -34,7 +34,10 @@ In practice, "community first" means two things rather than a hard membership ga
 
 Notably, Steeple likely does **not** need to hard-exclude commercial users, because **low cost is itself the gate**: nobody books a church hall for a corporate workplace meeting when WeWork exists. Price self-selects the community-centric audience.
 
-**Booking is instant by default, with request → approve as the supplier's choice.** *(Superseded 2026-08-05 — `docs/backlog/booking-modes.md`; originally "request → approve, not instant-book".)* A valid request (schedule fits, payment method on file) confirms immediately at an instant-mode venue — the supplier holds a rescind lever (cancel any time, guest refunded in full) — while suppliers who want to vet every applicant opt into **manual** mode and keep the full **application and approval flow with intent-matching**: the requesting group's activity, size, frequency, and purpose surfaced so the supplier can decide. Either way the intent travels with the request — instant-mode hosts still see who booked and why.
+> **Superseded 2026-08-05 → `docs/backlog/booking-modes.md`:** the original requirement was
+> request→approve only.
+
+**Booking is instant by default, with request → approve as the supplier's choice.** A valid request (schedule fits, payment method on file) confirms immediately at an instant-mode venue — the supplier holds a rescind lever (cancel any time, guest refunded in full) — while suppliers who want to vet every applicant opt into **manual** mode and keep the full **application and approval flow with intent-matching**: the requesting group's activity, size, frequency, and purpose surfaced so the supplier can decide. Either way the intent travels with the request — instant-mode hosts still see who booked and why.
 
 **The flywheel:** more consumers → more demand for space → more suppliers list → more options → more consumers.
 
@@ -188,7 +191,11 @@ The core v1 is a **polished, map-based marketplace** (not a flat directory — a
 - **Instant book by default; application → approval flow as the supplier's opt-in** *(2026-08-05, `docs/backlog/booking-modes.md`)* — every request carries intent (activity, group size, frequency); manual-mode suppliers approve, ask, or decline, instant-mode suppliers see the same intent on a confirmed booking and can rescind.
 - **Minimal trust layer:** **SSO (Sign in with Google/Apple)** at the *apply* step; written intent; basic ratings/history. (Phone OTP is a deferred paid step-up, not in the MVP.)
 - **Geo-fenced backend:** only hardcoded allowed location(s) are honored — server rejects requests for any area outside the beachhead (cost control + focus).
-- **Consumer web funnel** *(superseded on both counts: the web is an equal front door with apply + host self-service, not a read-only funnel — SYSTEM_DESIGN §17, 2026-07-03; and it is a Vite SPA over the one shared API, not HTMX with its own Web API — 2026-08-05)* **:** install-free, **shareable, read-only discovery** — browse listings on the web (e.g. `steeple.com/st-andrews`), with **applying converting into the app**. The **demand-side cold-start lever**, since mobile-install friction is real for a low-frequency need (book a hall a few times a year, not daily). Built alongside the app with separated concerns. _Whether the web also supports applying (vs. purely funnelling to the app) is a build-time call._
+> **Superseded 2026-08-05 → `ARCHITECTURE.md` "Web SPA":** the original consumer-web scope
+> was a read-only HTMX funnel that converted applying into the app.
+
+- **Consumer web:** install-free, shareable discovery plus organizer apply/inbox and provider
+  self-service. It is an equal front door over the shared API, not a read-only conversion funnel.
 - **Payments: out of v1** — money/keys are handled **offline** between the parties; the invisible commission, and its rate + verification/badge pricing, are set only when in-app paid bookings arrive later. Not needed for the POC.
 
 ### POC-first slice (ship this first)
@@ -254,8 +261,9 @@ A deliberately boring, conventional **N-tier** — **self-hosted, no lock-in, ch
                        └─► DO Spaces (S3): images + nightly DB backups
 ```
 
-> **Superseded where the build went another way** (as-built truth: `ARCHITECTURE.md`;
-> deviations logged in SYSTEM_DESIGN §17). (1) **One API deployable**, not two edge APIs.
+> **Superseded 2026-08-05 → `ARCHITECTURE.md` and `SYSTEM_DESIGN.md` §17.**
+> The build went another way (deviations are logged in SYSTEM_DESIGN §17): (1) **One API
+> deployable**, not two edge APIs.
 > (2) The web surface is **`Steeple.Web.v2` — a Vite + vanilla JS + Leaflet SPA served by
 > nginx**, which proxies same-origin `/api` to the API; the retired HTMX/MVC cookie-BFF
 > source lives in Git history. (3) **Auth is hand-rolled,

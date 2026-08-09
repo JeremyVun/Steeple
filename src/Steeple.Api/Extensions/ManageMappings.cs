@@ -80,7 +80,7 @@ public static class ManageMappings
     {
         if (venue.IsIdentityVerified)
         {
-            return "verified";
+            return VenueVerificationTokens.Verified;
         }
 
         return venue.VerificationRequests
@@ -88,10 +88,10 @@ public static class ManageMappings
             .FirstOrDefault()
             ?.Status switch
             {
-                VenueVerificationStatus.Pending => "pending",
-                VenueVerificationStatus.Declined => "declined",
-                VenueVerificationStatus.Approved => "verified",
-                _ => "unverified",
+                VenueVerificationStatus.Pending => VenueVerificationTokens.Pending,
+                VenueVerificationStatus.Declined => VenueVerificationTokens.Declined,
+                VenueVerificationStatus.Approved => VenueVerificationTokens.Verified,
+                _ => VenueVerificationTokens.Unverified,
             };
     }
 }

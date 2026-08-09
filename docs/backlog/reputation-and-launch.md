@@ -1,10 +1,9 @@
 # Phase 6 — Reputation & launch hardening (implementation plan)
 
-> **Status:** Backlog, adopted 2026-07-04 (supersedes the retired `ROADMAP.md`'s Phase 6
-> entry). Everything before this phase was staging; **the exit of this phase is the public
-> launch** in the founder-chosen NoVA suburb. Slices 1–4 are code; slices 5–6 are mostly
-> ops. Order within the phase: ratings first (longest signal lead time — a rating needs a
-> completed booking to exist), launch checklist last.
+> **Status: active backlog, partially complete.** Adopted 2026-07-04. Ratings and the
+> clean-route SEO build have landed; response stats, renewal, expiry tuning, area SEO, and launch
+> operations remain. This superseded the retired `ROADMAP.md` Phase 6 entry. The exit is public
+> launch in the founder-chosen NoVA suburb.
 
 ## Why this phase exists
 
@@ -40,7 +39,7 @@ the day real users arrive: renewal loop closed, SEO finished, production config 
 
 The centerpiece. Seams already reserved: `IRatingRepository` module slot (SYSTEM_DESIGN
 §4), `bookings 1─* ratings` (§5), `POST /api/v1/bookings/{id}/ratings` ✅ (CONTRACTS §5),
-`rating_submitted` event 🔲 (§7), `ratingReceived` notification type (already in the
+`rating_submitted` event ✅ (§7), `ratingReceived` notification type (already in the
 enum), `organizer.ratingSummary` comment slot in `ApplicationDto`, and no-show marks
 "feed ratings" (Bookings module).
 
@@ -213,7 +212,7 @@ PRD: a dense cluster before any demand push) → purge demo seed data from produ
 |---|---|
 | Flags SDK wiring (Phase 0) | SDK source lives outside this repo; wire Api/Web/Admin to it when it lands here. Config-backed `IFeatureFlags` (same key names) meanwhile |
 | Production SSO (Phase 1) | Client wiring is shipped. Ops-side leftovers: complete `docs/runbooks/sso-and-turnstile.md` — Apple Services ID/domain/return URL, production values and redeploy, then the once-only-name/private-relay/repeat-sign-in real test. Turnstile may be explicitly disabled pre-release; general release flips it to enabled on both web and API. |
-| Real-hands demo (Phases 2–3) | Moving web v2's inbox/request decisions off the demo store is **`v2_migration` Phase 2 (D4/D5)**. Ops-side leftovers: set `Email__ApiKey`/`Email__From`/`Email__WebBaseUrl` — the whole procedure (Resend account, SPF/DKIM/DMARC for jeremyvun.com, From address, verification) is **`docs/runbooks/email.md`**; link concierge venue managers in Admin; drive apply → church emailed → approve → organizer notified with a real church + organizer; confirm `application_decided.timeToDecisionHours` visible in Grafana |
+| Real-hands demo (Phases 2–3) | Web correspondence is already server-truth. Ops-side leftovers: configure Resend by `docs/runbooks/email.md`; link concierge venue managers in Admin; drive apply → host emailed → approve → organizer notified with real accounts; confirm `application_decided.timeToDecisionHours` in Grafana. |
 | Production provider self-service (Phase 5) | Set `GEOCODING_MODE=google` + `GEOCODING_GOOGLE_API_KEY` (or complete Apple Maps mode), plus `MEDIA_*` Spaces credentials; enable mobile management once its build ships; register the DMCA agent with the Copyright Office |
 | Mobile release (Phase 4) | Firebase project + config files; Google Maps + SSO client ids; Xcode signing/entitlements; official Google sign-in brand asset; TestFlight (founder + first organizers) → App Store; Android closed testing (founder's testers); profile against MOBILE_DESIGN §4 budgets on real devices |
 

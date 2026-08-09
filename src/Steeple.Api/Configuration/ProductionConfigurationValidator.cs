@@ -231,7 +231,7 @@ public static class ProductionConfigurationValidator
     private static void ValidatePayments(IConfiguration configuration, List<string> errors)
     {
         var payments = configuration.GetSection(PaymentsOptions.SectionName).Get<PaymentsOptions>() ?? new PaymentsOptions();
-        if (configuration.GetValue<bool>("Flags:payments.enabled")
+        if (configuration.GetValue<bool>($"Flags:{FeatureFlagKeys.PaymentsEnabled}")
             && payments.Gateway.Equals(PaymentsOptions.MockGateway, StringComparison.OrdinalIgnoreCase))
         {
             errors.Add("Payments: Production cannot enable 'payments.enabled' while Gateway is 'mock'.");

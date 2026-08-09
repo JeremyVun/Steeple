@@ -23,9 +23,6 @@ namespace Steeple.Api.Controllers;
 [EnableRateLimiting(RateLimitPolicies.Discovery)]
 public sealed class ListingsApiController : ControllerBase
 {
-    /// <summary>Time-first ("When") search is gated behind this flag (off → params ignored).</summary>
-    private const string AvailabilityFlag = "listing.availability";
-
     private readonly IListingService _listings;
     private readonly IGeofencePolicy _geofence;
     private readonly IFeatureFlags _flags;
@@ -71,7 +68,7 @@ public sealed class ListingsApiController : ControllerBase
                 DayTokens: ReadTokens("daysOfWeek"),
                 DurationMinutes: Request.Query["durationMinutes"]),
             todayLocal,
-            _flags.IsEnabled(AvailabilityFlag));
+            _flags.IsEnabled(FeatureFlagKeys.ListingAvailability));
 
         if (when.Error is { } detail)
         {

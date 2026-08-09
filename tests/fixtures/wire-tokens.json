@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "tokenSets": {
+    "accessibilityFeatures": [
+      "stepFreeAccess",
+      "accessibleRestroom",
+      "accessibleParking",
+      "hearingLoop",
+      "liftAccess"
+    ],
+    "activityTypes": [
+      "children",
+      "sports",
+      "community",
+      "religious",
+      "arts",
+      "education",
+      "music"
+    ],
+    "agreementDocumentTypes": [
+      "tos",
+      "privacy"
+    ],
+    "amenities": [
+      "parking",
+      "kitchen",
+      "restrooms",
+      "wifi",
+      "audioVisual",
+      "tables",
+      "chairs",
+      "heating",
+      "airConditioning",
+      "stage",
+      "piano"
+    ],
+    "applicationStatuses": [
+      "pending",
+      "needsInfo",
+      "counterOffered",
+      "approved",
+      "declined",
+      "withdrawn",
+      "expired"
+    ],
+    "authProviders": [
+      "google",
+      "apple",
+      "dev"
+    ],
+    "bookingModes": [
+      "instant",
+      "manual"
+    ],
+    "bookingReminderKinds": [
+      "comingUp",
+      "tomorrow"
+    ],
+    "bookingStatuses": [
+      "confirmed",
+      "completed",
+      "cancelled"
+    ],
+    "bookingTypes": [
+      "oneOff",
+      "recurring"
+    ],
+    "counterOfferStatuses": [
+      "open",
+      "accepted",
+      "declinedByOrganizer",
+      "superseded",
+      "lapsed"
+    ],
+    "notificationTypes": [
+      "applicationReceived",
+      "applicationMessage",
+      "applicationApproved",
+      "applicationDeclined",
+      "bookingCancelled",
+      "renewalDue",
+      "ratingReceived",
+      "listingApproved",
+      "listingDeclined",
+      "counterOfferReceived",
+      "counterOfferAccepted",
+      "counterOfferDeclined",
+      "paymentFailed",
+      "occurrenceRefunded",
+      "bookingReceived",
+      "bookingReminder"
+    ],
+    "occurrenceStatuses": [
+      "scheduled",
+      "occurred",
+      "noShow",
+      "cancelled"
+    ],
+    "paymentStatuses": [
+      "pending",
+      "requiresAction",
+      "succeeded",
+      "failed",
+      "refunded",
+      "disputed"
+    ],
+    "ratingRateeTypes": [
+      "organizer",
+      "venue"
+    ],
+    "roomStatuses": [
+      "draft",
+      "published",
+      "unlisted"
+    ],
+    "scheduleFrequencies": [
+      "oneOff",
+      "recurringWeekly"
+    ],
+    "venueTypes": [
+      "church",
+      "publicSpace",
+      "other"
+    ],
+    "venueVerificationStatuses": [
+      "unverified",
+      "pending",
+      "declined",
+      "verified"
+    ],
+    "weekdays": [
+      "sunday",
+      "monday",
+      "tuesday",
+      "wednesday",
+      "thursday",
+      "friday",
+      "saturday"
+    ]
+  },
+  "featureFlags": {
+    "all": [
+      "listing.availability",
+      "manage.open_hours_required",
+      "booking.counter_offers",
+      "payments.enabled",
+      "mobile.apply_enabled",
+      "mobile.manage_enabled",
+      "mobile.force_upgrade"
+    ],
+    "public": [
+      "payments.enabled",
+      "mobile.apply_enabled",
+      "mobile.manage_enabled",
+      "mobile.force_upgrade"
+    ]
+  }
+}

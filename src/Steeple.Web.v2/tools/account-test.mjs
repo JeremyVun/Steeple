@@ -11,7 +11,8 @@
 // What it proves:
 //   1. a fresh visitor sees no inbox, no badge, no verified chip, and one way in
 //   2. the shelf's Sign in opens the same identity panel the flows use
-//   3. signing in shows the chip and an empty inbox
+//   3. signing in names the person and opens an empty inbox without making a
+//      self-directed verification claim
 //   4. signing out revokes the session at steeple, not just here
 //   5. a second account on the same browser inherits none of the first's state
 //   6. an expired session says so instead of vanishing
@@ -241,7 +242,7 @@ await wait(900);
 eq('the inbox opens', await page.evaluate('__steeple.state.view'), 'journal');
 eq('and it is empty', await page.evaluate('__steeple.store.guestApplications().length'), '0');
 eq('named for whoever signed in', await text('.journal__who'), 'Ada First');
-check('the trust chip is earned now', await visible('.journal__aside .verified'));
+check('the inbox makes no verification claim to its owner', !(await visible('.journal__aside .verified')));
 await page.screenshot({ path: '/tmp/steeple-webp1-signed-in.png' });
 
 // Something of this person's own, so the next account has something to not see.

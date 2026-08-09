@@ -99,7 +99,7 @@ are excluded. Response:
 `suburbs` includes only localities with a Published, non-taken-down room inside the configured
 discovery geofence.
 
-### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07 — `v2_migration` D9)*
+### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07; clean-route completion record: `docs/backlog/seo/build_plan.md`)*
 The same rows as `sitemap`, as sitemaps.org XML (`application/xml`, `Cache-Control` 1h): the home
 page plus every published listing's `/space/{venueSlug}/{roomSlug}` URL with `lastmod`,
 `changefreq` and `priority`. The only endpoint here that answers XML — web v2 is a static bundle

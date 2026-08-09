@@ -27,7 +27,6 @@ import {
 import { heldVenue } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
 import { actionLabelFor, lineFor } from '../notifications.js';
-import { verifiedChip } from './sso.js';
 import {
   invitesGuestRating,
   isYourMove,
@@ -424,7 +423,10 @@ export function createJournal({
         }),
       ]),
       el('div', { class: 'journal__aside' }, [
-        session.isSignedIn() ? verifiedChip() : null,
+        // No trust chip here: verification is a claim made to the other party
+        // (on a listing, on a request a host reads), and this surface has no
+        // other party. Told to yourself it is a fact you cannot act on, sitting
+        // louder than the one line you came for.
         // Unread mail is not a request waiting on anybody (D8) — so it is
         // counted on its own line, in its own words, rather than folded into
         // the tally. Without it the head said "Nothing waiting on you" over

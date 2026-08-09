@@ -27,9 +27,8 @@ class InboxScreen extends ConsumerWidget {
         value: state,
         skeleton: () => const SkeletonList(),
         onRetry: () => ref.read(inboxProvider.notifier).refresh(),
-        data: (items) => items.isEmpty
-            ? const _EmptyInbox()
-            : _InboxList(items: items),
+        data: (items) =>
+            items.isEmpty ? const _EmptyInbox() : _InboxList(items: items),
       ),
     );
   }
@@ -44,7 +43,8 @@ class _EmptyInbox extends StatelessWidget {
       child: EmptyState(
         icon: Icons.notifications_none_rounded,
         title: 'Nothing yet',
-        body: 'Replies from churches land here — approvals, questions, and '
+        body:
+            'Replies from churches land here — approvals, questions, and '
             'updates on your bookings.',
       ),
     );
@@ -77,7 +77,9 @@ class _InboxList extends ConsumerWidget {
             return _NotificationTile(
               notification: notification,
               onTap: () {
-                unawaited(ref.read(inboxProvider.notifier).markRead([notification.id]));
+                unawaited(
+                  ref.read(inboxProvider.notifier).markRead([notification.id]),
+                );
                 goDeepLink(context, notification.payload.deepLink);
               },
             );
@@ -126,7 +128,10 @@ class _NotificationTile extends StatelessWidget {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(color: role.bg, shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: role.bg,
+                    shape: BoxShape.circle,
+                  ),
                   child: Icon(icon, size: 20, color: role.fg),
                 ),
                 const SizedBox(width: SteepleTokens.space3),
@@ -138,20 +143,26 @@ class _NotificationTile extends StatelessWidget {
                         title,
                         style: SteepleTypography.body.copyWith(
                           color: colors.textPrimary,
-                          fontWeight: unread ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: unread
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
                       ),
                       if (secondary != null && secondary.isNotEmpty) ...[
                         const SizedBox(height: SteepleTokens.space1),
                         Text(
                           secondary,
-                          style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                          style: SteepleTypography.bodySm.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
                       ],
                       const SizedBox(height: SteepleTokens.space1),
                       Text(
                         stamp,
-                        style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+                        style: SteepleTypography.caption.copyWith(
+                          color: colors.textTertiary,
+                        ),
                       ),
                     ],
                   ),
@@ -163,7 +174,10 @@ class _NotificationTile extends StatelessWidget {
                     child: Container(
                       width: 8,
                       height: 8,
-                      decoration: BoxDecoration(color: colors.accent, shape: BoxShape.circle),
+                      decoration: BoxDecoration(
+                        color: colors.accent,
+                        shape: BoxShape.circle,
+                      ),
                     ),
                   ),
                 ],
@@ -175,30 +189,101 @@ class _NotificationTile extends StatelessWidget {
     );
   }
 
-  static (IconData, StatusColors) _iconAndRole(NotificationType type, SteepleColors colors) =>
-      switch (type) {
-        NotificationType.applicationApproved => (Icons.check_circle_rounded, colors.success),
-        NotificationType.applicationDeclined => (Icons.cancel_rounded, colors.danger),
-        NotificationType.applicationMessage => (Icons.chat_bubble_rounded, colors.info),
-        NotificationType.applicationReceived => (Icons.mail_rounded, colors.info),
-        NotificationType.bookingCancelled => (Icons.event_busy_rounded, colors.danger),
-        NotificationType.renewalDue => (Icons.refresh_rounded, colors.info),
-        NotificationType.ratingReceived => (Icons.star_rounded, colors.neutral),
-        NotificationType.bookingReminder => (Icons.event_available_rounded, colors.info),
-        NotificationType.unknown => (Icons.notifications_none_rounded, colors.neutral),
-      };
+  static (IconData, StatusColors) _iconAndRole(
+    NotificationType type,
+    SteepleColors colors,
+  ) => switch (type) {
+    NotificationType.applicationApproved => (
+      Icons.check_circle_rounded,
+      colors.success,
+    ),
+    NotificationType.applicationDeclined => (
+      Icons.cancel_rounded,
+      colors.danger,
+    ),
+    NotificationType.applicationMessage => (
+      Icons.chat_bubble_rounded,
+      colors.info,
+    ),
+    NotificationType.applicationReceived => (Icons.mail_rounded, colors.info),
+    NotificationType.bookingCancelled => (
+      Icons.event_busy_rounded,
+      colors.danger,
+    ),
+    NotificationType.renewalDue => (Icons.refresh_rounded, colors.info),
+    NotificationType.ratingReceived => (Icons.star_rounded, colors.neutral),
+    NotificationType.listingApproved => (
+      Icons.check_circle_rounded,
+      colors.success,
+    ),
+    NotificationType.listingDeclined => (Icons.cancel_rounded, colors.danger),
+    NotificationType.counterOfferReceived => (
+      Icons.schedule_send_rounded,
+      colors.info,
+    ),
+    NotificationType.counterOfferAccepted => (
+      Icons.check_circle_rounded,
+      colors.success,
+    ),
+    NotificationType.counterOfferDeclined => (
+      Icons.cancel_rounded,
+      colors.danger,
+    ),
+    NotificationType.paymentFailed => (
+      Icons.credit_card_off_rounded,
+      colors.danger,
+    ),
+    NotificationType.occurrenceRefunded => (
+      Icons.currency_exchange_rounded,
+      colors.success,
+    ),
+    NotificationType.bookingReceived => (
+      Icons.event_available_rounded,
+      colors.success,
+    ),
+    NotificationType.bookingReminder => (
+      Icons.event_available_rounded,
+      colors.info,
+    ),
+    NotificationType.unknown => (
+      Icons.notifications_none_rounded,
+      colors.neutral,
+    ),
+  };
 
   static String _title(AppNotification n) {
     final venue = n.payload.venueName;
     return switch (n.typeValue) {
-      NotificationType.applicationApproved => '${venue ?? 'The venue'} approved your application',
-      NotificationType.applicationDeclined => '${venue ?? 'The venue'} declined your application',
-      NotificationType.applicationMessage => '${venue ?? 'The venue'} sent you a message',
+      NotificationType.applicationApproved =>
+        '${venue ?? 'The venue'} approved your application',
+      NotificationType.applicationDeclined =>
+        '${venue ?? 'The venue'} declined your application',
+      NotificationType.applicationMessage =>
+        '${venue ?? 'The venue'} sent you a message',
       NotificationType.applicationReceived =>
         'New application for ${n.payload.roomName ?? 'your space'}',
-      NotificationType.bookingCancelled => 'Your booking at ${venue ?? 'the venue'} was cancelled',
-      NotificationType.renewalDue => 'Your booking at ${venue ?? 'the venue'} is ending soon',
-      NotificationType.ratingReceived => '${venue ?? 'Someone'} left you a rating',
+      NotificationType.bookingCancelled =>
+        'Your booking at ${venue ?? 'the venue'} was cancelled',
+      NotificationType.renewalDue =>
+        'Your booking at ${venue ?? 'the venue'} is ending soon',
+      NotificationType.ratingReceived =>
+        '${venue ?? 'Someone'} left you a rating',
+      NotificationType.listingApproved =>
+        '${n.payload.roomName ?? 'Your listing'} is live',
+      NotificationType.listingDeclined =>
+        '${n.payload.roomName ?? 'Your listing'} needs another look',
+      NotificationType.counterOfferReceived =>
+        '${venue ?? 'The venue'} suggested another time',
+      NotificationType.counterOfferAccepted =>
+        'Your suggested time was accepted',
+      NotificationType.counterOfferDeclined =>
+        'Your suggested time was declined',
+      NotificationType.paymentFailed =>
+        'A payment for ${n.payload.roomName ?? 'your booking'} did not go through',
+      NotificationType.occurrenceRefunded =>
+        'A payment for ${n.payload.roomName ?? 'your booking'} was refunded',
+      NotificationType.bookingReceived =>
+        'New booking for ${n.payload.roomName ?? 'your space'}',
       NotificationType.bookingReminder =>
         '${n.payload.roomName ?? 'Your booking'} at ${venue ?? 'the venue'} is coming up',
       NotificationType.unknown => wireTokenLabel(n.type),

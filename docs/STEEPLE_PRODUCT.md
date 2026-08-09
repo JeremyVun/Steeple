@@ -3,11 +3,12 @@
 
 *An overview of what Steeple is, why it exists, who it serves, and how it sustains itself. A separate technical specification (the PRD) covers the build.*
 
-> **⚠️ Update (2026-07-07): free listings are removed.** Every room now carries a required,
-> host-set hourly price. The free-first framing woven through this brief ("usually for free",
-> "free is the whole point", "most bookings are free") is **historical context, superseded** —
-> see SYSTEM_DESIGN §17 (2026-07-07). The community-first, request→approve, trust-centered
-> framing all still stands.
+> **Superseded 2026-07-07 → `SYSTEM_DESIGN.md` §17:** every room now carries a required,
+> host-set hourly price. The free-first wording below is historical context.
+>
+> **Superseded 2026-08-05 → `docs/backlog/booking-modes.md`:** request→approve is no longer
+> universal. Instant book is the default; a host may opt a venue into manual approval. The
+> community-first and trust-centered framing still stands.
 
 ---
 

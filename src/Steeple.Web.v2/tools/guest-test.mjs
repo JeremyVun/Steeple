@@ -12,7 +12,10 @@
 //
 // Nothing here drives window.__steeple except resetDemo and reads: every
 // affordance is exercised with the mouse and the keyboard.
-import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
+//
+// Known stale (2026-08-09): 41/45. The four failures are the canvas-topmost
+// checks at village/venue/room and porch reachability behind an open request.
+import { at, closeBrowsers, isEnvironmentNoise, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -36,7 +39,7 @@ page.on('pageerror', (e) => {
   console.log('[pageerror]', e.message);
 });
 page.on('console', (m) => {
-  if (m.type() === 'error') {
+  if (m.type() === 'error' && !isEnvironmentNoise(m)) {
     problems.push(`console: ${m.text()}`);
     console.log('[console.error]', m.text());
   }

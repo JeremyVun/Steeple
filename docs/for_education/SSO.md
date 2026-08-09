@@ -4,37 +4,26 @@
 > `docs/CONTRACTS.md`; this file explains the *why* behind what's in the code, with pointers
 > to the real files. If this drifts from the code, the code wins.
 
-> **Status (2026-08-05) — read the halves differently.** Everything about the **API side** is
-> current: ID-token verification (JWKS, `aud`/`iss`/nonce, fail-closed), find-or-create by
-> `(provider, sub)`, the `use_original_provider` rule, and Steeple's own access + rotating
-> refresh-token families. Everything about the **BFF and its cookie** — "Why a BFF?", Flow 1,
-> Flow 2, and "The cookie session, silent refresh, and sign-out" — describes the **retired
-> `Steeple.Web.v1`** and the `src/Steeple.Web.v1/…` files it cites. **Web v2 is an SPA that
-> holds the API token pair itself** (localStorage, single-flight rotation in
-> `src/data/session.js`), so the BFF's "no bearer token in the browser" property no longer
-> applies and a CSP is what replaces it. The v1 flows are still worth reading — the provider
-> mechanics (GIS credential, Apple `response_type=code id_token` + nonce, the state-cookie/CSRF
-> reasoning) are exactly what v2's client must reproduce; **the v2 wiring is specced in
-> `docs/backlog/v2_migration/` (D1, build plan Phase 4)**, and only `signIn()` changes.
+> **Status: educational history, updated 2026-08-09.** The API-side identity material remains
+> current. The BFF flows below describe retired Web.v1; its cited files exist only in Git history.
+> Current web behavior is `docs/contracts/identity.md`: an httpOnly refresh cookie, in-memory
+> access token/profile, and no credential or identity in browser storage.
 
 ## The one-paragraph version
 
 Steeple never sees or stores passwords. Google or Apple authenticates the person and hands
-the browser a signed **ID token** (a JWT) that says "this is subject `10769…`, email X, and
-it was minted for client-id Y". The Web app (acting as a **Backend-for-Frontend**, "BFF")
-forwards that token to the Steeple API, which verifies the signature against the provider's
-published public keys, then finds-or-creates a local user and issues *Steeple's own* token
-pair: a 15-minute access JWT plus a 90-day rotating refresh token. The BFF hides that pair
-inside an encrypted cookie — the browser never sees a bearer token of any kind.
+the browser a signed **ID token**. Web v2 sends it to the API, which verifies the provider
+signature and claims, finds or creates the local user, returns a short-lived access JWT, and
+sets the rotating refresh credential as an httpOnly cookie. The access token and profile stay
+in module memory. Mobile uses the same API with native provider flows and secure token storage.
 
-Three parties, three trust boundaries:
+The current web trust boundaries are:
 
 ```
- Browser ──(provider ID token)──▶ Steeple.Web (BFF) ──(exchange)──▶ Steeple.Api
-    ▲                                    │                              │
-    │                                    ▼                              ▼
- Google / Apple                 encrypted auth cookie          users, user_logins,
- (authenticates the human)      (holds the API tokens)         refresh_tokens (Postgres)
+ Browser ──(provider ID token)──▶ Steeple.Api
+    ▲                            │
+    │                            ├── httpOnly refresh cookie ──▶ Browser
+ Google / Apple                 └── users, user_logins, hashed refresh tokens
 ```
 
 ## Background: OIDC ID tokens in 60 seconds
@@ -57,7 +46,7 @@ specifically so the only artifact leaving the provider is an ID token, and verif
 token needs only public keys. (A secret is required for the *authorization-code exchange*
 flavor of OIDC — a flow Steeple deliberately avoids; see the Apple section.)
 
-## Why a BFF? (the pattern that shapes everything else)
+## Historical Web.v1: why a BFF?
 
 `Steeple.Web` is a "Backend-for-Frontend": the browser only ever talks to it, and it holds
 the API credentials server-side. From `AuthController`'s summary comment: *"the BFF

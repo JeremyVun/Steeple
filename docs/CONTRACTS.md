@@ -8,10 +8,15 @@
 >
 > Legend used throughout: ✅ built & live · 🔲 planned (shape agreed, not yet implemented).
 
+The authoritative wire-token table is [`tests/fixtures/wire-tokens.json`](../tests/fixtures/wire-tokens.json).
+It is the one place an enum token or feature-flag name changes: API, web, and mobile golden tests
+all read that file and fail when a platform mirror drifts. Endpoint prose may repeat tokens to
+explain a shape, but those lists are not separate registries.
+
 | Old section | Now in | Covers |
 |---|---|---|
 | §1 Governance, §1.1 additive rule | `contracts/conventions.md` | How contracts change (the binding checklist) |
-| §2 Conventions, §2.1 enum token registry | `contracts/conventions.md` | Casing, times, IDs, enums, pagination, errors, auth, idempotency, rate limits |
+| §2 Conventions, §2.1 enum token registry | `contracts/conventions.md` + `../tests/fixtures/wire-tokens.json` | Casing, times, IDs, enums, pagination, errors, auth, idempotency, rate limits |
 | §3 Discovery | `contracts/discovery.md` | Search + When filter, listing detail, ratings, suburbs, sitemap, geofence |
 | §4 Identity | `contracts/identity.md` | Sessions, refresh/rotation, `/me`, agreements, deletion, devices |
 | §5 Applications, notifications, bookings | `contracts/applications.md` | Apply → decide, counter-offers, bookings/occurrences, ratings writes, inbox |

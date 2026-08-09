@@ -1,5 +1,8 @@
 # Ratings on web v2 — build plan
 
+> **Status: historical completion record, 2026-08-08.** Current behavior lives in the owning
+> contracts; `design.md` beside this file preserves the rationale.
+
 > Executes `design.md` (same folder — read it first; its D-numbers are cited below).
 > Everything here is `src/Steeple.Web.v2` + docs. **No API, Persistence, Admin, mobile,
 > or schema work** — re-verified 2026-08-08 that the backend is complete and live on the

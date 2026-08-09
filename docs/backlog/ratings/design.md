@@ -1,11 +1,12 @@
 # Ratings on web v2 — MVP design
 
-> **Status:** Adopted 2026-08-08. Delivers the web half of
+> **Status: historical rationale, completed 2026-08-08.** This delivered the web half of
 > `docs/backlog/reputation-and-launch.md` Slice 1 (ratings & reviews), whose API, mobile,
 > and Admin sides shipped 2026-07-05 and were re-verified against the current tree
 > 2026-08-08. **The backend needs zero changes for this MVP** — every field and endpoint
 > below already exists and is already served on reads web v2 makes today.
-> `build_plan.md` beside this file is the execution order.
+> `build_plan.md` beside this file is the completion record; current wire truth lives in
+> `docs/contracts/applications.md` and `docs/contracts/discovery.md`.
 >
 > File:line references were verified against the 2026-08-08 working tree (which includes
 > the uncommitted host-letter/unified-inbox work). Treat them as strong hints, not

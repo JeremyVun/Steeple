@@ -11,10 +11,11 @@
     "build:flat:debug": "VITE_WORLD=off VITE_DEBUG=on vite build --outDir dist-flat-debug",
     "preview": "vite preview",
     "shot": "node tools/shot.mjs",
-    "test": "node tools/store-test.mjs && node tools/notifications-test.mjs && node tools/flags-test.mjs && node tools/router-test.mjs && node tools/metadata-test.mjs",
+    "test": "node tools/store-test.mjs && node tools/notifications-test.mjs && node tools/flags-test.mjs && node tools/router-test.mjs && node tools/metadata-test.mjs && node tools/wire-tokens-test.mjs",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.check.json",
     "test:a11y": "node tools/accessibility-test.mjs",
+    "test:scope": "node tools/surface-scope-test.mjs",
     "check": "npm test && npm run lint && npm run typecheck && npm run audit:prod && npm run test:a11y",
     "smoke:providers": "node tools/provider-smoke-test.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high"

@@ -1,14 +1,10 @@
 // Stable product vocabulary shared by the mirror, wire mapping and dev fixture.
 
-export const APP_STATUS = {
-  pending: 'pending',
-  needsInfo: 'needsInfo',
-  counterOffered: 'counterOffered',
-  approved: 'approved',
-  declined: 'declined',
-  withdrawn: 'withdrawn',
-  expired: 'expired',
-};
+import { WIRE_TOKEN_SETS } from '../wireTokens.js';
+
+export const APP_STATUS = Object.freeze(
+  Object.fromEntries(WIRE_TOKEN_SETS.applicationStatuses.map((token) => [token, token]))
+);
 
 export const UNDECIDED = new Set([
   APP_STATUS.pending,
@@ -16,25 +12,15 @@ export const UNDECIDED = new Set([
   APP_STATUS.counterOffered,
 ]);
 
-export const COUNTER_STATUS = {
-  open: 'open',
-  accepted: 'accepted',
-  declinedByOrganizer: 'declinedByOrganizer',
-  superseded: 'superseded',
-  lapsed: 'lapsed',
-};
+export const COUNTER_STATUS = Object.freeze(
+  Object.fromEntries(WIRE_TOKEN_SETS.counterOfferStatuses.map((token) => [token, token]))
+);
 
-export const DAY_LABELS = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-];
+export const DAY_LABELS = WIRE_TOKEN_SETS.weekdays.map(
+  (day) => day[0].toUpperCase() + day.slice(1)
+);
 
-export const DAY_TOKENS = DAY_LABELS.map((day) => day.toLowerCase());
+export const DAY_TOKENS = WIRE_TOKEN_SETS.weekdays;
 
 /** The label the demo fixture's letters are written under. Not an identity. */
 export const GUEST_ID = 'maria-alvarez';

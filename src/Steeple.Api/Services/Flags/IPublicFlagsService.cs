@@ -23,15 +23,7 @@ public sealed class PublicFlagsService : IPublicFlagsService
     /// The public flag allowlist (CONTRACTS §8). Additive only — adding a key here is the one
     /// place that decides a flag is safe for clients to see.
     /// </summary>
-    public static readonly IReadOnlyList<string> PublicFlagKeys =
-    [
-        "payments.enabled",
-        "mobile.apply_enabled",
-        "mobile.manage_enabled",
-        "mobile.force_upgrade",
-    ];
-
-    private const string ForceUpgradeKey = "mobile.force_upgrade";
+    public static IReadOnlyList<string> PublicFlagKeys => FeatureFlagKeys.Public;
 
     private readonly IFeatureFlags _flags;
     private readonly FlagsOptions _options;
@@ -50,7 +42,7 @@ public sealed class PublicFlagsService : IPublicFlagsService
 
         foreach (var key in PublicFlagKeys)
         {
-            result[key] = key == ForceUpgradeKey
+            result[key] = key == FeatureFlagKeys.MobileForceUpgrade
                 ? EvaluateForceUpgrade(build)
                 : _flags.IsEnabled(key);
         }

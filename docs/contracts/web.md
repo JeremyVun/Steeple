@@ -1,7 +1,8 @@
 # Contracts — Steeple.Web.v2 seams
 
 > **Scope:** the frozen seams of the active web frontend (`src/Steeple.Web.v2`) — `api.js`
-> (the wire), `session.js` (tokens), `catalog.js` (product vocabulary + offline fallback),
+> (the wire), `wireTokens.js` (the complete API token mirror), `session.js` (credentials),
+> `catalog.js` (product vocabulary + offline fallback),
 > `store.js` (the per-person server mirror), plus harness truths and environment-gated integrations.
 > Wire shapes themselves live in the endpoint seam files; conventions: `conventions.md`.
 > Verified against `src/Steeple.Web.v2/src/` and `tools/` (2026-08-08).
@@ -26,6 +27,13 @@ route — is `src/ui/metadata.js` + `metaText.js`, pinned to the server's copy b
 `tests/fixtures/seo-formats.json`.)
 
 **The seam rule:** the day an upstream name changes, exactly one file moves.
+
+`src/data/wireTokens.js` is the browser's complete hand-kept mirror of the API enum and flag
+names. `tools/wire-tokens-test.mjs` reads the shared
+`tests/fixtures/wire-tokens.json` table and checks that mirror plus the product's activity,
+amenity, accessibility, application-status, counter-status, and weekday maps exactly. It changes
+no rendering policy: notification kinds the inbox deliberately does not print remain known wire
+tokens without acquiring copy.
 
 ## The boot state machine ✅ *(2026-08-07 — production migration Phase 3.5)*
 
@@ -162,7 +170,7 @@ expired, while an active tab still reports a refresh refusal as `expired`.
 ## `src/data/correspondence.js` — the wire for everything after a request is written
 
 The one seam the inbox, an opened letter, the host's desk and all four host decisions go
-through (v2_migration D4/D5, 2026-08-05). Each function calls `api.js`, hands steeple's own
+through (server-truth correspondence decision, 2026-08-05). Each function calls `api.js`, hands steeple's own
 answer to `store.js`'s mirror, and returns a verdict — never a guess.
 
 - Reads: `refreshMine()` (`GET /me/applications`), `refreshHosted()` (managed venues plus their
@@ -422,7 +430,11 @@ it is contained by construction: its letters are written under the seed's own id
   `/letter/…` while signed out lands in the village **and the address bar is corrected with
   it** (a `replace`: a route that could not be honoured is not a place anybody chose). Verification copy is gated on fact everywhere it is printed: account-owned surfaces use
   "Identity verified (SSO)" from the session, while host views use "Identity verified" for the
-  organizer recorded on an application and for the managed venue's verified flag.
+  organizer recorded on an application and for the managed venue's verified flag. It is only
+  printed where a **counterparty** reads it — the identity panel (confirming the sign-in that
+  just happened), a listing, a request a host opens. Since 2026-08-09 the guest inbox head
+  carries no chip: verification told to yourself is a fact you cannot act on, and it outshouted
+  the tally line beside it.
 - **Real (Phase 2, 2026-08-05):** the whole of the correspondence. The guest inbox is
   unified: it reads both `GET /me/applications` and the requests at the person's managed venues,
   groups undecided host-side requests under **Hosting**, and counts what is waiting on this
@@ -611,6 +623,18 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   and load order but makes cross-surface bleed structurally impossible. The listing flow's Place,
   Describe, and Availability panels live in `ui/host/listing/`; `listing.js` coordinates writes,
   publishing, navigation, and the unchanged public `createListingFlow` seam.
+- **The price of that scoping: shared chrome must be authored in `main.css`.** Anything mounted
+  outside *both* roots — the shelf's sign-in and card modals (`ui/signIn.js`, `ui/cardPanel.js`,
+  children of `#ui`), the porch (`ui/index.js`) — and anything both surfaces render loses every
+  rule whose only home is a scoped sheet, and falls back to bare UA styling. It compiles, it
+  passes every other suite, and it shows up only as an ugly control in a screenshot: on
+  2026-08-09 the porch switch, the letters tab and the whole SSO panel shipped undressed that
+  way. So `main.css` now owns the identity beat (`.identity*`, `.provider*`), the porch
+  (`.letters*`, `.porchswitch`) and the form primitives both surfaces write on (`.field`,
+  `.field__label`, `.field__input`); each sheet still refines them for its own surface.
+  **`tools/surface-scope-test.mjs` is the guard** — it reads which sheet declares each class,
+  walks the live DOM on each surface, and fails on any element wearing a class that can no
+  longer reach it. Run it after touching `styles/` or after moving markup between mount points.
 - **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
   guest.css loads after host.css. The desk's booking-mode radios are `.mode*` for that reason —
   the first version reused `.choice` and was silently restyled into an unreadable block.

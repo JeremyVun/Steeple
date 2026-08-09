@@ -134,7 +134,8 @@ renames never break a shared listing URL or SEO equity.
   posted to — the key identifies the request, not the path.
 - **No header → unchanged behavior** (every POST creates). A header that isn't a GUID is treated
   as absent — the create proceeds *unguarded*, it is not a `400`.
-- **Keys never expire.** There is no TTL; a key is spendable exactly once, forever.
+- **Keys remain replayable for 30 days.** After that window the retention sweep may remove the
+  ledger row, so a very late reuse is a new create.
 - Two *overlapping* requests with one key (the real hazard: a client write timeout fires while
   the first create is still running server-side) still yield one resource — the loser's whole
   transaction rolls back and it answers with the winner's `200`.

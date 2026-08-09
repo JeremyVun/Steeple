@@ -57,6 +57,11 @@ const COMMITTED = 96;
 /** How long a sheet takes to reach a detent it was let go near. */
 const SETTLE = 190;
 
+/** And how long it takes to leave, once the view has let go of it: the closing
+ *  transition `.sheet` carries in styles/panels.css (opacity 170ms, visibility
+ *  at 230). Nothing may touch the sheet's transform until it is out of sight. */
+const GONE = 250;
+
 /**
  * Which box scrolls a property sheet. On a phone the sheet is one page and
  * scrolls whole — picture, name, spaces — while wider it is a head that stays
@@ -88,6 +93,9 @@ export function createPutDown({ element, onBack, spoken }) {
   const narrow = window.matchMedia(NARROW);
 
   let dragging = false;
+  /** A put-down in flight: the sheet is off the page and on its way out, and
+   *  the view change it caused must leave its transform where it is. */
+  let going = false;
   let detent = 'resting';
   let startY = 0;
   let startOffset = 0;
@@ -152,7 +160,18 @@ export function createPutDown({ element, onBack, spoken }) {
     else slide(offsetOf('resting'), rest);
   }
 
-  /** Down and out, then the view changes — the sheet is seen to be put down. */
+  /** Down and out, then the view changes — the sheet is seen to be put down.
+   *
+   * What must not happen on the way out is the put-down played backwards. The
+   * sheet leaves on an inline transform, and `.sheet` carries a transform
+   * transition of its own for opening and closing: clearing that transform
+   * while the sheet is still on the page does not take it off the foot of the
+   * page, it *animates it back up* from there to where the CSS wants a closed
+   * sheet to sit — six hundred pixels of listing flying up out of the floor and
+   * fading, in the same half second the visitor just threw it away. So the
+   * marks of the gesture come off last, once the sheet is out of sight, and
+   * the view change that the put-down itself causes is not allowed to take
+   * them off early (`going`, read by the view:change below). */
   function commit() {
     if (state.reducedMotion) {
       rest();
@@ -163,8 +182,12 @@ export function createPutDown({ element, onBack, spoken }) {
     element.classList.add('is-going');
     element.style.transform = 'translate3d(0, 100%, 0)';
     setTimeout(() => {
-      rest();
+      going = true;
       onBack();
+      setTimeout(() => {
+        going = false;
+        rest();
+      }, GONE);
     }, SETTLE);
   }
 
@@ -301,7 +324,15 @@ export function createPutDown({ element, onBack, spoken }) {
   // changes what is on the page — the room under this venue, the map, a letter
   // over both — puts the rail back where the CSS wants it.
   bus.on('view:change', () => {
-    if (!dragging) rest();
+    if (dragging) return;
+    // The one view change a put-down makes for itself is answered by the
+    // put-down, when the sheet has left. Anything after that is somebody
+    // asking for a different page, and puts the rail back at once.
+    if (going) {
+      going = false;
+      return;
+    }
+    rest();
   });
   narrow.addEventListener('change', rest);
 

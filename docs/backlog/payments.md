@@ -7,8 +7,8 @@
 > payout-onboarding stub — all behind the `payments.enabled` flag. The **Stripe adapter,
 > webhooks, and the §11 legal/policy work stay gated on the Phase 7 trigger**; swapping the
 > mock for `StripePaymentGateway` behind the same port is the remaining build.
-> **⚠ Charge-timing supersession (2026-08-05):** §5's charge-at-T−48h-only rule is
-> **superseded in part** by `booking-modes.md`: the FIRST occurrence (and therefore the whole
+> **Superseded 2026-08-05 → `booking-modes.md`:** §5's charge-at-T−48h-only rule no longer
+> governs the first occurrence (and therefore the whole
 > of a one-off) charges **at confirmation**; later occurrences keep the T−48h rule. §6's
 > symmetric-window row for provider cancels was also superseded there (host cancel frees +
 > refunds everything, any time). Both recorded in SYSTEM_DESIGN §17.
@@ -101,7 +101,7 @@ because it's precisely the "managed vendors only where they remove liability" ca
 
 ## 5. Inbound — when money moves (the core design)
 
-> **⚠ Superseded in part (2026-08-05, `booking-modes.md`):** the unified at-T−48h rule below
+> **Superseded 2026-08-05 → `booking-modes.md`:** the unified at-T−48h rule below
 > now applies only to the *second and later* occurrences of a recurring booking. The first
 > occurrence — and the whole of a one-off — charges **at confirmation** (immediate,
 > ticket-like commitment). The refund table shifts with it: a charged occurrence a guest

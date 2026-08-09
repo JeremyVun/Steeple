@@ -275,10 +275,19 @@ check('one more puts the sheet down, exactly one level', await page.evaluate('__
 // exactly like one at rest — band of map above it and all — while its foot
 // hangs below the window, and the end of the listing quietly cannot be reached.
 // That shipped once. These are the checks that would have caught it.
+//
+// Read to the end is not the same as read comfortably: a listing whose last
+// line lands in the final few pixels of the window is one the phone's own
+// furniture takes away — a toolbar coming back, the home indicator, a rail
+// still lifted by a hair. On a 430×932 page the church sheet used to end 18px
+// off the bottom with 19px of scroll behind it, and read as a listing that
+// could not be scrolled to its end. CLEAR is the paper the reading now keeps.
+const CLEAR = 24;
 await wait(700);
 let end = await foot('.sheet--venue');
 check('the church sheet stands on the foot of the page', end.hangsBelow === 0, JSON.stringify(end));
 check('...and its last line can be read', end.cut <= 0, JSON.stringify(end));
+check('...standing clear of the foot of the window', end.cut <= -CLEAR, `${-end.cut}px of paper under it`);
 
 // A gesture that loses its pointer — a window blur, a capture handed elsewhere,
 // a context menu — lands the sheet anyway.

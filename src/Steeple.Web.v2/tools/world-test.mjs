@@ -15,7 +15,7 @@
 // navigation (four), envelope landing, and scaffold timing. The remaining
 // world-state, integrity, reduced-motion, budget, and console checks are green.
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { closeBrowsers, isEnvironmentNoise, launch } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -48,7 +48,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'error' && !isEnvironmentNoise(m)) errors.push(m.text());
   });
 
   const url = `${base}/?q=low`;
@@ -275,7 +275,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'error' && !isEnvironmentNoise(m)) errors.push(m.text());
   });
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   // `/desk/...` would land in the village now — hosting is somebody's, and

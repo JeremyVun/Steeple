@@ -7,9 +7,9 @@
 > Legend (all seam files): ✅ built & live · 🔲 planned (shape agreed, not yet implemented).
 > Planned shapes may still evolve; **built shapes may not change except by the §1 rules.**
 
-**The API owns the contract.** `Steeple.Api/Contracts/` is the reference implementation; the
-client mirrors are hand-kept **by convention, not by shared assembly** — this document is what
-keeps the mirrors honest.
+**The API owns the contract.** `Steeple.Api/Contracts/` plus its enum-backed projections are the
+reference implementation. The client mirrors remain hand-kept **by convention, not by shared
+assembly**; one shared golden table and three platform tests keep them honest.
 
 ## 1. Governance — how contracts change
 
@@ -48,26 +48,19 @@ and `mobile/lib/**/models/` is the hand-kept mobile mirror.
 | Pagination | Request `page` (1-based) + `pageSize` (≤100, default 24); response `{ items, totalCount, page, pageSize }` |
 | Errors | RFC 9457 ProblemDetails + `code` extension: `{ type, title, status, detail?, code }`. Stable `code` values documented per endpoint (e.g. `slot_taken`, `geofence_rejected`, `turnstile_failed`, `rate_limited`) |
 | Auth | `Authorization: Bearer <accessToken>` (mobile and the web SPA; web keeps it in module memory). Anonymous allowed on all Discovery reads |
-| Idempotency | `Idempotency-Key` header (client GUID) honored on `POST /listings/{id}/applications` ✅, `POST /manage/venues` ✅, `POST /manage/venues/{id}/rooms` ✅ (2026-08-05, D8). Replays return the original result as `200` (first create is `201`); keys are scoped to the authenticated user and never expire; a non-GUID value is treated as absent (unguarded create, never a `400`). Not yet honored on `POST /auth/sessions` — see `identity.md` |
+| Idempotency | `Idempotency-Key` header (client GUID) honored on `POST /listings/{id}/applications` ✅, `POST /manage/venues` ✅, `POST /manage/venues/{id}/rooms` ✅ (2026-08-05, D8). Replays return the original result as `200` (first create is `201`); keys are scoped to the authenticated user and remain replayable for 30 days, after which the retention sweep may remove the guard without touching the created resource. A non-GUID value is treated as absent (unguarded create, never a `400`). Not yet honored on `POST /auth/sessions` — see `identity.md` |
 | Rate limits | `429` + `Retry-After`. Public writable endpoints additionally require a Turnstile token field where noted |
 | Unknown fields | Clients must ignore them (see §1.1) |
 
 ### 2.1 Wire enum token registry ✅
 
-The canonical token sets (camelCase of the Persistence enum member — `FlagEnumExtensions`
-is the projection). Clients must tolerate tokens not listed here (additive rule §1.1) and
-humanize for display:
+[`tests/fixtures/wire-tokens.json`](../../tests/fixtures/wire-tokens.json) is the sole
+authoritative table for every API enum token and feature-flag name. The C# golden test derives
+the API side from every enum member through `FlagEnumExtensions`; web and mobile compare their
+complete hand-kept registries and typed maps with the same file. A token change therefore lands
+in the API, shared table, both client mirrors, and all three tests together.
 
-| Enum | Tokens |
-|---|---|
-| `activities` (flags) | `children, sports, community, religious, arts, education, music` |
-| `amenities` (flags) | `parking, kitchen, restrooms, wifi, audioVisual, tables, chairs, heating, airConditioning, stage, piano` |
-| `accessibility` (flags) | `stepFreeAccess, accessibleRestroom, accessibleParking, hearingLoop, liftAccess` |
-| `daysOfWeek` (flags, `Weekdays`) | `sunday, monday, tuesday, wednesday, thursday, friday, saturday` — emitted sorted Sunday-first |
-| `venueType` | `church, publicSpace, other` |
-| `status` (room, Manage only — never on public reads) | `draft, published, unlisted` |
-| `bookingMode` | `instant, manual` (booking-modes.md; public reads emit the *effective* mode — `discovery.md`) |
-| `paymentStatus` (occurrence rows) | `pending, requiresAction, succeeded, failed, refunded, disputed` (`payments.md`) |
-
-Application/booking/occurrence status and notification-type tokens are enumerated at their
-shapes in `applications.md`.
+Clients must still tolerate values newer than their build (additive rule §1.1) and humanize or
+fall back safely. `Weekdays` retain table order on the wire (Sunday first); other sets are exact
+memberships. Token lists repeated in endpoint descriptions are explanatory snapshots, not
+independent registries.

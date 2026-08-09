@@ -67,8 +67,7 @@ Development is exempt and retains credential inference for local adapter testing
   keep the `?goto=` grammar because the rest of the registry's paths (`/inbox/...`,
   `/bookings/{id}`) are deliberately not web routes. Unknown web paths are a real 404, never
   the shell at 200.
-- **Deep links** 🔲 *(implemented only in deprecated web v1; replacement required in v2)*:
-  v1 can serve
+- **Mobile universal links** 🔲: the deployed web surface must serve
   `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`, config-driven
   (`DeepLinks:AppleAppId`, `DeepLinks:AndroidPackage`, `DeepLinks:AndroidSha256Fingerprints`) —
   absent config 404s both rather than serving a bogus association (dev default, until the mobile

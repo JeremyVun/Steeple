@@ -36,7 +36,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `booking_reminder_sent` ✅ | server | bookingId, kind (`comingUp` \| `tomorrow`), recipientCount — one per claimed reminder, both parties counted together |
 | `venue_created` ✅ / `room_created` ✅ | server | venueId, suburb / roomId, venueId |
 | `venue_verification_requested` ✅ | server | venueId, documentCount |
-| ~~`venue_verification_decided`~~ | retired 2026-08-05 (`v2_migration` D2 — the separate verification decision is gone; the first-listing `listing_moderated` covers it) | — |
+| ~~`venue_verification_decided`~~ | retired 2026-08-05 (the separate verification decision is gone; the first-listing `listing_moderated` covers it) | — |
 | `listing_publish_requested` ✅ | server | roomId, venueId |
 | `photo_uploaded` ✅ | server | roomId, photoId |
 | `open_hours_updated` ✅ | server | roomId, windowCount, blackoutCount |

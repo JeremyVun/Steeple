@@ -18,9 +18,6 @@ namespace Steeple.Api.Controllers;
 [Route("api/v1")]
 public sealed class PublicAvailabilityController : ControllerBase
 {
-    /// <summary>Feature flag gating the whole guest availability surface (off → 404).</summary>
-    private const string AvailabilityFlag = "listing.availability";
-
     private readonly IAvailabilityService _availability;
     private readonly IFeatureFlags _flags;
     private readonly IAnalyticsSink _analytics;
@@ -39,7 +36,7 @@ public sealed class PublicAvailabilityController : ControllerBase
     public async Task<ActionResult<RoomAvailabilityDto>> Get(
         Guid roomId, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
     {
-        if (!_flags.IsEnabled(AvailabilityFlag))
+        if (!_flags.IsEnabled(FeatureFlagKeys.ListingAvailability))
         {
             return NotFound();
         }
@@ -60,7 +57,7 @@ public sealed class PublicAvailabilityController : ControllerBase
     public async Task<ActionResult<ScheduleCheckResultDto>> Check(
         Guid roomId, [FromBody] CheckScheduleRequest request, CancellationToken ct)
     {
-        if (!_flags.IsEnabled(AvailabilityFlag))
+        if (!_flags.IsEnabled(FeatureFlagKeys.ListingAvailability))
         {
             return NotFound();
         }
