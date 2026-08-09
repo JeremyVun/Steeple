@@ -221,7 +221,7 @@ await shot('02-describe-offline');
 // ── 3. the hours, painted with nobody to tell ─────────────────────────────
 console.log('\n3. the hours, with nobody to tell');
 check('Availability is next anyway — the writing is not held hostage', (await text('.steps__step.is-on')) === '2Availability', await text('.steps__step.is-on'));
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(600);
 const local = (await store('placedVenues()')).find((v) => v.id === host.venueSlug);
 const draftRoom = local?.rooms?.find((r) => r.name === newSpace);

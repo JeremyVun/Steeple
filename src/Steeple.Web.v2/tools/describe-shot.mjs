@@ -71,7 +71,6 @@ try {
   await page.goto(url, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   await page.evaluate('__steeple.roll.set(1)');
-  await page.evaluate('localStorage.removeItem("steeple-village-session")');
   // Minted and agreed first: an un-agreed account meets the agreements ask over
   // the sheet, and dismissing it signs the account out.
   await agreeCurrent((await signIn(hostEmail, 'Ruth Ellery')).accessToken);

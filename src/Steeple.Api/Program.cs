@@ -49,6 +49,10 @@ if (!mediaOptions.UseObjectStorage)
 
 // Schema + seed are owned by the one-shot Liquibase "migrate" service — the API never migrates.
 
+// Canonicals, og:url, document <base> and sitemap locs all come from Seo:PublicBaseUrl. Unset, the
+// API falls back to whatever origin each request arrives on — fine locally, wrong for a crawler.
+app.Services.GetRequiredService<IPublicBaseResolver>().WarnIfUnconfigured();
+
 app.UseForwardedHeaders();
 
 // Turns empty status-code responses (e.g. a controller's NotFound()) into ProblemDetails JSON.

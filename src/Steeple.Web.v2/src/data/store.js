@@ -1,13 +1,11 @@
-// The correspondence store — a MIRROR of what steeple holds, in the product's
-// own vocabulary, kept in localStorage so a surface can be drawn before the wire
-// answers and redrawn the moment it does.
+// The correspondence store — an in-memory MIRROR of what steeple holds, in the
+// product's own vocabulary, redrawn whenever the wire answers.
 //
 // The server is the record (v2_migration D4). Nothing here decides a status,
 // books a date, or invents a row: every application, counter-offer, message and
 // booking arrives as steeple's own document through `mirrorApplication` /
-// `mirrorBooking`, and those are the only ways in. Losing this cache costs a
-// reload, never a fact — clear localStorage mid-flow and the next read from the
-// wire puts everything back.
+// `mirrorBooking`, and those are the only ways in. A reload discards the mirror
+// and any unfinished local work; real reads fill it again.
 //
 // Schema truth for the shapes it mirrors: db/changelog/004-applications.sql,
 // 005-bookings.sql, 009-availability.sql.
@@ -16,10 +14,9 @@
 //                counterOffered = live host counter, undecided, guest's court
 //   counter:     open → accepted | declinedByOrganizer | superseded | lapsed
 //
-// One store per person: the localStorage key is `steeple-village-store:{id}`,
-// where the id is whoever data/session.js says is signed in, or `anon` when
-// nobody is. A shared browser therefore never shows one account another's
-// correspondence, and signing out drops what was in memory (D6).
+// One in-memory store per active identity. A shared browser therefore never
+// shows one account another's correspondence, and signing out drops what was
+// in memory (D6). Legacy persisted mirrors are purged at boot and sign-out.
 //
 // Outside a production build the village also carries a demo fixture — the
 // letters the seeded churches have waiting, the hours their rooms keep. It is
@@ -131,32 +128,31 @@ export function nextWeekday(isoDate, dow) {
 const timeOk = (t) => /^\d{2}:\d{2}$/.test(t);
 const overlaps = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
-// ---- persistence ------------------------------------------------------------
+// ---- memory and legacy cleanup ---------------------------------------------
 
-const memoryFallback = new Map();
-const storage = (() => {
-  try {
-    const probe = '__steeple-probe';
-    localStorage.setItem(probe, '1');
-    localStorage.removeItem(probe);
-    return localStorage;
-  } catch {
-    return {
-      getItem: (k) => memoryFallback.get(k) ?? null,
-      setItem: (k, v) => memoryFallback.set(k, v),
-      removeItem: (k) => memoryFallback.delete(k),
-    };
+/** Private mirrors from pre-P2 builds must not survive an upgrade or sign-out. */
+function purgeLegacyStores() {
+  for (const area of [globalThis.localStorage, globalThis.sessionStorage]) {
+    try {
+      for (let i = area?.length - 1; i >= 0; i -= 1) {
+        const key = area.key(i);
+        if (key?.startsWith(`${STORE_KEY}:`)) area.removeItem(key);
+      }
+    } catch {
+      // Disabled storage cannot contain a readable legacy mirror.
+    }
   }
-})();
+}
+
+purgeLegacyStores();
 
 let data = null;
 
 // ---- whose store this is ----------------------------------------------------
 //
-// A browser is shared. One key per person means signing out cannot leave a
-// letter on the screen for the next person to read, and signing in as somebody
-// else opens their correspondence rather than inheriting the last one's
-// (D6). Signed out, the `:anon` namespace holds drafts and nothing private.
+// A browser is shared. Changing identity throws the entire mirror away, so a
+// letter cannot remain on screen for the next person and signed-out drafts do
+// not survive a sign-in (D6).
 //
 // The identity is read from the session on every load rather than pushed in, so
 // there is no boot order to get wrong: whoever asks the store a question first
@@ -174,37 +170,18 @@ export function currentOrganizerId() {
   return session.currentUser()?.id ?? ANON;
 }
 
-const keyFor = (organizerId) => `${STORE_KEY}:${organizerId}`;
-
 function load() {
   const organizerId = currentOrganizerId();
   if (data && heldFor === organizerId) return data;
-  data = null;
   heldFor = organizerId;
-  try {
-    const raw = storage.getItem(keyFor(organizerId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed.seedVersion === SEED_VERSION) data = parsed;
-    }
-  } catch {
-    data = null;
-  }
-  if (!data) {
-    data = seed();
-    save();
-  }
+  data = seed();
   return data;
-}
-
-function save() {
-  storage.setItem(keyFor(heldFor ?? currentOrganizerId()), JSON.stringify(data));
 }
 
 // The person changed: drop what is in memory — nothing of theirs may survive
 // the sign-out — and tell the surfaces, which re-read from whoever is here now.
-// Other people's keys are left exactly where they are.
-session.onSessionChange(() => {
+session.onSessionChange((held) => {
+  if (!held) purgeLegacyStores();
   if (heldFor === currentOrganizerId()) return;
   data = null;
   heldFor = null;
@@ -212,7 +189,6 @@ session.onSessionChange(() => {
 });
 
 function emit(type, context = {}) {
-  save();
   bus.emit('store:change', { type, ...context });
 }
 
@@ -476,8 +452,12 @@ export function materializeDates(schedule, blackouts = []) {
  * What stands between a schedule and this room: clashes with live occurrences
  * (the only hard stop, as in the exclusion constraint), open-hours misses and
  * blackout skips (advisory — the desk shows them, the host decides).
+ *
+ * `exceptBookingId` leaves one booking's own occurrences out of the reckoning:
+ * an approved request laid against the week it was approved into would otherwise
+ * collide with itself, and report the group as their own rival.
  */
-export function scheduleConflicts(venueId, roomId, schedule) {
+export function scheduleConflicts(venueId, roomId, schedule, { exceptBookingId = null } = {}) {
   const windows = openHoursFor(venueId, roomId);
   const blackouts = blackoutsFor(venueId, roomId);
   const outsideHours = scheduleDays(schedule).filter(
@@ -486,7 +466,9 @@ export function scheduleConflicts(venueId, roomId, schedule) {
   const blocked = new Set(blackouts.map((b) => b.date));
   const skipped = materializeDates(schedule, []).filter((d) => blocked.has(d));
 
-  const live = roomOccurrences(venueId, roomId);
+  const live = roomOccurrences(venueId, roomId).filter(
+    (o) => !exceptBookingId || o.bookingId !== exceptBookingId
+  );
   const clashes = [];
   for (const date of materializeDates(schedule, blackouts)) {
     for (const o of live) {

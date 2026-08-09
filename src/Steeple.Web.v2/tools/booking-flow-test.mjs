@@ -158,8 +158,7 @@ console.log(`      the note carries the mark ${MARK}`);
 await page.goto('about:blank');
 await page.goto(url, { waitUntil: 'networkidle0' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
-// Nobody is signed in when a stakeholder opens this for the first time.
-await page.evaluate("localStorage.removeItem('steeple-village-session')");
+// Nobody is signed in when a stakeholder opens this fresh browser.
 await page.evaluate('__steeple.store.resetDemo()');
 await wait(1200);
 
@@ -261,7 +260,8 @@ await clickWords('.identity__actions .linkish', /Choose from the list/, 'back to
 await clickWords('.identity__person', new RegExp(PERSON.name), `sign in as ${PERSON.name}`);
 await page.waitForFunction('!!document.querySelector(".identity .verified")', { timeout: 15000 }).catch(() => {});
 await wait(600);
-check('a real session now exists', await page.evaluate("!!localStorage.getItem('steeple-village-session')"));
+check('a real memory-only session now exists', await page.evaluate('!!__steeple.session.currentUser()'));
+check('its profile was not persisted', !(await page.evaluate("localStorage.getItem('steeple-village-session')")));
 is('the trust wording is exact', await text('.identity .verified'), 'Identity verified (SSO)');
 is('the person card names them', await text('.identity__card .identity__name'), PERSON.name);
 await page.screenshot({ path: '/tmp/w6c-flow-signedin.png' });

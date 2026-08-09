@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      NOT FOUND — the last word on an address nobody owns.
+      docs/backlog/seo/design.md SEO-D3 (“Unknown paths do not fall through to
+      the SPA”) and §10's last row.
+
+      Until this file existed, nginx answered every unknown path with
+      index.html at status 200: a soft 404, which tells a crawler the typo is a
+      page and tells a person the app is broken. nginx now serves this, with
+      status 404, after every explicit file and known-route location has had
+      its turn.
+
+      No handoff script and no application. This is not a route — there is
+      nothing here for the app to open, and a page that quietly became the map
+      would be the soft 404 again with extra steps.
+
+      Self-contained on purpose, twice over. Its styles are inline because a
+      page whose job is to be presentable when something has gone wrong should
+      not depend on a second request going right; and it is nginx's `error_page`
+      target for arbitrary depths, so it cannot carry a depth-correct <base>
+      the way the boot documents do. Its two links are therefore written from
+      the origin root, which is correct for a deployment at / and NOT correct
+      behind a stripped sub-path prefix — the one place in this build where the
+      prefix contract does not reach. Recorded rather than hidden; a sub-path
+      deployment either accepts a bare edge 404 for typo'd URLs or teaches its
+      edge to serve this page itself.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Page not found · Steeple</title>
+    <meta name="theme-color" content="#fbf7f0" />
+    <style>
+      /* DESIGN_SYSTEM.md tokens, by value: paper, ink, the serif for the
+         moment, terracotta-strong for the way on. */
+      html {
+        background: #fbf7f0;
+      }
+
+      body {
+        margin: 0;
+        background: #fbf7f0;
+        color: #2a2620;
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+          Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .nf {
+        max-width: 34rem;
+        margin: 0 auto;
+        padding: 22vh 20px 72px;
+      }
+
+      .nf__brand {
+        display: inline-block;
+        font: 600 20px/1.2 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        letter-spacing: -0.01em;
+        color: #2a2620;
+        text-decoration: none;
+      }
+
+      .nf__title {
+        margin: 26px 0 6px;
+        font: 600 30px/1.2 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+        letter-spacing: -0.01em;
+      }
+
+      .nf__prose {
+        margin: 0;
+        color: #5c544a;
+      }
+
+      .nf__actions {
+        margin: 30px 0 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .nf__cta {
+        display: inline-block;
+        padding: 11px 22px;
+        border-radius: 999px;
+        background: #b0552f;
+        color: #ffffff;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .nf__cta:hover {
+        background: #a44d2e;
+      }
+
+      .nf__link {
+        color: #46603f;
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      .nf__link:hover {
+        text-decoration: underline;
+      }
+
+      :focus-visible {
+        outline: 3px solid rgba(91, 117, 83, 0.35);
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="nf">
+      <a class="nf__brand" href="/">Steeple</a>
+      <main>
+        <h1 class="nf__title">There's nothing at this address</h1>
+        <p class="nf__prose">
+          The link may be out of date, or it may have been mistyped. The spaces are all still here.
+        </p>
+        <p class="nf__actions">
+          <a class="nf__cta" href="/browse">Browse spaces</a>
+          <a class="nf__link" href="/">Steeple home</a>
+        </p>
+      </main>
+    </div>
+  </body>
+</html>

@@ -273,14 +273,19 @@ export function weekLanes(venueId, roomId, proposal, { exceptApplicationId = nul
 /**
  * What stands between this proposal and a yes, in the order a host cares:
  * collisions first (the hard stop), then hours, then blackouts.
+ *
+ * `exceptApplicationId` is the letter reading its own week: an approved request
+ * holds the very dates it is drawn against, and a booking must never be reported
+ * as colliding with itself.
  */
-export function readSchedule(venueId, roomId, proposal) {
-  const conflicts = scheduleConflicts(venueId, roomId, proposal);
+export function readSchedule(venueId, roomId, proposal, { exceptApplicationId = null } = {}) {
+  const exceptBookingId = exceptApplicationId ? (bookingFor(exceptApplicationId)?.id ?? null) : null;
+  const conflicts = scheduleConflicts(venueId, roomId, proposal, { exceptBookingId });
   const blackouts = blackoutsFor(venueId, roomId);
   const dates = materializeDates(proposal, blackouts);
   const clashDates = [...new Set(conflicts.clashes.map((c) => c.date))].sort();
   const holders = new Set();
-  const standing = standingBookings(venueId, roomId);
+  const standing = standingBookings(venueId, roomId, exceptApplicationId);
   for (const clash of conflicts.clashes) {
     const owner = standing.find((s) => s.occurrences.some((o) => o.bookingId === clash.bookingId));
     if (owner) holders.add(owner.organizer.org ?? owner.organizer.name);

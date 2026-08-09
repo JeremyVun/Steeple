@@ -2,12 +2,8 @@
 // given moment. Pure framing math: no transitions, no input. Every function is
 // allocation-free (module scratch vectors, single-threaded by construction).
 //
-// Two camera languages share this file (CONTRACT.md §3.1):
-//   diorama — low, theatrical, long-lens staging; lateral drift for layer parallax.
-//   atlas   — the painted miniature seen from a gentle, higher drifting orbit.
-//
 // All village framing derives from the bounding box of world.anchors, never from
-// hardcoded extents: the world stages and compresses arrangement per style.
+// hardcoded extents.
 
 import * as THREE from 'three';
 import { state } from '../core/bus.js';
@@ -26,59 +22,33 @@ const _subject = new THREE.Vector3();
 const _corner = new THREE.Vector3();
 const _pad = new THREE.Vector3();
 
-/** Per-style camera language. Angles in degrees, distances in world units. */
-const STYLES = {
-  diorama: {
-    // Long lens, low horizon, wide lateral drift: paper layers slide past each other.
-    arrival: { fov: 44, elevation: 10, fill: 0.70, fx: 0, fy: -0.26, roll: 0.5 },
-    village: { fov: 48, elevation: 10.5, fill: 0.94, fx: 0, fy: -0.06, roll: 0.35 },
-    venue: { fov: 37, elevation: 16, radius: 34, fill: 0.98, fx: 0.24, fy: -0.05, roll: 0.3 },
-    room: { fov: 40, elevation: 19, radius: 10.2, fill: 0.70, fx: 0.31, fy: 0.03, roll: 0.2 },
-    // Wave 2. `apply` is the room card at writing distance; `letter` is the
-    // church the letter is addressed to, held further off so the sheet can sit
-    // over it; `journal` keeps the whole village breathing behind the book;
-    // `desk` stands on the church's own step and looks out at the valley.
-    apply: { fov: 36, elevation: 16, radius: 10.2, fill: 0.84, fx: 0.34, fy: 0.04, roll: 0.12 },
-    letter: { fov: 37, elevation: 17, radius: 34, fill: 0.74, fx: 0.33, fy: -0.03, roll: 0.18 },
-    journal: { fov: 47, elevation: 12, fill: 1.02, fx: 0.30, fy: -0.03, roll: 0.28 },
-    desk: { fov: 50, elevation: 11, fx: 0.46, fy: -0.06, roll: 0.16, eye: 0.26, hold: 0.74, swing: 0.55 },
-    orbit: { mode: 'sweep', swing: 0.34, rate: 0.055, rate2: 0.031 },
-    arc: { lift: 0.13, bow: 0.15 },
-    tilt: {
-      village: 0.55, venue: 0.7, room: 0.95, arrival: 0.35,
-      apply: 1.0, letter: 0.8, journal: 0.62, desk: 0.5,
-    },
-    // Paper theatre: standing back among the foreground flats is the point.
-    reach: 1.42,
+/** Atlas camera language. Angles in degrees, distances in world units. */
+const TUNE = {
+  arrival: { fov: 42, elevation: 13, fill: 0.66, fx: 0, fy: -0.26, roll: 0 },
+  // A wider lens keeps the whole valley in one frame from inside its own rim.
+  village: { fov: 52, elevation: 20, fill: 0.80, fx: 0, fy: -0.04, roll: 0 },
+  venue: { fov: 40, elevation: 20, radius: 34, fill: 0.98, fx: 0.24, fy: -0.04, roll: 0 },
+  room: { fov: 42, elevation: 22, radius: 10.2, fill: 0.68, fx: 0.31, fy: 0.03, roll: 0 },
+  apply: { fov: 38, elevation: 18, radius: 10.2, fill: 0.82, fx: 0.34, fy: 0.04, roll: 0 },
+  letter: { fov: 40, elevation: 21, radius: 34, fill: 0.74, fx: 0.33, fy: -0.03, roll: 0 },
+  journal: { fov: 50, elevation: 21, fill: 0.72, fx: 0.30, fy: -0.03, roll: 0 },
+  desk: { fov: 52, elevation: 12, fx: 0.46, fy: -0.05, roll: 0, eye: 0.26, hold: 0.74, swing: 0.55 },
+  orbit: { rate: 0.031, rate2: 0.019 },
+  arc: { lift: 0.18, bow: 0.08 },
+  tilt: {
+    village: 0.85, venue: 0.75, room: 1.0, arrival: 0.5,
+    apply: 1.0, letter: 0.85, journal: 0.8, desk: 0.55,
   },
-  atlas: {
-    // Gentle high orbit over honest geography; tilt-shift model-village intimacy.
-    arrival: { fov: 42, elevation: 13, fill: 0.66, fx: 0, fy: -0.26, roll: 0 },
-    // A wider lens keeps the whole valley in one frame from inside its own rim.
-    village: { fov: 52, elevation: 20, fill: 0.80, fx: 0, fy: -0.04, roll: 0 },
-    venue: { fov: 40, elevation: 20, radius: 34, fill: 0.98, fx: 0.24, fy: -0.04, roll: 0 },
-    room: { fov: 42, elevation: 22, radius: 10.2, fill: 0.68, fx: 0.31, fy: 0.03, roll: 0 },
-    apply: { fov: 38, elevation: 18, radius: 10.2, fill: 0.82, fx: 0.34, fy: 0.04, roll: 0 },
-    letter: { fov: 40, elevation: 21, radius: 34, fill: 0.74, fx: 0.33, fy: -0.03, roll: 0 },
-    journal: { fov: 50, elevation: 21, fill: 0.72, fx: 0.30, fy: -0.03, roll: 0 },
-    desk: { fov: 52, elevation: 12, fx: 0.46, fy: -0.05, roll: 0, eye: 0.26, hold: 0.74, swing: 0.55 },
-    orbit: { mode: 'orbit', swing: 0, rate: 0.031, rate2: 0.019 },
-    arc: { lift: 0.18, bow: 0.08 },
-    tilt: {
-      village: 0.85, venue: 0.75, room: 1.0, arrival: 0.5,
-      apply: 1.0, letter: 0.85, journal: 0.8, desk: 0.55,
-    },
-    // Honest geography: stay inside the valley's own rim, never above the map.
-    reach: 0.84,
-  },
+  // Stay inside the valley's own rim, never above the map.
+  reach: 0.84,
 };
 
-/** The staged world faces +z: that is the front of the diorama and the default view. */
+/** The staged world faces +z by default. */
 const FRONT_AZ = 0;
 
 export function createCompositions(engine, world) {
   const camera = engine.camera;
-  const tune = STYLES[state.style] ?? STYLES.diorama;
+  const tune = TUNE;
 
   const bounds = new THREE.Box3();
   const center = new THREE.Vector3();
@@ -259,16 +229,13 @@ export function createCompositions(engine, world) {
   // whips the camera to the far side of the valley.
   let ambientAz = FRONT_AZ;
 
-  /** Slow ambient azimuth: a bounded lateral sweep (diorama) or a full orbit (atlas). */
+  /** Slow ambient orbit around the village. */
   function ambientAzimuth(elapsed) {
     const o = tune.orbit;
     if (state.reducedMotion) {
       ambientAz = FRONT_AZ + nudge.az;
-    } else if (o.mode === 'orbit') {
-      ambientAz = FRONT_AZ + elapsed * o.rate + Math.sin(elapsed * o.rate2) * 0.12 + nudge.az;
     } else {
-      const swing = Math.sin(elapsed * o.rate) * 0.62 + Math.sin(elapsed * o.rate2 + 1.1) * 0.38;
-      ambientAz = FRONT_AZ + swing * o.swing + nudge.az;
+      ambientAz = FRONT_AZ + elapsed * o.rate + Math.sin(elapsed * o.rate2) * 0.12 + nudge.az;
     }
     return ambientAz;
   }

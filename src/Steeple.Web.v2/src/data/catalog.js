@@ -229,6 +229,15 @@ function profileFrom(venue) {
     addressLine: [venue.addressLine, [venue.suburb, venue.postcode].filter(Boolean).join(' ')]
       .filter(Boolean)
       .join(', '),
+    // …and the parts, kept as they arrived. Only ui/metadata.js reads them: a
+    // schema.org PostalAddress is a structure, not a line, and a run-together
+    // street-suburb-postcode string would be a claim in the wrong field.
+    // `venueType` is there for the same reason — a church venue is a
+    // PlaceOfWorship in structured data and a Place otherwise, and guessing
+    // from the name is not a fact.
+    street: venue.addressLine ?? null,
+    postcode: venue.postcode ?? null,
+    venueType: venue.venueType ?? null,
     suburb: venue.suburb,
     lat: venue.latitude,
     lng: venue.longitude,
@@ -429,6 +438,9 @@ function noteListing(listing, fromSeed) {
       lat: profile.lat ?? listing.lat,
       lng: profile.lng ?? listing.lng,
       address: profile.addressLine,
+      street: profile.street,
+      postcode: profile.postcode,
+      venueType: profile.venueType,
       description: profile.description,
       parking: profile.parkingInfo,
       transit: profile.transitInfo,
@@ -475,9 +487,20 @@ export const heldResults = () => lastItems;
 const reads = new Map();
 const whole = new Set();
 
+// The same promise for one room. Three surfaces ask about the same space in the
+// same frame on a listing route — the sheet paints from it, the venue's own
+// assembly reads every room it has, and the request composer wants its hours —
+// and the answer does not change while somebody is reading it. Held answers are
+// what the document's own bootstrap primes (see the foot of this file), which
+// is what makes a direct `/space/…` visit cost no listing read at all.
+const listings = new Map();
+const listingReads = new Map();
+
 export function forgetVenues() {
   reads.clear();
   whole.clear();
+  listings.clear();
+  listingReads.clear();
 }
 
 /**
@@ -582,8 +605,25 @@ export async function searchListings(query = {}, { signal = null } = {}) {
 /**
  * One room, in full: the listing page's truth. Null when it is not published;
  * throws when steeple answered and refused (`readFailure`).
+ *
+ * Read once per room and held (see `listings` above). A caller that arrives
+ * while the question is still on the wire joins that question rather than
+ * asking it again — which is what turns the three simultaneous askers of a
+ * cold listing route into one request, and none at all when the document
+ * brought the answer with it.
  */
-export async function getListing(venueSlug, roomSlug) {
+export function getListing(venueSlug, roomSlug) {
+  const key = `${venueSlug}/${roomSlug}`;
+  if (listings.has(key)) return Promise.resolve(listings.get(key));
+  let reading = listingReads.get(key);
+  if (!reading) {
+    reading = readListing(venueSlug, roomSlug, key).finally(() => listingReads.delete(key));
+    listingReads.set(key, reading);
+  }
+  return reading;
+}
+
+async function readListing(venueSlug, roomSlug, key) {
   const listing = await live(
     async () => {
       const detail = await api.getListingBySlug(venueSlug, roomSlug);
@@ -606,6 +646,10 @@ export async function getListing(venueSlug, roomSlug) {
   // behind it is the only place the address, the parking and the transit are
   // ever said. Keeping it is what lets a sheet open on a venue nobody searched.
   if (listing) noteListing(listing, readingSeed);
+  // Only steeple's own answer is kept. The seed standing in for an absent
+  // steeple is the shape of this moment, not of the room, and its null means
+  // "the bundle has never heard of this" — which is not "steeple says no".
+  if (!readingSeed) listings.set(key, listing);
   return listing;
 }
 
@@ -699,3 +743,83 @@ export async function getGeofence() {
 
 /** Where the last answer came from — additive, for harnesses and diagnostics. */
 export const isLive = () => !readingSeed;
+
+// ─── the listing the document already brought ────────────────────────────────
+//
+// A direct `/space/{venue}/{room}` is answered by steeple with the listing
+// written out in words, and the same RoomDetail it would have served on the
+// wire is left in the page as inert JSON (design SEO-D5). Reading it here is
+// what makes that visit cost nothing twice: the map knows the venue before it
+// draws its pins, the sheet does not wait for a request it already has the
+// answer to, and `listing_viewed` is counted once — by the server read that
+// rendered the document — instead of once for the page and again for the app.
+//
+// It is the wire shape, not a second one, so it goes through the very same
+// `listingFrom` every API answer does. Anything that is not that shape is
+// ignored in silence and the ordinary read happens: a boot must never turn on
+// the contents of a script tag.
+//
+// This runs at import, which is before any product surface exists — and in
+// particular before ui/map/index.js asks `knownVenues()` for its pins.
+
+const BOOTSTRAP_ID = 'steeple-listing-bootstrap';
+
+const isText = (value) => typeof value === 'string' && value.trim().length > 0;
+const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * The least a RoomDetail must carry to be worth believing: a named room, a
+ * priced seat count, and a venue that can be put on a map.
+ */
+function isRoomDetail(detail) {
+  if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return false;
+  const venue = detail.venue;
+  if (!venue || typeof venue !== 'object' || Array.isArray(venue)) return false;
+  if (detail.photos !== undefined && !Array.isArray(detail.photos)) return false;
+  return (
+    isText(detail.roomSlug) &&
+    isText(detail.roomName) &&
+    isNumber(detail.capacity) &&
+    isNumber(detail.pricePerHour) &&
+    isText(detail.currency) &&
+    isText(venue.slug) &&
+    isText(venue.name) &&
+    isNumber(venue.latitude) &&
+    isNumber(venue.longitude)
+  );
+}
+
+function adoptListingBootstrap() {
+  if (typeof document === 'undefined') return null;
+  const node = document.getElementById(BOOTSTRAP_ID);
+  // Marked rather than removed. The block sits beside the document's own
+  // `application/ld+json`, which is the crawler's copy of the same facts and
+  // must survive the handoff untouched — and a mark is what makes a second
+  // call (a hot module reload, a second import) a no-op rather than a re-read.
+  if (!node || node.hasAttribute('data-steeple-consumed')) return null;
+  node.setAttribute('data-steeple-consumed', '');
+
+  let detail;
+  try {
+    detail = JSON.parse(node.textContent ?? '');
+  } catch {
+    return null;
+  }
+  if (!isRoomDetail(detail)) return null;
+
+  const listing = listingFrom(detail);
+  // NOT provisional. The seeded roster is swept the first time steeple itself
+  // answers with venues (`noteSummaries`), and a venue left provisional would
+  // be swept with it — unpinning the very venue this page is about, a moment
+  // after the opening search returns.
+  noteListing(listing, false);
+  listings.set(`${listing.venueSlug}/${listing.roomSlug}`, listing);
+  return listing;
+}
+
+/**
+ * The listing this document was rendered for, or null on an ordinary boot.
+ * Read by ui/metadata.js, which has one thing to decide with it: whether the
+ * head it is looking at was written by steeple for the address in the bar.
+ */
+export const bootstrappedListing = adoptListingBootstrap();

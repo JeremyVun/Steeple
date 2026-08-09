@@ -27,9 +27,9 @@ secret skip the check. Rate limited per IP (`auth`; refresh has its own policy b
 **Development only:** provider `"dev"` accepts `idToken` = `email` or `email|Display Name`
 (no signature) for the local dev loop and automated playtests. Its verifier is registered
 solely when `Auth:DevLoginEnabled` is true (`appsettings.Development.json`); everywhere else
-provider `dev` → `401 invalid_id_token`. The deprecated Web v1 BFF pairs it with a dev sign-in
-form on `/login` + `POST /auth/dev/callback` behind the same-named Web config flag. Active web
-v2 instead calls this API contract from its in-flow identity step through the Vite dev proxy.
+provider `dev` → `401 invalid_id_token`. The retired v1 BFF paired it with a dev sign-in
+form; that source lives in Git history. Active web v2 calls this API contract from its in-flow
+identity step through the Vite dev proxy.
 
 Errors: `401 invalid_id_token`, `403 turnstile_failed`, `409 use_original_provider` (the
 verified email already belongs to an account on the other provider — no auto-linking),
@@ -82,6 +82,17 @@ so a grace entry can never hand out a pair for a session that has just been kill
 
 A restart mid-race, or a second API instance, degrades to the old behaviour — the losing tab is
 signed out — never to a security hole, because the conditional update is still the arbiter.
+
+### Web profile and tab coordination
+
+The web keeps the access token and `GET /me` profile in module memory only. On every document
+boot it presents the httpOnly refresh cookie once, then reads `GET /me`; localStorage and
+sessionStorage contain neither identity/email nor a session tombstone. Tabs announce only opaque
+session-in/session-out state over `BroadcastChannel`. A tab hearing session-in refreshes the shared
+cookie and fetches its own profile; a tab hearing session-out drops memory without making another
+refresh request. Retired `steeple-village-session` and `steeple-village-store:*` keys are purged at
+module boot and sign-out.
+
 ### `GET /api/v1/me` ✅ — profile + `agreements: [{docType, version, acceptedAtUtc}]`.
 ### `DELETE /api/v1/me` ✅ — account deletion (anonymize + revoke all sessions; Apple 5.1.1(v) requirement).
 ### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere"). Accepts

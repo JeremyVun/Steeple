@@ -1,5 +1,14 @@
 # Steeple — The Village · Interface Contract & Art Direction
 
+> **Superseded 2026-08-08 — the hash routes named here are gone from the product.**
+> `src/core/router.js` owns clean History-API paths (`/browse`, `/venue/{v}`,
+> `/space/{v}/{r}`, `/apply/{v}/{r}`, `/journal`, `/desk[/{v}]`, `/letter/{id}`);
+> every `#/…` shape it names still *opens* and is replaced in place by its clean
+> path, with no deadline for removal. This brief is kept as the record of what
+> was asked for at the time — see `docs/backlog/seo/design.md` SEO-D1/D2 and
+> `docs/contracts/web.md` for what is true now.
+
+
 This is the binding contract for the three parallel subsystems (**world**, **journey**,
 **interface**) and the integration pass. If your code disagrees with this document, your
 code is wrong. The scaffold files in `src/core/`, `src/data/`, `src/main.js`, and
@@ -58,7 +67,7 @@ no dark patterns. The 3D translation:
   — the world dissolves into the page.
 - **Painted miniature, not photorealism**: stylized low-poly forms with hand-tuned
   vertex color gradients, soft long-shadow golden-hour light, gentle bloom, a hint of
-  vignette. Think storybook diorama / tilt-shift model village. No textures from photos,
+  vignette. Think storybook / tilt-shift model village. No textures from photos,
   no PBR-realism, no gray concrete.
 - **Each church is a distinct character** matching its data: Grace Community (large
   fellowship hall, welcoming, classic white steeple), Vienna Presbyterian (historic,
@@ -73,43 +82,14 @@ no dark patterns. The 3D translation:
   names/prices/moments; platform sans for labels/body. Never body text in serif; never
   uppercase the serif.
 
-### 3.1 Amendment — presentation styles are runtime explorations
+### 3.1 Amendment — Atlas is canonical
 
-This is a prototype: contrasting presentation ideas should *coexist* behind a runtime
-feature flag so they can be compared side by side, not fight for one slot. "3D" never
-means "a literal 3D map viewed from above" — every style must feel artistically
-composed (cinematic framing, forced perspective, layering, parallax are all welcome
-tools) — but no single aesthetic is dictated.
-
-**Mechanism (already in `core/bus.js` — frozen):** `state.style` reads the `?style=`
-URL param (default `'diorama'`); `setStyle(style)` reloads with the hash preserved, so
-the current deep-linked view survives a comparison flip. Never rebuild live — a style
-is fixed for the page's lifetime.
-
-**Canonical styles (both required):**
-
-- `diorama` — theatrical paper cut-out: depth-stacked flat scenery layers that
-  parallax as the camera drifts, pop-up-book staging (entering a venue feels like a
-  page opening), forced perspective, low staged camera angles, foreground layers
-  framing the shot.
-- `atlas` — the continuous painted miniature village of §3: rolling sage terrain,
-  honest geography, gentle drifting orbit, tilt-shift model-village intimacy.
-
-Additional style ideas are welcome if cheap to add given shared assets (e.g. a dusk
-variant) — extra styles must never dilute the quality of the canonical two.
-
-**Division of labor:** World implements both styles sharing the same church models,
-props, data, and the World interface — what changes is staging (layered planes vs
-terrain), sky/fog treatment, and arrangement compression. Relative geographic
-*arrangement* stays honest in every style (Vienna pair close, Oakton west, Dunn Loring
-east, Merrifield southeast); exact `data/venues.js` coordinates are a starting
-arrangement, not a survey requirement — `World.anchors` must always reflect where
-things actually stand. Journey may branch camera language on `state.style` (low
-theatrical drift for diorama; higher gentle orbit for atlas) and should derive framing
-from the anchors' bounding box, never hardcoded extents. Interface adds a small,
-unobtrusive style switcher (visible past arrival) that calls `setStyle`, and keeps
-panel design shared across styles. Verification screenshots are required per style
-(`?style=diorama&q=low` and `?style=atlas&q=low`).
+**Superseded 2026-08-09:** the runtime scenery comparison was retired by owner
+decision. Atlas is the one village presentation: continuous rolling terrain, honest
+relative geography, a gentle orbit, and tilt-shift model-village intimacy. World and
+Journey derive framing from `World.anchors`; there is no scenery-selection state or
+query flag. The flat/world-off path remains because it is a functional performance,
+accessibility, and deep-link fallback rather than a competing art direction.
 
 ## 4. Module contracts
 

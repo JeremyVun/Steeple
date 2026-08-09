@@ -24,6 +24,7 @@
 Contracts that were never in this file but belong to the same index:
 `contracts/api-ports.md` (API module map + port→adapter table), `contracts/persistence.md`
 (domain model, DB-enforced invariants, geofence), `contracts/web.md` (Steeple.Web.v2 seams),
-`contracts/mobile.md` (the former `MOBILE_CONTRACTS.md`).
+`contracts/seo.md` (the crawler surface — robots, sitemap policy, metadata, index rules; was
+`docs/SEO.md` until 2026-08-08), `contracts/mobile.md` (the former `MOBILE_CONTRACTS.md`).
 
 Start at `docs/contracts/README.md`.

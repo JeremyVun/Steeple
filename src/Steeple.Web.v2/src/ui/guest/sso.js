@@ -647,12 +647,12 @@ export function createIdentityStep({
       // after: an expired access token refreshes itself here, and a dead one
       // puts the panel back to signing in with nothing lost. The same read
       // answers what this person still owes an acceptance for.
-      if (session.isSignedIn()) {
-        session.fetchCurrentUser().then(() => {
+      session.fetchCurrentUser().then(() => {
+        if (session.isSignedIn()) {
           render();
           readAgreements();
-        });
-      }
+        }
+      });
     },
   };
 }

@@ -519,7 +519,12 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application!], ct).ConfigureAwait(false);
-        if (!IsUndecided(application!.Status) && application.Status != ApplicationStatus.CounterOffered)
+        // An approval does not end the correspondence: a booking still needs a
+        // way to say "the side door is locked, use the hall entrance". Declined,
+        // withdrawn and expired applications are closed and stay closed.
+        var open = IsUndecided(application!.Status)
+            || application.Status is ApplicationStatus.CounterOffered or ApplicationStatus.Approved;
+        if (!open)
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -531,7 +536,8 @@ public sealed class ApplicationService : IApplicationService
         // The ask/answer rhythm drives the sub-state: a provider question parks the application
         // in NeedsInfo; the organizer's answer puts it back in the provider's court (Pending).
         // While CounterOffered the thread flows but must NOT flip status — the ball stays with the
-        // organizer until they accept/decline the counter (CONTRACTS §5).
+        // organizer until they accept/decline the counter (CONTRACTS §5). Approved is the same for
+        // the opposite reason: the ball is with nobody, and a message is not a new question.
         if (application.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
         {
             application.Status = callerIsOrganizer
@@ -551,10 +557,11 @@ public sealed class ApplicationService : IApplicationService
             ct).ConfigureAwait(false);
 
         var senderName = callerIsOrganizer ? application.Organizer!.DisplayName : application.Room!.Venue!.Name;
+        var subject = application.Status == ApplicationStatus.Approved ? "booking" : "request";
         var email = new EmailContent(
             Subject: $"New message about {application.Room!.Name}",
             TextBody:
-                $"{senderName} wrote about the request for {application.Room.Name} at {application.Room.Venue!.Name}:\n\n" +
+                $"{senderName} wrote about the {subject} for {application.Room.Name} at {application.Room.Venue!.Name}:\n\n" +
                 $"\"{body}\"\n\n" +
                 $"Reply from your Steeple inbox.");
 

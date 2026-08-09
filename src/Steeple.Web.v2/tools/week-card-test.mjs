@@ -12,7 +12,7 @@
 //
 //   node tools/week-card-test.mjs "http://localhost:5323/?q=low"
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at as routeUrl, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -87,7 +87,7 @@ async function drag(day, fromSlot, toSlot) {
 console.log(`\n──── the week card under a real mouse · ${url} ────`);
 
 await page.goto('about:blank');
-await page.goto(`${url}#/apply/grace-community-vienna/fellowship-hall`, { waitUntil: 'networkidle0' });
+await page.goto(routeUrl(url, routes.apply('grace-community-vienna', 'fellowship-hall')), { waitUntil: 'networkidle0' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
 await page.evaluate('__steeple.store.resetDemo()');
 await page.evaluate('__steeple.roll.set(1)');

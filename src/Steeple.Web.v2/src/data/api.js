@@ -75,6 +75,11 @@ function queryString(params) {
   return query ? `?${query}` : '';
 }
 
+/** `GET /flags` — the public boolean snapshot evaluated for this client. */
+export function getPublicFlags({ platform = 'web', build = null } = {}) {
+  return get('/flags', { platform, build });
+}
+
 async function get(path, params, { notFoundAsNull = false, accessToken = null, signal = null } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);

@@ -15,7 +15,10 @@
   *(built 2026-07-04 — ROADMAP Phase 4)* returns the **public** flags evaluated for the caller's
   context as `{key: bool}` — clients never talk to the flags service directly, and private/ops
   flags never leave the backend. The public set is an explicit hardcoded allowlist in
-  `PublicFlagsService`: `mobile.apply_enabled`, `mobile.manage_enabled`, `mobile.force_upgrade`.
+  `PublicFlagsService`: `payments.enabled`, `mobile.apply_enabled`, `mobile.manage_enabled`,
+  `mobile.force_upgrade`. Web uses `payments.enabled` to omit the account's payment-method
+  block, including **Add a card**, when the payments rails are off; a missing flag snapshot
+  fails closed.
   The `platform`/`build` query params feed rule conditions server-side, so value-shaped concerns
   stay boolean on the wire — today only `mobile.force_upgrade` reads `build` (a config-backed
   `Flags:MobileMinSupportedBuild` threshold: enabled when `build` is present and below it). Like
@@ -42,8 +45,18 @@ public `mobile.*` rows. All default **off** in `appsettings.json` and are **on**
   forwarding headers are ignored. nginx applies a 5 req/s API ceiling (burst 30); the API adds
   a 300/min global account/IP ceiling plus 120/min/IP on discovery reads.
 - **Sub-path hosting:** web v2 uses document-relative build assets and API URLs behind a
-  stripped proxy prefix. Admin maps `X-Forwarded-Prefix` to `PathBase` and derives emitted
-  URLs from `~/`-relative helpers — see CLAUDE.md.
+  stripped proxy prefix; since the clean routes (2026-08-08) `index.html` carries
+  `<base href="./">`, which the client router freezes to its absolute prefix before the first
+  history write, and API-rendered documents emit an explicit prefix-aware `<base>`.
+  **Crawler-facing URLs (canonicals, `og:url`, sitemap locs, the robots `Sitemap:` line) come
+  only from `Seo:PublicBaseUrl` — a prefix deployment requires it; forwarded headers are never
+  consulted** (`docs/contracts/seo.md`). Admin maps `X-Forwarded-Prefix` to `PathBase` and
+  derives emitted URLs from `~/`-relative helpers — see CLAUDE.md.
+- **Web deep links** ✅ *(2026-08-08)*: a shared `/space/{venueSlug}/{roomSlug}` URL is a real
+  server document that opens the map product at that URL (`docs/contracts/seo.md`); email CTAs
+  keep the `?goto=` grammar because the rest of the registry's paths (`/inbox/...`,
+  `/bookings/{id}`) are deliberately not web routes. Unknown web paths are a real 404, never
+  the shell at 200.
 - **Deep links** 🔲 *(implemented only in deprecated web v1; replacement required in v2)*:
   v1 can serve
   `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`, config-driven

@@ -29,13 +29,20 @@ public sealed class ListingsApiController : ControllerBase
     private readonly IListingService _listings;
     private readonly IGeofencePolicy _geofence;
     private readonly IFeatureFlags _flags;
+    private readonly IPublicBaseResolver _publicBase;
     private readonly TimeProvider _clock;
 
-    public ListingsApiController(IListingService listings, IGeofencePolicy geofence, IFeatureFlags flags, TimeProvider clock)
+    public ListingsApiController(
+        IListingService listings,
+        IGeofencePolicy geofence,
+        IFeatureFlags flags,
+        IPublicBaseResolver publicBase,
+        TimeProvider clock)
     {
         _listings = listings;
         _geofence = geofence;
         _flags = flags;
+        _publicBase = publicBase;
         _clock = clock;
     }
 
@@ -127,54 +134,41 @@ public sealed class ListingsApiController : ControllerBase
         Ok(await _listings.GetSitemapEntriesAsync(ct));
 
     /// <summary>
-    /// The same rows as <c>sitemap</c>, rendered as sitemaps.org XML for crawlers (docs/SEO.md
-    /// item 1). Web v2 is a static bundle behind nginx and has no server of its own to render
+    /// The same rows as <c>sitemap</c>, rendered as sitemaps.org XML for crawlers
+    /// (docs/contracts/seo.md). Web v2 is a static bundle behind nginx and has no server of its own to render
     /// this, so the API — the only thing that knows which listings are published — renders it and
     /// the edge aliases <c>/sitemap.xml</c> onto this route.
     /// </summary>
     /// <remarks>
-    /// URLs are absolute and built from the forwarded request, so one API serves whatever public
-    /// origin (and stripped sub-path prefix) it is deployed behind without new configuration.
+    /// URLs are absolute and come from the configured public base — the same resolver the listing
+    /// documents use, so the two crawler surfaces can never advertise different origins for the
+    /// same room (docs/backlog/seo/design.md §7).
     /// </remarks>
     [HttpGet("sitemap.xml")]
     [ResponseCache(Duration = 3600)]
     public async Task<IActionResult> SitemapXml(CancellationToken ct)
     {
         var entries = await _listings.GetSitemapEntriesAsync(ct);
-        var baseUrl = PublicBaseUrl();
+        var publicBase = _publicBase.Resolve(Request);
 
         XNamespace ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
         var urls = new List<XElement>
         {
             new(ns + "url",
-                new XElement(ns + "loc", $"{baseUrl}/"),
+                new XElement(ns + "loc", publicBase.Absolute(string.Empty)),
                 new XElement(ns + "changefreq", "daily"),
                 new XElement(ns + "priority", "1.0")),
         };
+        // The same path builder the listing document's canonical uses, so a loc and the canonical
+        // it leads to cannot be spelled differently (SEO-D9).
         urls.AddRange(entries.Select(entry => new XElement(ns + "url",
-            new XElement(ns + "loc", $"{baseUrl}/space/{Uri.EscapeDataString(entry.VenueSlug)}/{Uri.EscapeDataString(entry.RoomSlug)}"),
+            new XElement(ns + "loc", publicBase.Absolute(WebDocumentRenderer.ListingPath(entry.VenueSlug, entry.RoomSlug))),
             new XElement(ns + "lastmod", entry.LastModifiedUtc.UtcDateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
             new XElement(ns + "changefreq", "weekly"),
             new XElement(ns + "priority", "0.8"))));
 
         var document = new XDocument(new XDeclaration("1.0", "utf-8", null), new XElement(ns + "urlset", urls));
         return Content(document.Declaration + Environment.NewLine + document, "application/xml", Encoding.UTF8);
-    }
-
-    /// <summary>
-    /// The origin this API is being reached at, as the public sees it: the forwarded scheme,
-    /// host and stripped prefix an edge proxy supplies, falling back to the request's own.
-    /// </summary>
-    private string PublicBaseUrl()
-    {
-        var scheme = First(Request.Headers["X-Forwarded-Proto"]) ?? Request.Scheme;
-        var host = First(Request.Headers["X-Forwarded-Host"]) ?? Request.Host.Value;
-        var prefix = (First(Request.Headers["X-Forwarded-Prefix"]) ?? Request.PathBase.Value ?? string.Empty)
-            .TrimEnd('/');
-        return $"{scheme}://{host}{prefix}";
-
-        static string? First(StringValues values) =>
-            values.Count == 0 ? null : values[0]?.Split(',')[0].Trim() is { Length: > 0 } one ? one : null;
     }
 
     /// <summary>Served-area context (name, center, beachhead box) for framing the map.</summary>

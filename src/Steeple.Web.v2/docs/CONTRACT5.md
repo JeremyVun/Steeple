@@ -103,7 +103,7 @@ finalizing (A lands first).
    mounted behind the scrim; leaving `apply` restores it untouched. Diagnose
    the current regression; if the root cause is in `src/ui/guest/*` (C's
    files), do not edit — report precisely and message the orchestrator.
-4. Both panels verified in both `?style=` worlds and with `?world=off`.
+4. Both panels verified with canonical Atlas and with `?world=off`.
 
 ## §4 Agent C — booking sheet, calendar, identity wire
 

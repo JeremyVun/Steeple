@@ -69,17 +69,20 @@ one of three states:
 
 | State | Who owns the press | What is on the page |
 | --- | --- | --- |
-| **printed arrival** | the markup | the three controls are real `<a href="#/browse">`/`#/desk` links, so a press before any script records its destination in `location.hash` — the recovery truth across a reload |
+| **printed arrival** | the markup | the three controls are real `<a href="browse">`/`href="desk"` links — base-relative clean paths, so one build serves `/` and a stripped prefix. Before any script a press is an ordinary navigation to a document the server answers; from the frame `core/intent.js` is armed it is answered in place, with the same path written into the address bar and the query kept. Either way the URL is the recovery truth across a reload |
 | **product-first (flat)** | `src/core/intent.js` → `main.js` | somebody asked. The product opens at once with `roll = 1`, canvas and poster removed, `data-world="off"`; the village is never started, and one already downloading is abandoned. If the visitor later returns through the wordmark, the poster is restored synchronously and Three/world are loaded only after the return roll lands. Explicit `?world=off` and `build:flat` visits never hydrate |
 | **live village** | `journey/roll.js` | nobody asked in time. Poster → canvas crossfade, and a press is the 1.28s cinematic roll it has always been |
 
 `src/core/intent.js` is the one thing that answers a press before the product
-exists. It is the entry's first import and imports **nothing** — no bus, no
-roll, no session, no store, nothing of Leaflet, the interface chunk or three.js
-— so it is armed a whole 105KB-gzip chunk earlier than the handlers used to be.
-It records `{destination, requestedAt}`, marks the pressed control
-`data-working="on"` (one slow breath, `styles/main.css`) and leaves the native
-navigation alone. `main.js` claims that intent **exactly once**; after the roll
+exists. It is the entry's first import and imports only `core/router.js`, which
+imports **nothing** — no bus, no roll, no session, no store, nothing of Leaflet,
+the interface chunk or three.js — so it is armed a whole 105KB-gzip chunk
+earlier than the handlers used to be. It records `{destination, requestedAt}`,
+marks the pressed control `data-working="on"` (one slow breath,
+`styles/main.css`) and writes the pressed route into the address bar itself:
+since the controls became real paths, letting the native navigation run would
+throw away a boot already in flight, so the same URL is written by hand with the
+query kept. `main.js` claims that intent **exactly once**; after the roll
 is genuinely live it calls `releaseArrival()` and from then on a press is
 prevented and handed to `ui/arrival.js`'s handler instead. `reportArrival()` is
 the named seam P5's analytics batcher wires into (`entry: direct | cinematic`),
@@ -89,7 +92,7 @@ Order on the wire: the interface chunk goes first and **alone**. `engine.js`,
 `world/index.js` and `journey/index.js` are not started until the interface is
 interactive, the browser has an idle opportunity (`requestIdleCallback` capped
 at 600ms so a busy main thread cannot postpone the village forever), and no
-intent or hash deep link exists. A dynamic `import()` in flight cannot be called
+intent or cold route exists. A dynamic `import()` in flight cannot be called
 back, so sequencing is the bandwidth control — there is no fetch/blob loader
 faking cancellation. A press during those transfers lets them finish and
 abandons that boot generation: `main.js` checks `taken` at every await, and no
@@ -119,7 +122,6 @@ three places; change them together.
 
 | Flag | Values | What it does |
 | --- | --- | --- |
-| `?style=` | `atlas` (default), `diorama` | Which scenery the world is staged in. |
 | `?q=` | `high` (default), `low` | `low` skips postprocessing and thins the scatter. |
 | `?tilt=` | `on`/`1`/`true`, `off`/`0`/`false` | Tilt-shift strength. Absent leaves the tuned default. |
 | `?map=` | `simple` (default), `dusk` | Which toning the discovery map's tiles are given. |
@@ -130,31 +132,46 @@ three places; change them together.
 
 Every flag is read once at boot, in `src/core/bus.js`, onto `state`; nothing
 downstream reads the URL. A value the flag does not know falls back to the
-default. Switching scenery is by URL (`?style=`) or the debug API's `setStyle`,
-which reloads with the current deep link preserved, so a comparison never loses
-your place — there is no in-product switcher.
+default. Atlas is the canonical village presentation.
 
-### Deep links
+### Routes
 
-- `#/browse` — the map, listing results, and discovery panel
-- `#/venue/<venueId>` — one church and the spaces it rents
-- `#/room/<venueId>/<roomId>` — one space, framed and detailed
-- `#/apply/<venueId>/<roomId>` — writing the request, at the room's own distance
-- `#/journal` — the guest's inbox
-- `#/desk[/<venueId>]` — hosting: requests waiting, spaces listed, their
+Clean History-API paths, translated by `src/core/router.js` — the one file that
+reads or writes a location (2026-08-08, `docs/backlog/seo/design.md` SEO-D1):
+
+- `/` — the title page over the village
+- `/browse` — the map, listing results, and discovery panel
+- `/venue/<venueSlug>` — one church and the spaces it rents
+- `/space/<venueSlug>/<roomSlug>` — one space, framed and detailed. **The
+  canonical listing URL**: the server renders it as a real document with the
+  room's own metadata, and it is the only indexable route besides `/`
+- `/apply/<venueSlug>/<roomSlug>` — writing the request, at the room's own distance
+- `/journal` — the guest's inbox
+- `/desk[/<venueSlug>]` — hosting: requests waiting, spaces listed, their
   church at their shoulder
-- `#/letter/<applicationId>` — one request opened, in whichever lens it belongs to
+- `/letter/<applicationId>` — one request opened, in whichever lens it belongs to
   (a cold link carries only the application; the store is asked where that is)
 
-e.g. `#/room/grace-community-vienna/fellowship-hall`. Deep links restore state
-on load and the hash follows you as you move.
+e.g. `/space/grace-community-vienna/fellowship-hall`. A press by a person
+pushes one history entry, so Back returns; the initial route, an old-link
+conversion and any correction the app makes on its own behalf replace instead;
+`popstate` applies state and writes nothing. Every write carries the query
+string through, so `?map=`, `?world=off` and `?q=` survive moving
+around.
 
-A **cold** hash load is somebody who has already chosen, so it takes the
+**The old `#/…` shapes still work and have no deadline.** They are compatibility
+entrances, never canonicals: `#/browse` and the retired `#/village` open
+`/browse`, `#/room/<v>/<r>` opens `/space/<v>/<r>`, and each is corrected in
+place with `replaceState` so no duplicate entry or canonical is left behind.
+`tools/router-test.mjs` §2 is the matrix; `tools/route-test.mjs` §3 drives it.
+
+A **cold non-root route** is somebody who has already chosen, so it takes the
 product-first path: no title page, no cinematic, and no village fetched behind
-it (see "How it boots"). A hash set *after* the boot — the way the product moves
-around itself — changes nothing about the village. A suite that needs both a
-route and a world must therefore load without a hash and set it afterwards; the
-reduced-motion section of `tools/world-test.mjs` shows the shape.
+it (see "How it boots"). Moving *after* the boot changes nothing about the
+village. A suite that needs both a route and a world must therefore load at `/`
+and travel afterwards — `fixtures.goRoute(page, path)`, which writes the entry
+and sends the popstate the browser would have; setting `location.hash` does
+nothing at all now, because nothing listens to it.
 
 ## What the village says about your requests
 
@@ -176,20 +193,14 @@ every mark is read from the demo store and re-derived on every change.
   the visitor's first gesture, never under `prefers-reduced-motion`.
 - **Publishing** the Renovation Annex strikes its scaffolding like scenery
   between acts, and the room takes its place on the grass, pickable like the rest.
-- **Placing** a church puts it at its own projected lat/lng, mapped into whichever
-  staging you are looking at by the same fit that carries the five.
+- **Placing** a church puts it at its own projected lat/lng, mapped into the
+  village by the same fit that carries the five.
 
-## The two scenery styles
+## Atlas village
 
-Both draw the same churches, props and data; what changes is the staging.
-
-- **diorama** — a paper theatre. The ground is a stack of cut contour cards,
-  the distance is a set of silhouette flats that parallax as the camera drifts,
-  and entering a church unfolds its own little stage set the way a pop-up book
-  opens on a page. Low, theatrical, long-lens camera.
-- **atlas** — the continuous painted miniature. Rolling sage terrain, honest
-  geography, lanes that go somewhere, a pond catching the low sun, seen from a
-  gentle drifting orbit inside the valley's own rim.
+Atlas is the continuous painted miniature: rolling sage terrain, honest
+geography, lanes that go somewhere, and a pond catching the low sun, seen from
+a gentle drifting orbit inside the valley's own rim.
 
 ## The discovery surface
 
@@ -384,16 +395,25 @@ including price, accessibility, amenities, accepted activities and house rules.
 `prefers-reduced-motion` replaces every camera flight with a soft paper
 crossfade and stills the ambient drift. Text meets WCAG AA on its own paper.
 
+## Quality gates
+
+```bash
+npm test
+npm run audit:prod
+npm run build
+npm run build:flat
+```
+
 ## Verification tools
 
 Rendering is judged by looking, not by whether it throws.
 
 ```bash
 # screenshot any state (prints console errors, exits non-zero if any)
-node tools/shot.mjs "http://localhost:5173/?q=low#/browse" /tmp/village.png --wait 3000
+node tools/shot.mjs "http://localhost:5173/browse?q=low" /tmp/village.png --wait 3000
 
-# a batch of states, in parallel; names prefixed with the style to render
-tools/shots.sh myprefix "diorama-village:/village" "atlas-room:/room/oakton-baptist/gymnasium"
+# a batch of states, in parallel
+tools/shots.sh myprefix "village:/browse" "room:/space/oakton-baptist/gymnasium"
 
 # real mouse/wheel/keyboard through the scene (no debug API)
 node tools/input-test.mjs "http://localhost:5173/?q=low"
@@ -401,7 +421,7 @@ node tools/input-test.mjs "http://localhost:5173/?q=low"
 # real clicks through the printed layer: pills, space cards, modal, switcher
 node tools/ui-test.mjs "http://localhost:5173/?q=low"
 
-# the request layer in the world, both styles: lanterns, ribbons, a sent
+# the request layer in the world: lanterns, ribbons, a sent
 # request in flight, wax at the door, the annex published, a church placed
 node tools/world-test.mjs "http://localhost:5173"
 
@@ -423,7 +443,7 @@ node tools/map-narrow.mjs "http://localhost:5173/?q=low" 390x844
 node tools/panel-fit.mjs "http://localhost:5173/?q=low" 1440x900 [58%]
 
 # real clicks through the sheets: a space card, the request CTA, and the room
-# still on the page behind the booking sheet — both scenery styles
+# still on the page behind the booking sheet
 node tools/panel-input.mjs "http://localhost:5173/?q=low"
 
 # the guest surface's own guards: pins that price the map, the phone's way back
@@ -453,7 +473,7 @@ node tools/guest-test.mjs "http://localhost:5173/?q=low&letter=ledger"
 # ⚠ stale from §1 since D4 — it enters through a desk that no longer opens
 # without a session; read its header before believing a failure
 node tools/host-test.mjs "http://localhost:5173/?q=low"
-node tools/host-test.mjs "http://localhost:5173/?q=low&style=atlas&desk=ledger"
+node tools/host-test.mjs "http://localhost:5173/?q=low&desk=ledger"
 
 # the hosting journey against the real steeple API on :5200 — an empty draft to
 # a room the service holds, then a venue abandoned before its first space, a
@@ -467,7 +487,7 @@ node tools/host-offline-test.mjs "http://localhost:5173/?q=low&world=off"
 node tools/host-session-test.mjs "http://localhost:5173/?q=low&world=off"
 node tools/host-input-test.mjs   "http://localhost:5173/?q=low&world=off"
 
-# the whole story in one session, both styles: a request written and sent, the
+# the whole story in one session: a request written and sent, the
 # world flying it, the church answering, the counter accepted, the village reset
 node tools/wave2-test.mjs "http://localhost:5173" --shots w2
 ```
@@ -490,7 +510,6 @@ src/data/venues.js    the five churches and their spaces — the only source of 
 src/world/            everything you look at
   index.js            builds the world, exposes anchors/pickables/highlight/filter/view
   sky.js backdrop.js  golden-hour light, paper sky, silhouette ridges
-  stage-diorama.js    paper-theatre staging: contour cards, flats, pop-up sets
   stage-atlas.js      terrain, roads, pond, scatter
   churches.js         the five landmarks, each a character built from its data
   rooms.js            a space as a pop-up model of itself
@@ -504,7 +523,7 @@ src/flows/world/      the requests, in the world
   ribbons.js          the committed week, printed on a room's doorstep
   placed.js           churches a host has placed, at their projected lat/lng
 src/journey/          everything you feel but never see
-  composition.js      where the camera wants to be, per style and depth
+  composition.js      where the camera wants to be at each depth
   rig.js              flights, retargeting, the reduced-motion cut
   input.js            pointer, wheel, keyboard, and the way back out of a request
   post.js             bloom, tilt-shift, warm grade, vignette

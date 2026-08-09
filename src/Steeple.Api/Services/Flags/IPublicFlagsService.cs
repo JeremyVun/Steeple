@@ -25,6 +25,7 @@ public sealed class PublicFlagsService : IPublicFlagsService
     /// </summary>
     public static readonly IReadOnlyList<string> PublicFlagKeys =
     [
+        "payments.enabled",
         "mobile.apply_enabled",
         "mobile.manage_enabled",
         "mobile.force_upgrade",

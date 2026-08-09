@@ -275,6 +275,86 @@ export function createAtlas() {
     placeOf.set(venue.id, venue);
   }
 
+  // ── bringing one venue forward ─────────────────────────────────────────────
+  //
+  // Which venue the map has already brought forward, and the visible band it
+  // was brought forward into. Both, because a phone's sheet settles a moment
+  // after the pin is chosen: a venue centred in the whole element and then
+  // covered to the waist is a venue centred under a sheet, which is the same as
+  // not centred at all.
+  //
+  // It starts at null and not at `state.venueId`. That line used to claim a
+  // deep link "starts already accounted for" — it was never true (the route was
+  // applied after this module was built, so the value read was always null) and
+  // under the clean routes it is the venue this page is *about*, so the line
+  // would have suppressed the one pan that matters (design SEO-D6).
+  let centred = null;
+  let centredBand = null;
+
+  /**
+   * Put a venue under the eye. Called from three places and implemented once:
+   * the sheet opening on it, its pin arriving late, and the band it was centred
+   * in changing shape.
+   *
+   * A venue with no marker yet spends no attempt: nothing is recorded, so the
+   * next call — from `setVenues`, when the pin lands — does the work.
+   *
+   * @param {string|null} venueId
+   * @param {{force?: boolean}} options `force` re-centres a venue already
+   *   centred, which only a change in the visible band asks for.
+   */
+  /**
+   * Mark which pin the page is about. Run from both places a pin can become the
+   * current one — the view changing, and the pin itself arriving afterwards —
+   * because a marker created while its venue was already the subject would
+   * otherwise never be told (its venue was chosen before it existed).
+   */
+  function mark(venueId) {
+    for (const [id, marker] of markerFor) {
+      const node = marker.getElement();
+      if (!node) continue;
+      const current = id === venueId;
+      node.classList.toggle('is-current', current);
+      if (current) node.setAttribute('aria-current', 'true');
+      else node.removeAttribute('aria-current');
+      // Leaflet stacks pins by latitude, so two venues at one address stack in
+      // whatever order they arrived and the chosen one can end up under the
+      // others. The one being read about comes to the top.
+      marker.setZIndexOffset(current ? 1000 : 0);
+    }
+  }
+
+  function centre(venueId, { force = false } = {}) {
+    if (!venueId) {
+      centred = null;
+      centredBand = null;
+      return;
+    }
+    if (!force && venueId === centred) return;
+
+    const marker = markerFor.get(venueId);
+    if (!marker) return;
+
+    // Where the pin is on screen is arithmetic against the size Leaflet last
+    // measured, and a deep link asks for this pan at the one moment that size
+    // is least likely to be current — the surface has just been mounted and the
+    // roll has not landed. A stale size does not move the map a little: it
+    // computes the answer in a container that no longer exists and lands the
+    // pin off the sheet entirely (verified on the desktop layout, 2026-08-08).
+    map.invalidateSize({ animate: false });
+
+    // Centred in what can be seen, not in the element: on a phone the bottom of
+    // the map is under the sheet.
+    const point = map.latLngToContainerPoint(marker.getLatLng());
+    const shift = (covered.bottom - covered.top) / 2;
+    map.panTo(map.containerPointToLatLng([point.x, point.y + shift]), {
+      animate: !state.reducedMotion,
+      duration: 0.7,
+    });
+    centred = venueId;
+    centredBand = { ...covered };
+  }
+
   /**
    * The roster, reconciled. Pins are kept rather than rebuilt — a marker torn
    * down and made again loses the focus a keyboard was holding on it — and a
@@ -304,10 +384,32 @@ export function createAtlas() {
     // A frame drawn around venues that were not there yet is the wrong frame,
     // and the first answer is exactly when that happens. It is only redrawn
     // while the framing is still this module's — a visitor's own pan is theirs.
+    let reframed = false;
     const next = L.latLngBounds(roster.map((v) => [v.lat, v.lng]));
-    if (!next.isValid() || next.equals(bounds)) return;
-    bounds = next;
-    if (!ownPan) frameChurches();
+    if (next.isValid() && !next.equals(bounds)) {
+      bounds = next;
+      if (!ownPan) {
+        frameChurches();
+        reframed = true;
+      }
+    }
+
+    // Two reasons to bring the current venue forward from here, and the first
+    // answer of a boot is usually both at once.
+    //
+    // The pin the page is about may only just have arrived: a venue listed this
+    // morning is in neither the seed nor this browser's memory, so the sheet
+    // opened on it long before its marker existed, and this is the first moment
+    // the deep link's pan can happen at all (design SEO-D6).
+    //
+    // And a re-framing pulls back to show every venue there is — which is the
+    // right answer for the roster and the wrong one for somebody reading about
+    // one space, so the venue is brought forward again afterwards rather than
+    // left in the wide shot the frame just cut to.
+    //
+    // Either way it is `centre` that does it: one camera, never a second.
+    mark(state.venueId);
+    centre(state.venueId, { force: reframed });
   }
 
   // ── what a pin says ────────────────────────────────────────────────────────
@@ -370,12 +472,6 @@ export function createAtlas() {
   }
 
   renderPlaced();
-
-  // Which church the map has already brought forward, so a re-render of the
-  // same one never fights a pan the visitor made themselves. A church arrived
-  // at by deep link starts already accounted for: the cold framing shows the
-  // whole area, and only a choice made here brings one pin forward.
-  let centred = state.venueId;
 
   return {
     element,
@@ -448,40 +544,32 @@ export function createAtlas() {
       map.invalidateSize({ animate: false });
       if (reframe && changed && !ownPan && band > 150) {
         frameChurches({ animate: !state.reducedMotion });
+        return;
+      }
+      // The sheet settled after its venue was brought forward. The band it was
+      // centred in is not the band in front of the visitor any more, so it is
+      // centred again in the one that is — unless the map has since become
+      // theirs, in which case it stays exactly where they left it.
+      if (
+        changed
+        && !ownPan
+        && centred
+        && (centredBand?.top !== next.top || centredBand?.bottom !== next.bottom)
+      ) {
+        centre(centred, { force: true });
       }
     },
     focusVenue(venueId) {
       markerFor.get(venueId)?.getElement()?.focus();
     },
     setCurrent(venueId) {
-      for (const [id, marker] of markerFor) {
-        const node = marker.getElement();
-        if (!node) continue;
-        const current = id === venueId;
-        node.classList.toggle('is-current', current);
-        if (current) node.setAttribute('aria-current', 'true');
-        else node.removeAttribute('aria-current');
-        // Leaflet stacks pins by latitude, so two venues at one address stack
-        // in whatever order they arrived and the chosen one can end up under
-        // the others. The one being read about comes to the top.
-        marker.setZIndexOffset(current ? 1000 : 0);
-      }
+      mark(venueId);
       // The sheet that opens beside the map is about a place: bring the place
-      // under the eye rather than leaving the visitor to hunt for its pin.
-      if (venueId && venueId !== centred) {
-        const marker = markerFor.get(venueId);
-        // Centred in what can be seen, not in the element: on a phone the
-        // bottom of the map is under the sheet.
-        if (marker) {
-          const point = map.latLngToContainerPoint(marker.getLatLng());
-          const shift = (covered.bottom - covered.top) / 2;
-          map.panTo(map.containerPointToLatLng([point.x, point.y + shift]), {
-            animate: !state.reducedMotion,
-            duration: 0.7,
-          });
-        }
-      }
-      centred = venueId;
+      // under the eye rather than leaving the visitor to hunt for its pin. A
+      // venue whose pin is not on the map yet spends nothing here — `centre`
+      // records only what it actually did, and `setVenues` calls it again the
+      // moment the marker exists.
+      centre(venueId);
     },
     setHovered(venueId) {
       for (const [id, marker] of markerFor) {

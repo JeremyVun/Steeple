@@ -32,6 +32,18 @@
 //   'store:change'   ({ type, ... }) — emitted by data/store.js on every mutation
 //   'notifications:change' ({ rows }) — the server inbox was refreshed
 
+// The address bar is core/router.js's, in both directions: this file says where
+// the product is, that file says how a location spells it (SEO-D1). Importing
+// it here rather than the other way round is what keeps the router free of
+// every other import, and therefore runnable under plain node.
+import * as router from './router.js';
+
+// Before anything can write history — and before the first relative `api/v1`
+// or `assets/…` is resolved against it — the deployment's base becomes an
+// absolute path that no `pushState` can move (SEO-D4 · index.html).
+// core/intent.js does the same on its own arming path; the call is idempotent.
+router.freezeBase();
+
 const listeners = new Map();
 
 export const bus = {
@@ -66,10 +78,8 @@ export const state = {
   roll: 0, // 0 = the title page over the village, 1 = the browse surface
 };
 
-// Presentation styles are prototype explorations (CONTRACT.md §3.1), fixed for
-// the page's lifetime. Switching reloads with the hash preserved, so the current
-// deep-linked view survives a comparison flip. Every exploration flag is read
-// here, once, and lives on `state` — modules read state, never the URL.
+// Presentation explorations are fixed for the page's lifetime. Every flag is
+// read here, once, and lives on `state` — modules read state, never the URL.
 const params =
   typeof window === 'undefined'
     ? new URLSearchParams()
@@ -81,8 +91,6 @@ function flag(name, allowed, fallback) {
   return allowed.includes(asked) ? asked : fallback;
 }
 
-state.style = params.get('style') || 'atlas';
-
 // Tilt-shift strength is a viewing preference, not a quality tier:
 // `?tilt=on|1|true` fakes the miniature hard, `?tilt=off|0|false` turns the
 // band off entirely, absent leaves the subtle default the styles are tuned for.
@@ -93,7 +101,7 @@ state.tilt = (() => {
   return 'default';
 })();
 
-// Map rendering language is an exploration flag like ?style= (CONTRACT2 §0/§1):
+// Map rendering language is an exploration flag (CONTRACT2 §0/§1):
 // 'simple' is the canonical brand basemap; agents may add their own values.
 state.map = params.get('map') || 'simple';
 
@@ -113,15 +121,11 @@ state.letter = flag('letter', ['stationery', 'ledger'], 'stationery');
 state.desk = flag('desk', ['board', 'ledger'], 'board');
 state.lantern = flag('lantern', ['lamp', 'window'], 'lamp');
 
-/** Flip an exploration flag: a reload with the hash — your place — preserved. */
+/** Flip an exploration flag: a reload with the route — your place — preserved. */
 function reloadWith(param, value) {
   const url = new URL(window.location.href);
   url.searchParams.set(param, value);
   window.location.assign(url);
-}
-
-export function setStyle(style) {
-  if (style !== state.style) reloadWith('style', style);
 }
 
 export function setMap(map) {
@@ -160,7 +164,25 @@ const MODE_OF_VIEW = { apply: 'guest', journal: 'guest', desk: 'host' };
 // switch — step back while one of these is open.
 export const CORRESPONDENCE_VIEWS = new Set(['apply', 'journal', 'letter', 'desk']);
 
-export function setView(view, { venueId = null, roomId = null, applicationId = null } = {}) {
+/**
+ * Go somewhere. The one state transition, and — since the clean routes — the
+ * one thing that writes history (SEO-D1).
+ *
+ * `history` says what the move *is*, and it is the caller's to declare:
+ *
+ *   'push'    (the default) somebody navigated. A click on a result, a pin, a
+ *             breadcrumb, a letter: one press, one entry, Back returns.
+ *   'replace' the app corrected itself. Reconciling a desk to the venue this
+ *             person actually keeps, standing a signed-out reader back on the
+ *             map, filling in an id the URL already implied — none of those are
+ *             places anybody chose, so none of them belong in Back.
+ *   'none'    the address bar is already right: applyRoute, and only applyRoute.
+ */
+export function setView(
+  view,
+  { venueId = null, roomId = null, applicationId = null } = {},
+  { history = 'push' } = {}
+) {
   const previous = { view: state.view, venueId: state.venueId, roomId: state.roomId };
   if (
     view === state.view &&
@@ -174,7 +196,7 @@ export function setView(view, { venueId = null, roomId = null, applicationId = n
   state.venueId = venueId;
   state.roomId = roomId;
   state.applicationId = applicationId;
-  syncHash();
+  if (history !== 'none') router.write(state, history);
   bus.emit('view:change', { view, venueId, roomId, applicationId, previous });
 }
 
@@ -235,54 +257,67 @@ export function setHover(venueId = null, roomId = null) {
   bus.emit('hover:change', { venueId, roomId });
 }
 
-// Deep links: #/browse · #/venue/<venueId> · #/room/<venueId>/<roomId>
-//   · #/apply/<venueId>/<roomId> · #/journal · #/desk[/<venueId>]
-//   · #/letter/<applicationId>
-let applyingHash = false;
+/**
+ * The address bar, applied to the product — the only reader of a location, and
+ * the only place a route may be applied from (core/router.js owns the grammar).
+ *
+ * It never pushes. The initial route is already in the address bar, a legacy
+ * `#/…` entrance is corrected in place so no duplicate entry is left behind it,
+ * and Back and Forward are the browser moving through entries that already
+ * exist. That is the re-entrancy guard the design asks for (SEO-D1): the write
+ * side of every application here is either a `replace` of an address that was
+ * wrong, or nothing at all.
+ *
+ * @param {{initial?: boolean}} options `initial` is the one boot call; anything
+ *   else is a popstate, which also has to move the roll — the title page and
+ *   the product are two ends of one scroll, and Back between them must travel.
+ */
+export function applyRoute({ initial = false } = {}) {
+  if (typeof window === 'undefined') return;
+  const found = router.parse();
 
-function syncHash() {
-  if (applyingHash || typeof window === 'undefined') return;
-  const h =
-    state.view === 'room'
-      ? `#/room/${state.venueId}/${state.roomId}`
-      : state.view === 'venue'
-        ? `#/venue/${state.venueId}`
-        : state.view === 'village'
-          ? '#/browse'
-          : state.view === 'apply'
-            ? `#/apply/${state.venueId}/${state.roomId}`
-            : state.view === 'journal'
-              ? '#/journal'
-              : state.view === 'desk'
-                ? state.venueId
-                  ? `#/desk/${state.venueId}`
-                  : '#/desk'
-                : state.view === 'letter'
-                  ? `#/letter/${state.applicationId}`
-                  : '';
-  if (window.location.hash !== h) history.replaceState(null, '', h || window.location.pathname);
+  // The one case where the address bar is not the authority: the interface is
+  // built before the boot applies its route, and an email's `?goto=` may
+  // already have sent this page somewhere. A root address must not pull it back
+  // to the title — the write below puts the address bar right instead.
+  const sentElsewhere =
+    initial && (found.view ?? 'village') === 'arrival' && state.view !== 'arrival';
+
+  if (!sentElsewhere) {
+    setView(
+      found.view ?? 'village',
+      {
+        venueId: found.venueId ?? null,
+        roomId: found.roomId ?? null,
+        applicationId: found.applicationId ?? null,
+      },
+      { history: 'none' }
+    );
+  }
+
+  // A legacy fragment, an unknown path, a trailing slash: whatever it was, the
+  // address bar now reads the one canonical spelling of where this person is.
+  router.write(state, 'replace');
+
+  if (!initial) alignRoll();
 }
 
-export function applyHash() {
-  if (typeof window === 'undefined') return;
-  const parts = window.location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  const isLegacyVillageRoute = parts[0] === 'village';
-  applyingHash = true;
-  if (parts[0] === 'room' && parts[1] && parts[2]) {
-    setView('room', { venueId: parts[1], roomId: parts[2] });
-  } else if (parts[0] === 'venue' && parts[1]) {
-    setView('venue', { venueId: parts[1] });
-  } else if (parts[0] === 'browse' || isLegacyVillageRoute) {
-    setView('village');
-  } else if (parts[0] === 'apply' && parts[1] && parts[2]) {
-    setView('apply', { venueId: parts[1], roomId: parts[2] });
-  } else if (parts[0] === 'journal') {
-    setView('journal');
-  } else if (parts[0] === 'desk') {
-    setView('desk', { venueId: parts[1] ?? null });
-  } else if (parts[0] === 'letter' && parts[1]) {
-    setView('letter', { applicationId: parts[1] });
+/**
+ * Back and Forward across the title page. The roll is the join between the two
+ * acts, so a history entry that means "the title" has to travel back up to it,
+ * and one that means the product has to be down here — otherwise Back leaves a
+ * map on screen under a URL that says `/`.
+ */
+function alignRoll() {
+  if (state.view === 'arrival') {
+    if (state.roll > 0) rollTo(0);
+  } else if (state.roll < 1) {
+    rollTo(1);
   }
-  applyingHash = false;
-  if (isLegacyVillageRoute) syncHash();
+}
+
+if (typeof window !== 'undefined') {
+  // Registered here rather than in main.js: the popstate contract belongs to
+  // the state it applies, and both boot paths would otherwise have to remember.
+  router.onPopState(() => applyRoute());
 }

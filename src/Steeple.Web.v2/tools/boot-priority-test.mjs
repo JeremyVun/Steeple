@@ -17,7 +17,7 @@
 //                         product is not overwritten afterwards.
 //   §4 world standing     nobody pressed in time. The village is up and the
 //                         press is the cinematic it has always been.
-//   §5 the hash           a cold deep link is somebody who has already chosen:
+//   §5 the cold route     a cold deep link is somebody who has already chosen:
 //                         same no-world policy, and the product reads start
 //                         without waiting on anything 3D.
 //
@@ -46,6 +46,13 @@ import puppeteer from 'puppeteer';
 const url = process.argv[2] ?? 'http://localhost:5279/?q=low';
 const origin = url.split('#')[0];
 
+/** The same origin and query, pointed at one clean route (SEO-D1). */
+const at = (path) => {
+  const target = new URL(origin);
+  target.pathname = path;
+  return target.href;
+};
+
 let failures = 0;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -73,7 +80,7 @@ try {
    * Nothing is blocked outright: a held request still lands, which is exactly
    * the case the phase cares about — the transfers cannot be called back.
    */
-  async function stage({ hold = [], cpu = 4, network = SLOW } = {}) {
+  async function stage({ hold = [], block = [], cpu = 4, network = SLOW } = {}) {
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
 
@@ -96,6 +103,10 @@ try {
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       issued.push(request.url());
+      // Blocked is not held: this is the script that never arrives at all, and
+      // it is the only way to see the page with genuinely nothing on it.
+      if (block.some((pattern) => pattern.test(request.url())))
+        return void request.abort().catch(() => {});
       const held = hold.find(([pattern]) => pattern.test(request.url()));
       if (!held) return void request.continue().catch(() => {});
       setTimeout(() => request.continue().catch(() => {}), held[1]);
@@ -149,10 +160,16 @@ try {
     const scripted = await s.page.evaluate(() => Boolean(window.__steeple));
     check('nothing of the app has run yet', scripted === false);
     check(
-      'the calls to action are links, not styled buttons',
+      'the calls to action are links to real routes, not styled buttons',
       await s.page.evaluate(() =>
         [...document.querySelectorAll('.arrival__cta, .arrival__host, .arrival__scroll')].every(
-          (n) => n.tagName === 'A' && n.getAttribute('href')?.startsWith('#/')
+          (n) =>
+            n.tagName === 'A' &&
+            // Base-relative clean paths (2026-08-08): `browse`, not `#/browse`
+            // and not `/browse` — one build has to serve `/` and a stripped
+            // prefix, and only the document's own <base> knows which it is.
+            /^(browse|desk)$/.test(n.getAttribute('href') ?? '') &&
+            ['/browse', '/desk'].includes(new URL(n.href).pathname)
         )
       )
     );
@@ -171,8 +188,8 @@ try {
     await s.press('.arrival__cta');
     check(
       'the press is recorded before a line of JavaScript',
-      (await s.page.evaluate(() => location.hash)) === '#/browse',
-      await s.page.evaluate(() => location.hash)
+      (await s.page.evaluate(() => location.pathname)) === '/browse',
+      await s.page.evaluate(() => location.pathname)
     );
 
     await s.ready();
@@ -186,6 +203,37 @@ try {
     );
     check('no page error along the way', s.errors.length === 0, s.errors.join(' · '));
     await s.close();
+
+    // And the layer under that one: the entry chunk that never comes at all.
+    //
+    // Holding it is not enough to see this. A module script is deferred, so
+    // `domcontentloaded` does not fire until it has *run* — the press above is
+    // therefore answered by core/intent.js, in the document, which is why an
+    // arrival settles for it. The markup's own promise is only visible when the
+    // script is refused outright, and since the routes became real documents
+    // (build_plan P3.3) that promise is stronger than it was: the press is an
+    // ordinary navigation to a page the server will answer, not a fragment on a
+    // shell that has to boot before it means anything.
+    const bare = await stage({ block: [ENTRY], cpu: 1, network: null });
+    await bare.page.goto(origin, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    await bare.page.waitForSelector('.arrival__cta', { timeout: 30000 });
+    check('with the entry refused, nothing of the app can run', await bare.page.evaluate(
+      () => Boolean(window.__steeple) === false && document.documentElement.dataset.world !== 'off'
+    ));
+    await Promise.all([
+      bare.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {}),
+      bare.press('.arrival__cta'),
+    ]);
+    check(
+      'the press is still a navigation to a real route',
+      (await bare.page.evaluate(() => location.pathname)) === '/browse',
+      await bare.page.evaluate(() => location.pathname)
+    );
+    check(
+      '...answered by the server, not by a shell that has to boot first',
+      await bare.page.evaluate(() => document.body.textContent.includes('Opening Steeple'))
+    );
+    await bare.close();
   }
 
   // ── §2 the controller is live, the interface is not ───────────────────────
@@ -309,7 +357,7 @@ try {
     );
     // Hosting is somebody's and this browser is nobody, so the desk answers for
     // itself: it sends a signed-out visitor to the product as a guest
-    // (ui/host/index.js — "a cold link to #/desk while signed out is not a
+    // (ui/host/index.js — "a cold link to /desk while signed out is not a
     // desk"). The direct path's job is to deliver the press to that truth, not
     // to invent a different one.
     check('...and it lands on the hosting truth a signed-out press has', await s.page.evaluate(
@@ -382,11 +430,14 @@ try {
 
   // ── §5 a cold link into the product ───────────────────────────────────────
   {
-    console.log('\n── §5 the hash: somebody who has already chosen ─────────────');
+    console.log('\n── §5 the route: somebody who has already chosen ────────────');
     const s = await stage({ cpu: 1, network: null });
-    await s.page.goto(`${origin}#/browse`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await s.page.goto(at('/browse'), { waitUntil: 'domcontentloaded', timeout: 60000 });
     await s.ready();
     check('it opens on the product', (await s.view()) === 'village');
+    check('the address it was given is the address it kept', await s.page.evaluate(
+      () => location.pathname === '/browse' && location.hash === ''
+    ));
     check('with no village fetched behind it', noWorld(await s.resources()));
     await s.page.waitForFunction('document.querySelectorAll(".dm-row").length > 0', { timeout: 60000 });
     check(
@@ -414,7 +465,15 @@ try {
     check('a space press on the down affordance is heard', await s.page.evaluate(
       () => document.querySelector('.arrival__scroll')?.dataset.working === 'on'
     ));
-    check('...and recorded in the address bar', (await s.page.evaluate(() => location.hash)) === '#/browse');
+    check(
+      '...and recorded in the address bar',
+      (await s.page.evaluate(() => location.pathname)) === '/browse'
+    );
+    check(
+      '...without spending the query it arrived with',
+      (await s.page.evaluate(() => location.search)) === new URL(origin).search,
+      await s.page.evaluate(() => location.search)
+    );
     await s.ready();
     check('it lands on the product', (await s.view()) === 'village');
     check('...once', (await s.settled()).length === 1);

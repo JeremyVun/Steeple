@@ -23,6 +23,7 @@ follow the governance checklist in `conventions.md`.
 | `infra.md` | Deployed-infra contracts: feature-flags service + client flags proxy; edge auth, sub-path hosting, deep links, push payload. |
 | `api-ports.md` | `Steeple.Api`'s internal architecture contract: module map, port → adapter table, module rules. |
 | `persistence.md` | Domain model, DB-enforced invariants, geofence, and the Liquibase-owns-schema / database-first EF recipe. |
+| `seo.md` | The crawler surface: `robots.txt`, sitemap policy + `lastmod` truth, site metadata/JSON-LD, index/canonical policy. As-built vs the clean-route build (`docs/backlog/seo/`). |
 | `web.md` | `Steeple.Web.v2` seams: `api.js` (the wire), `session.js`, `catalog.js`, `store.js`, harness truths, environment-gated integrations. |
 | `mobile.md` | `/mobile` in-app seams: Dart interfaces, error model, wire models, router registry, repositories/providers, shared widgets, fixtures. Was `docs/MOBILE_CONTRACTS.md`. |
 

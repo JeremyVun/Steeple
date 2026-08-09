@@ -46,16 +46,14 @@ const SKY_FRAG = /* glsl */ `
   }
 `;
 
-export function buildSky(scene, style, quality) {
-  const isDiorama = style === 'diorama';
-
+export function buildSky(scene, quality) {
   const uniforms = {
-    uHigh: { value: col(isDiorama ? '#7FB3D6' : '#8ABBDA') },
-    uMid: { value: col(isDiorama ? '#F0E4CA' : '#EEE4CD') },
-    uLow: { value: col(isDiorama ? '#F9DFB2' : '#F8E1B8') },
+    uHigh: { value: col('#8ABBDA') },
+    uMid: { value: col('#EEE4CD') },
+    uLow: { value: col('#F8E1B8') },
     uSunColor: { value: col('#FFCE86') },
     uSun: { value: SUN_DIR.clone() },
-    uBandStrength: { value: isDiorama ? 0.010 : 0.005 },
+    uBandStrength: { value: 0.005 },
   };
 
   const dome = new THREE.Mesh(
@@ -82,9 +80,7 @@ export function buildSky(scene, style, quality) {
   // Fog is the colour of the sky at the horizon, so the far hills dissolve into
   // the page instead of ending in a hard bright rim.
   scene.background = new THREE.Color(C.paper);
-  scene.fog = isDiorama
-    ? new THREE.Fog('#F2E2C6', 520, 2500)
-    : new THREE.Fog('#F1E3CA', 620, 2300);
+  scene.fog = new THREE.Fog('#F1E3CA', 620, 2300);
 
   const sun = new THREE.DirectionalLight('#FFD59A', 2.85);
   sun.position.copy(SUN_DIR).multiplyScalar(900);

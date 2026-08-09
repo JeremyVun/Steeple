@@ -1,7 +1,16 @@
 # CONTRACT2 — Wave 2: The Wayfinder & The Correspondence
 
+> **Superseded 2026-08-08 — the hash routes named here are gone from the product.**
+> `src/core/router.js` owns clean History-API paths (`/browse`, `/venue/{v}`,
+> `/space/{v}/{r}`, `/apply/{v}/{r}`, `/journal`, `/desk[/{v}]`, `/letter/{id}`);
+> every `#/…` shape it names still *opens* and is replaced in place by its clean
+> path, with no deadline for removal. This brief is kept as the record of what
+> was asked for at the time — see `docs/backlog/seo/design.md` SEO-D1/D2 and
+> `docs/contracts/web.md` for what is true now.
+
+
 Binding brief for the next build wave. It extends CONTRACT.md (still in force: art
-direction §3, style flags §3.1, module rules §4, verification §5) with three new
+direction §3, canonical Atlas amendment §3.1, module rules §4, verification §5) with three new
 workstreams. Read CONTRACT.md first; this document only adds.
 
 ## 0. Standing guardrails (owner-set, non-negotiable)
@@ -10,15 +19,15 @@ workstreams. Read CONTRACT.md first; this document only adds.
   forms, and controls must read as sophisticated professional tools — never cluttered,
   never a "child's play toy" that talks down to the user. The world may be a storybook;
   the instruments are set like fine print.
-- **Explorations ship as query-param feature flags**, never as a single chosen
-  aesthetic (established: `?style=`, `?tilt=`; new: `?map=`). The owner A/B tests live.
+- **Explorations ship as query-param feature flags** (`?tilt=`, `?map=`). The owner A/B
+  tests live until an owner decision makes one presentation canonical.
   Variants share truth and interaction; only rendering language differs.
 - **Design agents propose, not just execute.** Each workstream must deliver the
   canonical direction described here AND is invited to add one flagged variant of its
   own devising where marked. Cheap experiments welcome; canonical quality first.
 - **Real-input verification is mandatory.** Debug-API screenshots prove rendering
   only. Every interactive affordance must be proven with real pointer/keyboard/wheel
-  events (extend `tools/input-test.mjs` patterns; run in both `?style=` values). A
+  events (extend `tools/input-test.mjs` patterns; run against canonical Atlas). A
   closed overlay must never intercept hit-testing (`elementsFromPoint` audit — this
   bug already bit us once).
 - All product facts come from `src/data/venues.js` and the demo store (§3). Statuses,
@@ -113,7 +122,7 @@ orchestrator — do not edit these files.
 
 **Bus** (`core/bus.js`): `state.mode` ('guest'|'host'), `state.applicationId`,
 `state.map` (?map=, default 'simple'); `setMode(mode)`, `setMap(map)` (reloads,
-hash preserved, like `setStyle`); `setView(view, { venueId, roomId,
+route preserved); `setView(view, { venueId, roomId,
 applicationId })`. Views 'apply' and 'journal' switch mode to guest, 'desk' to
 host, 'letter' keeps the current lens. Hash routes: `#/apply/<v>/<r>`,
 `#/journal`, `#/desk[/<venueId>]`, `#/letter/<applicationId>`. A cold-loaded

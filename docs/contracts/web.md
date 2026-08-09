@@ -9,10 +9,21 @@
 Vite + vanilla JS + Leaflet SPA with a Three.js village splash; nginx serves the built assets
 in containers and proxies same-origin `/api` to the API (the API emits **no CORS** by design —
 the proxy is the missing BFF; in dev, `vite.config.js` does the same to `:5200`).
-Layout: `src/{core,data,ui,flows,journey,world,styles}`. Hash routes own navigation:
-`#/browse · #/venue/<venueId> · #/room/<venueId>/<roomId> · #/apply/<venueId>/<roomId> ·
-#/journal · #/desk[/<venueId>] · #/letter/<applicationId>` (`src/core/bus.js`).
-The retired prototype route `#/village` redirects in place to `#/browse` for old links.
+Layout: `src/{core,data,ui,flows,journey,world,styles}`. **Clean History-API routes own
+navigation** (2026-08-08, SEO-D1 — `src/core/router.js` is the one translator, `setView` in
+`src/core/bus.js` is still the state transition):
+`/ · /browse · /venue/<venueSlug> · /space/<venueSlug>/<roomSlug> ·
+/apply/<venueSlug>/<roomSlug> · /journal · /desk[/<venueSlug>] · /letter/<applicationId>`.
+`/space/…` is the canonical, indexable listing URL; every other route is `noindex`. Person-
+initiated navigation pushes, initial/legacy/self-correcting writes replace, `popstate`
+applies state without writing, and every write carries `location.search` through verbatim.
+The old fragment shapes remain **compatibility entrances with no deadline**: `#/browse` and
+the retired `#/village` → `/browse`, `#/room/<v>/<r>` → `/space/<v>/<r>`, and the rest
+one-for-one, each converted by `replaceState` on first boot so no duplicate entry or
+canonical is left behind. (Route documents, status codes and the crawler surface:
+`docs/contracts/seo.md`. In-session head ownership — title/canonical/robots/JSON-LD per
+route — is `src/ui/metadata.js` + `metaText.js`, pinned to the server's copy by
+`tests/fixtures/seo-formats.json`.)
 
 **The seam rule:** the day an upstream name changes, exactly one file moves.
 
@@ -24,14 +35,16 @@ with one owner each:
 
 | State | Owner | Contract |
 | --- | --- | --- |
-| **printed arrival** | `index.html` markup | the three controls are `<a href="#/browse">` / `#/desk` carrying `data-intent="village\|desk"`, styled as pills. Before any script, a press records its destination in `location.hash` — **the URL is the recovery truth across a reload**. Never a styled `<button>` with no behaviour. |
-| **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** hash deep link, `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. No village work may delay the product. On the first wordmark return in a village-capable build, restore the poster synchronously, finish the return roll, then lazy-load and attach engine/world/journey to that same roll. `?world=off` and `build:flat` never hydrate or contain/request Three. |
-| **live-village boot** | `src/journey/roll.js` | no intent and no hash. Poster → canvas crossfade, then the 1.28s cinematic roll on a press. |
+| **printed arrival** | `index.html` markup | the three controls are `<a href="browse">` / `href="desk"` — base-relative clean paths, so one build serves `/` and a stripped prefix — carrying `data-intent="village\|desk"`, styled as pills. Before any script a press is an ordinary navigation to a real document; from the frame `core/intent.js` is armed it is answered in place (`preventDefault` + the same path written by hand, query intact). Either way **the URL is the recovery truth across a reload**. Never a styled `<button>` with no behaviour. |
+| **product-first (flat) boot** | `src/core/intent.js` → `src/main.js` | an intent, a **cold** non-root route (`/space/…`, `/browse`, `/journal`, … — or an old `#/…` entrance), `?world=off` or a `build:flat` bundle. `roll = 1`, canvas + poster removed, `documentElement.dataset.world = 'off'`, destination applied. No village work may delay the product. On the first wordmark return in a village-capable build, restore the poster synchronously, finish the return roll, then lazy-load and attach engine/world/journey to that same roll. `?world=off` and `build:flat` never hydrate or contain/request Three. |
+| **live-village boot** | `src/journey/roll.js` | no intent and the root route. Poster → canvas crossfade, then the 1.28s cinematic roll on a press. **Two independent readers of the address** decide this: `main.js` (is a village raised at all) and `journey/roll.js` (does the overture play) — both ask `router.isProductEntry()`; teaching only one of them a route family gives a `/space/…` visitor the cinematic over the listing they asked for. |
 
-- `src/core/intent.js` is the critical controller: **the entry's first import, importing
-  nothing** — no bus, no roll, no session/store, no Leaflet, no panels, no Three, no world.
-  It records `{destination, requestedAt}`, sets `data-working="on"` on the pressed control
-  (visible progress from the frame of the press) and leaves the native navigation alone.
+- `src/core/intent.js` is the critical controller: **the entry's first import, importing only
+  `core/router.js`, which imports nothing** — no bus, no roll, no session/store, no Leaflet,
+  no panels, no Three, no world. It records `{destination, requestedAt}`, sets
+  `data-working="on"` on the pressed control (visible progress from the frame of the press),
+  and writes the pressed route into the address bar itself — a `pushState` of the same path
+  the link carried, with `location.search` intact, rather than a whole new document.
   It is not inline: the CSP forbids that. A second `<script>` in `index.html` buys nothing —
   Vite folds every extra html entry back into the first as a static import.
 - The intent is **claimed exactly once** (`claimArrival()`); `releaseArrival()` hands the page
@@ -98,7 +111,7 @@ A request whose body is `undefined` carries no body and declares no content type
 revocations below are the only such calls; `null` still means the empty JSON document that
 every other write sends.
 
-## `src/data/session.js` — who is signed in, and the proof (rewritten 2026-08-06)
+## `src/data/session.js` — who is signed in, and the proof (rewritten 2026-08-09)
 
 Owns identity and **nothing else reads a token**. The two halves live in two places on purpose:
 
@@ -106,40 +119,43 @@ Owns identity and **nothing else reads a token**. The two halves live in two pla
 |---|---|---|
 | refresh token (90d) | httpOnly cookie `steeple_refresh`, set by the API (`refreshTransport:'cookie'`, `identity.md`) | no script can read it; the browser presents it on same-origin `/api` calls by itself |
 | access token (~15m) | this module's **memory**, nowhere else | a reload simply asks for another |
-| the person + why it last changed | localStorage `steeple-village-session` = `{user, reason, stamp}` (in-memory fallback when storage throws) | shows the right name before the network answers, and is the only channel the **other tabs** hear about a change on |
+| fetched person/profile | this module's **memory**, nowhere else | identity/email are private; reload proves the cookie and reads the profile again |
+| cross-tab state | `BroadcastChannel('steeple-village-session')`, opaque `{state:'in'|'out', reason}` only | a sibling learns that it must fetch or drop identity; no profile crosses tabs |
 
-**No token is ever written to storage again.** A signed-out browser leaves a tombstone
-(`{user: null, reason, stamp}`) rather than removing the key, so a sibling tab can relay
-`signedOut` vs `expired` rather than guessing.
+**No token or profile is written to localStorage/sessionStorage.** Module evaluation and
+sign-out remove the retired `steeple-village-session` key from both stores. With no persisted
+profile, a cold boot with no cookie is simply signed out; it cannot infer that an earlier session
+expired, while an active tab still reports a refresh refusal as `expired`.
 
 - `signInWithProvider({provider, idToken, nonce?, displayName?, turnstileToken?})` is the common
   Google/Apple/dev path to `POST /auth/sessions`, always requesting cookie refresh transport.
   `signIn({email, displayName, turnstileToken?})` remains the Development-only dev-provider
   helper. `providers.js` lazily loads Google or Apple only when its build-time client settings
   exist; unconfigured providers are not offered.
-- `refresh()` is **single-flight per tab** (one promise memoized) and re-reads storage first, so a
-  tab whose sibling signed out does not go to the network at all. It presents nothing: the cookie
-  is the credential. It resolves to `null` when steeple *refused* (the session is dropped and
-  watchers are told `expired`) and **rejects** when nothing answered — an API that is not running
+- `refresh()` is **single-flight per tab** (one promise memoized). A sibling's opaque sign-out
+  event suppresses further refreshes. Refresh presents nothing: the cookie
+  is the credential. It resolves to `null` when steeple *refused*; an active profile is then
+  dropped and watchers are told `expired`. It **rejects** when nothing answered — an API that is not running
   must not cost anyone their sign-in. Cross-tab collisions are safe by the server's rotation grace
   (`identity.md`), not by this file.
 - `withAccess(work)` runs one bearer-needing piece of work. With no access token in memory — which
   is **every reload of a signed-in browser** — it refreshes first; on a 401 it refreshes once and
   retries; a second 401 is an answer.
-- `fetchCurrentUser()` at boot revalidates a remembered session: cookie refresh, then `GET /me`.
-  401 signs the browser out; an unreachable API does **not** cost the guest their sign-in.
-- `signOut()` clears storage **first**, then calls `DELETE /auth/sessions` **best-effort** — and
+- `fetchCurrentUser()` starts at module boot and is single-flight across callers: cookie refresh,
+  then `GET /me`. An unreachable API leaves the cookie untouched and a later call can retry.
+- `signOut()` drops memory and broadcasts **first**, purges all retired private keys, then calls
+  `DELETE /auth/sessions` **best-effort** — and
   no longer needs a live access token, because the API accepts the refresh cookie for the call.
   The response expires the cookie.
-- **Migration:** a legacy record still holding `{accessToken, refreshToken}` is scrubbed on the
-  first `load()`, and its refresh token is spent once with `refreshTransport:'cookie'` to move the
-  browser onto the cookie in a single rotation.
+- **Migration:** the retired profile/tombstone key is deleted at module evaluation without being
+  adopted. Cookie transport is now the only web restoration path.
 - `currentUser()`, `isSignedIn()`, `onSessionChange(fn)` are the read surface (signatures
   unchanged). Watchers are called `(session, reason)` with `session.REASON` ∈ `signedIn ·
   signedOut · expired · refreshed`; **`expired` is the only one the person did not ask for**, and
-  `ui/notice.js` turns it into a visible "You've been signed out." slip. A `storage` event from a
-  sibling tab fires the same channel with the same reasons — a surface never learns about identity
-  any other way. Note that a token rotation is **not** a session change and fires nothing.
+  `ui/notice.js` turns it into a visible "You've been signed out." slip. A `BroadcastChannel` event
+  from a sibling tab fires the same watcher channel — a surface never learns about identity
+  any other way. A sibling's signed-in event triggers refresh + `GET /me`; its payload never names
+  a person. Note that a token rotation is **not** a session change and fires nothing.
 - Harnesses that need a bearer use `withAccess((t) => Promise.resolve(t))`; there is nothing in
   storage to read. `tools/session-tabs-test.mjs` drives all of the above in two real tabs.
 
@@ -275,7 +291,7 @@ with other venues never leaves a phantom pin.
 **The rule this replaced:** pins and the two property sheets were built from `src/data/venues.js`
 — the 3D village's scenery — while the results came from the catalog. A venue a host listed had
 a row and nothing else: no pin, no sheet, and no way into its apply flow but a hand-typed
-`#/apply/<venueSlug>/<roomSlug>`. `venues.js` is now scenery and the seed behind
+`/apply/<venueSlug>/<roomSlug>`. `venues.js` is now scenery and the seed behind
 `bundledCatalog.js`, and **no product surface reads it**. Consumers that moved: `ui/index.js`,
 `ui/map/atlas.js`, `ui/copy.js`, `ui/nav.js`, `ui/announcer.js`, `ui/guest/{composer,letter,
 journal,index}.js`, `core/bus.js`.
@@ -322,12 +338,12 @@ Driven end to end by `tools/discovery-test.mjs` (57/57): a venue minted through 
 chain and a seed venue take the same journey — search → pin (mouse **and** keyboard) → venue
 sheet → room sheet → Request → composer.
 
-## `src/data/store.js` — the mirror, one per person
+## `src/data/store.js` — the memory-only mirror
 
-A localStorage **cache of what steeple holds**, in the product's vocabulary, so a surface can
-be drawn before the wire answers and redrawn the moment it does (D4, 2026-08-05). It decides
-nothing: there is one way in per shape and no local status machine to disagree with the
-server's. Clearing localStorage mid-flow costs a reload, never a fact.
+An in-memory **mirror of what steeple holds**, in the product's vocabulary, redrawn whenever
+the wire answers (D4; storage privacy rewrite 2026-08-09). It decides nothing: there is one way
+in per shape and no local status machine to disagree with the server's. Reload discards the
+mirror and unfinished local work; server reads fill it again.
 
 - `mirrorApplication(dto, {thread?})` — one `ApplicationDto`, held whole. A **list** read
   carries no thread (`messages: []`) and leaves the one already held alone; a **detail** read
@@ -372,14 +388,14 @@ deliberate exception: it is this person's own calendar date, read in local time.
 pins all of it and **must be run under `TZ=UTC`, `TZ=America/New_York` and
 `TZ=Australia/Sydney`** — a UTC-only run cannot see the bug class at all.
 
-**The key is `steeple-village-store:{organizerId}`** (Phase 1, D6), where the id is
-**steeple's own user id** or `'anon'`. `currentOrganizerId()` reads `session.currentUser()`
-on every load — no boot order to get wrong. Signed out, `guestApplications()` is empty by
-definition: an inbox belongs to somebody. The seeded-persona table (`PERSONA_IDS`) that used
-to stand in for an identity in dev builds **is gone** (D4).
+`currentOrganizerId()` reads `session.currentUser()` and returns steeple's own user id or
+`'anon'`. Signed out, `guestApplications()` is empty by definition: an inbox belongs to
+somebody. The retired `steeple-village-store:*` local/session-storage namespaces are deleted
+at module evaluation and sign-out; no mutation recreates them. The seeded-persona table
+(`PERSONA_IDS`) that used to stand in for an identity in dev builds **is gone** (D4).
 
-A change of person drops the in-memory copy, leaves every other key untouched, and emits
-`store:change {type:'identity'}`; surfaces re-read from whoever is here now.
+A change of person drops the in-memory copy and emits `store:change {type:'identity'}`;
+surfaces re-read from whoever is here now.
 
 **The demo fixture** loads only when `import.meta.env.PROD !== true`. It is scenery for the
 3D village — the lanterns and ribbons read `venueSignals()`/`roomOccurrences()` from it — and
@@ -398,17 +414,26 @@ it is contained by construction: its letters are written under the seed's own id
   states — a monogram + card with Sign out signed in, one quiet "Sign in"
   chip signed out, which opens the identity panel the flows use (`ui/signIn.js` wraps
   `ui/guest/sso.js` in the shared `.modal__layer`). The inbox tab, its badge, the journal and
-  an opened letter render only for a signed-in guest; a cold link to `#/journal` or
-  `#/letter/…` while signed out lands in the village **and the address bar is corrected with
-  it**. Verification copy is gated on fact everywhere it is printed: account-owned surfaces use
+  an opened letter render only for a signed-in guest; a cold link to `/journal` or
+  `/letter/…` while signed out lands in the village **and the address bar is corrected with
+  it** (a `replace`: a route that could not be honoured is not a place anybody chose). Verification copy is gated on fact everywhere it is printed: account-owned surfaces use
   "Identity verified (SSO)" from the session, while host views use "Identity verified" for the
   organizer recorded on an application and for the managed venue's verified flag.
 - **Real (Phase 2, 2026-08-05):** the whole of the correspondence. The guest inbox is
   unified: it reads both `GET /me/applications` and the requests at the person's managed venues,
-  groups undecided host-side requests under **Hosting**, and counts pending host decisions in the
-  badge. Opening a Hosting row switches to the host letter. The thread comes from
+  groups undecided host-side requests under **Hosting**, and counts what is waiting on this
+  person in the porch badge — pending host decisions included, and since 2026-08-09 **unread
+  messages too**: one number, unread mail plus whatever needs an answer, drained as each is read
+  or answered. The badge is `--terracotta` with the count in `--card`, hidden at zero, and its
+  `aria-label` names both halves in their own words ("Inbox — 1 unread message, 2 requests
+  waiting on you"). It moves with the feed (`notifications:change`), the store and the session,
+  and its "waiting" half is the journal head's own tally, so the badge and the page it opens can
+  never disagree. Opening a Hosting row switches to the host letter. The thread comes from
   `GET /applications/{id}`; withdraw, counter accept/decline and messages
-  are wire writes that re-mirror the answer. The host desk **exists only when
+  are wire writes that re-mirror the answer. **The thread outlives the decision** (2026-08-09):
+  both letters keep the reply box while a request is undecided *or* approved, because a booking
+  still needs a way to say which door is unlocked; declined, withdrawn and expired are closed
+  and the thread stands as a record. The host desk **exists only when
   `GET /manage/venues` is non-empty** and is scoped to those venues — the seeded-venue
   chooser is gone, and somebody who keeps no venue is taken to the listing flow instead of an
   empty desk. Approve / decline / ask / counter-offer are wire writes; `409 slot_taken` on
@@ -421,7 +446,7 @@ it is contained by construction: its letters are written under the seed's own id
   the send picks up by itself; instant venues answer the submit with the booking and the copy
   says so (`Book this space`, "Booked."). `?goto=` deep links from email CTAs are followed at
   boot (`ui/deepLink.js`). **Driven end to end** by `tools/correspondence-test.mjs` §§0–9 —
-  two people, two browsers, real rows, localStorage cleared twice mid-flow.
+  two people, two browsers, real rows, and a full reload that discards the memory mirror.
 - **Three seams the driving corrected (2026-08-05), worth knowing before touching them:**
   - a **counter-offer rides the detail read only**. The API omits `counterOffer` from list
     reads by design (like the thread — `ApplicationMappings.ToDto`), so `mirrorApplication`
@@ -455,7 +480,9 @@ it is contained by construction: its letters are written under the seed's own id
   - **The card on file is reachable outside a send** — `ui/cardPanel.js` wraps the same step
     (`ui/guest/payment.js`, now with a replace mode and a `Visa ···· 4242` line) and is opened
     from the account card on the shelf and from that failure ladder. Still brand + last4 only,
-    and **no field a card number could travel in**.
+    and **no field a card number could travel in**. The account's whole payment-method block,
+    including **Add a card**, renders only when the public `payments.enabled` snapshot is true;
+    an absent or unreachable snapshot is off.
   - **Payouts:** once a venue holds a priced booking and `GET …/payments` says payouts are off,
     the desk prompts once ("Set up payouts to receive $X"). It is a prompt, never a gate — in
     the mock era payout state gates nothing. `ui/host/payouts.js` renders the mock's own KYC
@@ -463,21 +490,67 @@ it is contained by construction: its letters are written under the seed's own id
     `…/onboarding/mock-complete`; the connected state says plainly that payments are simulated.
   - **Booking mode** is a two-option setting on the desk's Spaces tab (`PATCH /manage/venues/{id}`),
     one honest sentence each, scoped in copy to new asks only.
-  - **Notifications are ambient, not a tab** (`ui/notifications.js`). `GET /me/notifications` is
-    read on sign-in and on arriving at the product surface; the newest unread of
+  - **Notifications are messages in the inbox** (`ui/notifications.js`, reworked 2026-08-09 —
+    they were transient corner slips, which gave a host news with nothing to press). `GET
+    /me/notifications` is read on sign-in, on arriving at the product surface and on opening the
+    inbox; every row of
     `bookingReminder | paymentFailed | occurrenceRefunded | bookingReceived | listingApproved |
-    applicationMessage | applicationApproved | applicationDeclined`
-    is shown once as a `.slip` — with the same deep-link follower an email CTA uses
-    (`followDeepLink`) — and marked read. The inbox keeps the last few as quiet lines (`.jnotes`);
-    opening the inbox refreshes this feed as well as its request rows, so a decision made while the
-    tab stayed open appears without a reload. Booking approval says the booking is confirmed;
-    when the decision also carried a host note, one combined notification says both rather than
-    producing two alerts. Standalone messages name the sender when the event payload carries it.
-    Listing approval names the space, says that it is live and bookable, and its slip links to the
-    public page. Notification copy/eligibility is pinned by `tools/notifications-test.mjs`;
-    `tools/booking-notification-test.mjs` drives a real host message + approval into an already
-    signed-in guest's browser and follows the notification back to the conversation.
-  - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (65/65).
+    applicationMessage | applicationApproved | applicationDeclined | ratingReceived`
+    renders as a pressable `.jmsg` row in the inbox's **Messages** section, newest first, and is
+    **unread (`data-unread`) until it is opened**. Opening one emits `notification_opened`, marks
+    that row read through `POST /me/notifications/read`, and follows the row's `deepLink` with
+    the same follower an email CTA uses (`followDeepLink`) — so a message and its email land on
+    the same surface. There is no slip and no bell; the announcer says an arriving row once, which
+    marks nothing, and the porch badge counts the unread without nagging (above). **Nothing marks
+    a row read but a press** — the retired slips marked on sight, and a tab left open on that
+    older build will still consume somebody's unread mail from under a newer one (owner report,
+    2026-08-09: diagnosed as a stale tab, not a live defect; `inbox-messages-test.mjs` §7 is the
+    guard). Booking approval says the booking is confirmed; when the decision
+    also carried a host note, one combined notification says both rather than producing two.
+    Standalone messages name the sender when the event payload carries it. Listing approval names
+    the space and links to the public page. Notification copy/eligibility is pinned by
+    `tools/notifications-test.mjs`; `tools/inbox-messages-test.mjs` drives the whole surface
+    (unread across reloads, the press, the wire receipt, the hosting rows, the empty states).
+  - **The inbox carries the hosting side whole** (`ui/guest/journal.js`). Messages first, then
+    **Hosting** — the requests and bookings at venues this person keeps, in three buckets (still
+    open · bookings · closed), every row opening the host letter — then the person's own requests
+    in their four groups. Before 2026-08-09 Hosting listed only *undecided* requests, so a host
+    whose venue books instantly saw "No requests yet" beside news of a booking. The desk remains
+    the management surface; the inbox is the correspondence view of the same facts. The empty
+    state is chosen by who is reading: somebody who keeps a venue is never told to go and find a
+    space for their group, and neither is the **foot** of a populated inbox — the browse nudge is
+    printed only for somebody who is not purely a host (no venue, or requests of their own). The
+    "waiting on you" tally stays requests-that-need-an-answer plus rating invitations (D8) —
+    unread messages are counted beside the Messages heading and on their own `.journal__unread`
+    line in the head, never inside the tally.
+  - **Two kinds of thing, set differently** (`styles/guest.css`, visual round 2026-08-09). A
+    message is a slim digest line — filled dot when unread (nothing when read), one clamped
+    sentence, where the press goes, and the clock time for anything that arrived today
+    (`messageWhen`) so three of them from this morning can be told apart; no rule between them,
+    and one rule under the section. A request or booking is the substantial object: status
+    eyebrow and "Sent …" on one line, a serif headline with its venue, then schedule · standing
+    on one line (`.jrow__meta`), then the group's own words set as a ruled quotation
+    (`.jrow__excerpt`, printed only when there are words). Both end in the same resting `›`.
+    One dot vocabulary on the surface: a filled dot coloured by what it means — nothing on it is
+    a hollow ring.
+  - **The host letter of an approved request is a booking record** (`ui/host/letter.js`,
+    2026-08-09). Once steeple says approved the page stops presenting a decision: the eyebrow
+    reads "Booking · Confirmed" (· Cancelled · Finished), the meta line is dated by when it was
+    booked, the week is headed "What is held", the legend's own bar is "This booking" and the
+    collision key is gone — two bookings cannot share a room. The week is read with this
+    booking's **own** occurrences set aside (`readSchedule(..., {exceptApplicationId})` →
+    `scheduleConflicts(..., {exceptBookingId})`), or a booking is reported as colliding with
+    itself. The one lever left is **"Cancel this booking"** — a quiet destructive line, not a
+    button, offered only while dates remain; it opens the same two-press confirm the desk has
+    (`RESCIND_WARNING`, reason box, `POST /bookings/{id}/cancel`) and the letter then redraws as
+    the cancelled thing it is. The reply box stays (the API takes messages on `approved` — see
+    `applications.md`), and the way out names where the letter was opened from: "← Inbox" from
+    the inbox's hosting rows, "← Requests" from the desk. The origin is read from
+    `view:change`'s `previous.view` in `ui/host/index.js`; it is state, never a second history
+    writer. A letter opened from the inbox also asks for its booking in full
+    (`openBooking`) — the inbox's hosting pass is a list pass and carries no occurrences.
+  - Driven end to end by `tools/payments-ui-test.mjs` §§1–6 (65/65) and
+    `tools/booked-letter-test.mjs` (2026-08-09, 37 checks).
 - **Environment-gated:** `providers.js` offers Google/Apple only when their client settings exist;
   `turnstile.js` renders Cloudflare's widget only when `VITE_TURNSTILE_SITE_KEY` exists, otherwise
   both protected writes send `null` as the API expects in an unconfigured environment. The SSO
@@ -524,8 +597,11 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   Its *sheet* works either way — `readVenue` goes by slug through the sitemap — so a deep link
   or an email CTA lands correctly. The count line says what is on the page, not `totalCount`.
   Paging the map is unbuilt.
-- `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`, and
-  the ambient notification surface borrows it.
+- `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`, and it
+  now belongs to the session notice and the deep-link surface alone — notifications stopped
+  borrowing it in 2026-08-09's inbox rework. Inbox messages are `.jmsg*`, the hosting buckets
+  `.jsub`, the row's schedule/standing line `.jrow__meta` and the head's unread count
+  `.journal__unread`/`.journal__dot`; none of those names exists in `host.css`.
 - **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
   guest.css loads after host.css. The desk's booking-mode radios are `.mode*` for that reason —
   the first version reused `.choice` and was silently restyled into an unreadable block.
@@ -549,7 +625,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   a regression.
 - Headless GL runs app-time ~6× slow: tests **wait on state, never wall-clock**.
 - `window.__steeple` (`main.js`) is the debug/verification API the harnesses read
-  (`bus, state, setView, setFilters, setHover, setStyle, setMode, setMap, store, session`);
+  (`bus, state, setView, setFilters, setHover, setMode, setMap, store, session`);
   `window.__steepleReady` is the boot gate they await. Suites drive affordances with input and
   use `__steeple` only for reset, reads, and — since correspondence needs an owner — signing a
   real person in against the local API (`__steeple.session.signIn`).
@@ -563,13 +639,21 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   computed opacity (and on a transform settling) before clicking, or a click lands on whatever
   the moving box has slid off.
 - E2E suites mint real accounts/venues/applications against the local API each run.
-- Known-stale failure sets predating wave 7: guest-test 3, wave2-test 6, world-test 12.
-- ⚠️ **A cold hash is a product-first boot** (2026-08-07): `page.goto(url + '#/browse')` now
-  boots flat, so `__steeple.engine`/`.world` are `null` and any camera read throws. A suite
-  that wants a route *and* a village must load with no hash, wait on `__steepleReady`, then
-  set `location.hash` and `__steeple.roll.set(1)`. `tools/world-test.mjs`'s reduced-motion
-  section is the worked example; **`tools/input-test.mjs`'s `ready()` still needs the same
-  change** (it crashes at its map-drag section otherwise).
+- Known-stale failure sets (verified at HEAD 2026-08-08, not slice regressions): guest-test
+  11 (map-first drift), world-test Atlas-only 6 (exact set in its header),
+  booking-flow-test from §5,
+  discovery-test 2 (data-shaped), map-test §10 (asserts a pre-zoom row count), surface-test 3,
+  ui-test 1, wave2-test, session-tabs-test §3 (the two-pages-one-browser freeze hazard;
+  its §5 "refresh cookie went with it" red appeared once in the only run past §3, alongside
+  a sign-in 429 — unreproduced, needs a machine where §3 completes).
+- ⚠️ **A cold non-root route (or legacy hash) is a product-first boot** (2026-08-07; clean
+  routes 2026-08-08): `page.goto(url + '/browse')` boots flat, so `__steeple.engine`/`.world`
+  are `null` and any camera read throws. **Assigning `location.hash` after boot is inert** —
+  the router owns history; navigate with `fixtures.goRoute(page, path)` or real clicks, and
+  build URLs with `fixtures.at(url, routes.X())`. A suite that wants a route *and* a village
+  must load with no route, wait on `__steepleReady`, then drive navigation and
+  `__steeple.roll.set(1)`. `tools/world-test.mjs`'s reduced-motion section is the worked
+  example.
 - `tools/boot-priority-test.mjs` is Phase 3.5's gate (51 checks, §1–§6). It is the one suite
   that drives a **non-flat built bundle**: `npm run build:debug` then
   `npx vite preview --outDir dist-debug --port 5279 --strictPort`. It holds named chunk
@@ -578,9 +662,18 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   spot that let a lost click ship. Its own trap: `performance.getEntriesByType('resource')`
   only learns of a request when it *finishes*, so catching a download in flight needs the
   node-side `page.on('request')` log, not the page's timeline.
-- `tools/correspondence-test.mjs` is Phase 2's live probe: two browsers complete the manual
+- The clean-route slice's own suites (2026-08-08): `tools/seo-route-test.mjs` (97 checks —
+  transport/handoff: no-JS semantic documents, handoff-once, prefix/base ordering, API-down
+  status honesty; `--web <vite> --compose :8080`), `tools/router-test.mjs` (plain-node route
+  grammar, in `npm test`), `tools/route-test.mjs` (browser history/legacy-conversion matrix),
+  `tools/listing-test.mjs` (bootstrap adoption request counts, the six centring assertions,
+  head ownership per boot path — reads pin positions from **inline transforms only**, never
+  `getBoundingClientRect`: `.dm-pin` transitions make a mid-slide rect a position the map
+  never had), `tools/metadata-test.mjs` (golden formats vs the API's, `index.html` head
+  marking, in `npm test`).
+- `tools/correspondence-test.mjs` is the migration Phase 2 live probe: two browsers complete the manual
   loop (402 → card → send → question → answer → counter → accept → booking) and the instant
-  loop, with localStorage cleared on both sides mid-flow, the dev mailbox's CTA followed, and
+  loop, with a memory-mirror-dropping reload mid-flow, the dev mailbox's CTA followed, and
   every state read back from the database. It mints its own venues per run and uses `psql`
   for exactly one thing — the operator's approve on a newly claimed venue's first listing, which has no
   API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets. §8 counts
@@ -591,9 +684,29 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   booking view (including a `0002`-card failure — the mock gateway's decline card), the payout
   prompt through mock onboarding to connected, the mode toggle changing the public apply UX,
   the rescind lever with its refund proven in the `payments` table, and a seeded
-  `bookingReminder` rendering as the slip. Same env vars; `STEEPLE_SHOTS=<dir>` additionally
+  `bookingReminder`. Same env vars; `STEEPLE_SHOTS=<dir>` additionally
   photographs each surface on the way past (a photograph proves nothing about interactivity —
-  it is for looking at what was built).
+  it is for looking at what was built). §6 was reconciled with the inbox rework on 2026-08-09:
+  the seeded reminder is asserted as an unread `.jmsg` row, seeing it is proven *not* to read it
+  (steeple still holds `ReadAtUtc` null), pressing it lands on the booking and marks it read on
+  the wire, and the row then renders unbold — DOM state throughout, no fade measured. 69 checks
+  in all. `tools/booking-notification-test.mjs` (10 checks) was reconciled the same day: a
+  message and a combined approval reaching an **already-signed-in** guest arrive as `.jmsg`
+  rows when the inbox is pressed open (the press is what re-reads the feed), and following the
+  approval opens the conversation.
+- `tools/inbox-messages-test.mjs` (2026-08-09, 32 checks, world-OFF) owns the reworked inbox: a
+  host on an instant-book venue meets the booking as an unread message **and** a settled hosting
+  row, the unread state survives a reload, a press opens the letter in the host lens and the read
+  receipt is verified on the wire, the row then renders read, no slip is drawn, the head owns up
+  to unread mail without inflating the tally, and both empty states (newcomer · venue-keeper) are
+  asserted. `STEEPLE_SHOTS=<dir>` photographs the result.
+- `tools/booked-letter-test.mjs` (2026-08-09, 37 checks, world-OFF) owns the booked host letter:
+  opened from the **inbox** it reads as a booking record, does not collide with itself, takes a
+  message that reaches the guest (who writes back, both without moving the status), returns to
+  the inbox by its own back link — and to the desk when opened from the desk — and its two-press
+  cancel frees every date and redraws the letter as cancelled. `STEEPLE_SHOTS=<dir>` photographs
+  a confirmed letter and a cancelled one; a second booking is minted for the confirmed shot
+  because §5 cancels the first.
 - `tools/discovery-test.mjs` is the venue-presence probe (2026-08-06, 57 checks, world-OFF):
   a venue minted through the real hosting chain and a seed venue take the same journey — search
   → pin → venue sheet → room sheet → Request → composer — plus the Draft staying invisible, the
@@ -611,15 +724,13 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   the one case that cannot be faked in the browser: what the *proxy* answers for a dead API is
   the whole point (502, not a network error). §2–§5 fake the status with request interception,
   the way `surface-test.mjs` §2.5 does.
-- `tools/session-tabs-test.mjs` is the identity probe (2026-08-06, 35 checks): two pages of one
-  browser sharing one cookie jar. It proves the refresh token is an httpOnly cookie no script can
-  read, that a sibling tab adopts a sign-in and lets go of a sign-out through the `storage` event
-  with the right reason, and — the point — that **concurrent rotations of one cookie all succeed
-  and the family survives**. Its own trap, learned the hard way: a second tab that adopts a person
-  immediately does authed work and *re-mints the cookie*, so the section that stages a dead session
-  closes the other tab first, and it deletes the httpOnly cookie through CDP `Network.deleteCookies`
-  (puppeteer's `page.deleteCookie` round-trips through `setCookies` and silently fails on one whose
-  value it never read). World-OFF; `?world=off`.
+- `tools/session-tabs-test.mjs` is the identity/privacy probe (rewritten 2026-08-09): two pages
+  share one cookie jar. It proves the refresh token is an httpOnly cookie no script can read;
+  neither browser store holds a profile, mirror, draft, or location; a sibling follows opaque
+  `BroadcastChannel` sign-in/out events by fetching/dropping its own profile; reload loses private
+  working state but restores identity from the cookie; migration and sign-out purge retired keys;
+  and **concurrent rotations of one cookie all succeed and the family survives**. World-OFF;
+  `?world=off`.
 - **A slip is not "on screen" because it is not `hidden`.** It fades in, and headless GL runs
   app-time ~6× slow, so a check that only asks whether it exists passes on something nobody
   could have read. Wait on computed opacity.
@@ -627,7 +738,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   (`VITE_WORLD=off`, ~310kB vs ~988kB — three.js compiled out, no query can ask for a world
   that was never shipped).
 - A/B alternatives are **query params, never branches**, read once at boot into `state`
-  (`src/core/bus.js`): `?style= ?map= ?tilt= ?world=on|off ?letter=stationery|ledger
+  (`src/core/bus.js`): `?map= ?tilt= ?world=on|off ?letter=stationery|ledger
   ?desk=board|ledger ?lantern=lamp|window`.
 
 > Naming note: code comments citing "CONTRACT4 §5" mean this project's own
@@ -638,8 +749,13 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
 
 - Notification payloads carry `deepLink` paths (existing grammar: `/bookings/{id}`,
   `/inbox/applications/{id}`, `/inbox`, `/space/{venueSlug}/{roomSlug}`).
-- Email CTAs build `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` — a query param, not
-  a path, because the SPA ships no server-side routes and nginx soft-404s unknown paths.
+- Email CTAs build `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` — a query param, not a
+  path. It began as a way around a web host that soft-404ed unknown paths; since the clean
+  routes became real documents (2026-08-08) it stays because the rest of the grammar is
+  *steeple's* — `/inbox/applications/{id}` is deliberately not a route the web app has an
+  address for — and `/space/{venueSlug}/{roomSlug}` now also lands directly without `?goto=`.
+  A followed link routes through the ordinary `setView` seam and **replaces** rather than
+  pushes: the link is why the page exists, not a step within it.
 - `createDeepLink()` runs once from `ui/index.js`, after the surfaces exist:
   - the parameter is **claimed and removed from the address bar immediately**, so a reload
     lands where the person now is rather than where the email pointed;
@@ -648,6 +764,6 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
     not arriving at the front door;
   - `/bookings/{id}` is resolved through `GET /bookings/{id}` to its `applicationId` and
     opens **that letter**, which is where this app renders a booking today;
-  - signed out (or a remembered session that fails `GET /me`) opens the identity panel, holds
+  - signed out (or cookie restoration that fails) opens the identity panel, holds
     the link, and follows it on the next `signedIn`;
   - unresolvable ⇒ the village and one quiet `.slip`.

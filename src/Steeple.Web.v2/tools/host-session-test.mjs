@@ -130,7 +130,7 @@ try {
   await wait(400);
   await click('[data-action="advance"]', 'Set availability');
   await wait(2400);
-  await page.$$eval('.paint__quick .linkish', (nodes) => {
+  await page.$$eval('.paint__quick .pill', (nodes) => {
     for (const n of nodes) if (/Open every day/.test(n.textContent)) n.click();
   });
   await wait(600);

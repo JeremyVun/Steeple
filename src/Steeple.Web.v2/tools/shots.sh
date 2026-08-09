@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Batch screenshot helper for the integration pass.
-#   tools/shots.sh <prefix> <name>:<hashOrEmpty>[:evalJs] ...
+#   tools/shots.sh <prefix> <name>:<routeOrEmpty>[:evalJs] ...
+# The route is a clean path — "/browse", "/space/v/r" — or empty for the title.
 # Each job renders both nothing-fancy deep links in parallel.
 set -u
 ROOT="/Users/jeremy/projects/steeple/src/Steeple.Web.v2"
@@ -10,10 +11,9 @@ PREFIX="$1"; shift
 pids=()
 for job in "$@"; do
   name="${job%%:*}"; rest="${job#*:}"
-  hash="${rest%%:*}"; ev="${rest#*:}"
-  [ "$ev" = "$hash" ] && ev=""
-  style="${name%%-*}"
-  url="http://localhost:${PORT}/?style=${style}${QUERY}#${hash}"
+  route="${rest%%:*}"; ev="${rest#*:}"
+  [ "$ev" = "$route" ] && ev=""
+  url="http://localhost:${PORT}${route}?${QUERY#&}"
   if [ -n "$ev" ]; then
     node "$ROOT/tools/shot.mjs" "$url" "/tmp/${PREFIX}-${name}.png" --eval "$ev" --wait 3200 &
   else

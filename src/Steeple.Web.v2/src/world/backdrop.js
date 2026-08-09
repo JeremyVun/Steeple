@@ -84,23 +84,14 @@ export function buildRidge({
 }
 
 /** Layered rings, graded toward paper. Returns the group and the ridge meshes. */
-export function buildBackdrop(style) {
+export function buildBackdrop() {
   const group = new THREE.Group();
-  const rings =
-    style === 'diorama'
-      ? [
-          { radius: 620, height: 86, color: '#6C8A62', treeline: 0.9, roll: 0.30, seed: 11, baseY: -60 },
-          { radius: 830, height: 118, color: '#829D75', treeline: 0.72, roll: 0.34, seed: 23, baseY: -60 },
-          { radius: 1120, height: 146, color: '#9AB28C', treeline: 0.52, roll: 0.38, seed: 41, baseY: -60 },
-          { radius: 1520, height: 172, color: '#B6C6A8', treeline: 0.32, roll: 0.40, seed: 67, baseY: -60 },
-          { radius: 2050, height: 194, color: '#D2DCC8', treeline: 0.16, roll: 0.42, seed: 89, baseY: -60 },
-        ]
-      : [
-          { radius: 800, height: 156, color: '#7B9A6D', treeline: 0.85, roll: 0.30, seed: 13, baseY: -70 },
-          { radius: 1080, height: 186, color: '#92AA82', treeline: 0.58, roll: 0.34, seed: 29, baseY: -70 },
-          { radius: 1450, height: 208, color: '#ADBF9D', treeline: 0.36, roll: 0.38, seed: 53, baseY: -70 },
-          { radius: 1950, height: 228, color: '#C9D4BE', treeline: 0.18, roll: 0.40, seed: 83, baseY: -70 },
-        ];
+  const rings = [
+    { radius: 800, height: 156, color: '#7B9A6D', treeline: 0.85, roll: 0.30, seed: 13, baseY: -70 },
+    { radius: 1080, height: 186, color: '#92AA82', treeline: 0.58, roll: 0.34, seed: 29, baseY: -70 },
+    { radius: 1450, height: 208, color: '#ADBF9D', treeline: 0.36, roll: 0.38, seed: 53, baseY: -70 },
+    { radius: 1950, height: 228, color: '#C9D4BE', treeline: 0.18, roll: 0.40, seed: 83, baseY: -70 },
+  ];
   const meshes = rings.map((r) => {
     const m = buildRidge(r);
     group.add(m);

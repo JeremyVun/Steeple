@@ -6,7 +6,7 @@
 // the host lens on 'letter', and the listing flow that puts a church on the
 // map and takes the scaffolding off a room. All truth lives in data/store.js.
 //
-// Rendering language is a flag, like ?style=: ?desk=board (default) sets each
+// Rendering language is a flag: ?desk=board (default) sets each
 // waiting request as a card on a board; ?desk=ledger sets the same requests as
 // day-book lines with the schedule ribbon drawn small beside each one. Same
 // truth, same interactions, different instrument.
@@ -86,9 +86,21 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     },
   });
 
+  // Where this letter was opened from, so the way out goes back there. The same
+  // letter is reached from two surfaces now — the desk's requests and the
+  // inbox's hosting rows — and both are somewhere a person was standing.
+  let letterOrigin = 'desk';
+
+  function leaveLetter() {
+    // `journal` is a guest view, so setView switches the lens with it.
+    if (letterOrigin === 'journal') setView('journal');
+    else setView('desk', { venueId: state.venueId ?? deskVenue() });
+  }
+
   const letterPage = createLetterPage({
     announce,
-    onBackToDesk: () => setView('desk', { venueId: state.venueId ?? deskVenue() }),
+    origin: () => letterOrigin,
+    onLeave: leaveLetter,
   });
 
   const listing = createListingFlow({
@@ -108,11 +120,11 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       readDesk({ again: true }).then(() => {
         const listed = deskVenue();
         if (!listed) {
-          if (state.mode === 'host') setView('village');
+          if (state.mode === 'host') setView('village', {}, { history: 'replace' });
           return;
         }
         if (state.view === 'desk' && listed !== state.venueId) {
-          setView('desk', { venueId: listed });
+          setView('desk', { venueId: listed }, { history: 'replace' });
         }
         desk.render();
       });
@@ -214,7 +226,8 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       // in; closing it here would look like the work went with the session.
       if (state.mode === 'host' && !listing.isOpen()) {
         setMode('guest');
-        setView('village');
+        // Nobody navigated: the session ended under them.
+        setView('village', {}, { history: 'replace' });
       }
       return;
     }
@@ -330,24 +343,27 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
 
     if (!isDesk && !isLetter && listing.isOpen()) listing.close();
 
-    // A cold link to `#/desk` or a request while signed out is not a desk
+    // A cold link to `/desk` or a request while signed out is not a desk
     // either: hosting is somebody's, and this browser is nobody at the moment.
     // Left until the next microtask so the address bar is corrected with the
-    // view (core/bus.js will not write a hash back while it is reading one).
+    // view, and written as a `replace` — a route that could not be honoured is
+    // not a place anybody chose to stand.
     if ((isDesk || isLetter) && !session.isSignedIn() && !listing.isOpen()) {
       queueMicrotask(() => {
-        if (session.isSignedIn() || !HOST_VIEWS.has(state.view) || listing.isOpen()) return;
-        // Asking for the desk while signed out — the title page's "Host a
-        // space", a cold `#/desk` — is the porch switch's first case and gets
-        // its answer: the way in is signing in, and the press is held so once
-        // is enough. A letter is one person's correspondence; it just goes
-        // back to the map.
-        if (state.view === 'desk') {
-          announce?.('Sign in to list a space.');
-          askToSignIn?.(() => enterHosting());
-        }
-        setMode('guest');
-        setView('village');
+        session.fetchCurrentUser().then(() => {
+          if (session.isSignedIn() || !HOST_VIEWS.has(state.view) || listing.isOpen()) return;
+          // Asking for the desk while signed out — the title page's "Host a
+          // space", a cold `/desk` — is the porch switch's first case and gets
+          // its answer: the way in is signing in, and the press is held so once
+          // is enough. A letter is one person's correspondence; it just goes
+          // back to the map.
+          if (state.view === 'desk') {
+            announce?.('Sign in to list a space.');
+            askToSignIn?.(() => enterHosting());
+          }
+          setMode('guest');
+          setView('village', {}, { history: 'replace' });
+        });
       });
       setOpen(desk.element, false);
       setOpen(letterPage.element, false);
@@ -374,7 +390,9 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       });
       const venueId = state.venueId ?? deskVenue();
       if (!state.venueId && venueId) {
-        setView('desk', { venueId });
+        // `/desk` naming the venue it opened on is the same address, spelled in
+        // full — a correction of this entry, not a second one.
+        setView('desk', { venueId }, { history: 'replace' });
         return;
       }
       desk.setVenue(venueId);
@@ -384,15 +402,21 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     if (isLetter) {
       const application = getApplication(state.applicationId);
       if (!application) {
-        setView('desk', { venueId: deskVenue() });
+        setView('desk', { venueId: deskVenue() }, { history: 'replace' });
         return;
       }
       if (state.venueId !== application.venueId) {
-        setView('letter', {
-          applicationId: application.id,
-          venueId: application.venueId,
-          roomId: application.roomId,
-        });
+        setView(
+          'letter',
+          {
+            applicationId: application.id,
+            venueId: application.venueId,
+            roomId: application.roomId,
+          },
+          // The same letter, with the venue and room a cold entrance could not
+          // know: the address does not change, so neither does history.
+          { history: 'replace' }
+        );
         return;
       }
       if (shown !== application.id) {
@@ -416,7 +440,13 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     if (!spoken) announced = '';
   }
 
-  bus.on('view:change', () => {
+  bus.on('view:change', ({ previous }) => {
+    // Read before anything renders: a letter's way out is named after the
+    // surface it was opened from. A `replace` that only fills in the venue
+    // arrives here as letter→letter and must not count as an entrance.
+    if (state.view === 'letter' && previous?.view && previous.view !== 'letter') {
+      letterOrigin = previous.view === 'journal' ? 'journal' : 'desk';
+    }
     // Leaving the correspondence for the world leaves the desk behind.
     if (state.mode === 'host' && !HOST_VIEWS.has(state.view)) setMode('guest');
     // A cold link to a request sent by someone else can only be a host's:
@@ -436,7 +466,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     // Entering host mode leads to the desk, whichever way it was entered.
     queueMicrotask(() => {
       if (state.mode === 'host' && !HOST_VIEWS.has(state.view)) {
-        setView('desk', { venueId: deskVenue() });
+        setView('desk', { venueId: deskVenue() }, { history: 'replace' });
       } else {
         render();
       }
@@ -451,22 +481,26 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       state.mode === 'host' &&
       type === 'reset'
     ) {
-      setView('desk', { venueId: deskVenue() });
+      // The letter went away underneath the reader; that is not a step back.
+      setView('desk', { venueId: deskVenue() }, { history: 'replace' });
     }
   });
 
-  // A click on the page behind the desk closes the desk, and does nothing else:
-  // the visitor was reaching past it, not through it. Capture, because the
-  // surfaces underneath stop their own events before they ever bubble here.
+  // A click on the page behind the desk or an opened letter puts that surface
+  // down, and does nothing else: the visitor was reaching past it, not through
+  // it. A letter takes the same route as its named back control, preserving
+  // whether it came from the inbox or the desk. Capture, because the surfaces
+  // underneath stop their own events before they ever bubble here.
   document.addEventListener(
     'click',
     (event) => {
-      if (state.mode !== 'host' || state.view !== 'desk') return;
+      if (state.mode !== 'host' || (state.view !== 'desk' && state.view !== 'letter')) return;
       if (listing.isOpen()) return;
       if (event.target?.closest?.(NOT_AWAY)) return;
       event.preventDefault();
       event.stopPropagation();
-      setView('village');
+      if (state.view === 'letter') leaveLetter();
+      else setView('village');
     },
     { capture: true }
   );
@@ -479,7 +513,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     event.preventDefault();
     event.stopPropagation();
     letterPage.closeDrawer();
-    announce?.('Closed. The request is still open and undecided.');
+    announce?.('Closed. Nothing was changed.');
   });
 
   render();

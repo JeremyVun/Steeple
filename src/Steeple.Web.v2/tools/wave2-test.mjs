@@ -39,7 +39,7 @@
 // second event that only a manual venue can produce, and no seeded venue is one.
 // That beat lives in correspondence-test, off-world, where a manual venue exists.
 
-import { apiIsUp, call, closeBrowsers, launch, mintGuest, signInPage, stamp } from './fixtures.mjs';
+import { apiIsUp, at, call, closeBrowsers, goRoute, launch, mintGuest, routes, signInPage, stamp } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -57,7 +57,6 @@ const shotPrefix = process.argv.includes('--shots')
   ? process.argv[process.argv.indexOf('--shots') + 1]
   : null;
 
-const STYLES = ['diorama', 'atlas'];
 const VENUE = 'merrifield-fellowship'; // one of the five the village builds
 const ROOM = 'main-hall';
 
@@ -85,7 +84,8 @@ if (listing.status !== 200) {
   process.exit(2);
 }
 
-for (const style of STYLES) {
+{
+  const style = 'Atlas';
   console.log(`\n──── the village answers · ${style} · ${base} ────`);
 
   // A person with a card already on file. The 402 gate is real and is
@@ -96,8 +96,6 @@ for (const style of STYLES) {
     name: 'Maria Alvarez',
   });
 
-  // A browser per style: software GL is slow enough that two villages in one
-  // process starve each other's render loop.
   const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
@@ -127,20 +125,22 @@ for (const style of STYLES) {
   }
 
   async function ready(target) {
-    // A cold *hash* is a product-first flat boot now (build_plan P3.5): main.js
-    // reads `location.hash` before anything else and, for somebody who has
-    // already chosen a place, never fetches a village behind their back. This
-    // suite is the village's own suite — `__steeple.world` is its whole
-    // subject — so it arrives the way a visitor with a village does: bare
-    // first, then the route. And a goto that only changes the hash is not a
-    // navigation, so the page would keep the previous section's roll and tab;
-    // go away first.
-    const [origin, route] = target.split('#');
+    // A cold *route* is a product-first flat boot (build_plan P3.3): main.js
+    // reads the address before anything else and, for somebody who has already
+    // chosen a place, never fetches a village behind their back. This suite is
+    // the village's own suite — `__steeple.world` is its whole subject — so it
+    // arrives the way a visitor with a village does: the title bare first, then
+    // the route, travelled with a real history entry and the popstate the
+    // browser would have sent. Going away first is deliberate too: otherwise
+    // the page keeps the previous section's roll and tab.
+    const asked = new URL(target);
+    const route = asked.pathname;
+    asked.pathname = '/';
     await page.goto('about:blank');
-    await page.goto(origin, { waitUntil: 'networkidle0' });
+    await page.goto(asked.href, { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
-    if (route) {
-      await page.evaluate((r) => { window.location.hash = r; }, `#${route}`);
+    if (route !== '/') {
+      await goRoute(page, route);
       await page.evaluate('__steeple.roll.set(1)');
       await wait(400);
     }
@@ -194,10 +194,10 @@ for (const style of STYLES) {
 
   // ── 1. the church before anything is asked of it ─────────────────────────
   console.log('\n1. a church with nothing waiting on it');
-  await ready(`${base}/?style=${style}&q=low#/room/${VENUE}/${ROOM}`);
+  await ready(at(`${base}/?q=low`, routes.room(VENUE, ROOM)));
   await signInPage(page, guest.email, guest.name);
   await wait(1200);
-  await ready(`${base}/?style=${style}&q=low#/room/${VENUE}/${ROOM}`);
+  await ready(at(`${base}/?q=low`, routes.room(VENUE, ROOM)));
   const quietBefore = await world(`lantern('${VENUE}')`);
   check(
     'the village has a lantern for this church at all',
@@ -316,7 +316,7 @@ for (const style of STYLES) {
 
   // ── 5. and no desk is conjured for somebody who keeps nothing (D4) ───────
   console.log('\n5. a guest is not a host');
-  await ready(`${base}/?style=${style}&q=low#/browse`);
+  await ready(at(`${base}/?q=low`, routes.browse()));
   await click('.porchswitch', 'the porch switch');
   await wait(1600);
   check('no desk opens for a person who manages no venue',

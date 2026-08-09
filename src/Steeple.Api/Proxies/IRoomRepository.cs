@@ -39,7 +39,10 @@ public interface IRoomRepository
     Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Returns lightweight sitemap rows (slugs + timestamp) for every published room — no includes.
+    /// Returns lightweight sitemap rows (slugs + timestamp) for every published room whose venue
+    /// sits inside <paramref name="bounds"/> — no includes. The bounds are the served area the
+    /// caller's geofence policy owns; the adapter is told them rather than knowing them, so the
+    /// advertised URL set can never disagree with the discoverability gate that answers the read.
     /// </summary>
-    Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(BoundingBox bounds, CancellationToken ct = default);
 }

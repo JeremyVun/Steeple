@@ -79,6 +79,11 @@ services:
       Media__Bucket: "${MEDIA_BUCKET:-}"
       Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
       Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
+      # The canonical public origin every crawler-facing absolute URL is built from — sitemap
+      # <loc>, listing canonicals, og:url and the document <base> (docs/backlog/seo/design.md §7,
+      # which requires a deployment behind a stripped prefix to set it). Empty falls back to the
+      # request's own origin and earns a startup warning outside Development.
+      Seo__PublicBaseUrl: "${SEO_PUBLIC_BASE_URL:-}"
       Email__ApiKey: "${EMAIL_API_KEY:-}"
       Email__From: "${EMAIL_FROM:-Steeple <onboarding@resend.dev>}"
       Email__WebBaseUrl: "${EMAIL_WEB_BASE_URL:-}"

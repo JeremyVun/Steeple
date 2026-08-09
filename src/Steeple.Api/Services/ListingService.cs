@@ -178,7 +178,9 @@ public sealed class ListingService : IListingService
 
     /// <inheritdoc />
     public Task<IReadOnlyList<SitemapEntry>> GetSitemapEntriesAsync(CancellationToken ct = default) =>
-        _rooms.GetPublishedForSitemapAsync(ct);
+        // The sitemap advertises exactly what a read can answer: the served area is the same
+        // geofence ToDetailIfDiscoverableAsync enforces below, so no row can be crawlable-yet-404.
+        _rooms.GetPublishedForSitemapAsync(_geofence.Bounds, ct);
 
     /// <summary>
     /// Projects a loaded room to its detail DTO, enforcing the beachhead as defence-in-depth:

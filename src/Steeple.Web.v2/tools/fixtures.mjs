@@ -42,6 +42,56 @@ export const sql = (statement) =>
 /** Is the API answering at all? Every suite that needs it should say so and exit 2 if not. */
 export const apiIsUp = () => fetch(`${API}/geofence`).then((r) => r.ok).catch(() => false);
 
+// ── where a suite means to be (the clean routes, SEO-D1) ─────────────────────
+//
+// The app emits no fragments (2026-08-08). A suite that wants a place says so
+// through these two, so the day a route family is spelled differently there is
+// one line to change rather than sixty literals:
+//
+//   at(url, room('grace-community-vienna', 'fellowship-hall'))
+//     → http://localhost:5173/space/grace-community-vienna/fellowship-hall?q=low
+//
+// The query the suite was launched with survives, because half of them carry
+// `?q=low`, `?world=off` or a style flag and the route must not spend it.
+//
+// ⚠ Two things that used to work and no longer do. Setting `location.hash` is
+// not navigation any more — there is no `hashchange` listener at all — so a
+// suite that moved that way must use `goRoute()` (a real history entry plus the
+// popstate the browser would have sent) or `page.goto`. And a cold clean route
+// is a *document*: `/space/…` is rendered by the API, so it needs the API up,
+// while `/browse`, `/journal`, `/desk…`, `/venue/…`, `/apply/…` and `/letter/…`
+// are served by the static boot documents and boot with the API down.
+
+export const routes = {
+  title: () => '/',
+  browse: () => '/browse',
+  venue: (venueSlug) => `/venue/${venueSlug}`,
+  room: (venueSlug, roomSlug) => `/space/${venueSlug}/${roomSlug}`,
+  apply: (venueSlug, roomSlug) => `/apply/${venueSlug}/${roomSlug}`,
+  journal: () => '/journal',
+  desk: (venueSlug = null) => (venueSlug ? `/desk/${venueSlug}` : '/desk'),
+  letter: (applicationId) => `/letter/${applicationId}`,
+};
+
+/** A suite's origin (query and all), pointed at one clean route. */
+export function at(base, path) {
+  const url = new URL(base);
+  url.pathname = path;
+  url.hash = '';
+  return url.href;
+}
+
+/**
+ * Move a page that is already standing — the same thing a click on a link does,
+ * without reloading and without losing the village a suite is measuring.
+ */
+export async function goRoute(page, path) {
+  await page.evaluate((target) => {
+    history.pushState(null, '', target + window.location.search);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, path);
+}
+
 // ── the wire, from node ──────────────────────────────────────────────────────
 
 export async function call(method, path, { token = null, body = undefined, key = null } = {}) {
@@ -87,8 +137,8 @@ export async function paceAuth() {
 
 // The two legal documents at the versions this build ships, read from
 // src/data/agreements.js itself so the harness can never drift from the app.
-// (Importing the module would drag session/store's localStorage probes into
-// node; the constant is the only thing wanted.)
+// (Importing the module would start session restoration in node; the constant
+// is the only thing wanted.)
 const agreementSource = readFileSync(new URL('../src/data/agreements.js', import.meta.url), 'utf8');
 export const CURRENT_AGREEMENTS = [...agreementSource.matchAll(/docType:\s*'([^']+)',\s*version:\s*'([^']+)'/g)].map(
   ([, docType, version]) => ({ docType, version })

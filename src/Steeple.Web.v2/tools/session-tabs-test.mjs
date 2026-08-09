@@ -10,12 +10,11 @@
 // Two pages of one browser — one cookie jar, one localStorage, exactly what a
 // person has when they open a second tab. What it proves:
 //
-//   1. THE SECRET IS OUT OF REACH. After a real sign-in, localStorage holds the
-//      person and no token of any kind; the refresh token is an httpOnly cookie
-//      `document.cookie` cannot see.
-//   2. TABS SHARE THE PERSON. Tab two, opened after the sign-in, adopts them —
-//      and a tab already open when someone signs in is told, through the
-//      `storage` event, with REASON.signedIn.
+//   1. PRIVATE DATA IS OUT OF STORAGE. Neither browser store holds a profile,
+//      mirror, draft, token, or location; the refresh token is an httpOnly
+//      cookie `document.cookie` cannot see.
+//   2. TABS SHARE SESSION STATE. An opaque BroadcastChannel event tells tab two
+//      to fetch the person from steeple; no profile crosses between documents.
 //   3. THE RACE IS SURVIVABLE. Both tabs are reloaded, so neither holds an
 //      access token, and both are then made to do authed work at the same
 //      instant: two refreshes of one cookie, concurrently. Both must come back
@@ -23,10 +22,10 @@
 //      this whole change exists to stop is reuse-detection revoking it.
 //   4. SO IS THE BARE-WIRE VERSION. Four concurrent POST /auth/refresh from one
 //      page, cookie only. All must answer 200, and the session must survive.
-//   5. SIGNING OUT IS SHARED. One tab signs out; the other lets go, says
-//      'signedOut' rather than 'expired', and the cookie is gone from both.
-//   6. AND EXPIRY IS TOLD APART. With the cookie taken (the only way to stage a
-//      dead session now), a reload signs the browser out with REASON.expired.
+//   5. SIGNING OUT IS SHARED. One tab signs out; the other follows through the
+//      channel, the cookie goes, and legacy private keys are purged everywhere.
+//   6. MIGRATION IS UNCONDITIONAL. Old signed-out profile/store keys planted by
+//      hand are deleted at the next boot and are never adopted.
 //
 // Timing: headless app-time runs several times slow — every wait here is on
 // state, never on the clock.
@@ -47,6 +46,7 @@ for (const fatal of ['uncaughtException', 'unhandledRejection']) {
 const url = process.argv[2] ?? 'http://localhost:5175/?world=off';
 const stamp = Date.now().toString(36);
 const email = `tabs-${stamp}@example.com`;
+const MEMORY_APPLICATION = 'a2000000-0000-4000-8000-000000000002';
 
 let checks = 0;
 let failed = 0;
@@ -108,6 +108,33 @@ const waitHeard = (page, reason, timeout = 20000) =>
     reason
   );
 
+// After a simultaneous reload Puppeteer's isolated-world wait can miss an
+// expando written on the page's Window even though page.evaluate sees it. Poll
+// in the page's own realm so the harness waits on the state it later asserts.
+async function waitInPage(page, predicate, argument = null, timeout = 60000) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    if (await page.evaluate(predicate, argument).catch(() => false)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`page state did not settle within ${timeout}ms`);
+}
+
+const storageSnapshot = (page) =>
+  page.evaluate(() => {
+    const read = (area) =>
+      Array.from({ length: area.length }, (_, i) => area.key(i)).map((key) => [key, area.getItem(key)]);
+    return { local: read(localStorage), session: read(sessionStorage) };
+  });
+
+const hasPrivateStorage = (snapshot, person = null) =>
+  [...snapshot.local, ...snapshot.session].some(
+    ([key, value]) =>
+      key === 'steeple-village-session' ||
+      key.startsWith('steeple-village-store:') ||
+      (person && (String(value).includes(person.id) || String(value).includes(person.email)))
+  );
+
 try {
   console.log(`\n── one session, two tabs · ${url} ──`);
 
@@ -124,16 +151,9 @@ try {
   );
   check('a real sign-in against steeple', Boolean(person?.id), person?.displayName);
 
-  const stored = await one.evaluate("JSON.parse(localStorage.getItem('steeple-village-session'))");
-  check('storage names the person', stored?.user?.id === person.id);
-  check('and holds no access token', !stored?.accessToken);
-  check('and no refresh token', !stored?.refreshToken);
-  check(
-    'nothing token-shaped anywhere in storage',
-    await one.evaluate(() =>
-      Object.keys(localStorage).every((key) => !/token/i.test(localStorage.getItem(key) ?? ''))
-    )
-  );
+  const afterSignIn = await storageSnapshot(one);
+  check('neither storage contains a profile, mirror, draft, or identity', !hasPrivateStorage(afterSignIn, person));
+  check('the retired profile key does not exist', !(await one.evaluate("localStorage.getItem('steeple-village-session')")));
 
   const jar = await one.cookies();
   const cookie = jar.find((c) => c.name === 'steeple_refresh');
@@ -150,12 +170,12 @@ try {
   console.log('\n2. what the other tab is told');
   await waitHeard(two, 'signedIn');
   const twoHeard = await heard(two);
-  eq('the open tab was told, once', twoHeard.length, 1);
-  eq('with the reason it happened for', twoHeard[0].reason, 'signedIn');
-  eq('and it is the same person', twoHeard[0].who, person.id);
+  eq('the open tab heard one signed-in event', twoHeard.filter((event) => event.reason === 'signedIn').length, 1);
+  check('every profile event came from steeple for the same person', twoHeard.every((event) => event.who === person.id));
   eq('so the second tab holds them too', await two.evaluate('__steeple.session.currentUser()?.id ?? null'), person.id);
 
   const three = await open(browser);
+  await three.waitForFunction((id) => window.__steeple.session.currentUser()?.id === id, { timeout: 20000 }, person.id);
   eq(
     'a tab opened afterwards finds them already there',
     await three.evaluate('__steeple.session.currentUser()?.id ?? null'),
@@ -170,18 +190,82 @@ try {
   // piece of authed work in each has to rotate the cookie. Before, both tabs
   // held the same refresh token in localStorage and the second to spend it was
   // called a thief.
+  // Private working state is memory-only. It exists now, appears in neither
+  // storage, and must be gone after these reloads while the cookie restores the
+  // session itself.
+  await one.evaluate(() => window.__steeple.store.setHomePin({ lat: 38.901, lng: -77.265 }));
+  await one.evaluate(
+    (applicationId, organizer) =>
+      window.__steeple.store.mirrorApplication({
+        id: applicationId,
+        roomId: 'b2000000-0000-4000-8000-000000000002',
+        roomName: 'Memory Room',
+        venueName: 'Memory Venue',
+        venueSlug: 'memory-venue',
+        roomSlug: 'memory-room',
+        organizer: { id: organizer.id, displayName: organizer.displayName, ratingSummary: null },
+        activityType: 'community',
+        groupSize: 5,
+        schedule: {
+          frequency: 'oneOff',
+          startDate: '2026-09-01',
+          endDate: '2026-09-01',
+          daysOfWeek: null,
+          startTime: '10:00:00',
+          endTime: '11:00:00',
+        },
+        intentText: 'Memory-only draft marker',
+        status: 'pending',
+        createdAtUtc: '2026-08-09T00:00:00Z',
+        decidedAtUtc: null,
+        expiresAtUtc: '2026-08-23T00:00:00Z',
+        bookingId: null,
+        messageCount: 0,
+        messages: [],
+      }),
+    MEMORY_APPLICATION,
+    person
+  );
+  check('a private home pin exists in memory before reload', await one.evaluate('!!__steeple.store.homePin()'));
+  check(
+    'a server mirror row exists in memory before reload',
+    await one.evaluate((id) => Boolean(__steeple.store.getApplication(id)), MEMORY_APPLICATION)
+  );
+  check('the home pin was not persisted', !hasPrivateStorage(await storageSnapshot(one), person));
+
   await Promise.all([
     one.reload({ waitUntil: 'domcontentloaded' }),
     two.reload({ waitUntil: 'domcontentloaded' }),
   ]);
+  try {
+    await Promise.all([
+      waitInPage(one, () => window.__steepleReady === true),
+      waitInPage(two, () => window.__steepleReady === true),
+    ]);
+  } catch (error) {
+    const state = await Promise.all(
+      [one, two].map((page) =>
+        page.evaluate(() => ({ ready: window.__steepleReady, debug: Boolean(window.__steeple), href: location.href }))
+          .catch((failure) => ({ evaluationError: failure.message, href: page.url() }))
+      )
+    );
+    throw new Error(`reload did not become ready: ${JSON.stringify(state)}`, { cause: error });
+  }
   await Promise.all([
-    one.waitForFunction('window.__steepleReady === true', { timeout: 30000 }),
-    two.waitForFunction('window.__steepleReady === true', { timeout: 30000 }),
+    waitInPage(one, (id) => window.__steeple.session.currentUser()?.id === id, person.id, 20000),
+    waitInPage(two, (id) => window.__steeple.session.currentUser()?.id === id, person.id, 20000),
   ]);
   await watch(one);
   await watch(two);
   eq('both tabs still name the person', await one.evaluate('__steeple.session.currentUser()?.id ?? null'), person.id);
   eq('both of them', await two.evaluate('__steeple.session.currentUser()?.id ?? null'), person.id);
+  eq('the memory-only home pin is gone', await one.evaluate('__steeple.store.homePin()'), null);
+  eq(
+    'the memory-only server mirror is empty again',
+    await one.evaluate((id) => __steeple.store.getApplication(id), MEMORY_APPLICATION),
+    null
+  );
+  check('and storage is still private-data free', !hasPrivateStorage(await storageSnapshot(one), person));
 
   // The collision itself, forced: two documents sharing one cookie jar, each
   // spending the same refresh token at the same instant. Boot alone does not
@@ -259,6 +343,12 @@ try {
   // ── 5. signing out is shared ─────────────────────────────────────────────
   console.log('\n5. one tab signs out');
   await watch(two);
+  await one.evaluate(() => {
+    localStorage.setItem('steeple-village-session', '{"user":{"email":"old@example.org"}}');
+    localStorage.setItem('steeple-village-store:old-user', '{"applications":[{"private":true}]}');
+    sessionStorage.setItem('steeple-village-store:anon', '{"draft":"private"}');
+  });
+  await two.evaluate(() => sessionStorage.setItem('steeple-village-store:old-user', '{"private":true}'));
   await one.evaluate('__steeple.session.signOut()');
   await waitHeard(two, 'signedOut');
   const outHeard = await heard(two);
@@ -270,40 +360,24 @@ try {
     'the refresh cookie went with it',
     !(await one.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
   );
+  check('the signing-out tab purged every legacy private key', !hasPrivateStorage(await storageSnapshot(one)));
+  check('the sibling purged its own sessionStorage too', !hasPrivateStorage(await storageSnapshot(two)));
 
-  // ── 6. expiry is told apart from a sign-out ──────────────────────────────
-  console.log('\n6. a session that ends without being asked');
-  // One tab from here. A sibling adopting the person does authed work of its own
-  // the moment it hears about them, and that work rotates the cookie — which
-  // would quietly put back the credential this section exists to take away.
+  // ── 6. old signed-out state is purged at boot ─────────────────────────────
+  console.log('\n6. migration of a signed-out browser');
   await two.close();
-  await one.evaluate((who) => window.__steeple.session.signIn({ email: who }), email);
-  const live = (await one.cookies()).find((c) => c.name === 'steeple_refresh');
-  // Straight through CDP: puppeteer's own deleteCookie round-trips the cookie
-  // back through setCookies and cannot express an httpOnly one it never read a
-  // value for, so it fails silently or throws — either way it does not delete.
-  const cdp = await one.createCDPSession();
-  await cdp.send('Network.deleteCookies', {
-    name: 'steeple_refresh',
-    domain: live.domain,
-    path: live.path,
+  await one.evaluate(() => {
+    localStorage.setItem(
+      'steeple-village-session',
+      JSON.stringify({ user: null, reason: 'signedOut', stamp: Date.now() })
+    );
+    localStorage.setItem('steeple-village-store:departed-user', '{"homePin":{"lat":1,"lng":2}}');
+    sessionStorage.setItem('steeple-village-store:anon', '{"intentText":"unfinished"}');
   });
-  await cdp.detach();
-  // The staging has to be checked, not assumed: a cookie that quietly survived
-  // would make every assertion below pass for the wrong reason.
-  check(
-    'the cookie really is gone before the reload',
-    !(await one.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
-  );
   await one.reload({ waitUntil: 'domcontentloaded' });
   await one.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
-  await one.waitForFunction('!__steeple.session.currentUser()', { timeout: 25000 }).catch(() => {});
-  eq('the dead session is dropped', await one.evaluate('!!__steeple.session.currentUser()'), 'false');
-  eq(
-    'and storage says why, for whoever asks next',
-    await one.evaluate("JSON.parse(localStorage.getItem('steeple-village-session')).reason"),
-    'expired'
-  );
+  eq('the old tombstone is not an identity', await one.evaluate('!!__steeple.session.currentUser()'), 'false');
+  check('module boot deleted every planted private key', !hasPrivateStorage(await storageSnapshot(one)));
 } catch (error) {
   failed += 1;
   console.log(` FAIL  the suite fell over: ${error?.stack ?? error}`);

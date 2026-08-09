@@ -53,19 +53,23 @@ export function createHoursPainter({ announce } = {}) {
   const summary = el('div', { class: 'paint__summary' });
   const status = el('p', { class: 'paint__status', role: 'status' });
 
-  const quick = el('div', { class: 'paint__quick' }, [
-    el(
-      'button',
-      { type: 'button', class: 'linkish', onclick: () => preset(8, 22) },
-      'Open every day, 8 am – 10 pm'
-    ),
-    el(
-      'button',
-      { type: 'button', class: 'linkish', onclick: () => copyFirst() },
-      'Copy the first day across'
-    ),
-    el('button', { type: 'button', class: 'linkish', onclick: () => clearAll() }, 'Clear the week'),
-  ]);
+  const quick = el(
+    'div',
+    { class: 'paint__quick', role: 'group', 'aria-label': 'Quick hour actions' },
+    [
+      el(
+        'button',
+        { type: 'button', class: 'pill pill--sm', onclick: () => preset(8, 22) },
+        'Open every day, 8 am – 10 pm'
+      ),
+      el(
+        'button',
+        { type: 'button', class: 'pill pill--sm', onclick: () => copyFirst() },
+        'Copy the first day across'
+      ),
+      el('button', { type: 'button', class: 'pill pill--sm', onclick: () => clearAll() }, 'Clear the week'),
+    ]
+  );
 
   const element = el('div', { class: 'paint' }, [
     axis,

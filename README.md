@@ -90,7 +90,6 @@ db/changelog/              Liquibase changelog — owns schema + seed
 src/Steeple.Persistence  domain entities, value objects, enums, DbContext, EF configs
 src/Steeple.Api          the one JSON API (web + mobile): Contracts/Controllers/Services/Proxies
 src/Steeple.Web.v2        Vite + vanilla JS + Leaflet SPA; nginx host in containers
-src/Steeple.Web.v1        deprecated MVC + HTMX implementation; excluded from active builds
 src/Steeple.Admin        HTMX operator dashboard — reads Postgres via Persistence
 tests/                     xUnit unit tests + Testcontainers integration tests
 mobile/                    Flutter app (planned — docs/MOBILE_DESIGN.md)

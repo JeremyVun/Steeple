@@ -26,6 +26,7 @@
 // camera choreography at all.
 
 import { bus, state, setRoll, setView, drainRollRequest } from '../core/bus.js';
+import { isProductEntry } from '../core/router.js';
 import { clamp, easeInOutCubic, easeOutCubic, easeOutQuint } from './easing.js';
 
 /** Gesture travel that carries the whole roll, never more than two thirds of a page. */
@@ -74,10 +75,15 @@ export function createRoll(engine, { beforeReturn = null } = {}) {
   /**
    * The two ends of the roll are two views: the title page, and the product.
    * Everything between belongs to the roll and nothing changes underneath it.
+   *
+   * A roll somebody performed is navigation and gets its own history entry; a
+   * roll the boot performed — a flat page opening on the product, where there
+   * was no title act to fly through — is not, or Back would never leave the
+   * site (`history`, SEO-D1).
    */
-  function arrive() {
-    if (p >= 1 && state.view === 'arrival') setView('village');
-    else if (p <= 0 && state.view !== 'arrival') setView('arrival');
+  function arrive(history = 'push') {
+    if (p >= 1 && state.view === 'arrival') setView('village', {}, { history });
+    else if (p <= 0 && state.view !== 'arrival') setView('arrival', {}, { history });
   }
 
   // Only a tween needs a clock. A scrub is driven by the hand doing it, and a
@@ -204,8 +210,14 @@ export function createRoll(engine, { beforeReturn = null } = {}) {
 
   // A cold load carrying a place goes straight to it. The cinematic belongs to
   // someone arriving at the front door, not to a link somebody was sent — and
-  // the view stays whatever the hash is about to say it is.
-  if (window.location.hash.replace(/^#\/?/, '')) {
+  // the view stays whatever the route is about to say it is.
+  //
+  // This is the second reader of the address, and it is independent of the one
+  // in main.js on purpose: main.js decides whether a village is raised at all,
+  // this decides whether the overture plays. Teach only one of them about clean
+  // routes and a /space/… visitor gets the title page's cinematic over the
+  // listing they asked for (build_plan P3.3).
+  if (isProductEntry()) {
     p = 1;
     setRoll(1);
     engine.stop();
@@ -218,13 +230,13 @@ export function createRoll(engine, { beforeReturn = null } = {}) {
     /** 0..1 — where the roll stands. */
     get: () => p,
     /** Put it there this instant. The verification harness photographs frames. */
-    set(next) {
+    set(next, { history = 'push' } = {}) {
       tweening = false;
       scrubbing = false;
       flick = 0;
       landing = null;
       put(next);
-      arrive();
+      arrive(history);
     },
     /** Replace the flat boot's inert engine and honor where the roll now stands. */
     attachEngine(next) {

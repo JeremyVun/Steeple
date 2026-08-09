@@ -1,6 +1,5 @@
 // WORLD — sky, ground, the five churches, their rooms, and the quiet life around
-// them. Two staging styles share every model: `atlas` lays them out across rolling
-// country, `diorama` stands them between cut paper flats.
+// them. Atlas lays the village out across rolling country.
 //
 // Contract: CONTRACT.md §4 — buildWorld(engine) -> World.
 
@@ -18,7 +17,6 @@ import { createRoomCard } from './rooms.js';
 import { buildClouds, buildBirds, buildMotes } from './ambient.js';
 import { damp } from './rng.js';
 import * as atlas from './stage-atlas.js';
-import * as diorama from './stage-diorama.js';
 import { effectiveRoom } from '../data/store.js';
 import { createCorrespondence } from '../flows/world/index.js';
 
@@ -32,10 +30,7 @@ const RESTING_BODY = new THREE.Color(0.30, 0.35, 0.34);
 const _lo = new THREE.Vector3();
 const _hi = new THREE.Vector3();
 
-const METRO_SITE = {
-  atlas: { x: 318, z: 34, ry: 0.16 },
-  diorama: { x: 252, z: 36, ry: 0.2 },
-};
+const METRO_SITE = { x: 318, z: 34, ry: 0.16 };
 
 function haloMesh(radius, color, opacity) {
   const mesh = new THREE.Mesh(
@@ -56,16 +51,14 @@ function haloMesh(radius, color, opacity) {
 
 export async function buildWorld(engine) {
   const { scene } = engine;
-  const style = state.style === 'diorama' ? 'diorama' : 'atlas';
   const quality = state.quality;
-  const stageModule = style === 'atlas' ? atlas : diorama;
 
-  buildSky(scene, style, quality);
+  buildSky(scene, quality);
 
-  const backdrop = buildBackdrop(style);
+  const backdrop = buildBackdrop();
   scene.add(backdrop.group);
 
-  const stage = stageModule.buildStage(scene, { quality });
+  const stage = atlas.buildStage(scene, { quality });
   const heightAt = stage.heightAt;
   const layout = stage.layout;
 
@@ -285,7 +278,7 @@ export async function buildWorld(engine) {
 
   // The Metro motif — the reason Dunn Loring's transit line reads the way it does
   {
-    const site = METRO_SITE[style];
+    const site = METRO_SITE;
     const b = new Builder();
     const g = new Builder();
     buildMetro(b, g);
@@ -299,7 +292,7 @@ export async function buildWorld(engine) {
   }
 
   // Ambient life
-  const clouds = buildClouds(style, quality);
+  const clouds = buildClouds(quality);
   scene.add(clouds.group);
   const birds = buildBirds(quality);
   scene.add(birds.mesh);
@@ -333,7 +326,6 @@ export async function buildWorld(engine) {
   const world = {
     anchors,
     pickables,
-    style,
     /** Radius of the nearest scenery ring — how far the camera may pull back. */
     horizon: backdrop.inner,
 

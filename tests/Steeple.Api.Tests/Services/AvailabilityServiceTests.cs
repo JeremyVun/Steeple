@@ -844,16 +844,21 @@ public class AvailabilityServiceTests
                         && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
                     .ToList());
 
+        /// <summary>The room timestamp the last rule save asked for (sitemap lastmod).</summary>
+        public DateTimeOffset? StampedUpdatedAtUtc { get; private set; }
+
         public Task ReplaceRulesAsync(
             Guid roomId,
             IReadOnlyList<RoomOpenHours> openHours,
             IReadOnlyList<RoomBlackoutDate> blackouts,
+            DateTimeOffset updatedAtUtc,
             CancellationToken ct = default)
         {
             OpenHours.RemoveAll(h => h.RoomId == roomId);
             Blackouts.RemoveAll(b => b.RoomId == roomId);
             OpenHours.AddRange(openHours);
             Blackouts.AddRange(blackouts);
+            StampedUpdatedAtUtc = updatedAtUtc;
             return Task.CompletedTask;
         }
     }

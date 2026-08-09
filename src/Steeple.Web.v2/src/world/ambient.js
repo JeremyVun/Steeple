@@ -14,20 +14,13 @@ const _s = new THREE.Vector3(1, 1, 1);
 
 /** Cut-out clouds standing on rings around the valley — they slide past each
  *  other as the camera drifts, which is the whole trick. */
-export function buildClouds(style, quality) {
+export function buildClouds(quality) {
   const rng = makeRng(8081);
-  const layers =
-    style === 'diorama'
-      ? [
-          { radius: 1000, y: 235, count: 9, scale: 1.3, color: ['#EFCB98', '#FFFFFF'], speed: 0.0055 },
-          { radius: 1450, y: 320, count: 8, scale: 2.0, color: ['#EED3AA', '#FDFAF3'], speed: -0.0036 },
-          { radius: 2000, y: 430, count: 7, scale: 2.9, color: ['#E9D6BC', '#F9F4EB'], speed: 0.0022 },
-        ]
-      : [
-          { radius: 1150, y: 270, count: 9, scale: 1.4, color: ['#EFCE9E', '#FFFFFF'], speed: 0.005 },
-          { radius: 1650, y: 370, count: 8, scale: 2.2, color: ['#EED4AE', '#FDFAF4'], speed: -0.0032 },
-          { radius: 2200, y: 470, count: 6, scale: 3.1, color: ['#EAD7BF', '#F9F5ED'], speed: 0.002 },
-        ];
+  const layers = [
+    { radius: 1150, y: 270, count: 9, scale: 1.4, color: ['#EFCE9E', '#FFFFFF'], speed: 0.005 },
+    { radius: 1650, y: 370, count: 8, scale: 2.2, color: ['#EED4AE', '#FDFAF4'], speed: -0.0032 },
+    { radius: 2200, y: 470, count: 6, scale: 3.1, color: ['#EAD7BF', '#F9F5ED'], speed: 0.002 },
+  ];
 
   const group = new THREE.Group();
   const rings = [];

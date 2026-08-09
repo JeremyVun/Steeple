@@ -63,11 +63,15 @@ public interface IAvailabilityRepository
 
     /// <summary>
     /// Replaces the room's entire rule set (delete existing rows, insert the supplied ones) in one
-    /// SaveChanges — a single implicit transaction, so a partial write is never visible.
+    /// SaveChanges — a single implicit transaction, so a partial write is never visible. The room's
+    /// <c>UpdatedAtUtc</c> is stamped with <paramref name="updatedAtUtc"/> in the same write: open
+    /// hours are part of the public listing document, so the sitemap's <c>lastmod</c> must move
+    /// with them (docs/contracts/seo.md).
     /// </summary>
     Task ReplaceRulesAsync(
         Guid roomId,
         IReadOnlyList<RoomOpenHours> openHours,
         IReadOnlyList<RoomBlackoutDate> blackouts,
+        DateTimeOffset updatedAtUtc,
         CancellationToken ct = default);
 }

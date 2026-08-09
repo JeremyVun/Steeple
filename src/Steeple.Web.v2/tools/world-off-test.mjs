@@ -11,7 +11,7 @@
 // `npm run build:flat` dist. The second is the one that matters: the flag is
 // only worth having if the bundle it produces actually works.
 
-import { closeBrowsers, isEnvironmentNoise, launch } from './fixtures.mjs';
+import { agreeCurrent, at, closeBrowsers, isEnvironmentNoise, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -117,7 +117,7 @@ await clickReal('.dm-pin');
 check('a pin opens its venue', (await page.evaluate('__steeple.state.view')) === 'venue');
 
 // ── 5. the request sheet ────────────────────────────────────────────────────
-await page.goto(`${url.split('#')[0]}#/room/grace-community-vienna/fellowship-hall`, { waitUntil: 'domcontentloaded' });
+await page.goto(at(url.split('#')[0], routes.room('grace-community-vienna', 'fellowship-hall')), { waitUntil: 'domcontentloaded' });
 await wait(1800);
 check('a deep link to a space lands', (await page.evaluate('__steeple.state.view')) === 'room');
 
@@ -145,7 +145,7 @@ if (ctaBox) {
 // has no letters to walk at all — and that is itself the thing to assert.
 {
   // Signed out first: a link to a letter is not a way past the sign-in.
-  await page.goto(`${url.split('#')[0]}#/letter/app-chess-club`, { waitUntil: 'domcontentloaded' });
+  await page.goto(at(url.split('#')[0], routes.letter('app-chess-club')), { waitUntil: 'domcontentloaded' });
   await wait(1800);
   check(
     'signed out, a link to a letter lands in the village',
@@ -161,6 +161,19 @@ if (ctaBox) {
       "__steeple.session.signIn({email:'maria@demo.steeple.test',displayName:'Maria Alvarez'}).then(() => true, () => false)"
     )
     .catch(() => false);
+  // The P4 agreements ask, answered on the wire before it can interrupt this
+  // suite. An account that has never agreed gets the gate at boot, and the gate
+  // is a modal layer over the whole page — which is what §7's "known flake"
+  // really was: the wordmark was still there, with a sign-in panel on top of it
+  // (verified 2026-08-08). The bearer comes through the documented seam;
+  // nothing here reads storage.
+  if (signedIn) {
+    const token = await page
+      .evaluate('__steeple.session.withAccess((t) => Promise.resolve(t))')
+      .catch(() => null);
+    if (token) await agreeCurrent(token).catch(() => {});
+  }
+
   const seeded = signedIn
     ? await page.evaluate("__steeple.store.guestApplications().length > 0")
     : false;
@@ -177,7 +190,7 @@ if (ctaBox) {
       )) === 'journal'
     );
   } else {
-    await page.goto(`${url.split('#')[0]}#/letter/app-chess-club`, { waitUntil: 'domcontentloaded' });
+    await page.goto(at(url.split('#')[0], routes.letter('app-chess-club')), { waitUntil: 'domcontentloaded' });
     await wait(1800);
     check('a request the parish received opens as the host', await page.evaluate(
       "__steeple.state.view === 'letter' && __steeple.state.mode === 'host'"
@@ -198,7 +211,7 @@ if (ctaBox) {
     );
 
     const own = await page.evaluate('__steeple.store.guestApplications()[0].id');
-    await page.goto(`${url.split('#')[0]}#/letter/${own}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(at(url.split('#')[0], routes.letter(own)), { waitUntil: 'domcontentloaded' });
     await wait(1600);
     await page.keyboard.press('Escape');
     await wait(900);
@@ -213,11 +226,21 @@ if (ctaBox) {
 // ── 7. the way back up still means something ────────────────────────────────
 await page.keyboard.press('Escape');
 await wait(900);
-await page.goto(`${url.split('#')[0]}#/browse`, { waitUntil: 'domcontentloaded' });
+await page.goto(at(url.split('#')[0], routes.browse()), { waitUntil: 'domcontentloaded' });
 await wait(1500);
 await clickReal('.wordmark');
-await wait(1600);
+// The return is a real eased move, and headless app-time runs several times
+// slow: waiting a fixed 1600ms was reading the machine's load, not the page's
+// behaviour (it is the ⚠ §7 flake CLAUDE.md carried). Wait on the roll itself.
+await page
+  .waitForFunction('__steeple.state.roll === 0', { timeout: 20000 })
+  .catch(() => {});
 check('the wordmark rolls back up to the title page', (await page.evaluate('__steeple.state.roll')) < 1);
+check(
+  '...and the address bar goes back up with it',
+  (await page.evaluate('location.pathname')) === '/',
+  await page.evaluate('location.pathname')
+);
 
 await page.screenshot({ path: '/tmp/w6a-world-off-title.png' });
 

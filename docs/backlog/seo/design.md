@@ -1,9 +1,11 @@
 # Crawlable listings and clean web routes — design
 
-> **Status:** Adopted 2026-08-08; not built. This replaces
+> **Status:** Adopted 2026-08-08; **built 2026-08-08** (`build_plan.md` is the completion
+> record; `docs/contracts/seo.md` is the as-built contract). This replaces
 > `docs/backlog/seo-crawlable-listings.md` as the implementation source of truth for the
-> unfinished web-v2 work in `docs/SEO.md`. `build_plan.md` beside this file is the execution
-> order.
+> unfinished web-v2 SEO work. The former `docs/SEO.md` was dissolved 2026-08-08: its as-built
+> crawler-surface facts live in `docs/contracts/seo.md`, and everything unbuilt lives here.
+> `build_plan.md` beside this file is the execution order.
 >
 > **Product decision:** a canonical listing URL opens the existing map product, with that room's
 > sheet open and the map centred on its venue. It is not a separate SEO landing page. The server
@@ -40,6 +42,29 @@ path.
 The room name shown in the sheet is already unique UI content. It is not a unique HTTP document:
 social scrapers do not run the application, a fragment is not a canonical page, and the server
 cannot return a listing-specific status before JavaScript runs.
+
+This is a live defect, not a hypothetical (verified 2026-08-08): the shipped sitemap already
+advertises `/space/{venueSlug}/{roomSlug}` URLs, and today only the `?goto=` deep-link grammar
+understands that path — so every URL Steeple currently hands to crawlers resolves to the village
+shell at status 200, a soft-404 at the first hop of the share loop. This matters because the
+PRD's demand thesis is share-driven, install-free discovery: hyperlocal organic search and
+shared listing links are the awareness channels that cost nothing, and both read the served
+HTML, not the application.
+
+Rejected shapes, with reasons (carried from the dissolved `docs/SEO.md`; the decision record
+is SYSTEM_DESIGN §17, 2026-08-08):
+
+- **Prerender-for-bot-UA at nginx** (headless-Chrome service): the most faithful output and the
+  most moving parts — a second runtime inside a ~$100/mo ceiling, a maintained UA list, and a
+  cloaking posture to defend.
+- **A meta-injection layer in front of the SPA:** reintroduces the BFF that v2's
+  nginx-and-static-bundle shape removed. If a server must exist for listing URLs, the API is
+  already that server.
+- **Accept the degradation:** honest, and wrong for a product whose demand thesis is
+  share-driven discovery.
+- **A full SSR framework rewrite** (Next.js et al.): buys the same crawler outcome and the same
+  hydration window at the cost of a second runtime and rebuilding a shipped vanilla-JS surface,
+  to serve one URL family.
 
 Changing only the address-bar syntax would make the URL prettier, not finish SEO. This design
 changes both layers:
@@ -84,7 +109,7 @@ machine.
 | Product state | Canonical web-v2 route | Index policy |
 |---|---|---|
 | title | `/` | index |
-| browse/map | `/browse` | noindex, follow; canonical `/` |
+| browse/map | `/browse` | noindex, follow; no canonical |
 | venue sheet | `/venue/{venueSlug}` | noindex, follow |
 | room sheet | `/space/{venueSlug}/{roomSlug}` | index |
 | apply composer | `/apply/{venueSlug}/{roomSlug}` | noindex, nofollow |
@@ -119,6 +144,11 @@ No HTTP redirect can see a fragment, so this conversion is necessarily client-si
 `replaceState`, leaving no duplicate entry in browser history. New HTML, notifications and UI
 links emit only clean paths. Hash support can be removed only after external traffic proves the
 old links are dead; there is no deadline in this plan.
+
+One pre-existing bug sits under this promise (verified 2026-08-08): the current `syncHash`
+return-to-title transition writes `history.replaceState(null, '', h || pathname)` and silently
+drops `location.search` — every `?tilt=`/`?map=`/`?world=off` flag with it. The router must fix
+that transition; query preservation cannot be layered over it.
 
 ### SEO-D3 — The API renders listing documents; nginx remains the web host
 
@@ -211,10 +241,15 @@ A non-root pathname is a product intent, just as a non-empty hash is today. A co
 - centres the venue in the visible map band.
 
 The current `atlas.setCurrent` already knows how to pan while accounting for the mobile sheet.
-The gap is ordering: a deep-linked venue can arrive after `setCurrent` first runs, and adding the
-marker does not retry the centring. The fix must make “marker became available while current”
-call the same centring path. It must not add a second camera implementation or centre by guessed
-coordinates.
+The gap is two defects, not one (verified 2026-08-08): `setCurrent` records `centred = venueId`
+even when the marker did not exist yet, burning its only attempt, and `setVenues` adds the late
+marker without re-running the centring. Separately, the atlas initializes `centred =
+state.venueId` at construction under a comment claiming deep links "start already accounted for"
+— false today (state is still null until the hash applies after `createUI`) and actively harmful
+under clean routes, where state *will* be set at construction and that line suppresses the
+deep-link pan outright. The fix must make “marker became available while current” call the same
+centring path and correct that initialization. It must not add a second camera implementation or
+centre by guessed coordinates.
 
 On desktop, the venue lands in the map area not covered by the side panel. On narrow layouts it
 lands in the band above the bottom sheet. Reduced-motion mode makes the move immediate.
@@ -235,8 +270,10 @@ The body visibly contains every material fact used in metadata or structured dat
 are length-bounded and whitespace-normalized; user text is HTML-encoded, never interpolated raw.
 
 The static root document carries a deployment-relative self-canonical (`href="./"` after its
-fixed base), so the same build resolves correctly at `/` and at a stripped prefix. Browse keeps
-that root canonical and is `noindex,follow`; private routes have no canonical.
+fixed base), so the same build resolves correctly at `/` and at a stripped prefix. Browse is
+`noindex,follow` and carries **no** canonical — a cross-page canonical on a noindex document
+sends crawlers mixed signals, and the noindex alone does the work; private routes have no
+canonical either.
 
 Client navigation does not make another HTTP document request, so `src/ui/metadata.js` updates
 the browser title and marked head elements when state changes. It uses the same formatting rules
@@ -269,6 +306,12 @@ The server emits one `application/ld+json` block with an `@graph` containing:
 Room availability is not business opening hours and is not emitted as `openingHours`. Host-entered
 claims absent from the public contract are not invented. Empty optional values are omitted.
 
+Amenity and accessibility values arrive on the wire as stable camelCase tokens
+(`stepFreeAccess`); the renderer owns a server-side humanization (the retired v1
+`DiscoveryViewModel.Humanize` is the prior art) and never emits a raw token as a visible name.
+`RoomDetailDto` carries no image dimensions, no modification timestamp and no venue description
+(verified 2026-08-08) — those claims are omitted rather than added to the contract in this slice.
+
 JSON is serialized, not assembled with string concatenation. Tests include hostile text containing
 quotes, angle brackets and `</script>` and prove the script cannot be escaped.
 
@@ -279,8 +322,9 @@ quotes, angle brackets and `</script>` and prove the script cannot be escaped.
   to the DTO's lower-case slugs.
 - A trailing slash redirects to the no-trailing-slash form.
 - Query parameters never enter the canonical.
-- A public `/listings/{roomId}` compatibility endpoint may resolve by stable id and 301 to the
-  slug pair; it never renders duplicate content.
+- No `/listings/{id}` compatibility endpoint ships: nothing has ever linked by id, slugs are
+  stable after creation, and a second resolvable URL family is pure surface. If one is ever
+  needed it would resolve and 301 to the slug pair, never render content.
 - `/room/...` is not introduced as a second clean route. Only the old hash grammar uses “room”.
 
 Venue and room slugs remain stable after creation. A later slug-renaming feature would need an
@@ -395,6 +439,7 @@ GET /#/room/dunn-loring-umc/art-studio  (server receives GET /)
 | In-session head state | new `src/Steeple.Web.v2/src/ui/metadata.js` |
 | Map centring | existing `src/ui/map/index.js` + `atlas.js` |
 | Sitemap source | existing `IRoomRepository.GetPublishedForSitemapAsync` |
+| Canonical public base | `Seo:PublicBaseUrl` configuration + one shared helper replacing `ListingsApiController.PublicBaseUrl()` |
 
 The API renderer accepts `RoomDetailDto` and public-base information. It does not query EF, know
 nginx, or duplicate listing visibility rules.
@@ -415,8 +460,15 @@ The client router freezes and derives its base from `document.baseURI`; it never
 Route parsing removes only that base prefix. Route formatting adds it exactly once. API and media
 requests stay document-relative and therefore continue to resolve under the prefix.
 
-Forwarded host/proto/prefix are accepted only through the existing Caddy -> nginx -> API trust
-boundary. Direct client headers must not control canonical URLs.
+The canonical public base (scheme, host, prefix) comes from configuration (`Seo:PublicBaseUrl`),
+set per deployment; when it is unset — a Development convenience only — the API falls back to
+the request's own scheme/host/path-base. Forwarded headers never control the canonical. This is
+a correction, not a restatement of the status quo (verified 2026-08-08): the sitemap's current
+private `PublicBaseUrl()` helper reads `X-Forwarded-Host`/`-Prefix` raw, while the
+ForwardedHeaders middleware validates only `For`/`Proto` — those headers are untrusted client
+input today. The build replaces that helper with the one configured/shared helper for sitemap
+and documents alike, so a URL-poisoning nit is not promoted into the canonical, `og:url` and
+`<base>`.
 
 ## 8. Response and cache policy
 
@@ -447,6 +499,10 @@ the sitemap remains cached for one hour.
   public DTO, visible HTML and JSON-LD must all omit/blur together; hiding CSS alone is forbidden.
 - Route parameters are bounded/validated before lookup. Unknown input is encoded in logs and
   never reflected into HTML.
+- The bootstrap JSON is the public `RoomDetailDto` verbatim, which includes a venue's optional
+  public contact email. That value is already served to every anonymous API caller; its
+  appearance in page source is accepted and recorded here (2026-08-08). Reversing that is a DTO
+  change, never a forked bootstrap shape.
 
 ## 10. Failure modes
 
@@ -489,6 +545,8 @@ the sitemap remains cached for one hour.
 13. `/browse` and private clean routes still boot when the API is unavailable. A direct listing
     may show the generic human fallback in that case, but its original HTTP status remains
     502/503/504.
+14. In production configuration, canonical, `og:url`, `<base>` and sitemap origins come from the
+    configured public base; request forwarding headers cannot change them.
 
 ## 12. Deferred
 
@@ -498,3 +556,4 @@ the sitemap remains cached for one hour.
 - Indexable venue-only pages.
 - Address-visibility choices for residential/sensitive venue categories.
 - Slug history/renames.
+- Id-based short links (`/listings/{id}` → 301).

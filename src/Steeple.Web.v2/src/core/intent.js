@@ -8,17 +8,23 @@
 // Three layers hold that promise, weakest first:
 //
 //   1. the markup. The two calls to action and the down affordance are real
-//      links to the hash routes they mean. If this module is the last script
-//      that never arrives, the press still lands in `location.hash`, and the
-//      next boot reads it and opens there. The URL is the recovery truth.
+//      links to the clean routes they mean — `browse` and `desk`, relative to
+//      the document's <base>, so one build means /browse at the root and
+//      /steeple/browse behind a stripped prefix. If this module is the last
+//      script that never arrives, the press is an ordinary navigation to a real
+//      document, and the boot that follows opens there. The URL is the recovery
+//      truth, and since the routes became real paths it is a truth the *server*
+//      can answer too (docs/backlog/seo/design.md SEO-D1/D3).
 //   2. this module. An external same-origin module — the CSP forbids an inline
 //      script — and the entry's first import, armed before main.js's own body
 //      runs and long before the 105KB interface chunk that used to own these
-//      handlers. It imports nothing: no bus, no roll, no session, no store, no
-//      Leaflet, no world. Its whole job is to write down {destination,
-//      requestedAt}, say quietly that the press was heard, and hold it for
-//      whoever boots. (A <script> of its own in index.html buys nothing: Vite
-//      folds every extra html entry back into the first as a static import.)
+//      handlers. It imports one thing, core/router.js, which imports nothing
+//      itself: no bus, no roll, no session, no store, no Leaflet, no world.
+//      Its whole job is to write down {destination, requestedAt}, put that
+//      destination in the address bar, say quietly that the press was heard,
+//      and hold it for whoever boots. (A <script> of its own in index.html buys
+//      nothing: Vite folds every extra html entry back into the first as a
+//      static import.)
 //   3. main.js. It claims that intent exactly once and lets it decide the boot:
 //      an intent means the product, now, flat — the village is not started, and
 //      an already-started one is abandoned rather than raised over the top of a
@@ -30,6 +36,14 @@
 // ui/arrival.js's handler runs. Not before: the interface chunk can land while
 // the world is still building, and a `rollTo` answered by nobody is a press
 // thrown away.
+
+import { freezeBase } from './router.js';
+
+// The deployment's base, resolved to an absolute path before this module can
+// write anything into history: a *relative* <base> is re-resolved against the
+// visible address, so the first press-turned-pushState would otherwise re-root
+// every asset and `api/v1` call at the route it wrote (SEO-D4 · index.html).
+freezeBase();
 
 /** What each printed control means. Written in the markup, read from it. */
 const DESTINATIONS = new Set(['village', 'desk']);
@@ -66,24 +80,49 @@ function acknowledge(node) {
   node.closest('.arrival')?.setAttribute('aria-busy', 'true');
 }
 
+/**
+ * The address bar, told what was pressed — without leaving the document.
+ *
+ * The printed controls are paths now, so the native navigation is a whole new
+ * document: it would throw away a boot already in flight, the interface chunk
+ * already on the wire, and this record with it. Writing the same URL by hand
+ * keeps every promise the link made — a reload, a share and a restored tab all
+ * land on the pressed destination — and costs nothing.
+ *
+ * The query goes with it. `?map=`, `?world=off` and `?q=` are the
+ * visitor's, and a press is not a reason to spend them (SEO-D2).
+ */
+function record(node) {
+  const href = node.getAttribute('href');
+  if (!href || typeof history === 'undefined') return;
+  try {
+    const target = new URL(href, document.baseURI);
+    if (target.origin !== window.location.origin) return;
+    history.pushState(null, '', `${target.pathname}${window.location.search}`);
+  } catch {
+    // An address that cannot be built is an address not worth writing.
+  }
+}
+
 function press(event, node, destination) {
   const cinematic = live();
   if (cinematic) {
-    // The roll owns the page: the cinematic is the answer, not a hash jump.
+    // The roll owns the page: the cinematic is the answer, not a navigation.
     event.preventDefault();
     cinematic(destination);
     return;
   }
 
   acknowledge(node);
-  // The native navigation is deliberately left alone. It costs nothing — no
-  // listener is attached to `hashchange` yet — and it is what makes the press
-  // survive this module failing, a reload, or the tab being restored.
+  // This module is here, so the press is answered here: the document stays,
+  // and the address bar is written below exactly as the link would have.
+  event.preventDefault();
   if (claimed) return;
 
   // Until it is claimed the record is the latest press, not the first: someone
   // who presses Find a space and then Host a space is going to the desk, which
   // is also where the address bar now points. Claiming is the one-shot part.
+  record(node);
   pending = { destination, requestedAt: Math.round(performance.now()) };
   for (const resolve of waiting) resolve(pending);
   waiting.clear();

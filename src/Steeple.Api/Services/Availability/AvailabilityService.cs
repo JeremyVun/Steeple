@@ -71,7 +71,7 @@ public sealed class AvailabilityService : IAvailabilityService
             return ManageResult<RoomAvailabilityRulesDto>.Fail(ManageErrorCodes.InvalidAvailability, invalid);
         }
 
-        await _repository.ReplaceRulesAsync(roomId, hours!, blackouts!, ct).ConfigureAwait(false);
+        await _repository.ReplaceRulesAsync(roomId, hours!, blackouts!, now, ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
             "open_hours_updated",

@@ -24,6 +24,7 @@ import {
   todayIso,
 } from '../../data/store.js';
 import { el, replaceChildren } from '../dom.js';
+import { RESCIND_WARNING } from '../money.js';
 import {
   DAY_INITIAL,
   STATUS_WORD,
@@ -57,7 +58,7 @@ function labelled(label, control, hint) {
   ]);
 }
 
-export function createLetterPage({ announce, onBackToDesk }) {
+export function createLetterPage({ announce, onLeave, origin = () => 'desk' }) {
   const head = el('header', { class: 'letterpage__head' });
   const left = el('div', { class: 'letterpage__left' });
   const week = el('section', { class: 'letterpage__week' });
@@ -80,7 +81,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
   const scheduleText = el('p', { class: 'letterpage__when' });
 
   let application = null;
-  let mode = 'none'; // none | decline | counter | clash
+  let mode = 'none'; // none | decline | counter | clash | rescind
   let counter = null;
   let sealTimer = 0;
   let working = false;
@@ -140,6 +141,37 @@ export function createLetterPage({ announce, onBackToDesk }) {
     slip.textContent = text ?? '';
   }
 
+  // ── a request, or the booking it became ───────────────────────────────────
+  //
+  // Approving does not leave a decided request behind; it leaves a booking, and
+  // from that moment this page is its record. The eyebrow, the legend, the week
+  // heading and the left column all say booking rather than request — the only
+  // thing still asked of a host here is whether to keep it.
+
+  const booked = () => application?.status === APP_STATUS.approved;
+  const heldBooking = () => (booked() ? bookingFor(application.id) : null);
+  const rescinded = () => heldBooking()?.status === 'cancelled';
+
+  /** Dates this booking still holds — what a cancel would give back. */
+  function datesAhead(booking) {
+    const today = todayIso();
+    return occurrencesFor(booking.id).filter((o) => o.status !== 'cancelled' && o.date >= today);
+  }
+
+  function eyebrowText() {
+    if (!booked()) return `Request · ${STATUS_WORD[application.status]}`;
+    const booking = heldBooking();
+    if (booking?.status === 'cancelled') return 'Booking · Cancelled';
+    if (booking?.status === 'completed') return 'Booking · Finished';
+    return 'Booking · Confirmed';
+  }
+
+  /** The way out names where it goes, which is wherever this was opened from. */
+  function backLabel(venue) {
+    if (origin() === 'journal') return '← Inbox';
+    return venue?.shortName ? `← Requests at ${venue.shortName}` : '← Requests';
+  }
+
   // ── the week, redrawn whenever the counter draft moves ────────────────────
 
   function proposal() {
@@ -153,6 +185,9 @@ export function createLetterPage({ announce, onBackToDesk }) {
       roomId: application.roomId,
       proposal: current,
       exceptApplicationId: application.id,
+      // A cancelled booking holds nothing: those hours read as free again,
+      // because they are.
+      held: booked() && !rescinded(),
       ghost:
         mode === 'counter'
           ? {
@@ -163,12 +198,27 @@ export function createLetterPage({ announce, onBackToDesk }) {
           : null,
     });
     scheduleText.textContent = scheduleLine(current);
-    const read = readSchedule(application.venueId, application.roomId, current);
+    // A booking holds the very dates it is drawn against: read the week with its
+    // own occurrences set aside, or it reports the group as their own rival.
+    const read = readSchedule(application.venueId, application.roomId, current, {
+      exceptApplicationId: application.id,
+    });
     replaceChildren(verdict, [
       el('p', { class: 'verdict__count', text: read.countLine }),
-      ...read.notes.map((note) =>
-        el('p', { class: `verdict__note verdict__note--${note.tone}`, text: note.text })
-      ),
+      // Nothing is being weighed on a booked letter, so the notes that weigh a
+      // proposal — free, collides, outside your hours — have nothing to say.
+      ...(booked()
+        ? [
+            el('p', {
+              class: 'verdict__note verdict__note--held',
+              text: rescinded()
+                ? 'Cancelled. These dates are back on offer.'
+                : 'These dates are held for them.',
+            }),
+          ]
+        : read.notes.map((note) =>
+            el('p', { class: `verdict__note verdict__note--${note.tone}`, text: note.text })
+          )),
     ]);
     return read;
   }
@@ -177,9 +227,11 @@ export function createLetterPage({ announce, onBackToDesk }) {
     return el('ul', { class: 'legend' }, [
       el('li', { class: 'legend__item legend__item--open' }, 'Open'),
       el('li', { class: 'legend__item legend__item--booked' }, 'Already booked'),
-      el('li', { class: 'legend__item legend__item--proposed' }, 'This request'),
-      el('li', { class: 'legend__item legend__item--collide' }, 'Where they collide'),
-    ]);
+      el('li', { class: 'legend__item legend__item--proposed' }, booked() ? 'This booking' : 'This request'),
+      // Two bookings cannot share a room, so a booked week has no collision to
+      // name — and a key to a colour that is not on the page is a puzzle.
+      booked() ? null : el('li', { class: 'legend__item legend__item--collide' }, 'Where they collide'),
+    ].filter(Boolean));
   }
 
   // ── decisions ─────────────────────────────────────────────────────────────
@@ -230,7 +282,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
               );
               if (!declined) return;
               announce?.('Request declined, with your note. It is now answered.');
-              onBackToDesk();
+              onLeave();
             },
           },
           'Send the decline'
@@ -493,7 +545,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
             type: 'button',
             class: 'pill pill--primary',
             dataset: { action: 'back-to-desk' },
-            onclick: onBackToDesk,
+            onclick: onLeave,
           },
           'Back'
         ),
@@ -522,7 +574,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
             type: 'button',
             class: 'pill',
             dataset: { action: 'back-to-desk' },
-            onclick: onBackToDesk,
+            onclick: onLeave,
           },
           'Back'
         ),
@@ -537,7 +589,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
     clearTimeout(sealTimer);
     sealTimer = setTimeout(() => {
       if (element.classList.contains('is-sealed') && state.applicationId === application.id) {
-        onBackToDesk();
+        onLeave();
       }
     }, 3600);
   }
@@ -551,7 +603,78 @@ export function createLetterPage({ announce, onBackToDesk }) {
     replaceChildren(invitation, UNDECIDED.has(application.status) ? [] : [ratingBlock()].filter(Boolean));
   }
 
+  /**
+   * The one lever left over a confirmed booking, and it is asymmetric: every
+   * remaining date is freed and everything charged is refunded in full. Asked
+   * for twice, and never offered as a button — a destructive move should have
+   * to be reached for.
+   */
+  function openRescind(booking) {
+    mode = 'rescind';
+    const reason = el('textarea', {
+      class: 'input input--area',
+      id: 'letter-rescind-note',
+      rows: '3',
+      maxlength: '500',
+      placeholder: 'A line to the group, if you can give one.',
+    });
+
+    replaceChildren(drawer, [
+      el('h3', { class: 'eyebrow eyebrow--alert', text: 'Cancel this booking' }),
+      el('p', { class: 'prose prose--sm', text: RESCIND_WARNING }),
+      labelled('Why, in your words', reason),
+      el('div', { class: 'drawer__foot' }, [
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'pill',
+            dataset: { action: 'rescind-confirm' },
+            onclick: async () => {
+              const cancelled = await move(() => wire.cancelBooking(booking.id, reason.value));
+              if (!cancelled) return;
+              announce?.(
+                'Cancelled. Every remaining date is free again and the group has been refunded in full.'
+              );
+              // The letter is the record of a booking that no longer stands:
+              // redraw it as that before saying anything else about it.
+              show(application.id);
+            },
+          },
+          'Yes, cancel it'
+        ),
+        cancelButton('Keep the booking'),
+      ]),
+    ]);
+    revealDrawer();
+    renderActions();
+    reason.focus();
+  }
+
   function renderActions() {
+    if (booked()) {
+      const booking = heldBooking();
+      const ahead = booking && booking.status !== 'cancelled' ? datesAhead(booking) : [];
+      replaceChildren(
+        actions,
+        ahead.length
+          ? [
+              el(
+                'button',
+                {
+                  type: 'button',
+                  class: 'linkish letterpage__rescind',
+                  dataset: { action: 'rescind' },
+                  'aria-expanded': mode === 'rescind' ? 'true' : null,
+                  onclick: () => openRescind(booking),
+                },
+                'Cancel this booking'
+              ),
+            ]
+          : []
+      );
+      return;
+    }
     if (!UNDECIDED.has(application.status)) {
       replaceChildren(actions, []);
       return;
@@ -883,11 +1006,17 @@ export function createLetterPage({ announce, onBackToDesk }) {
    * The correspondence, and the way to add to it. The reply box lives here — on
    * the thread, where a person looks for it — not among the decisions: writing
    * back keeps the request open, and their answer brings it back to you.
+   *
+   * A booking is still a correspondence (2026-08-09). Once it is approved the
+   * box stays, because the side door is locked and somebody has to say so;
+   * steeple takes the message without moving the status, so writing on a booked
+   * letter re-opens nothing. Declined, withdrawn and expired are closed.
    */
   function threadBlock() {
     const messages = threadFor(application.id);
     const undecided = UNDECIDED.has(application.status);
-    if (!messages.length && !undecided) return null;
+    const open = undecided || booked();
+    if (!messages.length && !open) return null;
     const who = organizerOf(application).name;
 
     const box = el('textarea', {
@@ -911,7 +1040,11 @@ export function createLetterPage({ announce, onBackToDesk }) {
           }
           const updated = await move(() => wire.ask(application.id, body));
           if (!updated) return;
-          announce?.(`Sent. The request stays open and now waits on ${who}.`);
+          announce?.(
+            booked()
+              ? `Sent. ${who} has it — the booking stands as it is.`
+              : `Sent. The request stays open and now waits on ${who}.`
+          );
           show(application.id);
         },
       },
@@ -937,7 +1070,7 @@ export function createLetterPage({ announce, onBackToDesk }) {
             )
           )
         : null,
-      undecided ? el('div', { class: 'thread__reply' }, [box, send]) : null,
+      open ? el('div', { class: 'thread__reply' }, [box, send]) : null,
     ]);
   }
 
@@ -993,18 +1126,28 @@ export function createLetterPage({ announce, onBackToDesk }) {
     if (application.status === APP_STATUS.approved) {
       const booking = bookingFor(application.id);
       const dates = booking ? occurrencesFor(booking.id).map((o) => o.date) : [];
+      if (booking?.status === 'cancelled') {
+        return el('section', { class: 'outcome outcome--cancelled' }, [
+          el('h2', { class: 'eyebrow', text: 'Cancelled' }),
+          el('p', {
+            class: 'prose prose--sm',
+            text: 'This booking was cancelled. Every remaining date is free again and the group has been refunded in full.',
+          }),
+        ]);
+      }
+      const ahead = booking ? datesAhead(booking).length : 0;
       return el('section', { class: 'outcome outcome--approved' }, [
-        el('h2', { class: 'eyebrow', text: 'Booked' }),
+        el('h2', { class: 'eyebrow', text: 'The space is theirs' }),
         el('p', {
           class: 'prose prose--sm',
-          text: `${
-            dates.length
-              ? `${plural(dates.length, 'date', 'dates')} held for them, ${fmtDateRange(
-                  dates[0],
-                  dates.at(-1)
-                )}`
-              : 'Approved'
-          }${application.decidedAt ? ` · answered ${fmtDate(application.decidedAt.slice(0, 10))}` : ''}.`,
+          // Until the booking's own read lands this browser holds no dates at
+          // all, and a letter that answers "all of them past" about dates it
+          // has not been told is worse than one that says only what it knows.
+          text: dates.length
+            ? `${plural(dates.length, 'date', 'dates')} held, ${fmtDateRange(dates[0], dates.at(-1))}${
+                ahead ? ` · ${plural(ahead, 'date', 'dates')} still to come` : ' · all of them past'
+              }.`
+            : 'Booked.',
         }),
       ]);
     }
@@ -1054,6 +1197,16 @@ export function createLetterPage({ announce, onBackToDesk }) {
         if (!answer.ok || application?.id !== applicationId) return;
         show(applicationId);
       });
+      // A booked letter is a booking's record, and the dates and their charge
+      // states live on the booking's own detail read alone — the inbox's
+      // hosting pass is a list pass with none of that in it, so a letter opened
+      // from there would otherwise report a booking with no dates left.
+      const bookingId = application.bookingId ?? bookingFor(applicationId)?.id ?? null;
+      if (application.status === APP_STATUS.approved && bookingId) {
+        wire.openBooking(bookingId).then(() => {
+          if (application?.id === applicationId) show(applicationId);
+        });
+      }
     }
     clearTimeout(sealTimer);
     element.classList.remove('is-sealed');
@@ -1070,16 +1223,20 @@ export function createLetterPage({ announce, onBackToDesk }) {
     replaceChildren(head, [
       el(
         'button',
-        { type: 'button', class: 'linkish sheet__up', dataset: { action: 'back' }, onclick: onBackToDesk },
-        venue?.shortName ? `← Requests at ${venue.shortName}` : '← Requests'
+        { type: 'button', class: 'linkish sheet__up', dataset: { action: 'back' }, onclick: onLeave },
+        backLabel(venue)
       ),
-      el('p', { class: 'eyebrow', text: `Request · ${STATUS_WORD[application.status]}` }),
+      el('p', { class: 'eyebrow', text: eyebrowText() }),
       el('h1', { class: 'sheet__title', text: organizer.org ?? organizer.name }),
       el('p', {
         class: 'letterpage__meta',
         text: `About ${plural(application.groupSize, 'person', 'people')} · ${
           application.activityType
-        } · Sent ${fmtDate(application.createdAt.slice(0, 10))}`,
+        } · ${
+          booked() && application.decidedAt
+            ? `Booked ${fmtDate(application.decidedAt.slice(0, 10))}`
+            : `Sent ${fmtDate(application.createdAt.slice(0, 10))}`
+        }`,
       }),
       trustChips(organizer),
     ]);
@@ -1099,7 +1256,10 @@ export function createLetterPage({ announce, onBackToDesk }) {
     ]);
 
     replaceChildren(week, [
-      el('h2', { class: 'eyebrow', text: 'When' }),
+      el('h2', {
+        class: 'eyebrow',
+        text: booked() ? (rescinded() ? 'What was held' : 'What is held') : 'When',
+      }),
       scheduleText,
       ribbon.element,
       legend(),
@@ -1116,9 +1276,16 @@ export function createLetterPage({ announce, onBackToDesk }) {
     if (!application) return '';
     const organizer = organizerOf(application);
     const room = effectiveRoom(application.venueId, application.roomId);
-    const read = readSchedule(application.venueId, application.roomId, scheduleOf(application));
+    const read = readSchedule(application.venueId, application.roomId, scheduleOf(application), {
+      exceptApplicationId: application.id,
+    });
+    const booking = heldBooking();
     return [
-      `A request from ${organizer.org ?? organizer.name}, ${organizer.name}. ${STATUS_WORD[application.status]}.`,
+      booked()
+        ? `A booking with ${organizer.org ?? organizer.name}, ${organizer.name}. ${
+            booking?.status === 'cancelled' ? 'Cancelled.' : 'Confirmed.'
+          }`
+        : `A request from ${organizer.org ?? organizer.name}, ${organizer.name}. ${STATUS_WORD[application.status]}.`,
       `${room?.name ?? ''} for ${plural(application.groupSize, 'person', 'people')}, ${application.activityType}.`,
       scheduleLine(application),
       organizer.verified ? `${VERIFIED_LABEL}.` : '',
@@ -1135,11 +1302,23 @@ export function createLetterPage({ announce, onBackToDesk }) {
         : '',
       joinedText(organizer) ? `${joinedText(organizer)}.` : '',
       application.intentText,
-      ribbonSpoken(application.venueId, application.roomId, scheduleOf(application), application.id),
-      read.notes.map((n) => n.text).join(' '),
+      ribbonSpoken(
+        application.venueId,
+        application.roomId,
+        scheduleOf(application),
+        application.id,
+        booked() && !rescinded()
+      ),
+      booked() ? '' : read.notes.map((n) => n.text).join(' '),
       UNDECIDED.has(application.status)
         ? 'You can approve, decline, suggest another time, or write back on the thread.'
-        : ratingSpoken(),
+        : '',
+      booked()
+        ? booking && booking.status !== 'cancelled' && datesAhead(booking).length
+          ? 'You can write to the group on the thread, or cancel this booking.'
+          : 'You can write to the group on the thread.'
+        : '',
+      ratingSpoken(),
     ]
       .filter(Boolean)
       .join(' ');

@@ -242,4 +242,181 @@ public class RoomRepositoryTests
 
         Assert.Null(room);
     }
+
+    // ----- Sitemap rows: what steeple advertises to crawlers ------------------------------------
+    //
+    // These rows are staged in their own far-from-NoVA box so the suite can assert exact contents
+    // without depending on what the seed (or another suite sharing this database) has published
+    // inside the beachhead. The bounds are a parameter now, so the fixture area is as real a
+    // served area as the beachhead is.
+
+    private static readonly BoundingBox FixtureBounds = new(
+        MinLatitude: 10.0, MaxLatitude: 11.0, MinLongitude: 20.0, MaxLongitude: 21.0);
+
+    [Fact]
+    public async Task GetPublishedForSitemapAsync_AdvertisesOnlyWhatADirectReadWouldAnswer()
+    {
+        var prefix = $"sm-{Guid.NewGuid():N}"[..12];
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        // Inside the served area, published: the one crawlable listing.
+        await SeedListingAsync(db, $"{prefix}-inside", "hall", 10.5, 20.5, RoomStatus.Published);
+        // Same box, but each of the reasons a read answers 404.
+        await SeedListingAsync(db, $"{prefix}-draft", "hall", 10.5, 20.5, RoomStatus.Draft);
+        await SeedListingAsync(db, $"{prefix}-unlisted", "hall", 10.5, 20.5, RoomStatus.Unlisted);
+        // An operator takedown carries both marks — the schema forbids Published + the marker.
+        await SeedListingAsync(
+            db, $"{prefix}-takendown", "hall", 10.5, 20.5, RoomStatus.Unlisted,
+            operatorUnlistedAtUtc: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero));
+        // Published, but the venue sits outside the box — advertising it would be a URL that 404s.
+        await SeedListingAsync(db, $"{prefix}-outside", "hall", 12.5, 20.5, RoomStatus.Published);
+
+        var entries = await repository.GetPublishedForSitemapAsync(FixtureBounds);
+
+        Assert.Equal(
+            new[] { $"{prefix}-inside" },
+            entries.Where(e => e.VenueSlug.StartsWith(prefix, StringComparison.Ordinal)).Select(e => e.VenueSlug));
+    }
+
+    [Fact]
+    public async Task GetPublishedForSitemapAsync_AVenueSittingExactlyOnTheEdgeIsAdvertised()
+    {
+        // BoundingBox.Contains and the search SQL both include their edges, so a venue on the
+        // boundary is served — dropping it here would hide a readable listing from crawlers, and
+        // any looser comparison would advertise one that 404s. Same predicate, both directions.
+        var prefix = $"ed-{Guid.NewGuid():N}"[..12];
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        await SeedListingAsync(db, $"{prefix}-sw", "hall", FixtureBounds.MinLatitude, FixtureBounds.MinLongitude, RoomStatus.Published);
+        await SeedListingAsync(db, $"{prefix}-ne", "hall", FixtureBounds.MaxLatitude, FixtureBounds.MaxLongitude, RoomStatus.Published);
+
+        var entries = await repository.GetPublishedForSitemapAsync(FixtureBounds);
+        var mine = entries.Where(e => e.VenueSlug.StartsWith(prefix, StringComparison.Ordinal)).ToList();
+
+        Assert.Equal(new[] { $"{prefix}-ne", $"{prefix}-sw" }, mine.Select(e => e.VenueSlug));
+        // The read gate agrees, which is the whole point of sharing one comparison.
+        Assert.True(FixtureBounds.Contains(FixtureBounds.MinLatitude, FixtureBounds.MinLongitude));
+        Assert.True(FixtureBounds.Contains(FixtureBounds.MaxLatitude, FixtureBounds.MaxLongitude));
+    }
+
+    [Fact]
+    public async Task GetPublishedForSitemapAsync_OrdersByVenueThenRoomEveryTime()
+    {
+        var prefix = $"or-{Guid.NewGuid():N}"[..12];
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        // Inserted in an order that is neither the answer nor its reverse.
+        await SeedListingAsync(db, $"{prefix}-b", "yoga-room", 10.2, 20.2, RoomStatus.Published);
+        await SeedListingAsync(db, $"{prefix}-a", "small-hall", 10.3, 20.3, RoomStatus.Published);
+        await SeedListingAsync(db, $"{prefix}-b", "art-room", 10.2, 20.2, RoomStatus.Published);
+        await SeedListingAsync(db, $"{prefix}-a", "main-hall", 10.3, 20.3, RoomStatus.Published);
+
+        var first = await repository.GetPublishedForSitemapAsync(FixtureBounds);
+        var second = await repository.GetPublishedForSitemapAsync(FixtureBounds);
+
+        static IEnumerable<string> Paths(IReadOnlyList<SitemapEntry> entries, string venuePrefix) =>
+            entries.Where(e => e.VenueSlug.StartsWith(venuePrefix, StringComparison.Ordinal))
+                .Select(e => $"{e.VenueSlug}/{e.RoomSlug}");
+
+        Assert.Equal(
+            new[] { $"{prefix}-a/main-hall", $"{prefix}-a/small-hall", $"{prefix}-b/art-room", $"{prefix}-b/yoga-room" },
+            Paths(first, prefix));
+        Assert.Equal(Paths(first, prefix), Paths(second, prefix));
+    }
+
+    [Fact]
+    public async Task GetPublishedForSitemapAsync_LastmodIsWhicheverOfRoomAndVenueChangedLast()
+    {
+        var prefix = $"lm-{Guid.NewGuid():N}"[..12];
+        var older = new DateTimeOffset(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
+        var newer = new DateTimeOffset(2026, 7, 21, 16, 30, 0, TimeSpan.Zero);
+
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        // The venue was edited last (a new address changes every one of its room pages)…
+        await SeedListingAsync(db, $"{prefix}-venuelast", "hall", 10.6, 20.6, RoomStatus.Published,
+            roomUpdatedAtUtc: older, venueUpdatedAtUtc: newer);
+        // …and here the room was.
+        await SeedListingAsync(db, $"{prefix}-roomlast", "hall", 10.6, 20.6, RoomStatus.Published,
+            roomUpdatedAtUtc: newer, venueUpdatedAtUtc: older);
+
+        var entries = await repository.GetPublishedForSitemapAsync(FixtureBounds);
+
+        Assert.All(
+            entries.Where(e => e.VenueSlug.StartsWith(prefix, StringComparison.Ordinal)),
+            e => Assert.Equal(newer, e.LastModifiedUtc));
+    }
+
+    [Fact]
+    public async Task GetPublishedForSitemapAsync_TheSeedsDraftRoomIsNeverAdvertised()
+    {
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        var entries = await repository.GetPublishedForSitemapAsync(FullBeachheadBounds);
+
+        Assert.DoesNotContain(entries, e => e.RoomSlug == "renovation-annex");
+        Assert.Contains(entries, e => e is { VenueSlug: "grace-community-vienna", RoomSlug: "fellowship-hall" });
+    }
+
+    /// <summary>
+    /// Writes one venue + one room straight through EF (no service, no geocoder): these rows exist
+    /// to be queried, and staging them here keeps the sitemap predicate's proof independent of the
+    /// manage module's own rules.
+    /// </summary>
+    private static async Task SeedListingAsync(
+        SteepleDbContext db,
+        string venueSlug,
+        string roomSlug,
+        double latitude,
+        double longitude,
+        RoomStatus status,
+        DateTimeOffset? operatorUnlistedAtUtc = null,
+        DateTimeOffset? roomUpdatedAtUtc = null,
+        DateTimeOffset? venueUpdatedAtUtc = null)
+    {
+        var created = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var venue = await db.Venues.FirstOrDefaultAsync(v => v.Slug == venueSlug);
+        if (venue is null)
+        {
+            venue = new Venue
+            {
+                Id = Guid.NewGuid(),
+                Name = venueSlug,
+                Slug = venueSlug,
+                Description = "Staged by RoomRepositoryTests.",
+                Type = VenueType.Church,
+                AddressLine = "1 Fixture Way",
+                Suburb = "Fixtureton",
+                Postcode = "00000",
+                Latitude = latitude,
+                Longitude = longitude,
+                CreatedAtUtc = created,
+                UpdatedAtUtc = venueUpdatedAtUtc ?? created,
+            };
+            db.Venues.Add(venue);
+        }
+
+        db.Rooms.Add(new Room
+        {
+            Id = Guid.NewGuid(),
+            VenueId = venue.Id,
+            Name = roomSlug,
+            Slug = roomSlug,
+            Description = "Staged by RoomRepositoryTests.",
+            Capacity = 20,
+            PricePerHour = 25m,
+            Currency = "USD",
+            Status = status,
+            OperatorUnlistedAtUtc = operatorUnlistedAtUtc,
+            CreatedAtUtc = created,
+            UpdatedAtUtc = roomUpdatedAtUtc ?? created,
+        });
+
+        await db.SaveChangesAsync();
+    }
 }

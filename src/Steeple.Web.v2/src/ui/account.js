@@ -17,6 +17,7 @@
 
 import { CORRESPONDENCE_VIEWS, setView, state } from '../core/bus.js';
 import { paymentState } from '../data/correspondence.js';
+import { isEnabled } from '../data/flags.js';
 import * as session from '../data/session.js';
 import { el, replaceChildren } from './dom.js';
 import { cardLine } from './guest/payment.js';
@@ -37,6 +38,7 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
   // Null means the question has not been asked — which is a different sentence
   // from "no card on file", and the card prints neither until it knows.
   let payments = null;
+  let paymentsEnabled = false;
   const mark = el('span', { class: 'account__mark', 'aria-hidden': 'true' });
   const who = el('span', { class: 'account__who' });
 
@@ -97,9 +99,17 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
     if (open) {
       place();
       // Asked when the card is opened, not on every page load: nobody needs a
-      // payments read to look at a map. A stale answer is corrected in place.
-      readPayments();
+      // flags or payments read to look at a map. The public flag fails closed,
+      // so a missing flags endpoint can never expose an unavailable card flow.
+      readPaymentsFlag();
     }
+  }
+
+  async function readPaymentsFlag() {
+    paymentsEnabled = await isEnabled('payments.enabled');
+    if (!open) return;
+    render();
+    if (paymentsEnabled) readPayments();
   }
 
   /** What steeple holds on file. Best effort — a failure simply says nothing. */
@@ -117,7 +127,7 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
    * and four digits. No card number has ever been here to print.
    */
   function paymentBlock() {
-    if (!onCard) return null;
+    if (!onCard || !paymentsEnabled) return null;
     const line = payments?.hasPaymentMethod ? cardLine(payments.method) : null;
     return el('div', { class: 'account__payment' }, [
       el('p', { class: 'account__paylabel', text: 'Payment method' }),
@@ -157,7 +167,7 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
     // page corrects itself. A correspondence is the exception: an inbox, a desk
     // or a letter is somebody's, and once it is nobody's the honest place to
     // stand is the map.
-    if (CORRESPONDENCE_VIEWS.has(state.view)) setView('village');
+    if (CORRESPONDENCE_VIEWS.has(state.view)) setView('village', {}, { history: 'replace' });
     announce(`Signed out${person ? ` of ${person.displayName}` : ''}.`);
     trigger.focus();
   }
@@ -237,10 +247,8 @@ export function createAccount({ announce = () => {}, onSignIn = null, onCard = n
   });
   render();
 
-  // A session remembered from a previous visit may have gone stale while the
-  // browser was closed: ask steeple who this is, quietly. A dead session signs
-  // this browser out; an API that is simply not running costs nothing.
-  if (session.isSignedIn()) session.fetchCurrentUser().then(render);
+  // Identity is restored from the cookie rather than a persisted profile.
+  session.fetchCurrentUser().then(render);
 
   return { element, card, render };
 }

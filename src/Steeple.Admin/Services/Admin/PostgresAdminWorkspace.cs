@@ -365,9 +365,26 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<SteepleDbContext>();
-        var hiddenAt = hidden ? DateTimeOffset.UtcNow : (DateTimeOffset?)null;
-        db.Ratings.Where(r => r.Id == ratingId)
-            .ExecuteUpdate(s => s.SetProperty(r => r.HiddenAtUtc, hiddenAt));
+        var rating = db.Ratings.Include(r => r.Venue).FirstOrDefault(r => r.Id == ratingId);
+        if (rating is null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        rating.HiddenAtUtc = hidden ? now : null;
+
+        // A venue's star average rides every one of its room documents, so moderating a
+        // venue-directed rating changes what those pages say: stamp the venue that all of its
+        // rooms' sitemap lastmod reads through. Organizer-directed ratings never reach a listing
+        // page, so they move nothing. (Time-based reveal is not a write and cannot be covered —
+        // docs/contracts/seo.md.)
+        if (rating.RateeType == RatingRateeType.Venue && rating.Venue is { } venue)
+        {
+            venue.UpdatedAtUtc = now;
+        }
+
+        db.SaveChanges();
         _logger.LogInformation(
             "Moderation: {Actor} {Action} rating {RatingId}.",
             operatorUser,

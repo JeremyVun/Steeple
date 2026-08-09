@@ -15,13 +15,13 @@
 import { bus, setMode, setView, state } from '../../core/bus.js';
 import { refreshHosted, refreshMine } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
-import { getApplication, guestApplications, hostedApplications } from '../../data/store.js';
+import { getApplication } from '../../data/store.js';
 import { heldVenue } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
 import { createComposer } from './composer.js';
 import { createJournal } from './journal.js';
 import { createLetterView } from './letter.js';
-import { isYourMove, plural } from './copy.js';
+import { plural } from './copy.js';
 
 // An exploration flag in the house style (CONTRACT2 §0), parsed once by the bus
 // as `state.letter`: the same truth and the same interaction, set in two hands.
@@ -34,7 +34,13 @@ import { isYourMove, plural } from './copy.js';
 // purpose — and anything modal, which has its own way out.
 const NOT_AWAY = '.guest__surface, .sent, .slip, .nav, .porch, [role="dialog"], .modal__layer';
 
-export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } = {}) {
+export function createGuestFlows({
+  announce,
+  porch,
+  onFixPayment,
+  messageRows,
+  onOpenMessage,
+} = {}) {
   document.documentElement.dataset.letter = state.letter;
 
   const wash = el('div', { class: 'guest__wash', 'aria-hidden': 'true' });
@@ -60,9 +66,10 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
       setView('letter', { applicationId: app.id, venueId: app.venueId, roomId: app.roomId });
     },
     onBrowse: () => setView('village'),
-    // What steeple wrote while this person was away, printed as lines at the
-    // head of the inbox rather than as a second inbox of its own.
-    ambientRows,
+    // What steeple wrote to this person, printed as messages in this same
+    // inbox — unread until one is opened, and opening one is what marks it.
+    messageRows,
+    onOpenMessage,
   });
 
   const letter = createLetterView({
@@ -152,22 +159,30 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
 
   // An inbox is somebody's. Signed out there is nobody for it to belong to, so
   // there is no tab and no count — not an empty one (D6).
+  //
+  // One number, the way every inbox anybody has ever used counts: what has not
+  // been read plus what is waiting on you, draining as each is dealt with
+  // (owner review, 2026-08-09). It used to count only the requests, so an
+  // unread message sat in a silent inbox behind a badge-less word — the count
+  // is the only thing on the page that says "there is something in here" while
+  // the inbox is closed, and it was saying nothing. The two halves keep their
+  // own words in the label, because "1" over a message and "1" over a request
+  // ask for different things.
   function renderTab() {
     const guest = state.mode === 'guest' && session.isSignedIn();
     tab.hidden = !guest;
     if (!guest) return;
-    const waiting =
-      guestApplications().filter((a) => isYourMove(a.status)).length +
-      hostedApplications().filter((a) => a.status === 'pending').length;
-    tabCount.textContent = waiting ? String(waiting) : '';
-    tabCount.hidden = !waiting;
+    const unread = journal.unread();
+    const { count: needing, phrase } = journal.waiting();
+    const count = unread + needing;
+    tabCount.textContent = count ? String(count) : '';
+    tabCount.hidden = !count;
     tab.classList.toggle('is-on', state.view === 'journal' || state.view === 'letter');
-    tab.setAttribute(
-      'aria-label',
-      waiting
-        ? `Inbox — ${plural(waiting, 'request needs', 'requests need')} you`
-        : 'Inbox'
-    );
+    const said = [
+      unread ? plural(unread, 'unread message', 'unread messages') : null,
+      needing ? `${phrase} waiting on you` : null,
+    ].filter(Boolean);
+    tab.setAttribute('aria-label', said.length ? `Inbox — ${said.join(', ')}` : 'Inbox');
   }
 
   // ── visibility ────────────────────────────────────────────────────────────
@@ -205,9 +220,12 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     // would otherwise leave a letter's address in the bar.
     if (guest && !session.isSignedIn() && (state.view === 'journal' || state.view === 'letter')) {
       queueMicrotask(() => {
-        if (!session.isSignedIn() && (state.view === 'journal' || state.view === 'letter')) {
-          setView('village');
-        }
+        session.fetchCurrentUser().then(() => {
+          if (!session.isSignedIn() && (state.view === 'journal' || state.view === 'letter')) {
+            // The session ended under them; nobody navigated anywhere.
+            setView('village', {}, { history: 'replace' });
+          }
+        });
       });
       return;
     }
@@ -260,15 +278,18 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     }
   }
 
-  // A click on the page behind the inbox closes the inbox, and does nothing
-  // else: the visitor was reaching past it, not through it. Only the inbox — a
-  // request being read or written is not something to lose to a stray click.
+  // A click on the page behind the inbox puts the whole inbox down — the letter
+  // being read with it — and does nothing else: the visitor was reaching past
+  // it, not through it. Reading is not writing, so a request being *written*
+  // (the composer) is still not something to lose to a stray click
+  // (owner review, 2026-08-09: leaving a letter by the one small "← Inbox"
+  // control was the only way out, which is not a way out).
   // Capture, because the surfaces underneath stop their own events before they
   // ever bubble this far.
   document.addEventListener(
     'click',
     (event) => {
-      if (state.mode !== 'guest' || state.view !== 'journal') return;
+      if (state.mode !== 'guest' || (state.view !== 'journal' && state.view !== 'letter')) return;
       if (event.target?.closest?.(NOT_AWAY)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -320,9 +341,11 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
     renderTab();
     if (state.mode !== 'guest') return;
     if (state.view === 'journal') {
-      const openId = document.activeElement?.closest?.('.jrow')?.dataset.id;
+      const held = document.activeElement?.closest?.('.jrow, .jmsg');
+      const openId = held?.dataset.id;
+      const kind = held?.classList.contains('jmsg') ? '.jmsg' : '.jrow';
       journal.render();
-      if (openId) journal.element.querySelector(`.jrow[data-id="${openId}"]`)?.focus();
+      if (openId) journal.element.querySelector(`${kind}[data-id="${openId}"]`)?.focus();
     } else if (state.view === 'letter') {
       const held = letter.element.contains(document.activeElement);
       letter.render();
@@ -336,6 +359,9 @@ export function createGuestFlows({ announce, porch, onFixPayment, ambientRows } 
   // open inbox when that feed answers so a decision made while this tab stayed
   // signed in appears without a reload.
   bus.on('notifications:change', () => {
+    // The badge counts unread mail too, so it moves with the feed: a message
+    // arriving, one being opened, and the person changing all land here.
+    renderTab();
     if (state.mode === 'guest' && state.view === 'journal') journal.render();
   });
 

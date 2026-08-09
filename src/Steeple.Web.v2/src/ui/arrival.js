@@ -9,7 +9,7 @@
 // page that lacks it — keep the two, and ui/copy.js ARRIVAL, saying one thing.
 //
 // The presses themselves have been answered since before this module existed:
-// the controls are real links to their hash routes and core/intent.js has been
+// the controls are real links to their clean routes and core/intent.js has been
 // recording what was asked for. This file says only what a press *means* once
 // there is a roll to mean it with; main.js decides when that is (releaseArrival).
 
@@ -32,14 +32,15 @@ function build() {
       el('p', { class: 'arrival__line', text: ARRIVAL.line }),
       // Links, not buttons, and the same links index.html prints: a press must
       // record its destination in the address bar even on a page where no
-      // handler has arrived (core/intent.js).
+      // handler has arrived (core/intent.js). Base-relative, like the printed
+      // ones — `browse`, not `/browse` — so a stripped prefix survives.
       el('div', { class: 'arrival__actions' }, [
         el(
           'a',
-          { class: 'pill pill--primary arrival__cta', href: '#/browse', 'data-intent': 'village' },
+          { class: 'pill pill--primary arrival__cta', href: 'browse', 'data-intent': 'village' },
           ARRIVAL.cta
         ),
-        el('a', { class: 'pill arrival__host', href: '#/desk', 'data-intent': 'desk' }, ARRIVAL.ctaHost),
+        el('a', { class: 'pill arrival__host', href: 'desk', 'data-intent': 'desk' }, ARRIVAL.ctaHost),
       ]),
       el('p', { class: 'arrival__hint', text: ARRIVAL.hint }),
       // The invitation to scroll, drawn rather than written: a thread down off
@@ -49,7 +50,7 @@ function build() {
         'a',
         {
           class: 'arrival__scroll',
-          href: '#/browse',
+          href: 'browse',
           'data-intent': 'village',
           'aria-label': ARRIVAL.scroll,
         },
@@ -68,7 +69,7 @@ export function createArrival() {
   // One handler for all three controls, held by core/intent.js and used only
   // once main.js has released the page to the roll. Handing it over rather than
   // attaching our own is what keeps a press answered exactly once: the same
-  // press must not both jump the hash and run the cinematic.
+  // press must not both write the route and run the cinematic.
   setArrivalHandler((destination) => {
     reportArrival(destination, 'cinematic');
     roll(destination === 'desk' ? () => setView('desk') : null);

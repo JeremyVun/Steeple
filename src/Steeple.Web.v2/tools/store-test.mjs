@@ -18,11 +18,9 @@
 // about **ownership**: whose correspondence this browser is holding, and that
 // the demo fixture can never be mistaken for somebody's.
 //
-// A store belongs to somebody (D6): the key is `steeple-village-store:{id}` and
-// the id is steeple's own user id, so this suite stands a browser up and signs
-// one in before it asks the store anything. localStorage comes first because
-// data/session.js and data/store.js both probe for it as they are imported —
-// hence the dynamic import below.
+// A store belongs to somebody (D6), but its private mirror is memory-only. This
+// suite gives session.js a cookie-like refresh answer, then proves legacy keys
+// are purged and no mutation recreates them.
 
 function browserStorage() {
   const cells = new Map();
@@ -38,6 +36,7 @@ function browserStorage() {
 }
 
 globalThis.localStorage = browserStorage();
+globalThis.sessionStorage = browserStorage();
 
 const NADIA = {
   id: '9f1c0f2a-9d0e-4c0a-9d3e-2b6b8f0a1111',
@@ -46,12 +45,35 @@ const NADIA = {
   createdAtUtc: '2025-09-01T00:00:00Z',
 };
 
-// The session record is the non-secret half only — who is signed in, and why
-// that last changed. Tokens are memory and an httpOnly cookie (data/session.js).
+// Plant both retired private shapes before module evaluation. P2 migration must
+// remove them from both browser stores without adopting either profile/mirror.
 localStorage.setItem(
   'steeple-village-session',
   JSON.stringify({ user: NADIA, reason: 'signedIn', stamp: Date.now() })
 );
+localStorage.setItem(`steeple-village-store:${NADIA.id}`, '{"private":"old mirror"}');
+sessionStorage.setItem('steeple-village-session', '{"user":{"email":"old@example.org"}}');
+sessionStorage.setItem('steeple-village-store:anon', '{"draft":"old draft"}');
+
+globalThis.fetch = async (url, options = {}) => {
+  const path = String(url);
+  if (path.endsWith('api/v1/auth/refresh')) {
+    return new Response(JSON.stringify({ accessToken: 'memory-access' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  if (path.endsWith('api/v1/me')) {
+    return new Response(JSON.stringify({ ...NADIA, agreements: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+  if (path.endsWith('api/v1/auth/sessions') && options.method === 'DELETE') {
+    return new Response(null, { status: 204 });
+  }
+  throw new Error(`unexpected test request: ${options.method ?? 'GET'} ${path}`);
+};
 
 const {
   APP_STATUS,
@@ -76,6 +98,12 @@ function expect(label, actual, wanted) {
     console.log(`ok    ${label}`);
   }
 }
+
+await session.fetchCurrentUser();
+expect('migration: legacy profile left localStorage', localStorage.getItem('steeple-village-session'), null);
+expect('migration: legacy profile left sessionStorage', sessionStorage.getItem('steeple-village-session'), null);
+expect('migration: old account mirror was purged', localStorage.getItem(`steeple-village-store:${NADIA.id}`), null);
+expect('migration: old anonymous draft was purged', sessionStorage.getItem('steeple-village-store:anon'), null);
 
 store.resetDemo();
 
@@ -591,28 +619,26 @@ expect('slug: with nothing left under the guess', store.openHoursFor('chapel-yar
 store.adoptVenueSlug('chapel-yard', 'chapel-yard');
 expect('slug: re-adopting the same slug changes nothing', store.openHoursFor('chapel-yard', 'upper-room').length, 1);
 
-// ---- one store per person (D6) ----------------------------------------------
+// ---- one memory-only store per active person (D6) ---------------------------
 
 store.mirrorApplication(dto());
-expect('identity: their key exists', localStorage.getItem(`steeple-village-store:${NADIA.id}`) !== null, true);
-const hersBefore = localStorage.getItem(`steeple-village-store:${NADIA.id}`);
+expect('identity: a mirror mutation writes no account key', localStorage.getItem(`steeple-village-store:${NADIA.id}`), null);
+expect('identity: and writes nothing to sessionStorage', sessionStorage.length, 0);
+
+// An old build could have left these behind after this document booted. Sign-
+// out is the second migration boundary and removes every private namespace.
+localStorage.setItem('steeple-village-session', '{"user":{"email":"late@example.org"}}');
+localStorage.setItem(`steeple-village-store:${NADIA.id}`, '{"applications":[{"private":true}]}');
+sessionStorage.setItem('steeple-village-store:anon', '{"draft":"private"}');
 
 await session.signOut();
 expect('identity: signed out, the browser is nobody', store.currentOrganizerId(), 'anon');
 expect('identity: signed out, there is no inbox', store.guestApplications().length, 0);
-expect(
-  'identity: signing out leaves their store where it was',
-  localStorage.getItem(`steeple-village-store:${NADIA.id}`),
-  hersBefore
-);
+expect('identity: sign-out removes the legacy profile', localStorage.getItem('steeple-village-session'), null);
+expect('identity: sign-out removes the old account mirror', localStorage.getItem(`steeple-village-store:${NADIA.id}`), null);
+expect('identity: sign-out removes sessionStorage drafts', sessionStorage.getItem('steeple-village-store:anon'), null);
 store.venueApplications('grace-community-vienna');
-const anon = JSON.parse(localStorage.getItem('steeple-village-store:anon') ?? 'null');
-expect('identity: the anonymous namespace is its own', anon !== null, true);
-expect(
-  'identity: and holds none of her correspondence',
-  anon.applications.some((a) => a.id === APPLICATION_ID),
-  false
-);
+expect('identity: anonymous reads remain memory-only', localStorage.getItem('steeple-village-store:anon'), null);
 
 if (failures) {
   console.error(`\n${failures} failure(s)`);

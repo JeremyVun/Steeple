@@ -1,80 +1,47 @@
-// THE SESSION — who steeple thinks you are, and the proof it asks for.
+// THE SESSION — who steeple thinks this tab is, and the proof it asks for.
 //
-// One module owns it. Nothing else in the app reads a token, and nothing else
-// decides when one has expired: callers hand this module a piece of work that
-// needs a bearer, and it runs it — refreshing once, quietly, if the access token
-// has gone stale under them.
+// The rotating refresh token is an httpOnly cookie, the short-lived access
+// token and profile live only in this module's memory, and no identity data is
+// written to either browser storage. A reload proves the cookie by refreshing
+// once, then asks GET /me who owns it.
 //
-// Two things live in two different places, on purpose:
-//
-//   · the ROTATING REFRESH TOKEN is not here at all. It is an httpOnly cookie
-//     steeple sets (`refreshTransport: 'cookie'`, CONTRACTS — identity) and the
-//     browser presents by itself on every same-origin /api call. Script cannot
-//     read it, which is the whole point: a ninety-day credential in
-//     localStorage is a ninety-day credential in reach of anything that gets
-//     onto the page.
-//   · the ACCESS TOKEN lives in this module's memory and nowhere else. It is
-//     worth fifteen minutes, and a reload simply asks for another.
-//
-// What localStorage still holds is the non-secret half — who is signed in, and
-// why that last changed — so a reload shows the right name before the network
-// answers, and so the OTHER TABS of this browser can be told. Tabs share one
-// session: when one signs in, the rest adopt the person; when one signs out,
-// the rest let go, and they are told whether that was asked for ('signedOut')
-// or done to them ('expired').
-//
-// Two tabs also refresh at the same instant, which used to be fatal: rotation
-// treats a re-presented token as theft and kills the family. steeple now
-// answers a token rotated moments ago with its successor instead (the rotation
-// grace window), so a race costs nothing — this file only has to not make the
-// race worse, which it does by keeping one refresh in flight per tab and by
-// re-reading what the other tabs have said before starting one.
-//
-// Signing in is one call whoever asks: `signInWithProvider` takes a provider's
-// ID token and hands back the person steeple made of it. Google and Apple get
-// their tokens from data/providers.js; the dev provider (Auth:DevLoginEnabled,
-// which exists only in appsettings.Development.json) takes an email — or
-// `email|Display Name` — as its "token" and creates the account on first use.
-// Everything after that point is the same for all three, including the cookie
-// the refresh token arrives as.
+// Tabs coordinate through an opaque BroadcastChannel event. The event says
+// only that a session appeared or disappeared; a sibling that hears "in"
+// obtains the profile from steeple for itself. Nothing profile-shaped crosses
+// the channel.
 
 import * as api from './api.js';
 
-const KEY = 'steeple-village-session';
+const LEGACY_KEY = 'steeple-village-session';
+const CHANNEL = 'steeple-village-session';
 
-const memory = new Map();
-const storage = (() => {
-  try {
-    const probe = '__steeple-session-probe';
-    localStorage.setItem(probe, '1');
-    localStorage.removeItem(probe);
-    return localStorage;
-  } catch {
-    return {
-      getItem: (k) => memory.get(k) ?? null,
-      setItem: (k, v) => memory.set(k, v),
-      removeItem: (k) => memory.delete(k),
-    };
+/** Remove the profile/tombstone written by versions before cleanup P2. */
+function purgeLegacyProfile() {
+  for (const area of [globalThis.localStorage, globalThis.sessionStorage]) {
+    try {
+      area?.removeItem(LEGACY_KEY);
+    } catch {
+      // Storage can be disabled. There is then nothing durable to migrate.
+    }
   }
-})();
+}
+
+purgeLegacyProfile();
 
 /** @typedef {{id:string,displayName:string,email:string|null,createdAtUtc:string}} Person */
 
-/** The person this tab believes is signed in, or null. Never a token. */
+/** The person this document has fetched from steeple. Never persisted. */
 let held = null;
-/** The bearer, in memory only, for as long as this document lives. */
+/** The bearer for this document. Never persisted. */
 let access = null;
-/** A refresh token found in storage from before the cookie: spent once, then gone. */
-let inherited = null;
-let loaded = false;
+/** Explicit sign-out suppresses cookie probing until a new sign-in event. */
+let suppressed = false;
+/** Invalidates network answers that return after sign-out or an identity change. */
+let generation = 0;
+let refreshing = null;
+let restoring = null;
 const watchers = new Set();
 
-/**
- * Why the session changed, told to every watcher alongside the session itself.
- * Only 'expired' is news to the person — they did not ask for it — and the
- * interface says so out loud rather than letting a chip vanish (D6). The reason
- * is written down beside the profile so a sibling tab can relay the right one.
- */
 export const REASON = {
   signedIn: 'signedIn',
   signedOut: 'signedOut',
@@ -82,103 +49,70 @@ export const REASON = {
   refreshed: 'refreshed',
 };
 
-function readRecord() {
-  try {
-    const raw = storage.getItem(KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Adopt what is written down. A record naming a person is a session; a record
- * naming nobody is a tombstone left by a sign-out, and carries the reason for it.
- */
-function adopt(record) {
-  held = record?.user?.id ? { user: record.user } : null;
-  return held;
-}
-
-function load() {
-  if (loaded) return held;
-  loaded = true;
-  const record = readRecord();
-  adopt(record);
-
-  // A session written before the refresh token moved into the cookie. Take the
-  // pair out of storage and into memory at once — leaving it a moment longer
-  // than necessary is the thing this change exists to stop — and spend the
-  // refresh token once, on the rotation that moves this browser onto the cookie.
-  if (record && (record.refreshToken || record.accessToken)) {
-    inherited = record.refreshToken ?? null;
-    write(held?.user ?? null, REASON.refreshed, { tell: false });
-  }
-
-  return held;
-}
-
-/** Write the non-secret record, and (unless told not to) tell this tab's watchers. */
-function write(user, reason, { tell = true } = {}) {
-  held = user ? { user } : null;
-  loaded = true;
-  if (!user) access = null;
-  storage.setItem(KEY, JSON.stringify({ user: user ?? null, reason, stamp: Date.now() }));
-  if (tell) notify(reason);
-}
+const channel =
+  typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function'
+    ? new window.BroadcastChannel(CHANNEL)
+    : null;
 
 function notify(reason) {
   for (const watch of watchers) watch(held, reason);
 }
 
-/** The person signed in on this browser, or null. */
-export function currentUser() {
-  return load()?.user ?? null;
+function broadcast(state, reason) {
+  try {
+    channel?.postMessage({ type: 'session', state, reason });
+  } catch {
+    // Closing a document can close its channel before outstanding work settles.
+  }
 }
 
-/** Whether a real session exists — the only thing that earns the trust chip. */
-export const isSignedIn = () => Boolean(load());
+function personFrom(me) {
+  return {
+    id: me.id,
+    displayName: me.displayName,
+    email: me.email,
+    createdAtUtc: me.createdAtUtc,
+  };
+}
+
+function hold(user, reason, { announce = true } = {}) {
+  held = user ? { user } : null;
+  if (!user) access = null;
+  if (announce) notify(reason);
+}
+
+function drop(reason, { announce = true } = {}) {
+  generation += 1;
+  suppressed = true;
+  refreshing = null;
+  restoring = null;
+  hold(null, reason, { announce });
+}
+
+/** The person signed in in this document, or null while boot is unresolved. */
+export function currentUser() {
+  return held?.user ?? null;
+}
+
+/** Only a profile fetched from steeple earns signed-in UI. */
+export const isSignedIn = () => Boolean(held);
 
 /**
- * The access token as it stands — in memory, and null whenever this document
- * has not asked for one yet. For the single caller that cannot use
- * {@link withAccess}: a fire-and-forget post nobody waits on and nobody would
- * retry (data/analytics.js), where a null simply means the batch arrives
- * without a `userId`. Everything that matters goes through `withAccess`.
+ * The memory-only bearer for analytics' optional attribution. All application
+ * work uses withAccess() so it can refresh and retry.
  */
-export const accessToken = () => (load() ? access : null);
+export const accessToken = () => (held ? access : null);
 
-/**
- * Told whenever the session appears, changes person, or goes — with the
- * {@link REASON} it changed for. This is the only channel: surfaces subscribe,
- * nothing polls. It fires for what another tab did, too.
- *
- * @param {(session: object|null, reason: string) => void} watch
- */
+/** @param {(session: object|null, reason: string) => void} watch */
 export function onSessionChange(watch) {
   watchers.add(watch);
   return () => watchers.delete(watch);
 }
 
 /**
- * Exchange a provider's ID token for steeple's own pair.
- *
- * This is the one sign-in there is — Google, Apple and the dev provider all
- * arrive here with the same four things, because that is all
- * `POST /auth/sessions` has ever wanted (`docs/contracts/identity.md`). The
- * providers themselves live in data/providers.js; what happens to the pair
- * afterwards lives here, and the refresh half of it is asked for as a cookie
- * and never touches this file.
- *
- * `displayName` is a hint honoured only when the account is created, which is
- * what Apple's once-only name needs. `nonce` is compared against the token's
- * own claim, so it must be the one the provider was given.
- *
- * @param {{provider:string, idToken:string, nonce?:string|null,
- *          displayName?:string|null, turnstileToken?:string|null}} credential
+ * Exchange a provider credential for steeple's cookie-backed web session.
+ * @param {{provider:string,idToken:string,nonce?:string|null,displayName?:string|null,turnstileToken?:string|null}} credential
  * @returns {Promise<Person>}
- * @throws {api.ApiError} status 0 when nothing answered; otherwise steeple's
- *   own problem document, `code` and all.
  */
 export async function signInWithProvider({
   provider,
@@ -187,7 +121,7 @@ export async function signInWithProvider({
   displayName = null,
   turnstileToken = null,
 }) {
-  const session = await api.createSession({
+  const answer = await api.createSession({
     provider,
     idToken,
     nonce,
@@ -196,22 +130,18 @@ export async function signInWithProvider({
     device: { platform: 'web', label: 'Steeple Village' },
     refreshTransport: 'cookie',
   });
-  access = session.accessToken;
-  inherited = null;
-  write(session.user, REASON.signedIn);
-  return session.user;
+
+  generation += 1;
+  suppressed = false;
+  refreshing = null;
+  restoring = null;
+  access = answer.accessToken;
+  hold(answer.user, REASON.signedIn);
+  broadcast('in', REASON.signedIn);
+  return answer.user;
 }
 
-/**
- * Sign in through steeple's dev provider. Any email works — the account is
- * created the first time it is seen, and the same email always lands on the
- * same account. Development only: the verifier exists solely where
- * `Auth:DevLoginEnabled` is on, and it is the local loop's and every harness's
- * way in (`tools/fixtures.mjs` signs a browser in through exactly this).
- *
- * @param {{email:string, displayName?:string|null, turnstileToken?:string|null}} who
- * @returns {Promise<Person>}
- */
+/** Development-only dev-provider helper. */
 export function signIn({ email, displayName = null, turnstileToken = null }) {
   const address = String(email ?? '').trim().toLowerCase();
   const name = String(displayName ?? '').trim();
@@ -223,159 +153,184 @@ export function signIn({ email, displayName = null, turnstileToken = null }) {
   });
 }
 
-/**
- * Sign out: here, and at steeple.
- *
- * The local half is unconditional and happens first. The revocation that
- * follows no longer depends on holding a live access token — steeple accepts
- * the refresh cookie as proof for this one call, which is what makes a sign-out
- * after a long lunch actually revoke something instead of failing quietly.
- *
- * @returns {Promise<void>} resolves once the revocation has been attempted.
- */
+/** Clear this tab first, tell siblings, then revoke the shared cookie. */
 export async function signOut() {
   const token = access;
-  inherited = null;
-  write(null, REASON.signedOut);
+  drop(REASON.signedOut);
+  purgeLegacyProfile();
+  broadcast('out', REASON.signedOut);
   try {
     await api.deleteSession(token);
   } catch {
-    // Nothing to say and nothing to undo: this browser is signed out either
-    // way, and an unrevoked refresh token expires on its own.
+    // Local privacy is unconditional; revocation remains best-effort.
   }
 }
 
-let refreshing = null;
-
-/**
- * Rotate the pair, once at a time however many callers ask at once.
- *
- * Resolves to the new access token, or to null when steeple refused — in which
- * case the session is dropped here and the person is told. It *rejects* only
- * when nothing answered at all: an API that is not running must not cost anyone
- * their sign-in.
- */
+/** Rotate the cookie-backed pair once per tab. Refusal is null; outage rejects. */
 function refresh() {
-  // Another tab may have signed this browser out while this one was waiting for
-  // an answer. Ask storage before asking the network.
-  if (!adopt(readRecord())) {
-    access = null;
-    return Promise.resolve(null);
-  }
+  if (suppressed) return Promise.resolve(null);
+  if (refreshing) return refreshing;
 
-  refreshing ??= api
-    .refreshSession(inherited ? { refreshToken: inherited, refreshTransport: 'cookie' } : {})
+  const started = generation;
+  const request = api
+    .refreshSession({})
     .then((pair) => {
-      inherited = null;
+      if (started !== generation || suppressed) return null;
       access = pair.accessToken;
       return access;
     })
     .catch((error) => {
       if (!error?.status) throw error;
-      // The refresh token is spent, revoked, or was never good: this browser is
-      // signed out. Say so plainly rather than leaving a session that cannot do
-      // anything — and say it to the person too, since nobody asked for this
-      // (ui/notice.js).
-      inherited = null;
-      write(null, REASON.expired);
+      if (started === generation) access = null;
       return null;
     })
     .finally(() => {
-      refreshing = null;
+      if (refreshing === request) refreshing = null;
     });
-  return refreshing;
+  refreshing = request;
+  return request;
+}
+
+function expireIfHeld() {
+  if (!held) return;
+  drop(REASON.expired);
+  broadcast('out', REASON.expired);
 }
 
 /**
- * Run one piece of work that needs a bearer token, refreshing if the API answers
- * 401 — or straight away, when this document has no access token yet, which is
- * every reload of a signed-in browser now that the token lives in memory. A
- * second 401 is an answer, not a hiccup: the session is dropped and the error is
- * raised for the caller to say something calm about.
- *
+ * Run bearer-authenticated work, refreshing when memory is empty and once
+ * after a 401. A second refusal drops a profile that can no longer act.
  * @template T
- * @param {(accessToken: string) => Promise<T>} work
+ * @param {(accessToken:string) => Promise<T>} work
  * @returns {Promise<T>}
  */
 export async function withAccess(work) {
-  if (!load()) throw new api.ApiError('not signed in', 401);
+  if (restoring) await restoring;
+  if (suppressed) throw new api.ApiError('not signed in', 401);
+  const started = generation;
 
   let token = access;
   if (!token) {
     token = await refresh();
-    if (!token) throw new api.ApiError('not signed in', 401);
+    if (!token) {
+      expireIfHeld();
+      throw new api.ApiError('not signed in', 401);
+    }
   }
 
   try {
-    return await work(token);
+    const result = await work(token);
+    if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
+    return result;
   } catch (error) {
+    if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
     if (error?.status !== 401) throw error;
-    let fresh = null;
-    try {
-      fresh = await refresh();
-    } catch {
-      throw error;
-    }
-    if (!fresh) throw error;
-    return work(fresh);
+  }
+
+  access = null;
+  let fresh;
+  try {
+    fresh = await refresh();
+  } catch {
+    throw new api.ApiError('session refresh did not answer', 0);
+  }
+  if (!fresh) {
+    expireIfHeld();
+    throw new api.ApiError('not signed in', 401);
+  }
+
+  try {
+    const result = await work(fresh);
+    if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
+    return result;
+  } catch (error) {
+    if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
+    if (error?.status === 401) expireIfHeld();
+    throw error;
   }
 }
 
 /**
- * Ask the API who this browser belongs to and hold the answer. Used at boot to
- * find out whether a remembered session is still good: with no access token in
- * memory, the cookie is presented first and the answer is a fresh pair, or a
- * refusal that signs the browser out.
+ * Restore identity from the httpOnly refresh cookie, single-flight: rotate,
+ * then GET /me. With no cookie this is an ordinary signed-out boot and emits
+ * nothing; there is no persisted profile from which to infer an expiry.
  *
- * @returns {Promise<Person|null>} null when there is no session, or none left.
+ * @returns {Promise<Person|null>}
  */
-export async function fetchCurrentUser() {
-  if (!load()) return null;
-  try {
-    const me = await withAccess((token) => api.getMe(token));
-    const user = {
-      id: me.id,
-      displayName: me.displayName,
-      email: me.email,
-      createdAtUtc: me.createdAtUtc,
-    };
-    write(user, REASON.refreshed);
-    return user;
-  } catch (error) {
-    // A dead session goes; an API that simply is not running does not cost the
-    // guest their sign-in — it will be there again when the API is.
-    // The refresh inside withAccess may already have said so; say it once.
-    if (error?.status === 401 && load()) write(null, REASON.expired);
-    return currentUser();
-  }
+export function fetchCurrentUser(reason = REASON.refreshed) {
+  if (suppressed) return Promise.resolve(null);
+  if (restoring) return restoring;
+
+  const started = generation;
+  const request = (async () => {
+    let token = access;
+    try {
+      token ??= await refresh();
+      if (!token || started !== generation || suppressed) return currentUser();
+
+      let me;
+      try {
+        me = await api.getMe(token);
+      } catch (error) {
+        if (error?.status !== 401) return currentUser();
+        access = null;
+        token = await refresh();
+        if (!token || started !== generation || suppressed) {
+          expireIfHeld();
+          return currentUser();
+        }
+        try {
+          me = await api.getMe(token);
+        } catch (retryError) {
+          if (retryError?.status === 401) expireIfHeld();
+          return currentUser();
+        }
+      }
+
+      if (started !== generation || suppressed) return currentUser();
+      const user = personFrom(me);
+      hold(user, reason);
+      return user;
+    } catch {
+      // An unreachable API leaves the cookie untouched. A later call retries.
+      return currentUser();
+    }
+  })().finally(() => {
+    if (restoring === request) restoring = null;
+  });
+
+  restoring = request;
+  return request;
 }
 
-// One session, however many tabs. The `storage` event fires in every OTHER
-// document of this origin, which is the only news a tab gets about what its
-// siblings did — a person signing in next door, or signing out.
-if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('storage', (event) => {
-    // A null key is localStorage.clear(): everything went, including us.
-    if (event.key !== null && event.key !== KEY) return;
+if (channel) {
+  channel.addEventListener('message', (event) => {
+    const message = event.data;
+    if (message?.type !== 'session') return;
 
-    const record = readRecord();
-    const before = held?.user?.id ?? null;
-    const after = record?.user?.id ?? null;
-
-    if (before === after) {
-      // The same person, told again — a refreshed profile, not a change. Take
-      // the newer copy quietly; there is nothing to announce.
-      if (after) adopt(record);
+    if (message.state === 'out') {
+      drop(message.reason === REASON.expired ? REASON.expired : REASON.signedOut);
+      purgeLegacyProfile();
       return;
     }
+    if (message.state !== 'in') return;
 
-    loaded = true;
-    // Whoever is here now, this tab holds no bearer for them: its own access
-    // token belonged to the person who just left, and the next piece of work
-    // will ask the cookie for a new one.
+    const replaced = Boolean(held);
+    generation += 1;
+    suppressed = false;
     access = null;
-    inherited = null;
-    adopt(record);
-    notify(after ? REASON.signedIn : record?.reason === REASON.expired ? REASON.expired : REASON.signedOut);
+    held = null;
+    refreshing = null;
+    restoring = null;
+    // The event intentionally does not say whether this is the same person.
+    // Drop any old profile immediately; it must not remain on screen while the
+    // new profile is fetched.
+    if (replaced) notify(REASON.signedOut);
+    // The profile itself never crosses the channel. Fetch it from steeple.
+    void fetchCurrentUser(REASON.signedIn);
   });
 }
+
+// Identity is a network fact now. Start resolving it as soon as the module is
+// evaluated; UI subscribers installed during the same boot hear the result.
+void fetchCurrentUser();

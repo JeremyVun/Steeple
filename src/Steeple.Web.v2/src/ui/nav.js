@@ -7,6 +7,7 @@
 
 import { state, setView, rollTo } from '../core/bus.js';
 import { heldRoom, heldVenue } from '../data/catalog.js';
+import { APP_STATUS, getApplication } from '../data/store.js';
 import { HOME_LABEL } from './copy.js';
 import { el, replaceChildren, steepleMark } from './dom.js';
 
@@ -58,13 +59,30 @@ export function createNav() {
     } else if (view === 'desk') {
       items.push(crumb(hostingLabel(venue), null, true));
     } else if (view === 'letter') {
+      // An approved request is a booking, and the trail says the same word the
+      // letter's own eyebrow does.
+      const booked = getApplication(state.applicationId)?.status === APP_STATUS.approved;
       if (state.mode === 'host') {
         items.push(crumb(hostingLabel(venue), () => setView('desk', { venueId }), false));
-        items.push(crumb(room ? `Request for ${room.name}` : 'A request', null, true));
+        items.push(
+          crumb(
+            room ? `${booked ? 'Booking' : 'Request'} for ${room.name}` : booked ? 'A booking' : 'A request',
+            null,
+            true
+          )
+        );
       } else {
         items.push(crumb('Inbox', () => setView('journal'), false));
         items.push(
-          crumb(venue ? `Request to ${venue.shortName}` : 'Your request', null, true)
+          crumb(
+            venue
+              ? `${booked ? 'Booking at' : 'Request to'} ${venue.shortName}`
+              : booked
+                ? 'Your booking'
+                : 'Your request',
+            null,
+            true
+          )
         );
       }
     } else {
@@ -85,6 +103,12 @@ export function createNav() {
       // The same words the sheet's own eyebrow uses (CONTRACT5 §1.2).
       if (view === 'apply') items.push(crumb('Booking request', null, true));
     }
+
+    // A trail ends where you are, so the last step never points onward. The
+    // case that made this visible: a listing steeple no longer has leaves the
+    // venue standing as the last crumb, and the arrow after it pointed at
+    // nothing at all (2026-08-08).
+    items.at(-1)?.querySelector('.crumbs__sep')?.remove();
 
     replaceChildren(trail, items);
   }

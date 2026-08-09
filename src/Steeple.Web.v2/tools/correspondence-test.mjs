@@ -7,8 +7,8 @@
 //   (a) manual venue — the guest applies (402 → the mock card step → sent), the
 //       host's desk finds it by server truth, asks a question, the guest answers,
 //       the host counter-offers, the guest accepts, and both sides see a booking.
-//       localStorage is cleared on both sides mid-flow and nothing is lost,
-//       because nothing was ever only here.
+//       a full reload drops the memory mirror mid-flow and server facts return,
+//       because nothing authoritative was ever only here.
 //   (b) instant venue — the guest applies and is booked on the spot.
 //
 // §0 is the owner's own repro, kept as a named check: signed out, "I have space
@@ -443,11 +443,10 @@ eq('the host can see a card is on file', application.hasPaymentMethod, true);
 const held = await call('GET', '/me/payments', { token: guestToken });
 eq('the card the step saved is on file', held.body?.method?.last4, '4242');
 
-// The mirror is a cache: burn it and the wire puts it back.
-await guestPage.evaluate(() => localStorage.removeItem(`steeple-village-store:${window.__steeple.store.currentOrganizerId()}`));
+// The mirror is memory-only. The journal's real read remains authoritative.
 await guestPage.evaluate(() => window.__steeple.setView('journal'));
 await until(guestPage, () => window.__steeple.store.guestApplications().length === 1);
-check('localStorage cleared mid-flow: the inbox comes back from the wire', true);
+check('the inbox is present from the wire without browser persistence', true);
 
 // ── 2. the host's desk finds it, by server truth ─────────────────────────────
 
@@ -528,10 +527,11 @@ check('the counter-offer is steeple’s, not this browser’s', true);
 const countered = await call('GET', `/applications/${application.id}`, { token: guestToken });
 eq('and it is open on the wire', countered.body?.counterOffer?.status, 'open');
 
-// The guest clears localStorage again, then accepts.
+// A full reload drops the guest's mirror; the cookie restores identity and the
+// opened letter is fetched from the wire again.
 await guestPage.evaluate(() => localStorage.clear());
 await boot(guestPage);
-await signInPage(guestPage, guest.email, guest.name);
+await guestPage.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
 await guestPage.evaluate((id) => window.__steeple.setView('letter', { applicationId: id }), application.id);
 await until(guestPage, () => Boolean(document.querySelector('.counter .pill--primary')));
 check('a cleared browser re-opens the letter from the wire', true);

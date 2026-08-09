@@ -10,7 +10,10 @@
 //
 //   node tools/world-test.mjs [baseUrl]        (default http://localhost:5314)
 //
-// Screenshots land in /tmp/wld-test-<style>-*.png; look at them.
+// Screenshots land in /tmp/wld-test-atlas-*.png; look at them.
+// Known stale (2026-08-09, Atlas-only): six failures — arrival/keyboard/card
+// navigation (four), envelope landing, and scaffold timing. The remaining
+// world-state, integrity, reduced-motion, budget, and console checks are green.
 
 import { closeBrowsers, launch } from './fixtures.mjs';
 
@@ -26,7 +29,6 @@ for (const fatal of ['uncaughtException', 'unhandledRejection']) {
 }
 
 const base = process.argv[2] ?? 'http://localhost:5314';
-const styles = ['diorama', 'atlas'];
 
 let failures = 0;
 const log = (...a) => console.log(...a);
@@ -37,10 +39,9 @@ function check(name, ok, detail = '') {
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-for (const style of styles) {
+{
+  const style = 'Atlas';
   log(`\n── ${style} ─────────────────────────────────────────────`);
-  // A browser per style: software GL takes its time building a village, and a
-  // second page in the same process starves the first one's render loop.
   const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
@@ -50,7 +51,7 @@ for (const style of styles) {
     if (m.type() === 'error') errors.push(m.text());
   });
 
-  const url = `${base}/?style=${style}&q=low`;
+  const url = `${base}/?q=low`;
   await page.goto(url, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
   await page.evaluate('__steeple.store.resetDemo()');
@@ -159,7 +160,7 @@ for (const style of styles) {
   `);
   await wait(900);
   check('a posted letter is in the air', (await debug('envelopeFlying')) === true);
-  await page.screenshot({ path: `/tmp/wld-test-${style}-envelope.png` });
+  await page.screenshot({ path: '/tmp/wld-test-atlas-envelope.png' });
   await wait(9000);
   check('the letter has landed', (await debug('envelopeFlying')) === false);
   const vp = await debug("lantern('vienna-presbyterian')");
@@ -193,7 +194,7 @@ for (const style of styles) {
       });
     }, 'app-sparrows-mornings');
   await wait(1400);
-  await page.screenshot({ path: `/tmp/wld-test-${style}-seal.png` });
+  await page.screenshot({ path: '/tmp/wld-test-atlas-seal.png' });
   const settled = await debug("lantern('grace-community-vienna')");
   check('an approved church burns steady', settled && settled.settled > 0.5, JSON.stringify(settled));
 
@@ -207,7 +208,7 @@ for (const style of styles) {
     __steeple.store.editRoom('oakton-baptist','renovation-annex',{ status: 'published' });
   `);
   await wait(12000);
-  await page.screenshot({ path: `/tmp/wld-test-${style}-published.png` });
+  await page.screenshot({ path: '/tmp/wld-test-atlas-published.png' });
   check('scaffolding is struck', (await debug('scaffoldStruck')) === true);
   const annexState = await page.evaluate(`(() => {
     const w = __steeple.world;
@@ -252,7 +253,7 @@ for (const style of styles) {
   await page.keyboard.press('Escape');
   await wait(2600);
   check('Esc keeps climbing to the village', (await view()) === 'village', `view=${await view()}`);
-  await page.screenshot({ path: `/tmp/wld-test-${style}-village.png` });
+  await page.screenshot({ path: '/tmp/wld-test-atlas-village.png' });
 
   const calls = await page.evaluate('__steeple.engine.renderer.info.render.calls');
   log(`draw calls at village: ${calls}`);
@@ -267,7 +268,7 @@ for (const style of styles) {
 // The correspondence still happens; it just stops performing. No bell, no
 // drift, and the camera cuts through paper instead of flying.
 {
-  log('\n── reduced motion (diorama) ─────────────────────────────');
+  log('\n── reduced motion (Atlas) ─────────────────────────────');
   const browser = await launch();
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 900 });
@@ -277,14 +278,14 @@ for (const style of styles) {
     if (m.type() === 'error') errors.push(m.text());
   });
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-  // `#/desk/...` would land in the village now — hosting is somebody's, and
+  // `/desk/...` would land in the village now — hosting is somebody's, and
   // this page is nobody (D4). The village is where this half of the story is.
   //
-  // Loaded with no hash at all, and put past the roll afterwards: a cold hash
-  // is a product-first boot since build_plan Phase 3.5 — no engine, no world,
-  // nothing for a world suite to ask about — while the village's own arrival
-  // still raises one. Same place, through the door this suite is about.
-  await page.goto(`${base}/?style=diorama&q=low`, { waitUntil: 'networkidle0' });
+  // Loaded at the root, and put past the roll afterwards: a cold *route* is a
+  // product-first boot (build_plan P3.3) — no engine, no world, nothing for a
+  // world suite to ask about — while the village's own arrival still raises
+  // one. Same place, through the door this suite is about.
+  await page.goto(`${base}/?q=low`, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 45000 });
   await page.evaluate('__steeple.roll.set(1)');
   await wait(2500);

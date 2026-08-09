@@ -1,5 +1,14 @@
 # CONTRACT3 — Wave 3: the instrument earns its place
 
+> **Superseded 2026-08-08 — the hash routes named here are gone from the product.**
+> `src/core/router.js` owns clean History-API paths (`/browse`, `/venue/{v}`,
+> `/space/{v}/{r}`, `/apply/{v}/{r}`, `/journal`, `/desk[/{v}]`, `/letter/{id}`);
+> every `#/…` shape it names still *opens* and is replaced in place by its clean
+> path, with no deadline for removal. This brief is kept as the record of what
+> was asked for at the time — see `docs/backlog/seo/design.md` SEO-D1/D2 and
+> `docs/contracts/web.md` for what is true now.
+
+
 Owner steers, 2026-08-04. Binding for both workstreams. CONTRACT.md §1–3 and
 CONTRACT2.md remain in force where not superseded.
 
@@ -96,7 +105,7 @@ Merge order: B first, then A (A merges main before its final verify pass).
 ## Verification (both workstreams, non-negotiable)
 
 - Empirical loop: `tools/shot.mjs <url> <out.png>` → Read the PNG → judge as
-  art → iterate. Both `?style=diorama` and `?style=atlas`; A also 420×860.
+  art → iterate. Canonical Atlas; A also 420×860.
 - Real-input gate: puppeteer real mouse/keyboard. A rewrites
   `tools/input-test.mjs` for the new semantics (click pin → venue view; drag
   on map pans map, not camera; wheel over map zooms map; Esc semantics above)

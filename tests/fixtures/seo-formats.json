@@ -1,0 +1,130 @@
+{
+  "//": [
+    "ONE TABLE OF WORKED EXAMPLES, READ BY BOTH SIDES OF THE SEO SEAM.",
+    "",
+    "A listing is described twice: by the API when it renders the listing document a crawler,",
+    "a scraper and a JavaScript-less reader see (src/Steeple.Api/Services/Seo/), and by the web",
+    "app when it moves between rooms in one session without asking for another document",
+    "(src/Steeple.Web.v2/src/ui/metaText.js). The two must say the same words about the same",
+    "room, or the same URL has two descriptions depending on how somebody arrived at it.",
+    "",
+    "Neither implementation is the source of truth for the other. This file is, and it is",
+    "exercised from both suites, so a change to either side that drifts turns a test red:",
+    "  · tests/Steeple.Api.Tests/Services/Seo/SeoFormatGoldenTests.cs",
+    "  · src/Steeple.Web.v2/tools/metadata-test.mjs  (part of `npm test`)",
+    "",
+    "Adopted 2026-08-08 with docs/backlog/seo/ (SEO-D7, build_plan P4.2)."
+  ],
+
+  "labels": {
+    "//": [
+      "Wire tokens as the words a person reads. The web app's registry is",
+      "src/Steeple.Web.v2/src/data/vocabulary.js; the API's is SeoText.Label. A token in",
+      "neither is humanized from its own spelling by both, identically."
+    ],
+    "activity": {
+      "children": "Children",
+      "sports": "Sports",
+      "community": "Community",
+      "religious": "Religious",
+      "arts": "Arts",
+      "education": "Education",
+      "music": "Music"
+    },
+    "amenity": {
+      "parking": "Parking",
+      "kitchen": "Kitchen",
+      "restrooms": "Restrooms",
+      "wifi": "Wi-Fi",
+      "audioVisual": "Audio/visual",
+      "tables": "Tables",
+      "chairs": "Chairs",
+      "heating": "Heating",
+      "airConditioning": "Air conditioning",
+      "stage": "Stage",
+      "piano": "Piano"
+    },
+    "accessibility": {
+      "stepFreeAccess": "Step-free access",
+      "accessibleRestroom": "Accessible restroom",
+      "accessibleParking": "Accessible parking",
+      "hearingLoop": "Hearing loop",
+      "liftAccess": "Lift access"
+    },
+    "unknown": {
+      "//": "A word steeple learned after this bundle shipped. Humanized, never printed raw.",
+      "coveredPorch": "Covered porch"
+    }
+  },
+
+  "money": [
+    { "amount": 30, "currency": "USD", "money": "$30", "rate": "$30/hr" },
+    { "amount": 45.5, "currency": "USD", "money": "$45.5", "rate": "$45.5/hr" },
+    { "amount": 20, "currency": "AUD", "money": "20 AUD", "rate": "20 AUD/hr" },
+    { "amount": 0, "currency": "USD", "money": "$0", "rate": "Free" }
+  ],
+
+  "unavailable": {
+    "//": [
+      "A space that is not there, said once. The API renders it as a real 404 document;",
+      "the app opens the same words in a sheet when a listing read comes back empty inside a",
+      "session (SEO-D10). Somebody who reloads must read the same sentence twice."
+    ],
+    "title": "Space unavailable · Steeple",
+    "heading": "This space isn't available",
+    "prose": "The link may be out of date, or the space may have been taken off Steeple. There are other spaces nearby.",
+    "browse": "Browse spaces",
+    "home": "Steeple home"
+  },
+
+  "listings": [
+    {
+      "case": "the ordinary listing",
+      "roomName": "Art Studio",
+      "venueName": "Dunn Loring United Methodist Church",
+      "suburb": "Dunn Loring",
+      "capacity": 24,
+      "pricePerHour": 30,
+      "currency": "USD",
+      "description": "Wipe-clean studio with sinks, easels and abundant natural light.",
+      "title": "Art Studio at Dunn Loring United Methodist Church, Dunn Loring · Steeple",
+      "metaDescription": "Art Studio at Dunn Loring United Methodist Church in Dunn Loring. Seats 24, $30/hr. Wipe-clean studio with sinks, easels and abundant natural light."
+    },
+    {
+      "case": "no suburb, no description, a fractional price",
+      "roomName": "Fellowship Hall",
+      "venueName": "Merrifield Fellowship",
+      "suburb": "",
+      "capacity": 80,
+      "pricePerHour": 45.5,
+      "currency": "USD",
+      "description": "",
+      "title": "Fellowship Hall at Merrifield Fellowship · Steeple",
+      "metaDescription": "Fellowship Hall at Merrifield Fellowship. Seats 80, $45.5/hr."
+    },
+    {
+      "case": "host prose over the bound, a legacy unpriced row, whitespace squashed",
+      "roomName": "  Upper   Room \n",
+      "venueName": "St Mark's",
+      "suburb": "Vienna",
+      "capacity": 12,
+      "pricePerHour": 0,
+      "currency": "USD",
+      "description": "The old parish room upstairs, with a piano, a kettle and a long table that has seen a great many committee meetings and rather better birthday parties.",
+      "title": "Upper Room at St Mark's, Vienna · Steeple",
+      "metaDescription": "Upper Room at St Mark's in Vienna. Seats 12, Free. The old parish room upstairs, with a piano, a kettle and a long table that has seen a great many committee…"
+    },
+    {
+      "case": "a currency that is not dollars",
+      "roomName": "Gymnasium",
+      "venueName": "Oakton Baptist Church",
+      "suburb": "Oakton",
+      "capacity": 120,
+      "pricePerHour": 20,
+      "currency": "AUD",
+      "description": "A full-size court with markings for basketball, volleyball and badminton, plus a store of equipment clubs are welcome to borrow.",
+      "title": "Gymnasium at Oakton Baptist Church, Oakton · Steeple",
+      "metaDescription": "Gymnasium at Oakton Baptist Church in Oakton. Seats 120, 20 AUD/hr. A full-size court with markings for basketball, volleyball and badminton, plus a store of…"
+    }
+  ]
+}

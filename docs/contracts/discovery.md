@@ -97,10 +97,11 @@ The same rows as `sitemap`, as sitemaps.org XML (`application/xml`, `Cache-Contr
 page plus every published listing's `/space/{venueSlug}/{roomSlug}` URL with `lastmod`,
 `changefreq` and `priority`. The only endpoint here that answers XML — web v2 is a static bundle
 with no server of its own, so the API renders the one document a crawler must be handed.
-Absolute URLs are derived from the forwarded request (`X-Forwarded-Proto` / `-Host` / `-Prefix`,
-falling back to the request's own scheme/host/`PathBase`), so one API serves whatever public
-origin and stripped prefix it sits behind with no added configuration. The edge aliases
-`/sitemap.xml` onto this route — that is where `robots.txt` points (`docs/SEO.md`).
+Absolute URLs come from `IPublicBaseResolver`: `Seo:PublicBaseUrl` decides the origin and any
+stripped prefix, and only where it is unset does the request's own scheme/host stand in (a
+root-origin Development convenience — forwarded headers are never consulted, and a prefixed
+deployment must set the key; `seo.md`). The edge aliases `/sitemap.xml` onto this route — that is
+where `robots.txt` points, and `robots.txt` is rendered by the API too (`seo.md`).
 
 Anonymous guest availability reads for a listing (`GET /listings/{roomId}/availability`,
 `POST /listings/{roomId}/availability/check`) are specified in `manage.md` alongside the rules

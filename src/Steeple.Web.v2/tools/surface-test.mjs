@@ -16,7 +16,7 @@
 // stands; §2.5 fakes an origin that answers 404 on the listing endpoints, which
 // is what a static host or an unwired proxy does.
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5331/';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -64,7 +64,7 @@ async function surface({ width, height, block = null } = {}) {
   }
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => localStorage.clear());
-  await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
+  await page.goto(at(url, routes.browse()), { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   await page.evaluate('__steeple.roll.set(1)');
   await wait(3000);
@@ -150,7 +150,7 @@ async function press(page, sel, { touch = false } = {}) {
     // A goto that only changes the hash is not a navigation: the page would keep
     // the pan the last venue left the map on.
     await page.goto('about:blank');
-    await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
+    await page.goto(at(url, routes.browse()), { waitUntil: 'networkidle0' });
     await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
     await page.evaluate('__steeple.roll.set(1)');
     await wait(3000);

@@ -1126,24 +1126,25 @@
   color: var(--terracotta-deep);
 }
 
-/* The providers. Two buttons at most, stacked, each the full width of the card
-   so neither reads as the lesser way in. Google renders its own button into
-   .identity__google — its guidelines require it — so the only styling here is
-   the room it sits in; Apple's is ours to draw, to their weight and colour. */
+/* The providers. Two buttons at most, stacked at Google's 400px control width
+   and centred in the card. Google renders its own button; Apple's is ours to
+   draw to the same measure, with its own brand weight and colour. */
 .identity__providers {
   display: grid;
+  grid-template-columns: minmax(0, 400px);
+  justify-content: center;
   gap: 10px;
   margin-bottom: 16px;
 }
 
 .identity__google {
   display: grid;
-  justify-items: stretch;
+  justify-items: center;
   min-height: 40px;
 }
 
 .identity__google > div {
-  width: 100% !important;
+  max-width: 100%;
 }
 
 .provider {
@@ -1247,11 +1248,33 @@
   flex: none;
   display: grid;
   justify-items: end;
-  gap: 6px;
+  gap: 5px;
 }
 
 .journal__aside .verified {
   margin: 0;
+}
+
+/* Unread mail, counted where a reader looks for a count — beside the tally and
+   never inside it. Set in the ink of the page with the one mark that means
+   "new" everywhere on this surface, so the head and the rows agree. */
+.journal__unread {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.journal__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--terracotta);
 }
 
 .journal__tally {
@@ -1262,7 +1285,7 @@
 }
 
 .journal__body {
-  padding-top: 6px;
+  padding-top: 2px;
 }
 
 .journal__empty {
@@ -1270,14 +1293,14 @@
 }
 
 .jgroup {
-  padding-top: 18px;
+  padding-top: 15px;
 }
 
 .jgroup__head {
   display: flex;
   align-items: baseline;
   gap: 12px;
-  padding-bottom: 4px;
+  padding-bottom: 3px;
 }
 
 .jgroup__note {
@@ -1307,14 +1330,20 @@
   border-top: 1px solid var(--rule);
 }
 
+/* A request or a booking — the substantial object in this inbox, and the reason
+   the news above it is only a line. It reads top to bottom in one column: whose
+   it is, what and where, when and where it stands, and their own words. The old
+   shape gave the status label a 162px column of its own and left the content
+   floating in the middle of the row with dead paper down both sides. */
 .jrow {
+  position: relative;
   display: grid;
-  grid-template-columns: 162px minmax(0, 1fr);
-  align-items: start;
-  gap: 3px 22px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 18px;
   width: calc(100% + 20px);
   margin-inline: -10px;
-  padding: 14px 10px;
+  padding: 11px 30px 13px 10px;
   border: 0;
   border-radius: 4px;
   background: none;
@@ -1324,72 +1353,95 @@
   transition: background 150ms var(--ease);
 }
 
-.jrow:hover {
+/* Everything that can be pressed on this page ends in the same mark, at rest
+   and not only under a pointer: a row that shows its way on only on hover has
+   no affordance at all for the person deciding whether to reach for it. */
+.jrow::after,
+.jmsg::after {
+  content: '\203A';
+  position: absolute;
+  right: 11px;
+  /* Level with the headline, which is what the press opens — a mark floating
+     at the middle of a four-line row belongs to none of it. The first two
+     lines of a row are fixed, so this offset is too. */
+  top: 30px;
+  transform: translate(0, 0);
+  font-size: 16px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--ink-faint) 50%, transparent);
+  transition: color 150ms var(--ease), transform 150ms var(--ease);
+}
+
+.jrow:hover,
+.jrow:focus-visible {
   background: color-mix(in srgb, var(--paper-deep) 75%, transparent);
+}
+
+.jrow:active {
+  background: color-mix(in srgb, var(--paper-deep) 100%, transparent);
+}
+
+.jrow:hover::after,
+.jrow:focus-visible::after {
+  color: var(--terracotta);
+  transform: translate(3px, 0);
 }
 
 .jrow__status {
   grid-column: 1;
-  grid-row: 1 / span 5;
+  grid-row: 1;
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 11px;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
   font-weight: 650;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   line-height: 1.3;
   color: var(--ink-faint);
 }
 
+/* One dot vocabulary on this surface: a filled dot, coloured by what it means.
+   Nothing here is drawn as a hollow ring — the old outline read as an unfilled
+   checkbox beside the filled seals and said nothing at a glance. */
 .jrow__seal {
   flex: none;
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  border: 1.5px solid currentColor;
-  transform: translateY(-1px);
+  background: currentColor;
 }
 
 .jrow[data-tone='yours'] .jrow__status {
   color: var(--terracotta-deep);
 }
 
-.jrow[data-tone='yours'] .jrow__seal {
-  background: var(--terracotta);
-  border-color: var(--terracotta);
-}
-
 .jrow[data-tone='settled'] .jrow__status {
   color: var(--sage-deep);
 }
 
-.jrow[data-tone='settled'] .jrow__seal {
-  background: var(--sage);
-  border-color: var(--sage);
-}
-
 .jrow[data-tone='closed'] .jrow__status {
-  color: color-mix(in srgb, var(--ink-faint) 78%, transparent);
+  color: color-mix(in srgb, var(--ink-faint) 72%, transparent);
 }
 
 .jrow[data-tone='closed'] .jrow__seal {
-  border-color: var(--line-strong);
+  background: var(--line-strong);
 }
 
 .jrow__space {
-  grid-column: 2;
-  grid-row: 1;
+  grid-column: 1 / -1;
+  grid-row: 2;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
+  margin-top: 1px;
 }
 
 .jrow__room {
   font-family: var(--serif);
-  font-size: 19px;
-  line-height: 1.15;
+  font-size: 18px;
+  line-height: 1.2;
   color: var(--ink);
 }
 
@@ -1403,33 +1455,46 @@
   color: var(--ink-faint);
 }
 
-.jrow__when {
-  grid-column: 2;
-  grid-row: 2;
+/* When it is, and where it stands — one line, because they are one thought and
+   two lines made "1 date held." a fragment sitting on its own. */
+.jrow__meta {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--ink-soft);
 }
 
+.jrow__when:not(:empty) + .jrow__note::before {
+  content: '\00B7';
+  margin: 0 7px;
+  color: color-mix(in srgb, var(--ink-faint) 55%, transparent);
+}
+
+/* Their own words, set as the quotation they are — the same ruled aside the
+   opened letter uses for what is held. Unquoted, "asd" was a stray syllable
+   nobody could place. */
 .jrow__excerpt {
-  grid-column: 2;
-  grid-row: 3;
-  margin-top: 5px;
+  grid-column: 1 / -1;
+  grid-row: 4;
+  margin-top: 7px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-strong);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-faint);
+  color: var(--ink-soft);
 }
 
 .jrow__note {
-  grid-column: 2;
-  grid-row: 4;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--ink-soft);
+  color: inherit;
 }
 
 /* A finished booking still owed a rating. It keeps its bucket, its tone and its
@@ -1446,16 +1511,17 @@
 
 .jrow__sent {
   grid-column: 2;
-  grid-row: 5;
-  margin-top: 3px;
+  grid-row: 1;
+  justify-self: end;
   font-size: 11px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
   color: color-mix(in srgb, var(--ink-faint) 80%, transparent);
 }
 
 .journal__foot {
-  margin-top: 22px;
-  padding-top: 14px;
+  margin-top: 18px;
+  padding-top: 13px;
   border-top: 1px solid var(--rule);
   text-align: center;
 }
@@ -1467,12 +1533,30 @@
 }
 
 .opened {
+  --opened-pad: 34px;
   width: min(760px, 100%);
-  padding: 26px 34px 24px;
+  padding: 26px var(--opened-pad) 24px;
+  display: flex;
+  flex-direction: column;
+  /* The sheet itself no longer scrolls — `.opened__scroll` does. */
+  overflow: hidden;
   border: 1px solid var(--rule-firm);
   border-radius: 3px;
   background: var(--sheet);
   box-shadow: var(--lift);
+}
+
+/* Everything being said about the request, under the facts that stay put. The
+   scrollbar rides the sheet's own edge rather than sitting inside its margin. */
+.opened__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  margin-inline: calc(var(--opened-pad) * -1);
+  padding-inline: var(--opened-pad);
 }
 
 .opened__up {
@@ -1713,46 +1797,157 @@
   color: inherit;
 }
 
-/* ── what steeple wrote while you were away ─────────────────────────────────
-   Three lines at the head of the inbox, in the same hand as the slip that says
-   them in the corner. Not a badge, not a second inbox — ambience. */
+/* ── the messages steeple wrote to you ──────────────────────────────────────
+   Rows in the inbox, in the same grid hand as a request: a mark, a sentence,
+   when it came, and the way on. Unread is weight and a filled mark — never a
+   red badge and never a count in a circle. Read is not greyed out, only
+   quieter: a message somebody has already opened is still worth re-reading. */
 
-.jnotes {
-  margin: 0 0 18px;
-  padding: 0 0 16px;
-  border-bottom: 1px solid var(--rule, var(--line));
+/* The digest is not the page's furniture: no rule between one line of news and
+   the next, so the whole block reads as one dense column of headlines and the
+   ruled request rows below it read as the objects they are. */
+.jgroup--messages .jitem + .jitem {
+  border-top: 0;
 }
 
-.jnotes__list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
+.jgroup--messages {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.jmsg {
+  position: relative;
   display: grid;
-  gap: 5px;
-}
-
-.jnotes__item {
-  display: flex;
+  /* Fixed rails, not `auto`: every message is its own grid, so an intrinsic
+     column would size to its own row and the times down the page would never
+     line up with one another. */
+  grid-template-columns: 15px minmax(0, 1fr) 126px 74px;
   align-items: baseline;
-  gap: 9px;
-  font-size: 13px;
-  color: var(--ink-soft);
+  gap: 0 12px;
+  width: calc(100% + 20px);
+  margin-inline: -10px;
+  padding: 6px 30px 6px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms var(--ease);
 }
 
-.jnotes__dot {
-  width: 5px;
-  height: 5px;
-  flex: none;
+.jmsg:hover,
+.jmsg:focus-visible {
+  background: color-mix(in srgb, var(--paper-deep) 75%, transparent);
+}
+
+.jmsg:active {
+  background: color-mix(in srgb, var(--paper-deep) 100%, transparent);
+}
+
+/* A message is one line high, so its mark sits level with that line. */
+.jmsg::after {
+  top: 9px;
+}
+
+.jmsg:hover::after,
+.jmsg:focus-visible::after {
+  color: var(--terracotta);
+  transform: translate(3px, 0);
+}
+
+/* The same filled dot as everywhere else, and nothing at all once it has been
+   read: presence is the signal. A hollow ring on every row was two states that
+   looked like one. */
+.jmsg__mark {
+  grid-column: 1;
+  grid-row: 1;
+  /* Level with the first line of the sentence, not with the middle of a
+     sentence that has wrapped to three lines on a phone. */
+  align-self: start;
+  margin-top: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--sage);
+  background: none;
 }
 
-.jnotes__item[data-kind='paymentFailed'] .jnotes__dot {
+.jmsg[data-unread] .jmsg__mark {
   background: var(--terracotta);
 }
 
-.jnotes__item[data-kind='paymentFailed'] .jnotes__line {
+.jmsg__line {
+  grid-column: 2;
+  grid-row: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--ink-soft) 88%, transparent);
+}
+
+.jmsg[data-unread] .jmsg__line {
+  font-weight: 640;
+  color: var(--ink);
+}
+
+.jmsg[data-kind='paymentFailed'] .jmsg__line {
   color: var(--terracotta-deep);
+}
+
+.jmsg__when {
+  grid-column: 4;
+  grid-row: 1;
+  text-align: right;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--ink-faint) 85%, transparent);
+}
+
+/* Where the press goes, said at rest. The row is the button; these words are
+   what it opens, and a reader deciding whether to reach for it should not have
+   to hover to find out that it is reachable at all. */
+.jmsg__go {
+  grid-column: 3;
+  grid-row: 1;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--ink-faint) 78%, transparent);
+  transition: color 150ms var(--ease);
+}
+
+.jmsg:hover .jmsg__go,
+.jmsg:focus-visible .jmsg__go {
+  color: var(--terracotta-deep);
+}
+
+.jmsg__more {
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+/* A bucket inside a section — the hosting side's three. Quieter and smaller
+   than the section's own eyebrow, so the hierarchy is legible at a glance
+   rather than two headings of equal weight arguing. */
+.jsub {
+  margin: 18px 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--ink-faint) 80%, transparent);
+}
+
+.jsub:first-of-type {
+  margin-top: 12px;
 }
 
 /* ── what has happened to the money ─────────────────────────────────────────
@@ -2171,6 +2366,7 @@
 [data-letter='ledger'] .guest .opened {
   border-radius: 0;
   border-color: var(--ink);
+  --opened-pad: 30px;
   padding-inline: 30px;
 }
 
@@ -2195,52 +2391,31 @@
 }
 
 [data-letter='ledger'] .guest .jrow {
-  grid-template-columns: 152px minmax(0, 1fr) 184px 118px;
-  align-items: baseline;
   gap: 0 16px;
   border-radius: 0;
-  padding-block: 9px;
+  padding-block: 8px;
 }
 
 [data-letter='ledger'] .guest .jrow__status {
-  grid-row: 1;
   font-size: 10px;
-}
-
-[data-letter='ledger'] .guest .jrow__space {
-  grid-column: 2;
-  grid-row: 1;
 }
 
 [data-letter='ledger'] .guest .jrow__room {
   font-size: 15.5px;
 }
 
-[data-letter='ledger'] .guest .jrow__when {
-  grid-column: 3;
-  grid-row: 1;
-  margin: 0;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
+[data-letter='ledger'] .guest .jrow__meta,
 [data-letter='ledger'] .guest .jrow__sent {
-  grid-column: 4;
-  grid-row: 1;
-  margin: 0;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-[data-letter='ledger'] .guest .jrow__note {
-  grid-column: 2 / span 3;
-  grid-row: 2;
-  margin-top: 2px;
   font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 [data-letter='ledger'] .guest .jrow__excerpt {
   display: none;
+}
+
+[data-letter='ledger'] .guest .jmsg {
+  border-radius: 0;
 }
 
 [data-letter='ledger'] .guest .jitem + .jitem {
@@ -2349,6 +2524,7 @@
   .letter__sheet,
   .journal,
   .opened {
+    --opened-pad: 22px;
     padding-inline: 22px;
   }
 
@@ -2366,41 +2542,72 @@
     text-align: left;
   }
 
+  /* The row already reads as one column; a phone only loses the "Sent" stamp
+     from beside the status, which drops to the foot of the row where there is
+     width for it. */
   .jrow {
     grid-template-columns: minmax(0, 1fr);
+    padding-right: 26px;
   }
 
-  .jrow__status {
-    grid-column: 1;
-    grid-row: 1;
-    margin-bottom: 4px;
-  }
-
-  .jrow__space,
-  .jrow__when,
-  .jrow__excerpt,
-  .jrow__note,
   .jrow__sent {
     grid-column: 1;
-  }
-
-  .jrow__space {
-    grid-row: 2;
-  }
-  .jrow__when {
-    grid-row: 3;
-  }
-  .jrow__excerpt {
-    grid-row: 4;
-  }
-  .jrow__note {
     grid-row: 5;
+    justify-self: start;
+    margin-top: 6px;
   }
-  .jrow__sent {
-    grid-row: 6;
+
+  /* No width for the schedule and its standing on one line, so the standing
+     takes its own — and the separator goes with the line it belonged to
+     rather than dangling at the head of the next one. */
+  .jrow__note {
+    flex: 1 0 100%;
+  }
+
+  .jrow__when:not(:empty) + .jrow__note::before {
+    content: none;
+  }
+
+  /* A phone has no room for the sentence, the way on and the date side by
+     side: the sentence takes the width it needs and the way on drops beneath
+     it, where the date has already gone. */
+  .jmsg {
+    grid-template-columns: 15px minmax(0, 1fr) auto;
+    padding-bottom: 9px;
+  }
+
+  .jmsg__line {
+    white-space: normal;
+  }
+
+  .jmsg__when {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .jmsg__go {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .counter__pair {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A window too short to hold the letter's fixed head and a readable thread at
+   once — a phone on its side, mostly — gives the pinning up rather than squeeze
+   the correspondence into a slot: the sheet scrolls as one piece again, which
+   is what it did before the head was pinned. Nothing is ever out of reach. */
+@media (max-height: 620px) {
+  .opened {
+    display: block;
+    overflow-y: auto;
+  }
+
+  .opened__scroll {
+    overflow: visible;
+    margin-inline: 0;
+    padding-inline: 0;
   }
 }

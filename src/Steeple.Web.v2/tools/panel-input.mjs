@@ -13,7 +13,7 @@
 //   · nothing dead is over the card, the CTA, or the sheet behind the overlay
 //
 //   node tools/panel-input.mjs "http://localhost:5322/?q=low"
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -75,9 +75,9 @@ async function ready(target) {
   await wait(2000);
 }
 
-for (const style of ['diorama', 'atlas']) {
-  const target = `${url}${url.includes('?') ? '&' : '?'}style=${style}#/venue/grace-community-vienna`;
-  console.log(`\n──── ${style} ────`);
+{
+  const target = at(url, routes.venue('grace-community-vienna'));
+  console.log('\n──── Atlas ────');
   await ready(target);
   await wait(1200);
 

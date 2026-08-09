@@ -349,11 +349,53 @@ public class ApplicationServiceTests
         Assert.Equal(organizer.DisplayName, notification.Payload.GetType().GetProperty("senderName")!.GetValue(notification.Payload));
     }
 
+    // An approved application is a booking, and a booking still has two people who
+    // may need to say something to each other. Neither side's message flips the
+    // status: the ask/answer rhythm is about whose move it is, and after a yes it
+    // is nobody's.
     [Fact]
-    public async Task AddMessageAsync_OnApprovedApplication_ReturnsInvalidState()
+    public async Task AddMessageAsync_OnApprovedApplication_ByOrganizer_PostsWithoutFlippingStatus()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Approved, decidedAtUtc: FixedNow);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out _);
+
+        var result = await service.AddMessageAsync(application.Id, organizer.Id, new ApplicationMessageRequest("Where do we park?"));
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Approved, repo.Applications.Single().Status);
+        Assert.Contains(repo.Applications.Single().Messages, m => m.SenderId == organizer.Id && m.Body == "Where do we park?");
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.ApplicationMessage, notification.Type);
+        Assert.Contains(notification.Recipients, r => r.UserId == manager.Id);
+    }
+
+    [Fact]
+    public async Task AddMessageAsync_OnApprovedApplication_ByManager_PostsWithoutFlippingStatus()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.Approved, decidedAtUtc: FixedNow);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out _);
+
+        var result = await service.AddMessageAsync(application.Id, manager.Id, new ApplicationMessageRequest("The side door is locked — use the hall entrance."));
+
+        Assert.Null(result.Error);
+        Assert.Equal(ApplicationStatus.Approved, repo.Applications.Single().Status);
+        Assert.Contains(repo.Applications.Single().Messages, m => m.SenderId == manager.Id);
+        var notification = Assert.Single(notifications.Calls);
+        Assert.Equal(NotificationType.ApplicationMessage, notification.Type);
+        Assert.Contains(notification.Recipients, r => r.UserId == organizer.Id);
+    }
+
+    [Theory]
+    [InlineData(ApplicationStatus.Declined)]
+    [InlineData(ApplicationStatus.Withdrawn)]
+    public async Task AddMessageAsync_OnClosedApplication_ReturnsInvalidState(ApplicationStatus status)
     {
         var (repo, managers, _, room, organizer, _) = NewScenario();
-        var application = NewApplication(room, organizer, ApplicationStatus.Approved, decidedAtUtc: FixedNow);
+        var application = NewApplication(room, organizer, status, decidedAtUtc: FixedNow);
         repo.Applications.Add(application);
         var service = CreateService(repo, managers, out _, out _, out _);
 

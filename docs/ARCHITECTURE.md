@@ -47,7 +47,6 @@ Steeple.slnx
 ├─ src/Steeple.Api         — the one JSON API. Module subfolders inside each of:
 │    Contracts/ Controllers/ Services/ (ports) Proxies/ (adapters) Configuration/ Extensions/ Utils/
 ├─ src/Steeple.Web.v2      — active Vite + vanilla JS + Leaflet SPA; nginx container proxies /api.
-├─ src/Steeple.Web.v1      — deprecated MVC + HTMX implementation, retained as reference only.
 ├─ src/Steeple.Admin       — HTMX operator dashboard; reads Postgres directly via Persistence.
 ├─ mobile/                 — Flutter app (HTTP → Api only). Feature-first; seams in MOBILE_CONTRACTS.md.
 └─ tests/                  — Steeple.Api.Tests (unit) + Steeple.Integration.Tests (Testcontainers Postgres)
@@ -260,12 +259,14 @@ edits/deletes run behind `manage`; upload behind the pricier `media` policy (12/
 completed 2026-08-07 (`docs/backlog/v2_migration/design.md`, D1–D9). Vite produces static
 assets and the nginx host serves them while proxying same-origin `/api` and local `/media`
 requests to the API
-container; the API still emits no CORS headers. Hash routes own navigation, and are also
-the no-JavaScript fallback: the title page's CTAs are printed in `index.html` as real links.
+container; the API still emits no CORS headers. **Clean History-API routes own navigation**
+(2026-08-08, `src/core/router.js`; old `#/…` shapes are compatibility entrances converted by
+one `replaceState`); the title page's CTAs are printed in `index.html` as real base-relative
+links, so a press before any script is an honest navigation to a real document.
 
 *Boot* is a three-state machine (P3.5; `core/intent.js` + `main.js`): **printed arrival**
 (markup only — a press records its destination natively), **product-first flat boot** (any
-intent or deep link before the village is ready opens the map/desk directly; no engine,
+intent, cold non-root route or deep link before the village is ready opens the map/desk directly; no engine,
 world, or Three chunk is fetched on that product path), and **live-village boot** (no early
 intent — poster → canvas crossfade, the cinematic roll). A village-capable flat boot lazily
 restores the poster and raises Three/world only if the visitor returns to the title;
@@ -305,11 +306,30 @@ charge state, failure ladder, rescind + refund, mock payout onboarding), reminde
 ambience (one slip + quiet inbox lines; no bell), and `?goto=` email CTAs at boot. The
 demo fixture survives only as dev-build village scenery, contained by construction.
 
-*SEO floor* (D9): `public/robots.txt`, nginx aliases `/sitemap.xml` to the API's, index
-meta/OG tags; `public/terms.html` + `privacy.html` are real pages (founder's preview text —
-legal review is a launch gate). Deeper crawler rendering is its own backlog entry.
-The deprecated v1 BFF remains in source for reference but is excluded from the solution,
-Compose, and Bake builds.
+*Crawler surface* (shipped 2026-08-08; policy in `docs/contracts/seo.md`): the API renders
+the crawler-facing documents — `/robots.txt`, `/sitemap.xml`, and per-listing
+`/space/{venueSlug}/{roomSlug}` HTML (`WebDocumentController` → `Services/Seo/`
+`IWebDocumentRenderer`, outside `/api/v1`; metadata, JSON-LD, bootstrap DTO, real 404s for
+non-discoverable rooms, `documents` rate policy). nginx proxies exactly those routes to the
+API and serves everything else statically: known clean app routes get tiny `noindex` boot
+documents (`public/route-documents/app-depth-{1,2,3}.html`, internal locations), unknown
+paths get a designed static `404.html` **with status 404** (the old `try_files … index.html`
+soft-404 is gone), and a listing-document upstream failure serves the boot body while
+preserving the 502/503/504. A stable `public/route-handoff.js` progressively swaps a served
+document's body for the Vite shell at the same URL — no redirect, no UA sniffing, no second
+runtime. Canonical origins come only from `Seo:PublicBaseUrl` (`IPublicBaseResolver`;
+request-origin fallback is a Development convenience — a prefix deployment requires the key).
+`public/terms.html` + `privacy.html` are real pages (founder's preview text —
+legal review is a launch gate).
+### Retired Web.v1 history
+
+The first web surface was an ASP.NET MVC + HTMX + Leaflet application with an encrypted-
+cookie BFF. Web v2 replaced it as the active product surface on 2026-08-05 and its real-API
+migration finished on 2026-08-07. The retired project had already been excluded from the
+solution, Compose, Bake, and deployment builds. Its implementation was deleted from the
+working tree on 2026-08-09 to prevent obsolete authentication and UI patterns from appearing
+in code searches. The source and its evolution remain available in Git history; current web
+contracts and implementation live under `src/Steeple.Web.v2`.
 
 **Mobile** (`/mobile`, Flutter) — the organizer's home. Feature-first
 (`presentation → application → data`), Riverpod 3 (no codegen), go_router 4-tab shell
@@ -445,8 +465,10 @@ out-of-area detail lookups. Launch-suburb swap = one config change.
 
 ## Routes
 
-Web: `/` plus hash routes for map browsing, venue/room panels, apply, guest correspondence,
-account, and host management (see `src/Steeple.Web.v2/README.md`).
+Web: clean History-API routes (2026-08-08) — `/` · `/browse` · `/venue/{venueSlug}` ·
+`/space/{venueSlug}/{roomSlug}` (canonical, indexable) · `/apply/{venueSlug}/{roomSlug}` ·
+`/journal` · `/desk[/{venueSlug}]` · `/letter/{applicationId}`; old `#/…` shapes convert on
+boot (see `src/Steeple.Web.v2/README.md`, `docs/contracts/web.md`).
 Admin: `/admin` (overview), `/admin/review` (first-listing decisions + review-comment
 hide/unhide), `/admin/listings` (Unlist takedown), `/admin/venue-managers` (linking).
 
@@ -515,8 +537,12 @@ The SPA has no server of its own, so its host sets everything a static host must
   keying the providers needs no policy edit on the day. `style-src` carries
   `'unsafe-inline'` — the week card sets grid geometry as a `style` attribute.
   No directive names a path, so the policy is unchanged behind a stripped sub-path prefix.
-  `/api/` adds no headers at all — the API answers for its own responses. nginx also
-  aliases `/sitemap.xml` to the API's `GET /api/v1/sitemap.xml` (exact-match location).
+  `/api/` adds no headers at all — the API answers for its own responses. nginx aliases
+  `/sitemap.xml` to the API's `GET /api/v1/sitemap.xml` and proxies `/robots.txt` and
+  `/space/{v}/{r}` to the API's document routes; the full location precedence (static owners →
+  listing proxy with status-preserving fallback → internal boot documents per clean route →
+  static 404 for everything else, each HTML location repeating the complete header set) is
+  described under *Crawler surface* above.
 - **Proxy abuse controls** — real-IP/proto input is trusted only from private Docker peers;
   nginx emits one canonical `X-Forwarded-For` value and caps `/api/` at 5 req/s (burst 30).
   The API independently applies 300/min total per account/IP and 120/min/IP to discovery.

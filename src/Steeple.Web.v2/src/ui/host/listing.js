@@ -1423,7 +1423,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
           el('h3', { class: 'eyebrow', text: 'In review' }),
           el('p', {
             class: 'prose',
-            text: `${room.name} has been sent for review. Steeple reads a new listing before it goes on the map; nothing more is needed from you.`,
+            text: `Thanks for listing! As this is your first listing, ${room.name} has been sent for review. We'll be in touch shortly!`,
           }),
         ]),
         noticeBlock(),

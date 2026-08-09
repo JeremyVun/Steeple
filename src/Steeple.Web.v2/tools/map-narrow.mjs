@@ -5,7 +5,7 @@
 // not a sheet.
 //
 //   node tools/map-narrow.mjs "http://localhost:5322/?q=low" 390x844
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -80,7 +80,7 @@ const pinBand = () =>
 
 async function ready() {
   await page.goto('about:blank');
-  await page.goto(`${url}#/browse`, { waitUntil: 'networkidle0' });
+  await page.goto(at(url, routes.browse()), { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
   // The product lives past the roll; the harness lands there without the tween.
   await page.evaluate('__steeple.roll.set(1)');

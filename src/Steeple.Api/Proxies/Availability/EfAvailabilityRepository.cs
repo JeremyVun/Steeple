@@ -111,6 +111,7 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         Guid roomId,
         IReadOnlyList<RoomOpenHours> openHours,
         IReadOnlyList<RoomBlackoutDate> blackouts,
+        DateTimeOffset updatedAtUtc,
         CancellationToken ct = default)
     {
         var existingHours = await _db.RoomOpenHours.Where(h => h.RoomId == roomId).ToListAsync(ct).ConfigureAwait(false);
@@ -120,6 +121,14 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         _db.RoomBlackoutDates.RemoveRange(existingBlackouts);
         _db.RoomOpenHours.AddRange(openHours);
         _db.RoomBlackoutDates.AddRange(blackouts);
+
+        // The listing document publishes these hours, so the row a crawler times from moves with
+        // them. Tracked in the same context, so it lands in the one transaction below.
+        var room = await _db.Rooms.FirstOrDefaultAsync(r => r.Id == roomId, ct).ConfigureAwait(false);
+        if (room is not null)
+        {
+            room.UpdatedAtUtc = updatedAtUtc;
+        }
 
         // One SaveChanges = one transaction: the delete and the insert land together.
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);

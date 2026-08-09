@@ -257,8 +257,8 @@ A deliberately boring, conventional **N-tier** — **self-hosted, no lock-in, ch
 > **Superseded where the build went another way** (as-built truth: `ARCHITECTURE.md`;
 > deviations logged in SYSTEM_DESIGN §17). (1) **One API deployable**, not two edge APIs.
 > (2) The web surface is **`Steeple.Web.v2` — a Vite + vanilla JS + Leaflet SPA served by
-> nginx**, which proxies same-origin `/api` to the API; the HTMX/MVC web funnel (`Web.v1`,
-> a cookie BFF) is deprecated and retained as reference only. (3) **Auth is hand-rolled,
+> nginx**, which proxies same-origin `/api` to the API; the retired HTMX/MVC cookie-BFF
+> source lives in Git history. (3) **Auth is hand-rolled,
 > not ASP.NET Core Identity** — a `users`/`user_logins` model keyed by `(provider, sub)`
 > plus Steeple's own access/refresh tokens; no Identity package is referenced anywhere.
 > (4) **Admin has no in-app auth by design** — authelia at the edge proxy is the gate (see

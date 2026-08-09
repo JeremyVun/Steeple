@@ -61,6 +61,22 @@ public class ListingServiceTests
         Assert.Null(detail);
     }
 
+    [Fact]
+    public async Task GetSitemapEntriesAsync_AsksTheRepositoryForTheServedAreaItselfEnforces()
+    {
+        // The advertised set and the readable set are the same set: the bounds the sitemap query
+        // filters on are the ones ToDetailIfDiscoverableAsync would 404 a room for falling outside.
+        var repository = new StubRoomRepository(CreateRoom(RoomStatus.Published));
+        var policy = CreatePolicy();
+        var service = new ListingService(
+            repository, policy, new FakeRatingService(), new FakeAvailabilityService(),
+            new NullAnalyticsSink(), new FixedTimeProvider());
+
+        await service.GetSitemapEntriesAsync();
+
+        Assert.Equal(policy.Bounds, repository.SitemapBounds);
+    }
+
     private static ListingService CreateService(Room room) =>
         new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new FakeAvailabilityService(),
             new NullAnalyticsSink(), new FixedTimeProvider());
@@ -125,8 +141,14 @@ public class ListingServiceTests
         public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<string>>([]);
 
-        public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
+        public BoundingBox? SitemapBounds { get; private set; }
+
+        public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(
+            BoundingBox bounds, CancellationToken ct = default)
+        {
+            SitemapBounds = bounds;
+            return Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
+        }
     }
 
     private sealed class FakeAvailabilityService : IAvailabilityService

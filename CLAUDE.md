@@ -5,7 +5,7 @@ organizers. Instant-book by default with per-venue manual-approve opt-in (2026-0
 `docs/backlog/booking-modes.md`; was request→approve), required host-set hourly pricing
 (free listings removed 2026-07-07), one NoVA beachhead.
 .NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL + Flutter mobile
-(`/mobile`, Phase 4). The v1 HTMX web funnel is deprecated and retained only as reference.
+(`/mobile`, Phase 4). The retired v1 HTMX web funnel lives only in Git history.
 The API, web v2, and mobile implement the full discovery → SSO → apply/instant-book →
 booking → payments (mock-gateway era) loop; web v2's real-API migration **completed
 2026-08-07** — production Google/Apple/Turnstile are shipped, env-gated, and go live by
@@ -28,7 +28,7 @@ one concern; update the owning doc in the same PR as the change it describes.
 | `docs/MOBILE_DESIGN.md` | Flutter app design | Anything under `/mobile` |
 | `docs/MOBILE_CONTRACTS.md` | Mobile in-app seams (interfaces, routes, providers, shared widgets) | What a `/mobile` feature builds against |
 | `docs/DESIGN_SYSTEM.md` | Canonical design tokens + component/UX specs (all surfaces) | Any styling/visual decision — never hardcode values |
-| `docs/SEO.md` | SEO checklist | SEO to-dos |
+| `docs/contracts/seo.md` | Crawler surface (robots, sitemap, listing documents, clean routes, index rules) | Any SEO question — shipped 2026-08-08; `docs/backlog/seo/design.md` is the rationale of record |
 | `docs/runbooks/` | Operational procedures (email/Resend; SSO providers + Turnstile) | Setting up or debugging a third-party service in production |
 
 Target-state docs describe things that **don't exist yet** — don't assume an endpoint or
@@ -47,8 +47,6 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   `Controllers/`, `Services/` (use-cases + **port** interfaces), `Proxies/` (adapters),
   `Configuration/ Extensions/ Utils/` — each grown by **module subfolder**
   (e.g. `Services/Applications/`) — see SYSTEM_DESIGN §4.
-- `/src/Steeple.Web.v1` — deprecated MVC + HTMX + Leaflet implementation, retained as
-  reference and excluded from the solution and deployment builds.
 - `/src/Steeple.Web.v2` — the active web frontend (Vite + vanilla JS + Leaflet; Three.js
   splash only), served by nginx in containers. nginx/Vite proxy same-origin `/api` requests
   to the API; the frontend has no DB or shared server assembly. See its section below.
@@ -153,12 +151,13 @@ section in Api appsettings.
   one deliberate Draft room to prove it (`renovation-annex`).
 - **Geofence rejects, silently by design:** out-of-area search input clamps to the
   beachhead (empty results, not errors); detail lookups 404.
-- **Web sign-in state (rewritten 2026-08-06):** v2's `src/data/session.js` owns identity.
+- **Web sign-in state (rewritten 2026-08-09):** v2's `src/data/session.js` owns identity.
   The refresh token is an **httpOnly cookie the API sets** (`refreshTransport:'cookie'` —
-  not the v1 BFF), the access token lives in module memory only, and localStorage holds
-  just `{user, reason, stamp}` for cross-tab `storage`-event sync. Refresh is single-flight
-  per tab; concurrent tabs survive by the API's rotation reuse-grace
-  (`docs/contracts/identity.md`). Never write a token to storage.
+  not the v1 BFF), while the access token and fetched profile live in module memory only.
+  Reload restores identity by refreshing the cookie then reading `GET /me`; tabs exchange
+  opaque signed-in/out events through `BroadcastChannel` and fetch their own profile. Refresh
+  is single-flight per tab; concurrent tabs survive by the API's rotation reuse-grace
+  (`docs/contracts/identity.md`). Never write a token or profile to storage.
 - Compose runs server containers in **Production** and serves web v2 from nginx. Only
 ## Steeple.Web.v2 — the active frontend (real-API migration complete, 2026-08-07)
 
@@ -172,9 +171,12 @@ project; code comments citing "CONTRACT4 §5" etc. mean those files, while "CONT
 means this repo's `docs/CONTRACTS.md`.
 
 **Boot is a three-state machine** (P3.5): printed arrival (the title CTAs are real links
-in `index.html` — a press is answered from the first frame), product-first **flat boot**
-(any intent or deep link before the village is ready opens the product with no engine,
-world, or Three fetch; a cold `#/…` hash is always a flat boot), and the live-village boot
+to the clean routes `browse`/`desk` in `index.html` — a press is answered from the first
+frame, and before any script it is an ordinary navigation to a real document), product-first
+**flat boot** (any intent or deep link before the village is ready opens the product with no
+engine, world, or Three fetch; **any cold non-root route** — `/space/…`, `/browse`, an old
+`#/…` entrance — is always a flat boot, and `main.js` *and* `journey/roll.js` read the
+address independently), and the live-village boot
 (poster → canvas crossfade, cinematic roll). A flat-boot visitor's first return to the
 title restores the poster immediately and lazily raises the village there; explicit
 `?world=off`/`build:flat` visits remain flat. Product reads never wait on 3D; ⚠ never defer
@@ -190,12 +192,25 @@ its header — inverting them produces convincing, meaningless failures.** Headl
 app-time ~6× slow: suites wait on state, never wall-clock.
 
 **Seams (frozen — the day an upstream name changes, one file moves):**
+- `src/core/router.js` — the one translator between locations and product state (SEO-D1,
+  2026-08-08): route grammar, base-prefix freeze from `document.baseURI`, legacy-hash
+  conversion, push/replace/popstate intent. The **only** history writer besides
+  `intent.record` and `deepLink.claim`; imports nothing.
 - `src/data/api.js` — the wire, `/api/v1` names verbatim, one function per request; reads
   time out at 4s, writes at 15s, and a timeout classifies as *unknown*, never unreachable.
 - `src/data/catalog.js` — product vocabulary over the wire, with `bundledCatalog.js`
-  fallback when the API is down (seed slugs match the bundled ids 1:1).
+  fallback when the API is down (seed slugs match the bundled ids 1:1). Also consumes the
+  server listing document's `#steeple-listing-bootstrap` DTO once at module evaluation
+  (non-provisional venue, seeded read cache — a cold `/space/…` costs one detail read and
+  one `listing_viewed`, both server-side).
+- `src/ui/metadata.js` + `metaText.js` — in-session head owner (title/canonical/robots/
+  OG/JSON-LD per route, atomic replace of `data-steeple-route-meta` nodes); copy pinned to
+  the API renderer by `tests/fixtures/seo-formats.json` — change either side only through
+  that table. `src/ui/unavailable.js` is the designed missing-listing state (same words as
+  the server 404).
 - `src/data/session.js` — identity (httpOnly-cookie refresh token, in-memory access token,
-  `withAccess()` 401-retry-once, cross-tab `storage` sync; harnesses read a bearer via
+  in-memory profile, `withAccess()` 401-retry-once, opaque cross-tab `BroadcastChannel` sync;
+  harnesses read a bearer via
   `withAccess((t) => Promise.resolve(t))`, never storage). Dev sign-in
   (`provider:"dev"`, Development-only) and the real providers share one `signIn()` seam.
 - `src/data/providers.js` — Google/Apple, the only file that knows a third party exists; a
@@ -209,9 +224,10 @@ app-time ~6× slow: suites wait on state, never wall-clock.
 - `src/data/correspondence.js` — the wire for everything after a request is written (inbox,
   thread, withdraw, counter response, host decisions, method-on-file). Verdicts' `reach` is
   `refused | offline | signedOut | unavailable` — never a guess (D4/D5).
-- `src/data/store.js` — a localStorage **mirror** of what steeple holds, keyed per person
-  (`steeple-village-store:{userId}`, `:anon` signed out — D6). It decides nothing; clearing
-  it costs a reload, never a fact. The demo fixture is dev-build village scenery only.
+- `src/data/store.js` — a **memory-only mirror** of what steeple holds, scoped to the active
+  person (D6). It decides nothing; reload or identity change discards it and real reads refill
+  it. Old `steeple-village-store:*` keys are purged at boot/sign-out. The demo fixture is
+  dev-build village scenery only and never persists.
 - `src/data/analytics.js` — the interaction batcher to `POST /api/v1/events` (CONTRACTS
   §7); nothing user-visible ships dark.
 - `src/data/photo.js` — a picked file made into the file that is sent: EXIF orientation
@@ -223,7 +239,8 @@ app-time ~6× slow: suites wait on state, never wall-clock.
 **Everything is real.** Catalog, sign-in/out, agreements, the apply calendar
 (`openHours` + availability), submit (`Idempotency-Key`, org-name input, 402 → mock card
 step → the send resumes itself), instant book, one unified inbox (sent requests plus
-**hosting rows** for venue keepers — a hosting row opens the host letter; 2026-08-08),
+**hosting rows** for venue keepers, open · booked · closed alike, each opening the host
+letter; 2026-08-08, widened past undecided-only 2026-08-09),
 threads/withdraw/counters, all four host decisions (on the letter: Approve · Decline ·
 a reply box **on the thread** · a quiet "Suggest another time" link; `409 slot_taken`
 renders as the product moment — "Already taken", steeple declined it as it happened), the
@@ -236,7 +253,9 @@ booking is over (both letters ask, the inbox nudges and counts it, the double bl
 until both have written, and the earned ★ average then rides the search cards, the room
 sheet and the organizer's trust chip — a venue nobody has rated shows nothing, never a zero;
 `docs/backlog/ratings/`, 2026-08-08),
-`GET /me/notifications` as ambience (one slip + quiet inbox lines, no bell), and `?goto=`
+`GET /me/notifications` as **messages in the inbox** (pressable rows, unread until opened,
+opening one marks it read and follows its deep link — no slip, no bell, no badge;
+2026-08-09), and `?goto=`
 email CTAs at boot. Counter-offers behind a server flag render "not available here yet"
 when off, never an error. Mock-era residue: the dev provider locally, the mock card step
 and payout screen (gateway stand-ins), no Turnstile until keyed.
@@ -256,16 +275,36 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   `fixtures.agreeCurrent(token)` on minted accounts (versions are read from
   `src/data/agreements.js`, no drift) — except in `hardening-test` §4, whose subject is the
   un-agreed state.
-- Slips are **transients** (fade in, gone in 12s): record from before sign-in and assert
-  the record, never sample the live element (`payments-ui-test` §6 shows the pattern).
+- **Notification slips are gone** (2026-08-09): what steeple wrote is a `.jmsg` row in the
+  inbox, so those assertions are DOM state and never timing — `data-unread` until opened,
+  the sentence read off `.jmsg__line span:last-child` (a visually-hidden "Unread. " prefix
+  rides in front of it while unread), the one way on read off `.jmsg__go`'s *text* (it is
+  opacity-0 until hover but always in the DOM). The inbox redraws when a read answers, so a
+  press needs the detach-retry `press()` helper, never a synthetic `.click()`
+  (`inbox-messages-test`, `payments-ui-test` §6, `booking-notification-test`). `.slip` still
+  exists for one thing only — `ui/notice.js`'s sign-out/deep-link confirmation, whose live
+  gate is `account-test` §6.
 - `map-test` asserts seed venue counts — green only after a DB reset; every other suite
   mints its own rows and never collides.
 - Console-noise discipline: dead-port media 404s and GL narration are environmental —
   `fixtures.isEnvironmentNoise` is the shared filter; judge the check lines.
-- Known-stale sets (documented in the suites' own headers): `guest-test` 31/42 (map-first
-  roll drift) · `world-test` exactly 12, symmetric per style — asymmetry is real ·
+- **Routes are paths; `location.hash` is inert** (2026-08-08, SEO-D1). A suite says where
+  it means to be with `fixtures.at(url, routes.room(v, r))` — origin and query preserved —
+  and moves a page that is already standing with `fixtures.goRoute(page, path)`, which
+  writes the entry and sends the popstate the browser would have. Assigning
+  `location.hash` navigates nothing: there is no `hashchange` listener left. The old
+  `#/…` links are still honoured as compatibility entrances (the matrix is
+  `tools/router-test.mjs` §2, driven end-to-end by `tools/route-test.mjs` §3), so an
+  address-bar assertion reads `location.pathname`, never the fragment. A cold `/space/…`
+  is a **document the API renders**, so it needs the API up; the other clean routes are
+  static boot documents and open with it down.
+- Known-stale sets (documented in the suites' own headers): `guest-test` 34/45 (map-first
+  roll drift; the count moved with P3's three added route checks, the failing eleven are
+  unchanged) · `world-test` Atlas-only: 6 stale (header has the exact set) ·
   `booking-flow-test` fails from §5 (seed venues became instant-book 2026-08-05;
-  correspondence-test is the live gate for both flows).
+  correspondence-test is the live gate for both flows). `world-off-test` §7 is **no longer
+  a "load flake"**: it was the agreements gate standing over the wordmark, and the suite
+  now answers it on the wire and waits on the roll instead of a clock (2026-08-08).
   `input-test`'s opening roll beats are a **load reading** (headless GL under load), not a
   verdict.
 - All suites launch Chrome on a **pipe** and close in `finally` — a SIGKILL mid-run leaves
@@ -278,9 +317,10 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   Two *pages of one browser* freeze each other outright — the one not in front stops
   advancing transitions, so an opened surface sits at opacity 0 forever and `steady()`
   correctly calls it never-arrived (one browser per page, not per person). And concurrent
-  *browsers* starve it: a slip measured at opacity 1 with one in flight peaked at 0.26 with
-  three. Put finished browsers down before any section whose claim is a fade
-  (`payments-ui-test` §6 does).
+  *browsers* starve it: a transient measured at opacity 1 with one in flight peaked at 0.26
+  with three. Put finished browsers down before any section whose claim is a fade — and
+  before any section waiting on slow chained reads, which is why `payments-ui-test` §6 still
+  does it now that its own claim is DOM state rather than a fade.
 
 **Hazards (each verified against code, 2026-08-07):**
 - Class names are never shared across guest and host surfaces: stylesheets load
@@ -309,7 +349,7 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   Development API — compose (:8080) cannot sign anybody in until the owner keys a provider.
 
 **Design taste (Jeremy):** calm, sophisticated, professional — never childish or tacky;
-A/B alternatives ship behind query params (`?style= ?map= ?desk= ?letter= ?world=off`),
+A/B alternatives ship behind query params (`?map= ?desk= ?letter= ?world=off`),
 never branches. Copy says venue/space/host, never church. Verify by driving the real
 flow — debug screenshots don't prove interactivity; real-event tests are mandatory.
 

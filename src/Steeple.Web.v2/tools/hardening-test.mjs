@@ -89,16 +89,26 @@ const browser = await launch();
 
 try {
   const page = await browser.newPage();
+  let signedOutBootRefusals = 0;
   await page.setViewport({ width: 1440, height: 900 });
   page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
   page.on('console', (msg) => {
     if (msg.type() !== 'error' || isEnvironmentNoise(msg)) return;
+    // P2 boot has no profile hint: every fresh signed-out document probes the
+    // httpOnly cookie and receives an ordinary 401. Assert those responses
+    // below; do not count Chrome's rendering of that expected refusal as an
+    // application console problem.
+    if (msg.location()?.url?.includes('/api/v1/auth/refresh') && /401/.test(msg.text())) return;
     problems.push(`[console.error] ${msg.text()}`);
   });
 
   // Every event batch this page posts, and what steeple answered.
   const batches = [];
   page.on('response', async (response) => {
+    if (response.url().includes('/api/v1/auth/refresh') && response.status() === 401) {
+      signedOutBootRefusals += 1;
+      return;
+    }
     if (!response.url().includes('/api/v1/events')) return;
     let sent = null;
     try {
@@ -193,6 +203,7 @@ try {
 
   // ── 1. the batcher ────────────────────────────────────────────────────────
   console.log('\n1. what this browser saw somebody do, and where it went');
+  check('a signed-out boot proved the absent cookie rather than reading a profile hint', signedOutBootRefusals > 0);
 
   // The map, by hand. One event per gesture, not one per frame of it.
   const map = await page.$('.leaflet-container');
@@ -551,15 +562,11 @@ try {
   await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
   await signInPage(page, host.email, host.name);
   await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-  // Everything this browser could know about hours, forgotten. The session
-  // stays, so whatever the desk prints next came from steeple.
-  await page.evaluate(() => {
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('steeple-village-store:')) localStorage.removeItem(key);
-    }
-  });
+  // Reload forgets the memory-only mirror while the cookie restores the
+  // session, so whatever the desk prints next came from steeple.
   await page.reload({ waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
+  await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
   await page.evaluate('__steeple.roll.set(1)');
   await wait(800);
   await page.evaluate('__steeple.setMode("host")');
@@ -585,11 +592,19 @@ try {
 
   // ── 8. the SEO floor ──────────────────────────────────────────────────────
   console.log('\n8. what a crawler and a share card are handed');
+  const origin = new URL(url).origin;
   const robots = await fetch(new URL('robots.txt', url).href);
   const robotsText = await robots.text();
-  check('robots.txt is a real file', robots.status === 200 && /^User-agent:/m.test(robotsText), String(robots.status));
+  check('robots.txt answers as plain text', robots.status === 200 && /^User-agent:/m.test(robotsText), String(robots.status));
   check('and it is not the app shell', !/<!doctype html>/i.test(robotsText));
-  check('naming the sitemap', /Sitemap:\s*\/sitemap\.xml/.test(robotsText), robotsText.split('\n').pop());
+  // The API renders this file for one reason: sitemaps.org reads `Sitemap:` as a
+  // fully-qualified URL and ignores a relative one, so a relative line is an
+  // undiscoverable sitemap (docs/contracts/seo.md).
+  check(
+    'naming the sitemap at an absolute URL, at this very origin',
+    robotsText.includes(`Sitemap: ${origin}/sitemap.xml`),
+    robotsText.trim().split('\n').pop()
+  );
 
   const sitemap = await fetch(`${API}/sitemap.xml`);
   const xml = await sitemap.text();
@@ -597,17 +612,24 @@ try {
   check('as XML, said so', (sitemap.headers.get('content-type') ?? '').includes('xml'), sitemap.headers.get('content-type'));
   check('to the sitemaps.org schema', xml.includes('http://www.sitemaps.org/schemas/sitemap/0.9'));
   check('with this run’s own listing in it', xml.includes(`/space/${host.venueSlug}/${host.roomSlug}`));
-  const forwarded = await fetch(`${API}/sitemap.xml`, {
-    headers: {
-      'X-Forwarded-Proto': 'https',
-      'X-Forwarded-Host': 'steeple.example',
-      'X-Forwarded-Prefix': '/steeple',
-    },
-  }).then((r) => r.text());
+  // Where a public URL comes from: Seo:PublicBaseUrl, or — unset, as here — the
+  // request's own origin. Never a header. A stranger who says the site lives at
+  // their address gets told the same URLs as everybody else (design.md §7).
+  const spoofHeaders = {
+    'X-Forwarded-Host': 'steeple.example',
+    'X-Forwarded-Prefix': '/steeple',
+  };
+  const forwarded = await fetch(`${API}/sitemap.xml`, { headers: spoofHeaders }).then((r) => r.text());
   check(
-    'its URLs are the origin the edge says, not the container’s',
-    forwarded.includes('<loc>https://steeple.example/steeple/</loc>'),
+    'and nobody can rename the origin its URLs advertise',
+    !forwarded.includes('steeple.example') && !forwarded.includes('/steeple/'),
     forwarded.match(/<loc>[^<]*<\/loc>/)?.[0]
+  );
+  const forwardedRobots = await fetch(new URL('robots.txt', url).href, { headers: spoofHeaders }).then((r) => r.text());
+  check(
+    'nor the sitemap robots.txt sends them to',
+    forwardedRobots.includes(`Sitemap: ${origin}/sitemap.xml`),
+    forwardedRobots.trim().split('\n').pop()
   );
 
   const shell = await fetch(url).then((r) => r.text());

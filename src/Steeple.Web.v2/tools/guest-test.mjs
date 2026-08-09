@@ -12,7 +12,7 @@
 //
 // Nothing here drives window.__steeple except resetDemo and reads: every
 // affordance is exercised with the mouse and the keyboard.
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -115,20 +115,19 @@ async function topmostAtCentre() {
   );
 }
 
-const style = url.includes('style=atlas') ? 'atlas' : 'diorama';
-console.log(`\n──── guest requests · ${style} · ${url} ────`);
+console.log(`\n──── guest requests · ${url} ────`);
 
-await ready(`${url}#/browse`);
+await ready(at(url, routes.browse()));
 await page.evaluate('__steeple.store.resetDemo()');
 await wait(400);
 
 // ── 1. CTA → composer ───────────────────────────────────────────────────────
 console.log('\n1. the room CTA opens the request');
-await ready(`${url}#/room/grace-community-vienna/fellowship-hall`);
+await ready(at(url, routes.room('grace-community-vienna', 'fellowship-hall')));
 await clickText('.sheet--room .pill--primary', /Request this space/, 'request CTA');
 await wait(900);
 check('view after CTA', await state('view'), 'apply');
-check('hash', await page.evaluate('location.hash'), '#/apply/grace-community-vienna/fellowship-hall');
+check('the address', await page.evaluate('location.pathname'), '/apply/grace-community-vienna/fellowship-hall');
 checkThat('composer is open', await countOf('.guest__surface--letter.is-open') === 1);
 check('the heading names the room', await text('.letter__title'), 'Fellowship Hall');
 // The shared announcer speaks first for every view; ours must land last.
@@ -274,35 +273,47 @@ check('and files nothing', await page.evaluate('__steeple.store.guestApplication
 // (Workstream D's return-path memory: Esc leaves a request view for the last
 // place the visitor actually stood in the world.)
 console.log('\n11. Esc');
-// This used to open `#/letter/app-sparrows-craft` and press Esc. Two Phase 1/2
+// This used to open the letter route for app-sparrows-craft and press Esc. Two Phase 1/2
 // changes make that unaskable here rather than broken: a cold link to a letter
 // **while signed out** lands in the village and corrects the address bar with
 // it, and the store is keyed per person, so a seeded demo request is not in any
 // real account's inbox to open. The return path from an opened letter is driven
 // where opened letters now come from — correspondence-test.mjs. What this suite
 // can still say about that link is the thing Phase 1 promised about it.
-await ready(`${url}#/room/dunn-loring-umc/art-studio`);
-await ready(`${url}#/letter/app-sparrows-craft`);
+await ready(at(url, routes.room('dunn-loring-umc', 'art-studio')));
+await ready(at(url, routes.letter('app-sparrows-craft')));
 check('a letter nobody is signed in to read lands in the village', await state('view'), 'village');
 check(
   '...and the address bar is corrected with it, not left lying',
-  await page.evaluate('location.hash'),
-  '#/browse'
+  await page.evaluate('location.pathname'),
+  '/browse'
 );
 
+// The compatibility entrances, kept deliberately (SEO-D2): every old `#/…` link
+// that was ever shared still opens the same state, and is replaced in place by
+// its clean path so no duplicate entry or canonical is left behind. The full
+// matrix is tools/router-test.mjs §2; this is the one driven end to end.
 await ready(`${url}#/village`);
 check('the retired village route still opens browse', await state('view'), 'village');
-check('...and is replaced by the public route', await page.evaluate('location.hash'), '#/browse');
+check('...and is replaced by the public route', await page.evaluate('location.pathname'), '/browse');
+check('...with the fragment gone', await page.evaluate('location.hash'), '');
+await ready(`${url}#/room/grace-community-vienna/fellowship-hall`);
+check('an old room link opens the room', await state('roomId'), 'fellowship-hall');
+check(
+  '...at the canonical listing address',
+  await page.evaluate('location.pathname'),
+  '/space/grace-community-vienna/fellowship-hall'
+);
 
-await ready(`${url}#/browse`);
-await ready(`${url}#/journal`);
+await ready(at(url, routes.browse()));
+await ready(at(url, routes.journal()));
 await page.keyboard.press('Escape');
 await wait(1200);
 check('Esc from the inbox returns to the village', await state('view'), 'village');
 checkThat('nothing of ours is open at the village', (await countOf('.guest__surface.is-open')) === 0);
 
-await ready(`${url}#/room/grace-community-vienna/youth-activity-room`);
-await ready(`${url}#/apply/grace-community-vienna/youth-activity-room`);
+await ready(at(url, routes.room('grace-community-vienna', 'youth-activity-room')));
+await ready(at(url, routes.apply('grace-community-vienna', 'youth-activity-room')));
 check('deep link opens the composer', await state('view'), 'apply');
 await page.keyboard.press('Escape');
 await wait(1400);
@@ -311,9 +322,9 @@ check('Esc from the composer returns to the room', await state('view'), 'room');
 // ── 12. the hit-test audit ──────────────────────────────────────────────────
 console.log('\n12. closed surfaces never intercept the scene');
 for (const [label, target] of [
-  ['village', `${url}#/browse`],
-  ['venue', `${url}#/venue/grace-community-vienna`],
-  ['room', `${url}#/room/oakton-baptist/gymnasium`],
+  ['village', at(url, routes.browse())],
+  ['venue', at(url, routes.venue('grace-community-vienna'))],
+  ['room', at(url, routes.room('oakton-baptist', 'gymnasium'))],
 ]) {
   await ready(target);
   const top = await topmostAtCentre();
@@ -331,7 +342,7 @@ for (const [label, target] of [
 
 // One more, with a request genuinely open: the sheet takes the pointer, the
 // margin around it does not, so the wordmark and the porch stay live.
-await ready(`${url}#/apply/grace-community-vienna/fellowship-hall`);
+await ready(at(url, routes.apply('grace-community-vienna', 'fellowship-hall')));
 const overSheet = await page.evaluate(() => {
   const box = document.querySelector('.letter__sheet').getBoundingClientRect();
   return document.elementsFromPoint(box.x + box.width / 2, box.y + 40)[0]?.className ?? '?';

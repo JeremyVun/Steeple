@@ -11,7 +11,8 @@
     "build:flat:debug": "VITE_WORLD=off VITE_DEBUG=on vite build --outDir dist-flat-debug",
     "preview": "vite preview",
     "shot": "node tools/shot.mjs",
-    "test": "node tools/store-test.mjs && node tools/notifications-test.mjs"
+    "test": "node tools/store-test.mjs && node tools/notifications-test.mjs && node tools/flags-test.mjs && node tools/router-test.mjs && node tools/metadata-test.mjs",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

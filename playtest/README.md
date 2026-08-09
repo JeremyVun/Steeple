@@ -1,8 +1,10 @@
-# Playtest suites — deprecated web v1 coverage
+# Archived Playtest suites — retired web v1
 
-These suites still specify the deprecated MVC/HTMX web v1 routes and are not the regression
-gate for the deployed v2 SPA. Keep them as v1 reference coverage until equivalent v2 stories
-are authored; v2 currently has its own event-driven harnesses under `src/Steeple.Web.v2/tools/`.
+These baselines specify the retired MVC/HTMX routes. The implementation was deleted on
+2026-08-09 and lives only in Git history, so these cases are historical artifacts rather than
+runnable regression coverage. Do not run or refresh them against web v2: their stories and
+success gates describe a different product surface. Web v2's real-input gates live under
+`src/Steeple.Web.v2/tools/`; equivalent Playtest stories remain future work.
 
 Two suites, one shared world:
 
@@ -18,37 +20,17 @@ organizer), and files one pending application for Fellowship Hall so host-review
 cases always have real work waiting. Both suites are `parallel: 1` **on purpose** —
 they share the dev Postgres; do not parallelize without giving each worker its own DB.
 
-## Environment (dev loop — NOT the compose containers)
+## Historical environment
 
-These legacy suites drive the v1 `dotnet run` dev loop, because Development registers the
-**dev sign-in** (`Auth:DevLoginEnabled` — a "Dev sign-in" form on `/login`; see
-CONTRACTS §4). The compose web/api images run in Production and will 404 it.
+These suites formerly drove a Development-only v1 server at `:5187`. That project no longer
+exists in the working tree; the commands and implementation remain available in Git history.
 
-```bash
-docker compose up -d postgres migrate
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project src/Steeple.Api --no-launch-profile --urls http://localhost:5200 &
-ASPNETCORE_ENVIRONMENT=Development Api__BaseUrl=http://localhost:5200 dotnet run --project src/Steeple.Web.v1 --no-launch-profile --urls http://localhost:5187 &
-curl -s http://localhost:5200/api/v1/geofence   # readiness
-```
-
-Then:
-
-```bash
-playtest playtest/journeys          # regression: first run records baselines, later runs replay
-playtest playtest/discovery         # study: one fresh run per case@persona
-playtest view                       # inspect runs / review healed journeys
-```
-
-Test emails all end in `@steeple.test`. Actors sign in through the real `/login`
-page's dev form — the SSO gate flow (draft stash → login → restore) is exercised
-for real, not bypassed.
+`playtest view` may still be used to inspect recorded artifacts. Never accept or refresh these
+baselines as v2 behavior.
 
 ## Reading results
 
-- **Journeys** are the red/green gate for v1 reference changes only. Close the loop with the
-  `playtest-ci` skill: triage each failure as app bug / app changed (accept heal) /
-  agent flake / environment flake. Anything touching apply/approve must also keep
-  `dotnet test` green (BookingIntegrityTests).
+- **Journeys** are archived v1 results, not a current red/green gate.
 - **Discovery** runs end "explored", never pass/fail. Use the `playtest-discovery`
   skill to run + synthesize. Findings feed the UX punch-list; re-run the same study
   after polish work to verify the friction actually moved.

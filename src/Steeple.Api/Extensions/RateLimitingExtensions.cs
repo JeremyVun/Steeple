@@ -48,6 +48,13 @@ public static class RateLimitPolicies
 
     /// <summary>Per-IP limiter for the anonymous guest availability reads (CONTRACTS §6).</summary>
     public const string Availability = "availability";
+
+    /// <summary>
+    /// Per-IP limiter for the rendered web documents (<c>/space/{venue}/{room}</c>). Deliberately
+    /// not <see cref="Discovery"/>: a crawler working through the sitemap would spend that budget
+    /// in one pass and leave every person behind the same NAT unable to search.
+    /// </summary>
+    public const string Documents = "documents";
 }
 
 /// <summary>
@@ -65,6 +72,9 @@ public static class RateLimitingExtensions
     private const int MediaPermitLimit = 12;
     private const int AvailabilityPermitLimit = 30;
     private const int DiscoveryPermitLimit = 120;
+    // Four documents a second sustained — far above any crawler's polite rate, so a full sitemap
+    // pass never 429s, and still under the global per-IP ceiling that backstops everything.
+    private const int DocumentsPermitLimit = 240;
     private const int GlobalPermitLimit = 300;
 
     // Both policies share a 1-minute window, which keeps the single OnRejected Retry-After honest.
@@ -182,6 +192,17 @@ public static class RateLimitingExtensions
                     _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = AvailabilityPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.Documents, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    // Crawlers and anonymous visitors alike — always per-IP.
+                    partitionKey: ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = DocumentsPermitLimit,
                         Window = Window,
                         QueueLimit = 0,
                     }));

@@ -226,7 +226,6 @@ await wait(1500);
 await store('resetDemo()');
 await page.evaluate('__steeple.roll.set(1)');
 await wait(300);
-await page.evaluate('localStorage.removeItem("steeple-village-session")');
 
 // Re-baselined for v2_migration Phase 2 (D4). The flow used to be reached by
 // pressing "List a space" on a desk that opened for anybody. There is no desk
@@ -351,7 +350,7 @@ check('steeple was told nothing it would refuse', (beforePrice.rooms ?? []).leng
 
 // The price, where the flow says it belongs: Publish asks for it, names it as
 // what is missing, and walks the host back to the field.
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(500);
 await click('[data-action="advance"]', 'Review and publish, unpriced');
 await wait(2600);
@@ -422,7 +421,7 @@ check('and a sound room still advances', (await onStep()) === '3Availability', a
 
 // ── 5. Availability: dates and reasons that do not belong ─────────────────
 console.log('\n5. Availability — a day gone, a day twice, a reason nobody reads');
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(500);
 const venueKey = await store('hostVenueId()');
 // The room's slug is steeple's own now ('main-space' died with the freeRoomId

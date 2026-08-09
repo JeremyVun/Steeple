@@ -2,15 +2,83 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      The application's base, and it is first on purpose: <base> only governs
+      the URL-bearing nodes that come after it, so nothing with an href or a src
+      may be written above this line.
+
+      `./` is what makes one build deployable at either / or a stripped prefix
+      (docs/backlog/seo/design.md SEO-D4, §7): the document resolves it against
+      its own address, so this file loaded at /index.html bases on / and the
+      same file loaded at /steeple/index.html bases on /steeple/. That is what
+      holds `assets/…`, the poster, and data/api.js's document-relative
+      `api/v1` on the deployment they were served from.
+
+      It is also the invariant the clean routes rest on. Once the router starts
+      writing paths, /space/v/r would re-resolve a *relative* base to /space/,
+      and every relative asset and API call with it — so `freezeBase()` in
+      src/core/router.js resolves this value to its absolute pathname and writes
+      it back to this element before the first history write, which is also
+      before core/intent.js can answer a press. Until then the relative form is
+      the correct one, because only the browser knows which prefix the document
+      arrived under.
+
+      The two query-string defects this base briefly carried are closed (P3,
+      2026-08-08): the printed controls below are clean paths rather than
+      fragments, and every history write core/router.js makes carries
+      `location.search` through verbatim. `tools/boot-priority-test.mjs` is the
+      watch on both, and is green at `/` and at `?q=low`.
+    -->
+    <base href="./" />
+    <!--
+      WHAT `data-steeple-route-meta` MARKS, HERE AND EVERYWHERE (SEO-D7).
+
+      It is the mark of a head node the *route* owns, and src/ui/metadata.js
+      removes the whole marked set before writing the next one. steeple's own
+      listing documents mark theirs (`Services/Seo/WebDocumentRenderer.cs`), so
+      a route change replaces them cleanly; the nodes printed below are the site
+      defaults for the same set and carry the same mark for the same reason.
+
+      Without it this file's head is a second, unremovable opinion. This
+      document is served at `/` and at every legacy `#/…` fragment over it, so
+      the app would leave an unmarked canonical naming `/` on a `noindex` browse
+      surface — the mixed signal SEO-D7 forbids — and two canonicals, two
+      descriptions and two `ld+json` blocks on a legacy `#/room/…` link.
+
+      Marked: canonical, description, the og: and twitter: sets, and the WebSite
+      data block. Not marked: the title element (metadata.js assigns
+      document.title, so there is nothing to remove), and the things that are the
+      document's rather than the route's — charset, base, viewport, theme-color,
+      icon, styles.
+
+      The words below and `src/ui/metaText.js` SITE_META are the same words, so
+      the swept-in set says what the printed set said; tools/metadata-test.mjs
+      §5 reads this file and asserts both halves of that.
+
+      The route documents in public/route-documents/ carry no marks and want
+      none: the handoff copies only styles out of a shell head, so a boot
+      document's own head is never joined by this one, and the `noindex` it
+      prints is the served truth a crawler with no JavaScript reads.
+    -->
+    <!--
+      The root document's own address, and the only self-canonical in this file
+      (SEO-D7): deployment-relative, so it names / at the root and /steeple/
+      behind a stripped prefix, from one build. `vite-ignore` is what keeps the
+      bundler's hands off it — every other link[href] in an html entry is an
+      asset to be hashed and copied, and `./` is a directory. The attribute is
+      removed from the built output.
+    -->
+    <link rel="canonical" href="./" vite-ignore data-steeple-route-meta />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
+      data-steeple-route-meta
       content="Steeple — rent affordable halls, studios and gyms by the hour from Northern Virginia venues. Five real listings, explored as one continuous scene."
     />
     <title>Steeple — Community space to rent in Northern Virginia</title>
 
     <!--
-      The share card and the crawler's first read (docs/SEO.md items 4–6).
+      The share card and the crawler's first read (docs/contracts/seo.md).
 
       This is the app's *one* set of tags: every route here is a hash route over
       the same document, so nothing below can be per-listing without the
@@ -27,21 +95,31 @@
       HTML spec never prepares for execution, so script-src never sees it. That
       is why this may be inline while src/core/intent.js may not.
     -->
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Steeple" />
-    <meta property="og:title" content="Steeple — community space to rent in Northern Virginia" />
+    <meta property="og:type" content="website" data-steeple-route-meta />
+    <meta property="og:site_name" content="Steeple" data-steeple-route-meta />
+    <meta
+      property="og:title"
+      data-steeple-route-meta
+      content="Steeple — community space to rent in Northern Virginia"
+    />
     <meta
       property="og:description"
+      data-steeple-route-meta
       content="Halls, studios and rooms in Northern Virginia venues, by the hour. Find one near you, see when it is open, and book it."
     />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Steeple — community space to rent in Northern Virginia" />
+    <meta name="twitter:card" content="summary" data-steeple-route-meta />
+    <meta
+      name="twitter:title"
+      data-steeple-route-meta
+      content="Steeple — community space to rent in Northern Virginia"
+    />
     <meta
       name="twitter:description"
+      data-steeple-route-meta
       content="Halls, studios and rooms in Northern Virginia venues, by the hour. Find one near you, see when it is open, and book it."
     />
     <meta name="theme-color" content="#fbf7f0" />
-    <script type="application/ld+json">
+    <script type="application/ld+json" data-steeple-route-meta>
       {
         "@context": "https://schema.org",
         "@type": "WebSite",
@@ -91,11 +169,14 @@
            the build path in that file and ui/copy.js ARRIVAL — change all three
            together.
 
-           Every control here is a real link to the hash route it means, so a
-           press lands somewhere even if no script ever arrives: the URL is the
-           recovery truth. `data-intent` is what src/core/intent.js reads, and
-           once the roll is live the native navigation is prevented and the
-           cinematic runs instead (build_plan Phase 3.5). -->
+           Every control here is a real link to the clean route it means —
+           relative to the <base> above, so one build says /browse at the root
+           and /steeple/browse behind a stripped prefix — and a press lands on a
+           real document even if no script ever arrives: the URL is the recovery
+           truth. `data-intent` is what src/core/intent.js reads; from the frame
+           it is armed a press is answered without leaving the document (the
+           same path, written by hand, query intact), and once the roll is live
+           it is the cinematic instead (build_plan Phase 3.5 · SEO-D1). -->
       <div id="arrival" class="arrival is-open">
         <div class="arrival__sheet">
           <p class="eyebrow arrival__eyebrow">Community space in Northern Virginia</p>
@@ -113,13 +194,13 @@
             for playgroups, classes, rehearsals and clubs.
           </p>
           <div class="arrival__actions">
-            <a class="pill pill--primary arrival__cta" href="#/browse" data-intent="village">Find a space</a>
-            <a class="pill arrival__host" href="#/desk" data-intent="desk">Host a space</a>
+            <a class="pill pill--primary arrival__cta" href="browse" data-intent="village">Find a space</a>
+            <a class="pill arrival__host" href="desk" data-intent="desk">Host a space</a>
           </div>
           <p class="arrival__hint">Or scroll to browse the spaces nearby.</p>
           <a
             class="arrival__scroll"
-            href="#/browse"
+            href="browse"
             data-intent="village"
             aria-label="Scroll down to the spaces nearby"
           >

@@ -1,0 +1,309 @@
+/* ROUTE DOCUMENTS — the page steeple serves before the application exists.
+ *
+ * Three documents wear this stylesheet and nothing else does:
+ *
+ *   the listing        /space/{venue}/{room}, rendered by the API
+ *                      (Services/Seo/WebDocumentRenderer.cs) — the whole room in
+ *                      words, for a crawler, a share-card scraper, and anyone
+ *                      whose JavaScript never arrives
+ *   the unavailable    the same route's designed 404
+ *   the boot document  public/route-documents/app-depth-*.html, the tiny noindex
+ *                      page every other clean route serves while the shell loads
+ *
+ * EVERY RULE IS SCOPED `body.rd-body`, WITHOUT EXCEPTION.
+ *
+ * That is not tidiness. This stylesheet stays in the head after
+ * route-handoff.js replaces the body with the application's own (SEO-D4) — the
+ * head is what carries the listing's metadata and boot JSON through the swap,
+ * so it cannot be thrown away. The handoff drops the `rd-body` class instead,
+ * and every rule here goes quiet in the same instant. An unscoped rule would
+ * survive it and restyle the running app from underneath: the stylesheet form
+ * of the shared-class-name hazard CLAUDE.md records for host.css/guest.css.
+ *
+ * Values are DESIGN_SYSTEM.md's, bound once to `--rd-*` custom properties on
+ * the body itself so they vanish with the class too — the app's own `:root`
+ * tokens are never touched, shadowed or relied upon here. This file loads with
+ * no build step, so it takes the tokens by value; a token change is a change
+ * here as well (DESIGN_SYSTEM.md's change rule).
+ */
+
+body.rd-body {
+  /* Primitives (DESIGN_SYSTEM §2.1) */
+  --rd-paper: #fbf7f0;
+  --rd-paper-deep: #f3ece0;
+  --rd-card: #ffffff;
+  --rd-ink: #2a2620;
+  --rd-ink-soft: #5c544a;
+  --rd-ink-faint: #6b6253;
+  --rd-sage: #5b7553;
+  --rd-sage-deep: #46603f;
+  --rd-terracotta-strong: #b0552f;
+  --rd-terracotta-deep: #a44d2e;
+  --rd-line: #e6decf;
+  --rd-line-strong: #d8ceba;
+
+  --rd-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --rd-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+
+  --rd-radius-card: 14px;
+  --rd-radius-pill: 999px;
+
+  margin: 0;
+  background: var(--rd-paper);
+  color: var(--rd-ink);
+  font-family: var(--rd-sans);
+  font-size: 16px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One measure for the whole document. A listing read without the map is a page
+   of prose, and prose is read at a book's width, not a screen's. */
+body.rd-body .rd {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 26px 20px 72px;
+}
+
+/* Focus is brand (DESIGN_SYSTEM §9): the same sage ring the application uses,
+   on a document that may be navigated entirely by keyboard. */
+body.rd-body :focus-visible {
+  outline: 3px solid rgba(91, 117, 83, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── masthead ───────────────────────────────────────────────────────────── */
+
+body.rd-body .rd__masthead {
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--rd-line);
+}
+
+body.rd-body .rd__brand {
+  display: inline-block;
+  font-family: var(--rd-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--rd-ink);
+  text-decoration: none;
+}
+
+body.rd-body .rd__brand:hover {
+  color: var(--rd-terracotta-deep);
+}
+
+/* ── the room ───────────────────────────────────────────────────────────── */
+
+/* Serif for the moment, sans for the work (DESIGN_SYSTEM §1.2): the room's own
+   name is the moment on this page. */
+body.rd-body .rd__title {
+  margin: 30px 0 6px;
+  font-family: var(--rd-serif);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+body.rd-body .rd__at {
+  margin: 0;
+  color: var(--rd-ink-soft);
+}
+
+body.rd-body .rd__headline {
+  margin: 14px 0 0;
+  font-size: 17px;
+  color: var(--rd-ink-soft);
+}
+
+body.rd-body .rd__price {
+  font-family: var(--rd-serif);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rd-ink);
+}
+
+/* The photograph holds its own space on paper before it arrives, so the page
+   does not jump when it does. `aspect-ratio` rather than a padding box: the
+   contract carries no image dimensions (SEO-D8), so 3:2 is the frame the card
+   surface already uses, not a claim about this file. */
+body.rd-body .rd__figure {
+  margin: 24px 0 0;
+}
+
+body.rd-body .rd__photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  border-radius: var(--rd-radius-card);
+  background: var(--rd-paper-deep);
+}
+
+body.rd-body .rd__caption {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--rd-ink-faint);
+}
+
+body.rd-body .rd__prose {
+  margin: 18px 0 0;
+  max-width: 38rem;
+}
+
+/* ── fact blocks ────────────────────────────────────────────────────────── */
+
+body.rd-body .rd__block {
+  margin: 26px 0 0;
+  padding: 0 0 22px;
+  border-bottom: 1px solid var(--rd-line);
+}
+
+body.rd-body .rd__eyebrow {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rd-ink-faint);
+}
+
+body.rd-body .rd__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Chips, not bullets: these are the same facts the filter rail shows as chips,
+   and a page of them reads as a set rather than as an inventory. */
+body.rd-body .rd__list li {
+  padding: 5px 13px;
+  border: 1px solid var(--rd-line-strong);
+  border-radius: var(--rd-radius-pill);
+  background: var(--rd-card);
+  font-size: 14px;
+  color: var(--rd-ink-soft);
+}
+
+/* ── actions ────────────────────────────────────────────────────────────── */
+
+body.rd-body .rd__actions {
+  margin: 32px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+/* terracotta-strong, not terracotta: white on #C0623F is AA for large text
+   only, and this label is neither large nor bold enough to claim it
+   (DESIGN_SYSTEM §2.1 note). */
+body.rd-body .rd__cta {
+  display: inline-block;
+  padding: 11px 22px;
+  border-radius: var(--rd-radius-pill);
+  background: var(--rd-terracotta-strong);
+  color: #ffffff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+body.rd-body .rd__cta:hover {
+  background: var(--rd-terracotta-deep);
+}
+
+body.rd-body .rd__link {
+  color: var(--rd-sage-deep);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+body.rd-body .rd__link:hover {
+  text-decoration: underline;
+}
+
+body.rd-body .rd__colophon {
+  margin: 48px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--rd-line);
+  font-size: 13px;
+  color: var(--rd-ink-faint);
+}
+
+/* ── the unavailable document ───────────────────────────────────────────── */
+
+/* Nothing to read here, so the page is shorter and the words sit higher. It
+   says what happened and offers the two ways on; it never says why (SEO-D10). */
+body.rd-body .rd--empty .rd__title {
+  margin: 56px 0 0;
+}
+
+body.rd-body .rd--empty .rd__prose {
+  color: var(--rd-ink-soft);
+}
+
+/* ── the boot document ──────────────────────────────────────────────────── */
+
+/* public/route-documents/app-depth-*.html: on screen only for as long as the
+   shell takes to arrive, and permanently if it never does. Calm, centred, and
+   honest — no spinner racing a load it cannot measure. */
+body.rd-body .rd--boot {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 26px 20px;
+}
+
+body.rd-body .rd__mark {
+  color: var(--rd-terracotta-strong);
+}
+
+body.rd-body .rd__boot {
+  margin: 0;
+  font-family: var(--rd-serif);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body.rd-body .rd__boot-note {
+  margin: 0;
+  max-width: 26rem;
+  font-size: 14px;
+  color: var(--rd-ink-faint);
+}
+
+/* ── small print ────────────────────────────────────────────────────────── */
+
+body.rd-body .rd__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  body.rd-body .rd {
+    padding: 20px 16px 56px;
+  }
+
+  body.rd-body .rd__title {
+    font-size: 26px;
+  }
+}

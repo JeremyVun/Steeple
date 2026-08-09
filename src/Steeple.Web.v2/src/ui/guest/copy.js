@@ -113,6 +113,32 @@ export function timeAgo(isoStamp) {
   )}`;
 }
 
+/**
+ * When a message arrived, said so that a column of them can be read in order.
+ *
+ * `timeAgo` is right for a request that was sent once and then waited — but an
+ * inbox where three things arrived this morning prints "today" three times and
+ * loses the only ordering a reader has. Anything from today is given its clock
+ * time; everything older keeps the plain distance, which is all anybody wants
+ * from last week. The day is counted on the calendar, not in milliseconds, so
+ * something from 11pm last night is yesterday rather than "today".
+ */
+export function messageWhen(isoStamp) {
+  if (!isoStamp) return '';
+  const then = new Date(isoStamp);
+  if (Number.isNaN(then.getTime())) return '';
+  const now = new Date();
+  const midnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((midnight(now) - midnight(then)) / 86400000);
+  if (days === 0) {
+    const h = then.getHours();
+    const hour = h % 12 === 0 ? 12 : h % 12;
+    return `${hour}:${String(then.getMinutes()).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
+  }
+  if (days === 1) return 'yesterday';
+  return timeAgo(isoStamp);
+}
+
 // ── Status ──────────────────────────────────────────────────────────────────
 // Names the guest would use, not the schema's. The schema's status is still the
 // single source of truth; this only chooses the words.

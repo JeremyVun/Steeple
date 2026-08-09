@@ -580,7 +580,7 @@ export function createDesk({
             dataset: { room: room.id, action: state === 'draft' ? 'finish' : 'edit' },
             onclick: () => onListing({ venueId, roomId: room.id, step: 'describe' }),
           },
-          state === 'draft' ? 'Finish this listing' : 'Edit listing'
+          state === 'draft' ? 'Finish listing' : 'Edit listing'
         ),
       ]),
     ]);

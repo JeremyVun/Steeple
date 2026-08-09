@@ -4,7 +4,7 @@
 import puppeteer from 'puppeteer';
 
 const ORIGIN = process.env.STEEPLE_WEB ?? 'http://localhost:8080';
-const ROUTE = '#/apply/dunn-loring-umc/art-studio';
+const ROUTE = '/apply/dunn-loring-umc/art-studio';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
@@ -20,7 +20,7 @@ const browser = await puppeteer.launch({
 });
 try {
   const page = await browser.newPage();
-  await page.goto(`${ORIGIN}/${ROUTE}`, { waitUntil: 'networkidle2' });
+  await page.goto(`${ORIGIN}${ROUTE}`, { waitUntil: 'networkidle2' });
   await sleep(3000);
 
   const sheetInfo = () =>

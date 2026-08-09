@@ -14,7 +14,7 @@
 import { bus, CORRESPONDENCE_VIEWS, state, setView } from '../core/bus.js';
 import { outstanding as outstandingAgreements } from '../data/agreements.js';
 import { track } from '../data/analytics.js';
-import { heldVenue, readVenue } from '../data/catalog.js';
+import { getListing, heldVenue, readVenue } from '../data/catalog.js';
 import * as session from '../data/session.js';
 import { el } from './dom.js';
 import { liveRoom } from './copy.js';
@@ -28,9 +28,12 @@ import { createAnnouncer } from './announcer.js';
 import { createArrival } from './arrival.js';
 import { createBrowse } from './browse.js';
 import { createHoverBanner } from './hoverBanner.js';
+import { createMetadata } from './metadata.js';
 import { createNav } from './nav.js';
 import { SHEET_BAND } from './rail.js';
 import { createRoomPanel } from './roomPanel.js';
+import { UNAVAILABLE } from './metaText.js';
+import { createUnavailablePanel } from './unavailable.js';
 import { createVenuePanel } from './venuePanel.js';
 import { createDiscovery } from './map/index.js';
 import { createGuestFlows } from './guest/index.js';
@@ -58,19 +61,31 @@ export function createUI(_engine, _world) {
   const roomPanel = createRoomPanel({
     onRequest: () => setView('apply', { venueId: state.venueId, roomId: state.roomId }),
   });
+  const unavailablePanel = createUnavailablePanel();
+  // What this page says it is, kept true as the app moves (design SEO-D7). One
+  // owner, made once: every head node it writes is marked and replaced whole.
+  const metadata = createMetadata();
 
   const porch = el('div', { class: 'porch' });
   const discovery = createDiscovery({ announce: announcer.say });
   // One panel for the card on file, opened from the two places it matters: the
   // account on the shelf, and a booked date whose charge failed.
   const cardPanel = createCardPanel({ announce: announcer.say });
+  // What steeple wrote to this person: the notification feed, printed as
+  // messages in the one inbox and read when one is opened (ui/notifications.js).
+  // No slip, no bell — the announcer is the only thing it speaks through.
+  //
+  // Made *before* the inbox that prints it: the porch's badge counts unread
+  // mail, and it is drawn the moment the guest flows are built — a feed made
+  // further down was a name read before its own line ran (2026-08-09).
+  const messages = createNotifications({ announce: announcer.say });
+
   const guest = createGuestFlows({
     announce: announcer.say,
     porch,
     onFixPayment: () => cardPanel.open(),
-    // Read lazily: the ambient surface is made further down, once the slip it
-    // speaks through exists. The inbox only ever asks at render time.
-    ambientRows: () => ambient.ambient(),
+    messageRows: () => messages.rows(),
+    onOpenMessage: (row) => messages.open(row),
   });
   // Hosting is somebody's, so the switch has to be able to ask who. The panel
   // itself is made below — this is called on a click, long after.
@@ -140,17 +155,18 @@ export function createUI(_engine, _world) {
   // A session this browser was already holding when it opened, and every
   // sign-in that happens after — the inline ask answers almost all of the
   // latter before the first tick looks.
-  session.onSessionChange((held, reason) => {
-    if (held && reason === session.REASON.signedIn) collectAgreements();
+  session.onSessionChange((held) => {
+    if (held) collectAgreements();
   });
-  if (session.isSignedIn()) session.fetchCurrentUser().then(() => collectAgreements());
+  session.fetchCurrentUser().then(() => {
+    if (session.isSignedIn()) collectAgreements();
+  });
 
-  // What steeple wrote while this person was away — ambient, not a tab. It
-  // borrows the same slip the session notice uses, because it is the same kind
-  // of thing: a word about something that happened to you (ui/notifications.js).
-  const ambient = createNotifications({ notice, announce: announcer.say });
-
-  const rail = el('div', { class: 'rail' }, [venuePanel.element, roomPanel.element]);
+  const rail = el('div', { class: 'rail' }, [
+    venuePanel.element,
+    roomPanel.element,
+    unavailablePanel.element,
+  ]);
   const browse = createBrowse();
   browse.mount([nav.element, porch, discovery.element, rail]);
 
@@ -219,6 +235,31 @@ export function createUI(_engine, _world) {
     });
   }
 
+  // A space nothing on this page has heard of — a link followed long after the
+  // host took it down, a slug that was never a room. Only steeple settles it:
+  // the seed cannot, and the store speaks for one browser. A null is steeple
+  // saying "no such published room" (data/catalog.js vouches for that with the
+  // sitemap), and only that opens the unavailable sheet. A read that threw is a
+  // steeple that could not answer, which is a different sentence — the verdict
+  // is forgotten so the next visit to the room asks again.
+  const roomVerdicts = new Map();
+
+  function settleRoom(venueId, roomId) {
+    const key = `${venueId}/${roomId}`;
+    const held = roomVerdicts.get(key);
+    if (held) return held;
+    roomVerdicts.set(key, 'reading');
+    getListing(venueId, roomId)
+      .then((listing) => roomVerdicts.set(key, listing ? 'known' : 'missing'))
+      .catch(() => roomVerdicts.delete(key))
+      .finally(() => {
+        if (state.venueId === venueId && state.roomId === roomId) render();
+      });
+    return 'reading';
+  }
+
+  let saidUnavailable = false;
+
   function render({ rebuild = false } = {}) {
     const { view, venueId, roomId } = state;
     readIfUnknown(venueId);
@@ -230,6 +271,12 @@ export function createUI(_engine, _world) {
     // written but not yet sent. A deep link to either lands on the map.
     const shown = venue && roomId ? liveRoom(venueId, roomId) : null;
     const room = shown?.status === 'published' ? shown : null;
+    // Nothing at all is known about this space — not steeple's answer, not the
+    // scenery, not a host's own unsent draft. That, and only that, is worth
+    // asking steeple about; a Draft this browser already holds is a room it
+    // knows the state of, and it lands on the map as it always has.
+    const unavailable =
+      view === 'room' && !!venueId && !!roomId && !shown && settleRoom(venueId, roomId) === 'missing';
     const venueKey = venue ? venue.id : null;
     const roomKey = venue && room ? `${venue.id}/${room.id}` : null;
 
@@ -253,6 +300,9 @@ export function createUI(_engine, _world) {
     const behindSheet = view === 'apply';
     venuePanel.setOpen(view === 'venue' && !!venue);
     roomPanel.setOpen((view === 'room' || behindSheet) && !!room, behindSheet);
+    unavailablePanel.setOpen(unavailable);
+    if (unavailable && !saidUnavailable) announcer.say(`${UNAVAILABLE.title}. ${UNAVAILABLE.prose}`);
+    saidUnavailable = unavailable;
     nav.update();
 
     // The banner names what the pointer is over *in the world*; on the browse
@@ -260,6 +310,10 @@ export function createUI(_engine, _world) {
     if (rolled || (view !== 'village' && view !== 'venue')) banner.hide();
     document.documentElement.dataset.view = view;
     document.documentElement.dataset.mode = state.mode;
+
+    // Last, and after the read verdicts are in: the head describes what is on
+    // the page, not what was asked for.
+    metadata.update({ unavailable });
   }
 
   bus.on('view:change', ({ view, previous }) => {
@@ -273,9 +327,9 @@ export function createUI(_engine, _world) {
       track('inbox_opened', { surface: view === 'desk' ? 'host' : 'guest' });
     }
     // A host may have replied or decided while this tab stayed open. The
-    // request list and notification feed are separate reads; opening the inbox
-    // refreshes both, and an unread event gets the same one-time slip as arrival.
-    if (view === 'journal') ambient.wake();
+    // request list and the notification feed are separate reads; opening the
+    // inbox refreshes both, and anything new is simply there, unread.
+    if (view === 'journal') messages.wake();
   });
 
   bus.on('mode:change', () => {
@@ -284,8 +338,8 @@ export function createUI(_engine, _world) {
 
   bus.on('roll:change', () => {
     render();
-    // Arriving at the product surface is when there is room for a quiet word.
-    ambient.onRoll();
+    // Arriving at the product surface is when the inbox is worth reading.
+    messages.onRoll();
   });
 
   bus.on('filters:change', () => announcer.filters());

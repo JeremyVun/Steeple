@@ -143,12 +143,24 @@ export function createDiscovery({ announce = () => {} } = {}) {
   const panel = el('div', { class: 'dm-panel' }, [head, list]);
   const card = el('div', { class: 'dm-card' }, [mapwrap, search.element, panel]);
 
+  // Which sheet is standing on the map's foot — the results, or a property sheet
+  // laid over them (`coverForSheet` below). Declared here because the results
+  // sheet reports where it settled 340ms after it gets there, which is long
+  // enough for a property sheet to have opened in front of it: a listing route
+  // opens the room, tells the map it is covered to the waist, brings the venue
+  // into the band that is left — and then the results sheet's own settle would
+  // land and say the map is covered to the middle instead. The venue was then
+  // centred in a band nobody was looking at.
+  let sheetCovering = false;
+
   const sheet = createSheet({
     card,
     panel,
     above: search.element,
     announce,
-    onSettle: (covered) => atlas.setCovered(covered),
+    onSettle: (covered) => {
+      if (!sheetCovering) atlas.setCovered(covered);
+    },
   });
   panel.prepend(sheet.handle);
 
@@ -183,7 +195,6 @@ export function createDiscovery({ announce = () => {} } = {}) {
   // is under a sheet, which is the same as not panning to it at all.
   const narrow = window.matchMedia('(max-width: 900px)');
   const OVER_THE_MAP = new Set(['venue', 'room', 'apply']);
-  let sheetCovering = false;
 
   function coverForSheet() {
     if (!narrow.matches) return;

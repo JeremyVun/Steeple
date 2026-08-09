@@ -1,9 +1,23 @@
 // Booking decisions and host messages, from real writes to the real v2 inbox.
 //
 //   node tools/booking-notification-test.mjs
+//   STEEPLE_WEB=http://localhost:5173/?q=low&world=off node tools/…   (another origin)
 //
-// Needs the Development API on :5200 and Vite on :5173, both using the shared
-// dev Postgres. Rows are minted under unique accounts; no reset is needed.
+// Needs the Development API on :5200 (STEEPLE_API moves it) and Vite on :5173
+// with its proxy pointed at that same API. Rows are minted under unique
+// accounts; no database reset is needed and no seed count is asserted.
+//
+// The bug this suite exists for: a guest who is **already on the page** when the
+// host acts. Opening the inbox has to re-read the notification feed rather than
+// reuse the one fetched at sign-in — so the press on `.letters` here is a real
+// press and nothing reloads the page.
+//
+// Since 2026-08-09 there are no corner slips: what steeple wrote arrives as a
+// `.jmsg` row in the one inbox, unread until it is opened, and pressing it lands
+// on the conversation that owns the fact. Two DOM truths this suite depends on:
+// `.jmsg__line` carries a visually-hidden "Unread. " prefix while unread (so the
+// sentence is read off `span:last-child`), and `.jmsg__go` is opacity-0 until
+// hover but always present (so its text is read, never its visibility).
 
 import {
   agreeCurrent,
@@ -29,6 +43,26 @@ function check(label, ok, detail = '') {
   checks++;
   if (!ok) failures++;
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}${detail ? ` — ${detail}` : ''}`);
+}
+
+/**
+ * A real press on a row that may be re-rendered under the pointer.
+ *
+ * The inbox redraws whenever a read answers, so a node resolved a moment before
+ * the click can be detached by the time puppeteer scrolls to it. Retried rather
+ * than worked around with a synthetic `.click()`: the point of this suite is
+ * that a real browser event reaches a real handler.
+ */
+async function press(page, selector, tries = 6) {
+  for (let attempt = 1; ; attempt += 1) {
+    await page.waitForSelector(selector, { timeout: 30000 });
+    try {
+      return await page.click(selector);
+    } catch (error) {
+      if (attempt >= tries || !/detached/i.test(error.message)) throw error;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
 }
 
 if (!(await apiIsUp())) {
@@ -94,45 +128,48 @@ try {
   // since sign-in; no reload or internal refresh hook is used here.
   await page.click('.letters');
   const approvalCopy = `Your booking is confirmed — ${roomName} at ${venueName}. There\u2019s also a message from ${venueName}.`;
-  await page.waitForFunction(
-    (copy) => {
-      const slip = document.querySelector('.slip');
-      return (
-        !slip?.hidden &&
-        slip.classList.contains('is-open') &&
-        slip.querySelector('.slip__line')?.textContent === copy &&
-        Number(getComputedStyle(slip).opacity) > 0.9
-      );
-    },
-    { timeout: 30000 },
-    approvalCopy
-  );
-
-  const slip = await page.evaluate(() => ({
-    line: document.querySelector('.slip__line')?.textContent ?? '',
-    action: document.querySelector('.slip__actions button')?.textContent ?? '',
-  }));
-  check('the approval pops up in plain booking language', slip.line === approvalCopy, slip.line);
-  check('the combined popup calls out the host note', slip.action === 'See booking & message', slip.action);
+  const messageCopy = `${venueName} sent you a message about ${roomName} at ${venueName}.`;
 
   await page.waitForFunction(
-    (approval, message) => {
-      const lines = [...document.querySelectorAll('.jnotes__line')].map((line) => line.textContent);
-      return lines.includes(approval) && lines.includes(message);
-    },
+    (id) => Boolean(document.querySelector(`.jmsg[data-id="${id}"]`)),
     { timeout: 30000 },
-    approvalCopy,
-    `${venueName} sent you a message about ${roomName} at ${venueName}.`
+    approvalRow.id
   );
-  check('the inbox keeps both the approval and standalone message', true);
+  const approval = await page.evaluate((id) => {
+    const row = document.querySelector(`.jmsg[data-id="${id}"]`);
+    return {
+      line: row.querySelector('.jmsg__line span:last-child')?.textContent ?? '',
+      go: row.querySelector('.jmsg__go')?.textContent ?? '',
+      unread: row.dataset.unread ?? null,
+      pressable: row.tagName,
+    };
+  }, approvalRow.id);
+  check('the approval reached the inbox in plain booking language', approval.line === approvalCopy, approval.line);
+  check('the combined message calls out the host note', approval.go === 'See booking & message', approval.go);
+  check(
+    'it is waiting there, unread and pressable',
+    approval.unread === 'yes' && approval.pressable === 'BUTTON',
+    JSON.stringify(approval)
+  );
 
-  await page.click('.slip__actions button');
+  await page.waitForFunction(
+    (id) => Boolean(document.querySelector(`.jmsg[data-id="${id}"]`)),
+    { timeout: 30000 },
+    messageRow.id
+  );
+  const standalone = await page.evaluate(
+    (id) => document.querySelector(`.jmsg[data-id="${id}"] .jmsg__line span:last-child`)?.textContent ?? '',
+    messageRow.id
+  );
+  check('and the standalone message is a row of its own', standalone === messageCopy, standalone);
+
+  await press(page, `.jmsg[data-id="${approvalRow.id}"]`);
   await page.waitForFunction(
     (id) => window.__steeple.state.view === 'letter' && window.__steeple.state.applicationId === id,
-    { timeout: 10000 },
+    { timeout: 30000 },
     application.id
   );
-  check('the notification opens the booking conversation', true);
+  check('following the message lands on the booking conversation', true);
   check('the browser stayed free of app errors', pageProblems.length === 0, pageProblems.join(' | '));
 } finally {
   await closeBrowsers();

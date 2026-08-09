@@ -16,7 +16,7 @@
 //   5. a second account on the same browser inherits none of the first's state
 //   6. an expired session says so instead of vanishing
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -206,7 +206,7 @@ eq('and it says so plainly', await text('.account'), 'Sign in');
 await page.screenshot({ path: '/tmp/steeple-webp1-signed-out.png' });
 
 console.log('\n1b. correspondence cannot be reached by link');
-await page.goto(`${origin}/#/journal`, { waitUntil: 'domcontentloaded' });
+await page.goto(at(origin, routes.journal()), { waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
 await wait(1500);
 eq('a cold link to the inbox lands in the village', await page.evaluate('__steeple.state.view'), 'village');
@@ -295,9 +295,16 @@ eq('the inbox shows it', await page.evaluate('document.querySelectorAll(".jrow")
 
 // ── 4. signing out revokes the session at steeple ───────────────────────────
 console.log('\n4. signing out');
-const stored = await page.evaluate("JSON.parse(localStorage.getItem('steeple-village-session'))");
-check('storage holds the person', Boolean(stored?.user?.id));
-check('and no token of any kind', !stored?.accessToken && !stored?.refreshToken);
+check(
+  'neither storage holds the person or a private mirror',
+  await page.evaluate(() =>
+    [localStorage, sessionStorage].every((area) =>
+      Array.from({ length: area.length }, (_, i) => area.key(i)).every(
+        (key) => key !== 'steeple-village-session' && !key.startsWith('steeple-village-store:')
+      )
+    )
+  )
+);
 check(
   'the refresh token is a cookie script cannot read',
   !(await page.evaluate('document.cookie')).includes('steeple_refresh')
@@ -319,6 +326,7 @@ eq('which steeple honours while the session lives', stillGood, 200);
 
 await page.reload({ waitUntil: 'networkidle0' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
+await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
 await page.evaluate('__steeple.roll.set(1)');
 await wait(1200);
 
@@ -339,14 +347,15 @@ await page.screenshot({ path: '/tmp/steeple-webp1-card.png' });
 // the page itself has no way to, which is the point of §4's first checks.
 const live = (await page.cookies()).find((c) => c.name === 'steeple_refresh')?.value;
 await clickOn('.account__out');
-await wait(1200);
+// The UI lets go immediately; cookie revocation is best-effort network work.
+// Wait on its externally visible result before replaying the old credential.
+for (let until = Date.now() + 20000; Date.now() < until; ) {
+  if (!(await page.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)) break;
+  await wait(200);
+}
 
 eq('the browser holds nobody', await page.evaluate('!!__steeple.session.currentUser()'), 'false');
-eq(
-  'and storage names nobody either',
-  await page.evaluate("String(JSON.parse(localStorage.getItem('steeple-village-session') ?? 'null')?.user)"),
-  'null'
-);
+eq('and no profile tombstone is persisted', await page.evaluate("localStorage.getItem('steeple-village-session')"), null);
 check(
   'the refresh cookie is gone with it',
   !(await page.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
@@ -387,10 +396,10 @@ check(
 );
 await page.screenshot({ path: '/tmp/steeple-webp1-second.png' });
 
-// ── 6. a session that ends without being asked ──────────────────────────────
-console.log('\n6. a session that expires under them');
-// The person is still written down; the credential that proves it is not. Taking
-// the httpOnly cookie is the only way to stage this now — which is the point.
+// ── 6. a cookie absent at cold boot ─────────────────────────────────────────
+console.log('\n6. a cold browser with no credential');
+// No profile is persisted, so after a reload there is deliberately no evidence
+// that this was an expiry rather than a browser that was always signed out.
 const held = (await page.cookies()).find((c) => c.name === 'steeple_refresh');
 const cdp = await page.createCDPSession();
 await cdp.send('Network.deleteCookies', { name: held.name, domain: held.domain, path: held.path });
@@ -399,19 +408,15 @@ check(
   'the credential really is gone before the reload',
   !(await page.cookies()).some((c) => c.name === 'steeple_refresh' && c.value)
 );
-// Not networkidle0: with no access token in memory the session now expires in
-// the first breath of boot, and the slip lives twelve seconds. Waiting for the
-// map's blocked tiles to give up first can spend the whole of it.
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForFunction('window.__steepleReady === true', { timeout: 30000 });
 await page.evaluate('__steeple.roll.set(1)');
 await page.waitForFunction('!__steeple.session.currentUser()', { timeout: 20000 }).catch(() => {});
 eq('the dead session is dropped', await page.evaluate('!!__steeple.session.currentUser()'), 'false');
-check('and the page says so rather than going quiet', await waitVisible('.slip'));
-eq('in words', await text('.slip__line'), "You've been signed out.");
+check('no false expiry notice is invented without persisted evidence', !(await visible('.slip')));
+eq('the ordinary way back in remains', await text('.account'), 'Sign in');
 await page.screenshot({ path: '/tmp/steeple-webp1-expired.png' });
-check('with a way back in', await waitVisible('.slip .linkish'));
-await clickOn('.slip .linkish');
+await clickOn('.account');
 check('which opens the panel', await waitVisible('.signin__layer .identity'));
 
 console.log(`\n──── ${checks - failed}/${checks} checks passed · ${problems.length} console problems ────`);

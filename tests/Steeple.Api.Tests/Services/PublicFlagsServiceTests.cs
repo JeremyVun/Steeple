@@ -71,12 +71,14 @@ public class PublicFlagsServiceTests
     public void Evaluate_PlainBooleanFlags_ReflectTheUnderlyingReaderVerbatim()
     {
         var flags = new FakeFeatureFlags();
+        flags.Set("payments.enabled", true);
         flags.Set("mobile.apply_enabled", true);
         flags.Set("mobile.manage_enabled", false);
         var service = CreateService(flags, minSupportedBuild: 0);
 
         var result = service.Evaluate("web", build: null);
 
+        Assert.True(result["payments.enabled"]);
         Assert.True(result["mobile.apply_enabled"]);
         Assert.False(result["mobile.manage_enabled"]);
     }

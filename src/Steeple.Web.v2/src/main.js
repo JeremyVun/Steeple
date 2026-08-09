@@ -43,9 +43,9 @@
 // raising the world is one calm line in the console and then `bootFlat`.
 
 // First, and on purpose: this is what answers the printed title page's presses,
-// and it must be armed before anything else in the entry runs. It imports
-// nothing — no bus, no roll, no session, no store, and nothing of the 105KB
-// interface chunk, Leaflet or three.js.
+// and it must be armed before anything else in the entry runs. It imports only
+// core/router.js, which imports nothing at all — no bus, no roll, no session,
+// no store, and nothing of the 105KB interface chunk, Leaflet or three.js.
 import {
   claimArrival,
   pendingArrival,
@@ -62,12 +62,12 @@ import {
   setView,
   setFilters,
   setHover,
-  setStyle,
   setMode,
   setMap,
   rollTo,
-  applyHash,
+  applyRoute,
 } from './core/bus.js';
+import { isProductEntry } from './core/router.js';
 import { releaseBoot } from './core/idle.js';
 import { store } from './data/store.js';
 import * as session from './data/session.js';
@@ -112,7 +112,6 @@ function publish(extra) {
     setView,
     setFilters,
     setHover,
-    setStyle,
     setMode,
     setMap,
     store,
@@ -156,8 +155,11 @@ async function boot() {
   const canvas = document.getElementById('scene');
   const flat = BUILT_FLAT || state.world === 'off';
   // A cold link to a place in the product is somebody who has already chosen:
-  // no title page, no overture, and no village fetched behind their back.
-  const linked = Boolean(window.location.hash.replace(/^#\/?/, ''));
+  // no title page, no overture, and no village fetched behind their back. Any
+  // route but the root is that link now — /space/v/r, /browse, /journal — and
+  // the old `#/…` shapes still count, because they are the same choice made
+  // through the compatibility entrance (SEO-D6).
+  const linked = isProductEntry();
 
   if (flat || linked || pendingArrival()) {
     taken = true;
@@ -271,13 +273,12 @@ async function bootVillage(canvas) {
       roll: journey.roll,
     });
 
-    window.addEventListener('hashchange', applyHash);
-    applyHash();
+    applyRoute({ initial: true });
 
     engine.start();
 
     // The roll is real now, so the title page's controls may have it: from here
-    // a press is the cinematic rather than a jump down the hash. A press that
+    // a press is the cinematic rather than a jump to the route. A press that
     // landed in the last moments of this boot is answered the same way, by
     // releaseArrival itself.
     releaseArrival();
@@ -319,7 +320,7 @@ function release(engine) {
  * flat page's own furniture: no canvas, no poster, the roll landed.
  *
  * Every way here but one is a choice: a build with no village in it, `?world=off`,
- * a cold hash link, or a press on the title page that beat the overture. The
+ * a cold route link, or a press on the title page that beat the overture. The
  * exception is a village that could not be raised, so nothing here may assume a
  * clean page: the canvas may already be half-alive.
  */
@@ -344,21 +345,23 @@ function bootFlat(canvas, { mayRaise = false } = {}) {
 
   publish({ engine: null, world: null, roll });
 
-  window.addEventListener('hashchange', applyHash);
-  applyHash();
+  applyRoute({ initial: true });
 
-  // What was pressed, applied — once. The address bar usually says the same
-  // thing already (the controls are links, and the native navigation was left
-  // alone), so this is belt and braces for the case where it does not.
+  // What was pressed, applied — once. The address bar says the same thing
+  // already (core/intent.js wrote the pressed path into it), so this is belt
+  // and braces for the case where it does not — and a `replace`, because the
+  // entry for that press is the one the press itself made.
   const asked = claimArrival();
   if (asked) {
     reportArrival(asked.destination, 'direct');
-    setView(asked.destination === 'desk' ? 'desk' : 'village');
+    setView(asked.destination === 'desk' ? 'desk' : 'village', {}, { history: 'replace' });
   }
 
   // A page with no title act to fly through opens on the product. The title
-  // page is still up there; the wordmark is still the way to it.
-  roll.set(1);
+  // page is still up there; the wordmark is still the way to it. A `replace`,
+  // because opening is not navigating: a flat visit to `/` reads `/browse`
+  // afterwards, and Back still leaves the site rather than rolling up.
+  roll.set(1, { history: 'replace' });
 
   // And when it is reached again, its controls belong to the roll like any
   // other page's do — flat or not, the press is answered here now.

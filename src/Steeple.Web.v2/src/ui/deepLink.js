@@ -2,8 +2,15 @@
 //
 // Every notification steeple sends carries a deep link, and every email CTA is
 // `{WebBaseUrl}/?goto=<encoded deepLink>` — a query parameter rather than a
-// path, because this SPA ships no server-side routes and nginx soft-404s
-// anything it does not have a file for.
+// path. It began as a way around a web host that soft-404ed anything it had no
+// file for; that is no longer true (the clean routes are real documents now —
+// docs/backlog/seo/design.md SEO-D3), and `/space/{venue}/{room}` in particular
+// is a link that lands directly. `?goto=` stays because the rest of this
+// grammar is *steeple's*, not the web app's: `/inbox/applications/{id}` is what
+// a notification row and an email CTA both carry, and it is deliberately not a
+// route this app has an address for. One registry, resolved here, then handed
+// to the ordinary navigation seam (core/bus.js `setView`) — never a second
+// grammar for writing URLs.
 //
 // The grammar is steeple's, and it is short:
 //   /inbox/applications/{id}  → that request, opened
@@ -59,21 +66,27 @@ export async function followDeepLink(path) {
   return follow(path);
 }
 
-async function follow(path) {
+/**
+ * @param {string} path the registry path
+ * @param {'push'|'replace'} history a press on a notification is navigation and
+ *   earns its entry; an arrival that was *already* this page's reason for
+ *   existing — the `?goto=` boot — corrects the address it came in on instead.
+ */
+async function follow(path, history = 'push') {
   const [head, ...rest] = parts(path);
 
   if (head === 'space' && rest[0] && rest[1]) {
-    setView('room', { venueId: rest[0], roomId: rest[1] });
+    setView('room', { venueId: rest[0], roomId: rest[1] }, { history });
     return true;
   }
 
   if (head === 'inbox' && !rest.length) {
-    setView('journal');
+    setView('journal', {}, { history });
     return true;
   }
 
   if (head === 'inbox' && rest[0] === 'applications' && rest[1]) {
-    return openLetter(rest[1]);
+    return openLetter(rest[1], history);
   }
 
   if (head === 'bookings' && rest[0]) {
@@ -84,7 +97,7 @@ async function follow(path) {
       .withAccess((token) => api.getBooking(rest[0], token))
       .catch(() => null);
     if (!answer?.applicationId) return false;
-    return openLetter(answer.applicationId);
+    return openLetter(answer.applicationId, history);
   }
 
   return false;
@@ -102,7 +115,7 @@ async function follow(path) {
  * hosting rows do it, so the guest letter never flashes over somebody else's
  * request on the way (D12).
  */
-async function openLetter(applicationId) {
+async function openLetter(applicationId, history = 'push') {
   const answer = await openApplication(applicationId);
   if (!answer.ok && !getApplication(applicationId)) return false;
   const app = getApplication(applicationId);
@@ -111,11 +124,15 @@ async function openLetter(applicationId) {
   // Said both ways round: a host following a link to their own request must
   // come back out of the host lens, or the guest letter never appears at all.
   setMode(hosting ? 'host' : 'guest');
-  setView('letter', {
-    applicationId,
-    venueId: app?.venueId ?? null,
-    roomId: app?.roomId ?? null,
-  });
+  setView(
+    'letter',
+    {
+      applicationId,
+      venueId: app?.venueId ?? null,
+      roomId: app?.roomId ?? null,
+    },
+    { history }
+  );
   return true;
 }
 
@@ -140,7 +157,7 @@ export function createDeepLink({ notice, announce, signIn } = {}) {
   function lost(line) {
     pending = null;
     arrive();
-    setView('village');
+    setView('village', {}, { history: 'replace' });
     notice?.show(line);
     announce?.(line);
   }
@@ -150,23 +167,19 @@ export function createDeepLink({ notice, announce, signIn } = {}) {
     if (!path) return;
     pending = null;
     arrive();
-    const landed = await follow(path);
+    const landed = await follow(path, 'replace');
     if (!landed) {
       pending = path;
       lost('That link could not be opened. It may have been answered already.');
     }
   }
 
-  if (session.isSignedIn()) {
-    // A remembered session may be dead. Ask first: signing somebody out on the
-    // way in from an email is worse than making them wait a moment.
-    session.fetchCurrentUser().then(() => {
-      if (session.isSignedIn()) return attempt();
-      askToSignIn();
-    });
-  } else {
+  // There is no persisted profile to consult. Resolve the cookie before
+  // deciding this is a signed-out arrival.
+  session.fetchCurrentUser().then(() => {
+    if (session.isSignedIn()) return attempt();
     askToSignIn();
-  }
+  });
 
   function askToSignIn() {
     notice?.show('Sign in to open this.', {

@@ -50,7 +50,23 @@ public static class ServiceCollectionExtensions
         services.AddSteepleFlags(configuration);
         services.AddSteepleAnalyticsIngest();
         services.AddSteepleReminders(configuration);
+        services.AddSteepleSeo(configuration);
         services.AddSteepleRateLimiting();
+
+        return services;
+    }
+
+    /// <summary>
+    /// The crawler surface (docs/backlog/seo/design.md): the one canonical-public-base resolver
+    /// that the sitemap and the listing documents share, and the document renderer. Both are
+    /// stateless over configuration and contracts -> singletons.
+    /// </summary>
+    private static IServiceCollection AddSteepleSeo(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<SeoOptions>(configuration.GetSection(SeoOptions.SectionName));
+
+        services.AddSingleton<IPublicBaseResolver, PublicBaseResolver>();
+        services.AddSingleton<IWebDocumentRenderer, WebDocumentRenderer>();
 
         return services;
     }

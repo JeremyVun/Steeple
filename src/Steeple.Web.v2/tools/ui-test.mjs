@@ -1,8 +1,8 @@
 // Real-input test for the printed layer: the filter chips inside the discovery
-// panel, the room rows on the venue sheet, the request CTA (→ apply view) and
-// the scenery switcher, driven with actual mouse and keyboard events.
+// panel, the room rows on the venue sheet, and the request CTA (→ apply view),
+// driven with actual mouse and keyboard events.
 //   node tools/ui-test.mjs "http://localhost:5395/?q=low"
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -64,7 +64,7 @@ async function clickText(selector, pattern, label) {
   return false;
 }
 
-await ready(`${url}#/browse`);
+await ready(at(url, routes.browse()));
 console.log('boot view:', await state('view'));
 
 // The chips are behind the search pill's funnel now — the segment is the
@@ -75,12 +75,12 @@ check('the chip filters', (await page.evaluate('[...__steeple.state.filters].joi
 await clickText('.dm-filters .pill--filter', /^Music$/, 'filter chip again');
 check('...and unfilters', (await page.evaluate('__steeple.state.filters.size')) === 0);
 
-await ready(`${url}#/venue/grace-community-vienna`);
+await ready(at(url, routes.venue('grace-community-vienna')));
 await clickText('.spacecard', /Fellowship Hall/, 'space card');
 check('a room row opens the room', (await state('view')) === 'room' && (await state('roomId')) === 'fellowship-hall', `${await state('view')} / ${await state('roomId')}`);
 
 await clickText('.sheet--room .pill--primary', /Request this space/, 'request CTA');
-check('the CTA opens the request step', (await state('view')) === 'apply', `${await state('view')} · ${await page.evaluate('location.hash')}`);
+check('the CTA opens the request step', (await state('view')) === 'apply', `${await state('view')} · ${await page.evaluate('location.pathname')}`);
 await page.keyboard.press('Escape');
 await wait(1800);
 check('Esc comes back to the room', (await state('view')) === 'room' && (await state('roomId')) === 'fellowship-hall', `${await state('view')} / ${await state('roomId')}`);
@@ -99,13 +99,6 @@ const geometry = await page.evaluate(() => {
 });
 check('the property sheet is on the right rail', geometry.sheetRight > geometry.width - 60, JSON.stringify(geometry));
 check('the sheet leaves the map on the page beside it', geometry.sheetLeft > geometry.width * 0.25, `sheet starts at ${Math.round(geometry.sheetLeft)}px of ${geometry.width}`);
-
-// The scenery switcher reloads the page with the hash preserved.
-const other = url.includes('style=atlas') ? /^Diorama$/ : /^Atlas$/;
-await clickText('.segment', other, 'scenery switcher');
-await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
-await wait(1600);
-check('the flip keeps your place', (await state('view')) === 'room', `${page.url()} · ${await state('view')}`);
 
 const topmost = await page.evaluate(() =>
   document.elementsFromPoint(720, 450).map((n) => `${n.tagName.toLowerCase()}.${(n.className.baseVal ?? n.className) || ''}`).slice(0, 3)

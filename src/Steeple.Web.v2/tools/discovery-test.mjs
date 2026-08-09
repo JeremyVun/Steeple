@@ -27,7 +27,7 @@
 // `import('/src/data/catalog.js')` from this page is not reliably the instance
 // the app is running once vite has hot-reloaded.
 
-import { closeBrowsers, launch } from './fixtures.mjs';
+import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -372,6 +372,13 @@ try {
     check('the Draft space is not offered', !cards.some((n) => /Renovation Annex/.test(n)), cards.join(', '));
     check('...but the sheet says one is being prepared', /being prepared/.test(await text('.sheet--venue .aside')), await text('.sheet--venue .aside'));
 
+    // Deliberately the *old* entrance (2026-08-08). `/space/oakton-baptist/
+    // renovation-annex` is now a document the API answers 404 to, so a clean
+    // deep link never reaches the application at all — that is
+    // tools/seo-route-test.mjs's assertion, and a stronger one. What this
+    // section is about is the client being asked for a room it must not show,
+    // and the compatibility fragment is the way to put it in that position:
+    // the page is served at `/`, and the router converts in place.
     await page.goto(`${url.split('#')[0]}#/room/oakton-baptist/renovation-annex`, {
       waitUntil: 'domcontentloaded',
     });
@@ -381,6 +388,13 @@ try {
       'a deep link to the Draft opens no listing',
       !(await page.evaluate("document.querySelector('.sheet--room').classList.contains('is-open')")),
       `${await view()} / ${await text('.sheet--room .sheet__title')}`
+    );
+    check(
+      '...and the old fragment is gone from the address bar either way',
+      await page.evaluate(
+        () => location.hash === '' && location.pathname === '/space/oakton-baptist/renovation-annex'
+      ),
+      await page.evaluate(() => location.pathname + location.hash)
     );
   }
 

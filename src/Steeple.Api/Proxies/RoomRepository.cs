@@ -100,11 +100,20 @@ public class RoomRepository : IRoomRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(
+        BoundingBox bounds, CancellationToken ct = default)
     {
+        // The same inclusive comparison as BoundingBox.Contains and ApplyFilters' search predicate:
+        // a venue sitting exactly on an edge is served, so advertising it is honest. Any looser
+        // predicate here would publish a URL that the detail read correctly answers with a 404.
         return await _db.Rooms
             .AsNoTracking()
-            .Where(r => r.Status == RoomStatus.Published && r.OperatorUnlistedAtUtc == null)
+            .Where(r => r.Status == RoomStatus.Published
+                && r.OperatorUnlistedAtUtc == null
+                && r.Venue!.Latitude >= bounds.MinLatitude
+                && r.Venue.Latitude <= bounds.MaxLatitude
+                && r.Venue.Longitude >= bounds.MinLongitude
+                && r.Venue.Longitude <= bounds.MaxLongitude)
             .OrderBy(r => r.Venue!.Slug)
             .ThenBy(r => r.Slug)
             // The listing page renders venue fields too, so lastmod is whichever changed last.

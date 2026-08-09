@@ -136,7 +136,7 @@ Rules that keep the budgets:
   deletion on sign-out. iOS: request permission **in context** (after first application
   submitted — "want to know when the church replies?"), not at launch.
 - **Deep links:** universal links for `https://<host>/space/{venue}/{room}` (the web surface
-  must serve the `.well-known` files — **`Web.v1` did; web v2 does not yet**, so universal
+  must serve the `.well-known` files — **the retired v1 did; web v2 does not yet**, so universal
   links are dark until it does — ARCHITECTURE "Current state"); unknown/out-of-area
   links fall back to in-app browse. `steeple://` only for auth callbacks.
 - **Offline:** honest-but-thin — banner on connectivity loss, cached last search/photos

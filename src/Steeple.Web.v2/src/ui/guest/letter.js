@@ -49,6 +49,19 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
   const body = el('article', { class: 'opened', tabindex: '-1' });
   const element = el('div', { class: 'guest__surface guest__surface--opened' }, [body]);
 
+  // What this letter is about — the room, the status, the when/who/what — stays
+  // where it was put; everything being said about it scrolls under that, the way
+  // the host's own letter is built (host.css `.letterpage__cols`). A thread that
+  // has grown long must not push the room's name off the top of the sheet.
+  const scroller = el('div', { class: 'opened__scroll' });
+
+  // A letter opens at the newest thing on it, which is the bottom, the way every
+  // conversation anybody has ever read does. It holds across the redraw the wire's
+  // answer causes, and is dropped the moment the reader scrolls for themselves.
+  let toBottom = false;
+  scroller.addEventListener('wheel', () => { toBottom = false; }, { passive: true });
+  scroller.addEventListener('touchmove', () => { toBottom = false; }, { passive: true });
+
   /**
    * One move on this letter, at steeple.
    *
@@ -578,9 +591,15 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     ]);
   }
 
+  // A booked request still has two people who may need to say something to each
+  // other, so the reply box outlives the decision (2026-08-09): steeple takes a
+  // message on an approved application without moving its status. Declined,
+  // withdrawn and expired are closed, and the thread stands as a record.
+  const canWrite = (app) => UNDECIDED.has(app.status) || app.status === APP_STATUS.approved;
+
   function threadBlock(app, venue) {
     const messages = threadFor(app.id);
-    if (!messages.length && !UNDECIDED.has(app.status)) return null;
+    if (!messages.length && !canWrite(app)) return null;
     const you = nameOf(app);
     return el('section', { class: 'thread' }, [
       el('h2', { class: 'eyebrow', text: messages.length ? 'What has been said' : 'Say something' }),
@@ -597,7 +616,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
           ])
         )
       ),
-      UNDECIDED.has(app.status) && replyBlock(app, venue),
+      canWrite(app) && replyBlock(app, venue),
     ]);
   }
 
@@ -626,7 +645,10 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
           // only emptied then — a failure leaves the words where they were typed.
           if (sent) {
             reply.value = '';
+            // What was just said is the newest thing on the letter: show it.
+            toBottom = true;
             render();
+            toBottom = false;
           }
         },
       },
@@ -724,6 +746,16 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
     const counter = openCounterFor(app.id);
     const booking = app.status === APP_STATUS.approved ? bookingFor(app.id) : null;
 
+    const held = scroller.scrollTop;
+    replaceChildren(scroller, [
+      counter && counterBlock(app, venue, counter),
+      booking && occurrenceBlock(app),
+      // After what this booking was, before anything still being said about it.
+      booking && ratingBlock(app, venue, booking),
+      intentBlock(app, venue),
+      threadBlock(app, venue),
+      closingBlock(app, venue),
+    ]);
     replaceChildren(body, [
       letterhead(app, venue, room),
       el('p', { class: 'opened__state', text: statusNote(app, {
@@ -735,14 +767,11 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       // field in it.
       refusal ? el('p', { class: 'opened__refusal', role: 'alert', text: refusal }) : null,
       particulars(app),
-      counter && counterBlock(app, venue, counter),
-      booking && occurrenceBlock(app),
-      // After what this booking was, before anything still being said about it.
-      booking && ratingBlock(app, venue, booking),
-      intentBlock(app, venue),
-      threadBlock(app, venue),
-      closingBlock(app, venue),
+      scroller,
     ]);
+    // Being taken out of the page and put back is what a redraw is; the reader's
+    // place in the thread is not the redraw's to lose.
+    scroller.scrollTop = toBottom ? scroller.scrollHeight : held;
     // Set from the flag, never only to true: the page is rebuilt here, but the
     // habit is what keeps a control from staying dead after a redraw that is not.
     for (const control of body.querySelectorAll('button')) control.disabled = working;
@@ -790,6 +819,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
       }
       applicationId = id;
       fetching = true;
+      toBottom = true;
       render();
       // The thread lives behind the detail read, and only steeple has it. The
       // mirror draws the page at once; this makes it true a moment later — and
@@ -799,6 +829,7 @@ export function createLetterView({ announce, onBack, onBrowse, onFixPayment }) {
         fetching = false;
         if (!answer.ok) refusal = answer.problem;
         render();
+        toBottom = false;
       });
       return true;
     },

@@ -184,8 +184,7 @@ await store('resetDemo()');
 // does. Without this the suite reads the same store through a title page.
 await page.evaluate('__steeple.roll.set(1)');
 await wait(300);
-// A journey from nothing: no session remembered, no venue placed.
-await page.evaluate('localStorage.removeItem("steeple-village-session")');
+// A journey from nothing: this fresh browser has no session and no venue.
 
 // Re-baselined for v2_migration Phase 2 (D4). The flow used to be reached from a
 // desk that opened for anybody, and the host signed in at the Verify step. There
@@ -337,7 +336,7 @@ const labelsAligned = await page.$$eval('.closed__form .eyebrow', (nodes) =>
 );
 check('its labels sit on one line, none orphaned', labelsAligned);
 check('the wordy closed-days blurb is gone', !/fortnight of repairs/.test((await text('.closed')) ?? ''));
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(400);
 check('seven windows are painted', (await store(`openHoursFor('${mirrored.id}','${roomSlug}')`)).length === 7);
 const closedDay = new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 10);
@@ -465,7 +464,7 @@ await wait(400);
 await click('[data-action="advance"]', 'Set availability');
 await wait(2400);
 check('Availability is next', (await text('.steps__step.is-on')) === '2Availability', await text('.steps__step.is-on'));
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(400);
 await click('[data-action="advance"]', 'Review and publish');
 await wait(2400);
@@ -494,7 +493,7 @@ await (await page.$('#room-photo')).uploadFile(PHOTO);
 await wait(400);
 await click('[data-action="advance"]', 'Set availability');
 await wait(2400);
-await clickText('.paint__quick .linkish', /Open every day/, 'the standard week');
+await clickText('.paint__quick .pill', /Open every day/, 'the standard week');
 await wait(400);
 await click('[data-action="advance"]', 'Review and publish');
 await wait(2400);

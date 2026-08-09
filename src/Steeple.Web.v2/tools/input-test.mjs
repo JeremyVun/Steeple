@@ -50,11 +50,14 @@ import {
   agreeCurrent,
   apiIsUp,
   apply,
+  at,
   closeBrowsers,
+  goRoute,
   isEnvironmentNoise,
   launch,
   mintGuest,
   mintVenue,
+  routes,
   signInPage,
   stamp,
 } from './fixtures.mjs';
@@ -107,18 +110,20 @@ function check(label, ok, detail = '') {
 }
 
 async function ready(target) {
-  // A goto that only changes the hash is not a navigation: the page keeps
-  // everything it was holding — the roll, the tab a desk was left on — and the
-  // checks after it quietly read the previous section's state. Go away first.
-  // And a cold *hash* is a product-first flat boot now (build_plan P3.5): no
-  // engine, no world, nothing to ask about a camera. This suite is the world's
-  // suite, so it loads bare and arrives at the route the way a visitor does.
-  const [base, route] = target.split('#');
+  // A cold route is a product-first flat boot (build_plan P3.3): no engine, no
+  // world, nothing to ask about a camera. This suite is the world's suite, so
+  // it loads the title bare — where a village is raised — and then travels to
+  // the route the way the browser does, with a real history entry and the
+  // popstate that goes with it. (Setting `location.hash` used to do this and
+  // does nothing at all now: there is no `hashchange` listener any more.)
+  const asked = new URL(target);
+  const route = asked.pathname;
+  asked.pathname = '/';
   await page.goto('about:blank');
-  await page.goto(base, { waitUntil: 'networkidle0' });
+  await page.goto(asked.href, { waitUntil: 'networkidle0' });
   await page.waitForFunction('window.__steepleReady === true', { timeout: 25000 });
-  if (route) {
-    await page.evaluate((r) => { window.location.hash = r; }, `#${route}`);
+  if (route !== '/') {
+    await goRoute(page, route);
     await page.evaluate('__steeple.roll.set(1)');
     await wait(400);
   }
@@ -221,7 +226,7 @@ const camBeforePin = await camera();
 await page.mouse.click(pin.cx, pin.cy);
 await wait(1800);
 check('clicking a pin enters the venue', (await state('view')) === 'venue' && (await state('venueId')) === 'oakton-baptist', `${await state('view')} / ${await state('venueId')}`);
-check('the hash follows', (await page.evaluate('location.hash')) === '#/venue/oakton-baptist');
+check('the address follows', (await page.evaluate('location.pathname')) === '/venue/oakton-baptist');
 check('that pin is marked current', await page.evaluate('!!document.querySelector(\'.dm-pin.is-current[data-venue="oakton-baptist"]\')'));
 check('and its row too', await page.evaluate('!!document.querySelector(\'.dm-row.is-current[data-venue="oakton-baptist"]\')'));
 check('the sheet opens beside the map', await page.evaluate('!!document.querySelector(".sheet--venue.is-open")'));
@@ -248,7 +253,7 @@ check(
 );
 
 // ── 4. a drag on the map pans the map, and only the map ─────────────────────
-await ready(`${url}#/browse`);
+await ready(at(url, routes.browse()));
 check('a deep link opens straight into the product', (await state('roll')) === 1);
 
 const map = await box('.dm-map');
@@ -301,7 +306,7 @@ check('...and the title page is the view again', (await state('view')) === 'arri
 
 // Scrolling got the visitor in; it must never throw them back out. The top of
 // the list is where natural reading ends up, not a request to leave.
-await ready(`${url}#/browse`);
+await ready(at(url, routes.browse()));
 const list = await box('.dm-list');
 await page.mouse.move(list.cx, list.y + 60);
 await page.mouse.wheel({ deltaY: -600 });
@@ -379,7 +384,7 @@ check(
 check('...and the title page has it back', (await state('view')) === 'arrival', String(await state('view')));
 
 // ── 8. Esc belongs to whoever has focus, and never to the roll ─────────────
-await ready(`${url}#/browse`);
+await ready(at(url, routes.browse()));
 
 // (a) the search pill has a panel open and owns focus: Esc closes the panel,
 //     and the world stays exactly where it was. (Workstream B replaced the
@@ -395,7 +400,7 @@ check('Esc in the panel closes the panel', (await page.evaluate('document.queryS
 check('...and does not roll', (await state('roll')) === 1, String(await state('roll')));
 
 // (b) nobody owns focus: Esc means what it has always meant.
-await ready(`${url}#/venue/grace-community-vienna`);
+await ready(at(url, routes.venue('grace-community-vienna')));
 await page.evaluate('document.activeElement.blur()');
 await wait(200);
 await page.keyboard.press('Escape');
@@ -417,7 +422,7 @@ await wait(1200);
 check('Enter on a pin enters the venue', (await state('view')) === 'venue' && (await state('venueId')) === 'merrifield-fellowship', `${await state('view')} / ${await state('venueId')}`);
 
 // ── 10. the request CTA still opens the request step ────────────────────────
-await ready(`${url}#/room/grace-community-vienna/fellowship-hall`);
+await ready(at(url, routes.room('grace-community-vienna', 'fellowship-hall')));
 const request = await box('.sheet--room .pill--primary');
 const overCta = await stack(request.cx, request.cy);
 check('nothing overlays the request CTA', overCta[0].includes('pill--primary'), overCta.join(' | '));
@@ -431,10 +436,10 @@ check('clicking it opens the request step', (await state('view')) === 'apply', S
 // same click on its way through.
 // Re-baselined for v2_migration Phase 2 (D4). A desk used to open for anybody,
 // on a seeded venue. **Hosting is somebody's now**: the desk exists only when
-// `GET /manage/venues` answers with something, so a deep link to `#/desk` from a
+// `GET /manage/venues` answers with something, so a deep link to `/desk` from a
 // browser that is nobody must not conjure a business. That is the check now —
 // it is also the owner's own repro, kept at the top of correspondence-test §0.
-await ready(`${url}#/desk`);
+await ready(at(url, routes.desk()));
 check('a deep link to a desk, signed out, opens no desk', await page.evaluate('!document.querySelector(".desk.is-open")'));
 check('...and leaves the visitor in the village', await state('view'), 'village');
 check('...without rolling', (await state('roll')) === 1, String(await state('roll')));
@@ -446,7 +451,7 @@ await page.evaluate(
   "__steeple.session.signIn({email:'maria@demo.steeple.test',displayName:'Maria Alvarez'})"
 );
 await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-await ready(`${url}#/journal`);
+await ready(at(url, routes.journal()));
 check('the inbox opens on a deep link', await page.evaluate('!!document.querySelector(".guest__surface--journal.is-open")'));
 const journalBox = await box('.journal');
 const awayFromInbox = { x: Math.min(journalBox.x + journalBox.width + 100, 1420), y: journalBox.cy };
@@ -464,7 +469,7 @@ check('...and keeps the lens it was read in', (await state('mode')) === 'guest',
 // one now, so they are back where they belong.
 await signInPage(page, host.email, host.name);
 await page.waitForFunction('!!__steeple.session.currentUser()', { timeout: 20000 });
-await ready(`${url}#/desk`);
+await ready(at(url, routes.desk()));
 await page.waitForFunction('!!document.querySelector(".desk")', { timeout: 30000 }).catch(() => {});
 await wait(1200);
 check('a deep link to a desk, as a host who keeps one, opens it', await page.evaluate('!!document.querySelector(".desk")'));

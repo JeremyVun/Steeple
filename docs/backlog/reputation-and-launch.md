@@ -173,21 +173,23 @@ not firing (nobody reads → nobody sweeps), adopt pg_cron/worker behind the sam
 the escalation path the decision log already reserved (SYSTEM_DESIGN §17, 2026-07-04
 lazy-sweep entry).
 
-## Slice 5 — SEO completion (`SEO.md` owns the checklist)
+## Slice 5 — SEO completion (`docs/contracts/seo.md` owns the crawler surface)
 
-> **Re-scoped 2026-08-08:** web v2's site-level floor (robots, sitemap, site metadata) is
-> built. Clean canonical routes, per-listing HTML/metadata/JSON-LD and real 404s are owned by
-> `docs/backlog/seo/`: the listing URL progressively opens the existing map product rather than
-> becoming a separate landing page. The owner explicitly deferred the area landing page,
-> Search Console/Bing submission and Core Web Vitals field pass from that build.
+> **Re-scoped 2026-08-08, and the clean-route build shipped the same day:** clean canonical
+> routes, per-listing HTML/metadata/JSON-LD, real 404s and the sitemap/`lastmod` regression
+> coverage are all built (`docs/contracts/seo.md` is the as-built truth; `docs/backlog/seo/`
+> holds the rationale and completion record). What remains here is exactly the owner-deferred
+> tail below — plus one deployment prerequisite: **production must set `SEO_PUBLIC_BASE_URL`
+> (`Seo:PublicBaseUrl`)** before go-live, or crawler-facing URLs name whatever origin each
+> request arrives on.
 
-- **Area landing page** — `/halls/{area-slug}` (SEO.md item 7) backed by
+- **Area landing page** — `/halls/{area-slug}` (deferred in `docs/backlog/seo/design.md` §12) backed by
   `GET /api/v1/areas/{slug}` (CONTRACTS §3 planned addition): area name, copy, listing
   grid. Implemented off the single `Geofence` config section — the `areas` *table*
   arrives only with Area #2 (Phase 7); don't build it early.
-- ~~Close the **sitemap `lastmod` caveat**~~ — the current repository already emits the later
-  room/venue `UpdatedAtUtc`; the SEO build adds regression coverage and reconciles the stale
-  checklist text, with no schema change.
+- ~~Close the **sitemap `lastmod` caveat**~~ — done 2026-08-08: regression coverage landed
+  (`SitemapLastModIntegrationTests`), the two missing stamp paths (availability saves, Admin
+  rating hide/unhide) now write, no schema change.
 - **Search Console + Bing** verification and sitemap submission (item 9); re-validate
   JSON-LD on a couple of real listings (the "free vs paid" pair predates the 2026-07-07
   removal of free listings); CWV field pass against the deployed environment.

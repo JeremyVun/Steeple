@@ -1199,6 +1199,12 @@
   color: var(--sage-deep);
 }
 
+/* Nothing is being weighed on a booked letter: the week states a fact. */
+.verdict__note--held {
+  border-left-color: var(--sage-deep);
+  color: var(--ink);
+}
+
 /* ── the opened letter ──────────────────────────────────────────────────── */
 
 .letterpage__sheet {
@@ -1433,6 +1439,11 @@
   background: var(--sage-tint);
 }
 
+.outcome--cancelled {
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
+
 .outcome .prose {
   margin-top: 6px;
 }
@@ -1474,6 +1485,13 @@
 .letterpage__actions .linkish {
   align-self: center;
   margin-left: 6px;
+}
+
+/* The only lever over a confirmed booking, and the last thing a host should
+   press by accident: a quiet line, in the colour of the warning it opens. */
+.letterpage__rescind {
+  margin-left: 0;
+  color: var(--terracotta-deep);
 }
 
 /* ── how it went ────────────────────────────────────────────────────────────
@@ -2051,7 +2069,7 @@
 .paint__quick {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
 }
 
 .paint__list {

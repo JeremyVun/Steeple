@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      A BOOT DOCUMENT. One of three (app-depth-1/2/3), and the ONLY difference
+      between them is the <base href> on the next line — everything else in
+      these files is byte-identical, and tools/seo-route-test.mjs §0 proves it.
+
+      They exist because the clean routes that are not listings have nothing a
+      server could truthfully say about them (docs/backlog/seo/design.md
+      SEO-D3): an inbox, a letter and a host desk are behind authorization, and
+      their content is the application's to fetch once it is running. So the
+      server answers with a page that says what is happening, indexes nowhere,
+      carries no user data at all, and hands off to the shell like any other
+      route document.
+
+      The base is why there are three. nginx serves one of these files at the
+      visitor's own address without rewriting it, so the document's idea of "the
+      deployment root" has to be spelled relative to the depth of the route it
+      is standing in: `./` at /browse, `../` at /venue/x, `../../` at
+      /apply/v/r. Everything below — the stylesheet, the handoff script, the
+      shell it fetches and the one link on the page — is written relative to
+      that, which is what lets the same three files serve a deployment at / and
+      a deployment behind a stripped /steeple prefix (design §7).
+
+      Keep this file tiny. It is on screen for as long as a fetch takes, and
+      permanently for anyone whose JavaScript never arrives.
+    -->
+    <base href="../" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" data-steeple-route-meta />
+    <title>Steeple</title>
+    <meta name="theme-color" content="#fbf7f0" />
+    <style>
+      /* Paper, not white, in the frames before the stylesheet lands. */
+      html {
+        background: #fbf7f0;
+      }
+    </style>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z' fill='%23C0623F'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="route-document.css" />
+    <script src="route-handoff.js" data-base="./" data-shell="index.html" defer></script>
+  </head>
+  <body class="rd-body">
+    <div id="steeple-route-document" class="rd rd--boot" data-steeple-route-document="app">
+      <svg class="rd__mark" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true" focusable="false">
+        <path
+          d="M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z"
+          fill="currentColor"
+        />
+      </svg>
+      <p class="rd__boot">Opening Steeple</p>
+      <p class="rd__boot-note">
+        If this page stays, JavaScript may be switched off or blocked.
+        <a class="rd__link" href="./">Go to Steeple</a>
+      </p>
+    </div>
+  </body>
+</html>

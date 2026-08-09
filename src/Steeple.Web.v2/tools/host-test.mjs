@@ -2,7 +2,7 @@
 // keyboard, never the debug API.
 //
 //   node tools/host-test.mjs "http://localhost:5313/?q=low"
-//   node tools/host-test.mjs "http://localhost:5313/?q=low&style=atlas&desk=ledger" --shots hsc-ledger
+//   node tools/host-test.mjs "http://localhost:5313/?q=low&desk=ledger" --shots hsc-ledger
 //
 // Re-baselined 2026-08-06 for v2_migration Phase 3.6 item 2. Every section of
 // this suite used to enter through a desk opened by the porch switch with **no
@@ -201,7 +201,7 @@ await page.waitForFunction('!!document.querySelector(".desk")', { timeout: 30000
 await wait(1200);
 check('mode is host', (await state('mode')) === 'host', await state('mode'));
 check('view is the host view', (await state('view')) === 'desk', await state('view'));
-check('hash deep-links it', /#\/desk/.test(await page.evaluate('location.hash')));
+check('the address deep-links it', /^\/desk(\/|$)/.test(await page.evaluate('location.pathname')), await page.evaluate('location.pathname'));
 check('documentElement carries data-mode', (await page.evaluate('document.documentElement.dataset.mode')) === 'host');
 check('the switch offers the way back', (await text('.porchswitch')) === 'Back to browsing', await text('.porchswitch'));
 

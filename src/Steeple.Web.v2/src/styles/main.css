@@ -1170,6 +1170,11 @@ body {
   max-height: min(78vh, 660px);
 }
 
+.signin .identity > .eyebrow,
+.signin .identity__title {
+  text-align: center;
+}
+
 /* ── The card on file, reachable ─────────────────────────────────────────────
    The request sheet's card step, lifted out of the sheet the same way the
    identity panel is (ui/cardPanel.js). Same paper, same rules; brand and last

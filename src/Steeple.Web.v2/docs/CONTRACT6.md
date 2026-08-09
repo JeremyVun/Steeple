@@ -102,7 +102,7 @@ serif prices, Free in sage. CONTRACT.md §guardrails and CONTRACT5 §0 remain la
    a truthful heading from the loaded data or let the search bar's Where
    field carry the location and drop the eyebrow — judge what serves the
    design, note the decision.
-8. Everything verified in both worlds (`?style=`), with `?world=off`, at
+8. Everything verified with canonical Atlas, with `?world=off`, at
    desktop and ~390×844. Update stale tool-test assertions you invalidate;
    prove any new regression test bites.
 

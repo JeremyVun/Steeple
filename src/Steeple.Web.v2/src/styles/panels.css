@@ -722,6 +722,49 @@
   padding: 13px 26px 15px;
 }
 
+/* ── a space that is not there (ui/unavailable.js) ──────────────────────── */
+
+/* The same sheet, said quietly. No photograph, no plate where one would have
+   been, no apology in red: a listing that has gone is a fact about the space,
+   not a fault of the person who followed the link — so the page keeps the
+   product's voice and the map behind it keeps its place. */
+.sheet--unavailable .sheet__head {
+  padding-top: 30px;
+}
+
+.sheet--unavailable .sheet__title {
+  font-size: 26px;
+}
+
+/* No rule under the heading and no line pinned to the foot: a sheet with one
+   sentence in it should not be ruled off like a page with sections. */
+.sheet--unavailable .sheet__body {
+  justify-content: flex-start;
+  border-top: 0;
+  padding-top: 0;
+  gap: 22px;
+}
+
+.sheet--unavailable .prose {
+  max-width: 34ch;
+  color: var(--ink-soft);
+}
+
+/* The way on, then the way out — one under the other, so the move that helps
+   is the one the thumb finds first. */
+.sheet--unavailable .sheet__ways {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  max-width: 21rem;
+}
+
+.sheet--unavailable .sheet__away {
+  padding: 8px 0 2px;
+  align-self: center;
+}
+
 /* ── the sheet held behind the booking overlay ──────────────────────────── */
 
 /* Asking for a space is an overlay over the space (CONTRACT5 §1.1). The room

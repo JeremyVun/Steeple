@@ -68,6 +68,15 @@ or on lifecycle pause; a failed flush is re-queued within a 100-event cap. Both 
 return without delaying the interaction. `sso_started` at the web apply gate carries `trigger`
 instead of `provider` (the provider isn't chosen yet at that point).
 
+Web's event queue is memory-only. Its sole browser-storage value is the anonymous random
+`steeple-analytics-session` id in sessionStorage: one tab visit, with no free text, profile,
+identity, or location. It is not a durable client id and disappears with the tab.
+
+`notification_opened` on web means **a press**, since 2026-08-09: notifications render as unread
+rows in the inbox and the event is emitted when one is opened (`channel: 'web'`), alongside the
+read receipt. It previously fired when a corner slip appeared — an impression, not an opening —
+so web counts before and after that date are not comparable. Mobile's push channel is unchanged.
+
 The Ingest allowlist (`EventIngestService.AllowedEventNames`) is exactly the nine **built**
 client-sourced rows in the table — `map_interacted`, `application_started`, `sso_started`,
 `notification_opened`, `inbox_opened`, `decision_pressed`, `card_step_opened`,

@@ -136,7 +136,7 @@ public class ListingServiceWhenTests
         public Task<Room?> GetByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Room?>(null);
         public Task<Room?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default) => Task.FromResult<Room?>(null);
         public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
-        public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
+        public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(BoundingBox bounds, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
     }
 
     private sealed class StubAvailability(IReadOnlyDictionary<Guid, MatchedWindowDto> matched) : IAvailabilityService

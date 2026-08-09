@@ -43,6 +43,7 @@
     <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Services.Reminders" />
     <Using Include="Steeple.Api.Services.Payments" />
+    <Using Include="Steeple.Api.Services.Seo" />
     <Using Include="Steeple.Api.Proxies" />
     <Using Include="Steeple.Api.Proxies.Availability" />
     <Using Include="Steeple.Api.Proxies.Identity" />

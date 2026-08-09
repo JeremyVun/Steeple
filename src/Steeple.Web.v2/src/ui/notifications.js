@@ -1,49 +1,32 @@
-// WHAT STEEPLE WROTE WHILE YOU WERE AWAY — ambient, never a tab.
+// WHAT STEEPLE WROTE TO YOU — messages in the one inbox.
 //
-// The API has been writing an inbox for a while and this app has never read it
-// (`GET /me/notifications`): a booking landed at a host's venue, a card was
-// declined, an occurrence was refunded, a session is a week out, a session is
-// tomorrow. Every one of those already has a **zero-click** channel — the email
-// — and the deep link in it lands on the surface that owns the fact.
+// The API writes an inbox (`GET /me/notifications`): a booking landed at a
+// host's venue, a card was declined, an occurrence was refunded, a listing went
+// live, a session is tomorrow. This file owns the reading of it — the fetch, the
+// held rows, the one sentence each row is said in (`lineFor`), the deep link it
+// opens onto, and the read receipt.
 //
-// So in-app this is deliberately not a second inbox with its own bell and its
-// own unread count. There is one inbox in this product and it is the
-// correspondence. What a visitor gets here is ambience: arrive, and the one
-// thing that is about to happen to you is on the page, in the same quiet hand
-// the session slip uses, with the way to it a press away. Nothing to click to
-// find out; nothing to dismiss to get on.
+// It used to show them as corner slips: a transient that appeared once, marked
+// itself read on sight and was gone twelve seconds later. That was ambience for
+// a guest and a dead end for a host — news with nothing to press, arriving on a
+// surface that then said "No requests yet" (owner review, 2026-08-09). Slips are
+// gone. Every row is a **message in the inbox**: clickable, unread until it is
+// opened, opened onto the surface that owns the fact, and marked read then and
+// only then. People already know this shape; it is the one shape that lets a
+// person act on what they were told.
 //
-// What that costs, and why it is the right cost: an ambient slip is shown once
-// and marked read, so it does not nag on every visit. The fact itself is never
-// only here — the booking, the failed charge, the refund all live on the letter
-// and the desk, which are read from steeple every time they are opened. Losing
-// a slip loses a reminder, never a fact.
+// Nothing here is a bell and nothing here is a badge — the inbox is a place you
+// go, and a message that goes unread nags nobody. The fact itself is never only
+// here: the booking, the failed charge, the refund all live on the letter and
+// the desk, which are read from steeple every time they are opened.
 //
-//   createNotifications({ notice, announce }) -> { read, ambient }
+//   createNotifications({ announce }) -> { read, rows, wake, onRoll, open }
 
 import { bus, rollTo, state } from '../core/bus.js';
 import { track } from '../data/analytics.js';
 import { markNotificationsRead, notifications } from '../data/correspondence.js';
 import * as session from '../data/session.js';
 import { followDeepLink } from './deepLink.js';
-
-/**
- * The types that are worth saying without being asked. Everything else steeple
- * writes already land on an owning surface, but a person should not have to
- * reopen every request to discover that a host replied or decided it. These are
- * the changes worth saying without being asked.
- */
-const AMBIENT = new Set([
-  'bookingReminder',
-  'paymentFailed',
-  'occurrenceRefunded',
-  'bookingReceived',
-  'listingApproved',
-  'applicationMessage',
-  'applicationApproved',
-  'applicationDeclined',
-  'ratingReceived',
-]);
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -119,12 +102,16 @@ function ratedBy(payload) {
   return payload.organizerName ?? null;
 }
 
-/** Whether this build deliberately surfaces this row in the inbox and as a slip. */
+/**
+ * Whether this build prints this row as a message in the inbox. Having a
+ * sentence IS the test: `lineFor`'s switch is the one place a new server-side
+ * type is taught, and a type it has never heard of stays unprinted.
+ */
 export function isAmbient(row) {
-  return AMBIENT.has(row?.type) && Boolean(lineFor(row));
+  return Boolean(lineFor(row));
 }
 
-/** What the slip's one way on should be called, for each kind. */
+/** What the message's one way on should be called, for each kind. */
 const ACTION_LABEL = {
   paymentFailed: 'Fix it',
   occurrenceRefunded: 'See the booking',
@@ -144,17 +131,17 @@ export function actionLabelFor(row) {
   return ACTION_LABEL[row?.type] ?? 'Open it';
 }
 
-export function createNotifications({ notice, announce } = {}) {
-  // Everything steeple last answered with, ambient rows only, newest first.
+export function createNotifications({ announce } = {}) {
+  // Everything steeple last answered with, printable rows only, newest first.
   let held = [];
   // One read in flight at a time, and never a poll: this is asked when somebody
-  // arrives and when the person changes, and at no other moment.
+  // arrives, when the person changes, and when the inbox is opened.
   let reading = null;
   let asked = false;
-  // Rows already shown as a slip in this page's life. Steeple's own read receipt
-  // is the durable half; this stops a second slip inside one visit while that
-  // receipt is still travelling.
-  const shown = new Set();
+  // Rows this page has already spoken aloud. The screen reader is the one
+  // channel that cannot re-read a row later, so it must not repeat itself
+  // either — and unlike the old slip, saying it here marks nothing read.
+  const announced = new Set();
 
   async function pull() {
     if (!session.isSignedIn()) {
@@ -177,49 +164,60 @@ export function createNotifications({ notice, announce } = {}) {
     return reading;
   }
 
-  /** The one thing most worth saying, or null when there is nothing. */
-  function next() {
-    return held.find((row) => !row.readAt && !shown.has(row.id)) ?? null;
-  }
+  /** Everything printable this browser holds — the inbox prints from this. */
+  const rows = () => held;
 
-  /** Say it, once, and tell steeple it was delivered. */
-  function speak() {
-    // Under the title page nothing is said: somebody who has not arrived yet is
-    // not being kept from anything, and a slip over the splash is an interruption
-    // of a page they have not read.
-    if (state.roll < 1) return;
-    const row = next();
-    if (!row) return;
-    const line = lineFor(row);
-    if (!line) return;
-    shown.add(row.id);
-    const link = row.payload?.deepLink;
-    notice?.show(
-      line,
-      link
-        ? {
-            label: actionLabelFor(row),
-            onPick: () => {
-              if (state.roll < 1) rollTo(1);
-              followDeepLink(link);
-            },
-          }
-        : null
-    );
-    announce?.(line);
-    // Shown is delivered here — this app has no bell to press, so the slip
-    // appearing on the page is the moment steeple's notification was opened.
+  /**
+   * A message, opened.
+   *
+   * Three things happen, in this order and for this reason: steeple is told the
+   * row was read (a receipt this browser also applies locally, so the row stops
+   * being bold before the round trip lands); the inbox is told to redraw; and
+   * the deep link the row carries is followed to the surface that owns the fact
+   * — the same follower an email CTA for the same event uses, so the two can
+   * never land in different places (`ui/deepLink.js`).
+   *
+   * A row with no link is still a message and is still read when it is pressed;
+   * it simply has nowhere further to go.
+   */
+  async function open(row) {
+    if (!row) return false;
     track('notification_opened', { type: row.type, channel: 'web' });
-    markNotificationsRead([row.id]);
-    // Held so `ambient()` stops offering it as unread the moment it was said.
-    row.readAt = new Date().toISOString();
+    if (!row.readAt) {
+      row.readAt = new Date().toISOString();
+      announced.add(row.id);
+      bus.emit('notifications:change', { rows: held });
+      markNotificationsRead([row.id]);
+    }
+    const link = row.payload?.deepLink;
+    if (!link) return false;
+    if (state.roll < 1) rollTo(1);
+    return followDeepLink(link);
   }
 
-  /** Everything ambient this browser holds — the journal prints from this. */
-  const ambient = () => held;
+  /**
+   * Say what has just arrived — to the screen reader alone.
+   *
+   * Nothing is drawn and nothing is marked read: this is the one channel that
+   * cannot go back and look, so it is told once and the message stays unread in
+   * the inbox for the press that opens it.
+   */
+  function announceNew() {
+    // Under the title page nothing is said: somebody who has not arrived yet is
+    // not being kept from anything.
+    if (state.roll < 1) return;
+    const fresh = held.filter((row) => !row.readAt && !announced.has(row.id));
+    if (!fresh.length) return;
+    for (const row of fresh) announced.add(row.id);
+    announce?.(
+      fresh.length === 1
+        ? `${lineFor(fresh[0])} It is in your inbox.`
+        : `${fresh.length} new messages in your inbox.`
+    );
+  }
 
   function wake() {
-    return read({ again: true }).then(speak);
+    return read({ again: true }).then(announceNew);
   }
 
   // Arriving at the product surface is the moment: the roll landing is what
@@ -233,8 +231,12 @@ export function createNotifications({ notice, announce } = {}) {
 
   session.onSessionChange((signedIn) => {
     held = [];
-    shown.clear();
+    announced.clear();
     asked = false;
+    // Whoever is reading now has a different inbox — an empty one until this
+    // answers, and the surfaces printing from it must not keep the last
+    // person's messages on the page in the meantime.
+    bus.emit('notifications:change', { rows: held });
     if (signedIn) wake();
   });
 
@@ -244,5 +246,5 @@ export function createNotifications({ notice, announce } = {}) {
   if (session.isSignedIn() && state.roll >= 1) wake();
   else if (session.isSignedIn()) read();
 
-  return { read, ambient, wake, onRoll, lineFor };
+  return { read, rows, wake, onRoll, open, lineFor };
 }

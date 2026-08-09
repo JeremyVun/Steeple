@@ -31,7 +31,7 @@ function overlaps(a, b) {
 }
 
 /** A lane read out loud, for the live region and for the row's title. */
-function laneSentence(lane) {
+function laneSentence(lane, held = false) {
   const parts = [lane.label];
   parts.push(lane.open.length ? `open ${lane.open.map((w) => fmtTimeRange(w.start, w.end)).join(' and ')}` : 'closed');
   if (lane.booked.length)
@@ -40,7 +40,9 @@ function laneSentence(lane) {
     );
   if (lane.proposed)
     parts.push(
-      `asked for ${fmtTimeRange(lane.proposed.start, lane.proposed.end)}${lane.clash ? ' — this collides' : ''}`
+      held
+        ? `held ${fmtTimeRange(lane.proposed.start, lane.proposed.end)} by this booking`
+        : `asked for ${fmtTimeRange(lane.proposed.start, lane.proposed.end)}${lane.clash ? ' — this collides' : ''}`
     );
   return `${parts.join(', ')}.`;
 }
@@ -55,7 +57,10 @@ export function createRibbon({ compact = false } = {}) {
     compact ? null : heldRow,
   ]);
 
-  function update({ venueId, roomId, proposal, ghost = null, exceptApplicationId = null }) {
+  // `held` is the ribbon on a booked letter: the lanes are not a proposal being
+  // weighed, they are dates this venue already stands behind, and a lane marked
+  // "free" over a booking of one's own is simply untrue.
+  function update({ venueId, roomId, proposal, ghost = null, exceptApplicationId = null, held = false }) {
     const { lanes, axis } = weekLanes(venueId, roomId, proposal, { exceptApplicationId });
 
     const ticks = [];
@@ -78,14 +83,14 @@ export function createRibbon({ compact = false } = {}) {
       lanes.map((lane) => {
         const track = el('div', { class: 'lane__track' });
         for (const window of lane.open) track.append(bar('lane__open', axis, window.start, window.end));
-        for (const held of lane.booked) track.append(bar('lane__booked', axis, held.start, held.end));
+        for (const taken of lane.booked) track.append(bar('lane__booked', axis, taken.start, taken.end));
         if (ghost && ghost.days.has(lane.day)) {
           track.append(bar('lane__ghost', axis, ghost.start, ghost.end));
         }
         if (lane.proposed) {
           track.append(bar('lane__proposed', axis, lane.proposed.start, lane.proposed.end));
-          for (const held of lane.booked) {
-            const hit = overlaps(lane.proposed, held);
+          for (const taken of lane.booked) {
+            const hit = overlaps(lane.proposed, taken);
             if (hit) track.append(bar('lane__collide', axis, hit.start, hit.end));
           }
         }
@@ -94,7 +99,7 @@ export function createRibbon({ compact = false } = {}) {
           'div',
           {
             class: `lane${lane.proposed ? ' lane--asked' : ''}${lane.clash ? ' lane--clash' : ''}`,
-            title: laneSentence(lane),
+            title: laneSentence(lane, held),
           },
           [
             compact ? null : el('span', { class: 'lane__day', text: lane.short }),
@@ -103,7 +108,7 @@ export function createRibbon({ compact = false } = {}) {
               ? null
               : el('span', {
                   class: 'lane__note',
-                  text: lane.clash ? 'collides' : 'free',
+                  text: held ? 'held' : lane.clash ? 'collides' : 'free',
                 }),
           ]
         );
@@ -113,18 +118,18 @@ export function createRibbon({ compact = false } = {}) {
     if (!compact) {
       // What the room already stands behind, named beside the ribbon rather
       // than crammed inside a bar too narrow to hold a word.
-      const held = new Map();
+      const bars = new Map();
       for (const lane of lanes) {
         for (const booked of lane.booked) {
           const key = `${booked.label}/${booked.start}/${booked.end}`;
-          const entry = held.get(key) ?? { ...booked, days: [] };
+          const entry = bars.get(key) ?? { ...booked, days: [] };
           entry.days.push(lane.day);
-          held.set(key, entry);
+          bars.set(key, entry);
         }
       }
       replaceChildren(
         heldRow,
-        [...held.values()].map((entry) =>
+        [...bars.values()].map((entry) =>
           el('li', { class: 'held__item' }, [
             el('span', { class: 'held__mark', 'aria-hidden': 'true' }),
             `${entry.days.map((d) => `${DAY_LABELS[d]}s`).join(', ')} ${fmtTimeRange(
@@ -143,10 +148,10 @@ export function createRibbon({ compact = false } = {}) {
 }
 
 /** The same week, said in words — the ribbon's job for a screen reader. */
-export function ribbonSpoken(venueId, roomId, proposal, exceptApplicationId = null) {
+export function ribbonSpoken(venueId, roomId, proposal, exceptApplicationId = null, held = false) {
   const { lanes } = weekLanes(venueId, roomId, proposal, { exceptApplicationId });
   return lanes
     .filter((lane) => lane.proposed)
-    .map((lane) => laneSentence(lane))
+    .map((lane) => laneSentence(lane, held))
     .join(' ');
 }

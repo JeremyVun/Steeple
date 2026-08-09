@@ -13,12 +13,9 @@ keeps the mirrors honest.
 
 ## 1. Governance — how contracts change
 
-`Steeple.Api/Contracts/` is the reference implementation;
-`src/Steeple.Web.v1/Models/ApiModels.cs` and `mobile/lib/**/models/` are hand-kept mirrors.
-
-> As-built note (2026-08-05): `src/Steeple.Web.v1/Models/ApiModels.cs` belongs to the **deprecated**
-> web v1. The active web mirror is `src/Steeple.Web.v2/src/data/api.js` (wire) plus
-> `catalog.js` (product vocabulary over it) — see `web.md`.
+`Steeple.Api/Contracts/` is the reference implementation. The active web mirror is
+`src/Steeple.Web.v2/src/data/api.js` (wire) plus `catalog.js` (product vocabulary over it),
+and `mobile/lib/**/models/` is the hand-kept mobile mirror.
 
 **Change rules:**
 1. **Additive is free.** New optional fields, new endpoints, new enum *values* — allowed

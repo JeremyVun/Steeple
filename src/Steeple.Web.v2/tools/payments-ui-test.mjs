@@ -20,8 +20,9 @@
 //   §4  payouts: the prompt, the mock KYC screen, and the connected state.
 //   §5  the booking-mode toggle: flipping a venue changes the public room's
 //       apply UX, on the wire and on the page.
-//   §6  a reminder, seeded as the notification steeple writes, rendering as the
-//       quiet slip a visiting person sees without clicking anything.
+//   §6  a reminder, seeded as the notification steeple writes, rendering as an
+//       unread message in the one inbox — pressable, and read only once it is
+//       opened (slips were deleted 2026-08-09; showing is no longer delivering).
 //
 // Needs: the API (STEEPLE_API, default http://localhost:5215/api/v1) with
 // Auth:DevLoginEnabled and payments.enabled, this app on the given origin with
@@ -43,15 +44,17 @@
 // ask — are `tools/fixtures.mjs`, shared with every other wire-era suite.
 
 import {
-  API,
   agreeCurrent,
+  API,
   apiIsUp,
   apply,
+  at,
   call,
   closeBrowsers,
   launch,
   mintGuest,
   mintVenue,
+  routes,
   signInPage as signInAs,
   sql,
   stamp,
@@ -204,8 +207,10 @@ async function boot(page, at = url) {
   // is a same-document navigation, and one landing in the middle of an
   // `evaluate` is reported as "execution context was destroyed" — a sentence
   // that describes the harness's timing and nothing about the app. Wait for the
-  // hash to be there before anything is asked of the page.
-  await page.waitForFunction(() => window.location.hash !== '', { timeout: 10000 }).catch(() => {});
+  // route to be there before anything is asked of the page. (It is a path now,
+  // never a fragment — this suite runs world=off, so the flat boot lands on
+  // /browse even when it was given the bare origin.)
+  await page.waitForFunction(() => window.location.pathname !== '/', { timeout: 10000 }).catch(() => {});
   await settle(page);
 }
 
@@ -606,7 +611,7 @@ check('and each sentence is one short sentence', modeBefore.blurbs.every((b) => 
 await shot(manualHostPage, '5-booking-mode');
 
 const guestBeforeFlip = await openPage('mode-guest');
-await boot(guestBeforeFlip, `${url}#/apply/${manual.venueSlug}/${manual.roomSlug}`);
+await boot(guestBeforeFlip, at(url, routes.apply(manual.venueSlug, manual.roomSlug)));
 await arrive(guestBeforeFlip);
 await until(
   guestBeforeFlip,
@@ -721,9 +726,9 @@ await until(
 );
 check('the group sees the refund on the same dates, without being told twice', true);
 
-// ── 6. a reminder, arriving without a click ─────────────────────────────────
+// ── 6. a reminder, waiting in the inbox ─────────────────────────────────────
 
-console.log('\n6 · the quiet reminder');
+console.log('\n6 · the reminder in the inbox');
 
 // Seeded rather than waited for: the reminder worker runs on a 15-minute
 // cadence, and a suite that waits on a worker is a suite nobody runs.
@@ -746,103 +751,107 @@ sql(
   `insert into notifications ("Id","UserId","Type","PayloadJson","CreatedAtUtc") values (gen_random_uuid(), '${decliner.user.id}', 21, '${payload}', now());`
 );
 
-// Every browser this suite still has open is put down first, and this section
-// is the reason. A fade is the one claim here that a *rendered frame* has to
-// carry, and headless Chromes share whatever the machine has: measured on this
-// machine, a slip reaches opacity 1 with one browser in flight and peaks at
-// 0.26 with three — so the strict instrument below was failing on the suite's
-// own company rather than on anything the app did. Nothing after this line
-// reads any earlier page.
+// Every browser this suite still has open is put down first. Headless Chromes
+// share whatever the machine has, and the reads this section waits on — the
+// notification feed, then the applications behind it — are slow enough under
+// three browsers' company to look like a surface that never drew. Nothing after
+// this line reads any earlier page.
 await closeBrowsers();
 
 const visitor = await openPage('reminded');
 await boot(visitor);
-// The slip is a **transient**, and the harness must not have to catch it live.
-//
-// It is shown the moment the notifications read answers — which is the moment
-// the session changes, before any wait this suite could start — it fades in
-// over 220ms, and `ui/notice.js` takes it away again twelve seconds later. A
-// check that samples the live element is therefore racing a compositor: on a
-// loaded machine the fade is stretched five-fold and more, and a poll that
-// lands either side of the readable window reads 0 both times and calls a slip
-// that really was on screen a slip that never came. That is a measurement, not
-// a defect, and it cost this suite two red runs.
-//
-// So the page keeps its own record from before the sign-in, and the assertion
-// reads the record. It is the stricter instrument, not the looser one: it
-// cannot miss a window it was watching the whole time, and it still says
-// nothing about a slip that only ever existed at opacity 0.
-await visitor.evaluate(() => {
-  const slip = document.querySelector('.slip');
-  window.__slipTrace = [];
-  const note = (why) =>
-    window.__slipTrace.push({
-      at: Math.round(performance.now()),
-      why,
-      hidden: slip.hidden,
-      open: slip.classList.contains('is-open'),
-      opacity: Number(getComputedStyle(slip).opacity),
-      line: slip.querySelector('.slip__line')?.textContent ?? '',
-    });
-  note('installed');
-  new MutationObserver(() => note('attribute')).observe(slip, { attributes: true });
-  for (const type of ['transitionend', 'transitioncancel']) {
-    slip.addEventListener(type, (event) => {
-      if (event.propertyName === 'opacity') note(type);
-    });
-  }
-  // The fade itself moves no attribute and fires nothing until it is over, so
-  // the peak is sampled while it is open. 100ms is well inside the 12s linger
-  // even when the machine stretches the fade many times over.
-  setInterval(() => {
-    if (!slip.hidden) note('sample');
-  }, 100);
-});
 await signInPage(visitor, decliner.email, decliner.name);
 await arrive(visitor);
-// Not merely un-hidden: **on screen**. A slip nobody could have read — opacity
-// 0.0 for its whole life — is not a slip that appeared.
-try {
-  await until(
-    visitor,
-    () => (window.__slipTrace ?? []).some((seen) => !seen.hidden && seen.opacity > 0.9),
-    null,
-    30000,
-    'a slip appeared, and finished appearing, for a visitor with a booking tomorrow'
-  );
-} catch (error) {
-  const trace = await visitor.evaluate(() => window.__slipTrace ?? []);
-  console.log(`  slip trace: ${JSON.stringify(trace)}`);
-  throw error;
-}
-const slip = await visitor.evaluate(() => ({
-  line: document.querySelector('.slip__line')?.textContent ?? '',
-  action: document.querySelector('.slip__actions button')?.textContent ?? null,
-}));
-check('a visitor is told, without clicking anything', /^Tomorrow: /.test(slip.line), slip.line);
-check('and the space is named', slip.line.includes(instant.roomName), slip.line);
-check('with one way on', Boolean(slip.action), JSON.stringify(slip.action));
-await shot(visitor, '6-reminder-slip');
 
-const marked = sql(
-  `select count(*) from notifications where "UserId" = '${decliner.user.id}' and "Type" = 21 and "ReadAtUtc" is not null;`
-);
-eq('showing it is delivering it — steeple is told it was read', marked, '1');
-
-// The same fact stays legible in the inbox, so a slip missed is a reminder
-// missed and never a fact lost.
+// Slips are gone (2026-08-09): a reminder is a **message in the inbox**, and
+// every claim below is DOM state rather than a rendered frame. Nothing here is
+// timed, because nothing here fades away — the row is still there a minute
+// later, which is the whole point of the change.
 await visitor.evaluate(() => window.__steeple.setView('journal'));
-await until(visitor, () => Boolean(document.querySelector('.jnotes')), null, 30000, 'the inbox carried the lines');
-const notes = await visitor.evaluate(() =>
-  [...document.querySelectorAll('.jnotes__line')].map((n) => n.textContent)
+await until(
+  visitor,
+  () => Boolean(document.querySelector('.jmsg[data-kind="bookingReminder"]')),
+  null,
+  30000,
+  'the reminder arrived as a message in the inbox'
 );
-await shot(visitor, '6-inbox-lines');
-check('the inbox keeps it as a quiet line', notes.some((line) => /^Tomorrow: /.test(line)), JSON.stringify(notes));
+const reminder = await visitor.evaluate(() => {
+  const row = document.querySelector('.jmsg[data-kind="bookingReminder"]');
+  return {
+    // The visually-hidden "Unread. " prefix is part of `.jmsg__line`'s text
+    // while the row is unread, so the sentence is read off its last span.
+    line: row.querySelector('.jmsg__line span:last-child')?.textContent ?? '',
+    // `.jmsg__go` is opacity-0 until hover on a desktop pointer and present in
+    // the DOM the whole time: its text is the claim, never its visibility.
+    go: row.querySelector('.jmsg__go')?.textContent ?? null,
+    unread: row.dataset.unread ?? null,
+    id: row.dataset.id ?? null,
+    pressable: row.tagName,
+  };
+});
+check('a visitor with a booking tomorrow is told so', /^Tomorrow: /.test(reminder.line), reminder.line);
+check('and the space is named', reminder.line.includes(instant.roomName), reminder.line);
+check('it is something you can press', reminder.pressable === 'BUTTON', reminder.pressable);
+eq('with one way on', reminder.go, 'See the details');
+eq('and it is waiting unread', reminder.unread, 'yes');
+
+const messages = await visitor.evaluate(() =>
+  [...document.querySelectorAll('.jmsg__line')].map((n) => n.textContent)
+);
 check(
   'alongside the failed payment it already knew about',
-  notes.some((line) => /did not go through/.test(line)),
-  JSON.stringify(notes)
+  messages.some((line) => /did not go through/.test(line)),
+  JSON.stringify(messages)
 );
+
+// Showing is no longer delivering. The old slip marked itself read on sight;
+// a message is read when somebody opens it, and steeple is asked both times.
+eq(
+  'seeing it is not reading it — steeple still holds it unread',
+  sql(
+    `select count(*) from notifications where "UserId" = '${decliner.user.id}' and "Type" = 21 and "ReadAtUtc" is not null;`
+  ),
+  '0'
+);
+
+// The inbox redraws when a read answers, so the node under the pointer can be
+// detached between resolve and click — `press` retries, and it is a real
+// browser event either way.
+await press(visitor, `.jmsg[data-id="${reminder.id}"]`);
+await until(
+  visitor,
+  (id) => window.__steeple.state.view === 'letter' && window.__steeple.state.applicationId === id,
+  failedApplication.id,
+  30000,
+  'the reminder opened the booking it was about'
+);
+check('pressing it lands on the booking it is about', true);
+
+let markedRead = '0';
+for (let attempt = 0; attempt < 20 && markedRead === '0'; attempt += 1) {
+  markedRead = sql(
+    `select count(*) from notifications where "UserId" = '${decliner.user.id}' and "Type" = 21 and "ReadAtUtc" is not null;`
+  );
+  if (markedRead === '0') await new Promise((r) => setTimeout(r, 250));
+}
+eq('opening it is reading it — steeple is told, on the wire', markedRead, '1');
+
+await visitor.evaluate(() => window.__steeple.setView('journal'));
+await until(
+  visitor,
+  () => Boolean(document.querySelector('.jmsg[data-kind="bookingReminder"]')),
+  null,
+  30000,
+  'the message is still in the inbox after it was read'
+);
+eq(
+  'and it stays in the inbox, no longer bold',
+  await visitor.evaluate(
+    () => document.querySelector('.jmsg[data-kind="bookingReminder"]')?.dataset.unread ?? null
+  ),
+  null
+);
+
 eq(
   'and there is no notifications tab bolted onto the shelf',
   await visitor.evaluate(() =>
@@ -850,6 +859,10 @@ eq(
   ),
   false
 );
+
+// Shots last: a headless page stops advancing CSS transitions after its first
+// screenshot, so anything asserted after one is a lie.
+await shot(visitor, '6-inbox-reminder');
 
 // ── done ─────────────────────────────────────────────────────────────────────
 

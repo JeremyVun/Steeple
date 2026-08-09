@@ -107,7 +107,13 @@ At most one counter is ever `open` (DB partial unique index); history rows stay 
 - `GET /api/v1/applications/{id}` ✅ — full `Application` incl. `messages` (party-scoped: organizer or a `venue_manager` of the room's venue; others 404). The thread screen's fetch.
 - `POST /api/v1/applications/{id}/messages` ✅ — `{body}` (either party; the "ask" thread). A
   provider message on `pending` → `needsInfo`; the organizer's answer → back to `pending`.
-  Errors: `409 invalid_state` once decided, `400 invalid_application`, `429 rate_limited`.
+  **`approved` takes messages too (2026-08-09)** — a booking is still a correspondence, and
+  either party may write on it — but the status does **not** move: the pending⇄needsInfo
+  rhythm says whose move it is, and after a yes it is nobody's. The `ApplicationMessage`
+  notification (email + inbox row) fires the same way. `declined`, `withdrawn` and `expired`
+  stay closed.
+  Errors: `409 invalid_state` on a closed application, `400 invalid_application`,
+  `429 rate_limited`.
 - `POST /api/v1/applications/{id}/decision` ✅ (provider, `apply` limit since 2026-08-07) —
   `{decision: "approve"|"decline", message?}`.
   `403 not_venue_manager` · `409 invalid_state` once decided. ✅ Phase 3: **approve is the
@@ -209,3 +215,19 @@ configured `Email:ApiKey` / `Push:ServiceAccountJson[Path]` the API logs sends i
 Every email ends with one CTA line the **dispatcher** composes from the payload's own `deepLink`
 — `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` (`web.md`), or nothing at all where no web
 origin is configured. Composition sites never build URLs; gateways never edit bodies.
+
+**Adding a new inbox event type (the extension recipe — additive, no migration):**
+1. Add a `NotificationType` value (`Persistence/Constants/NotificationType.cs`); the wire
+   token is its camelCase name. The `notifications` table stores type as int + payload as
+   JSON — no schema change, ever.
+2. At the domain site, one call: `INotificationDispatcher.NotifyAsync(recipients, type,
+   payload, email?)`. The payload carries the display fields plus `deepLink` (a path from
+   `infra.md`'s registry). The inbox row is the record of truth; email + push fan-out,
+   the CTA, and `notification_sent` analytics ride free.
+3. Web: one `case` in `lineFor` (`Web.v2/src/ui/notifications.js`) — having a sentence IS
+   the print test — plus an optional `ACTION_LABEL` entry. Inbox rendering, unread/read,
+   and deep-link follow come free. Mobile: the equivalent in
+   `mobile/lib/features/inbox/` + `core/models/wire_enums.dart` when it should print there.
+4. Document the type and payload in this section, same commit.
+Clients that predate the type ignore it silently by design (unknown = unprinted), so the
+server may ship first.
