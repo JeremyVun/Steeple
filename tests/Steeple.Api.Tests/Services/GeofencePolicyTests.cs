@@ -9,18 +9,18 @@ namespace Steeple.Api.Tests.Services;
 public class GeofencePolicyTests
 {
     // Mirrors the "Geofence" section in src/Steeple.Api/appsettings.json.
-    private const double MinLatitude = 38.84;
-    private const double MaxLatitude = 38.96;
-    private const double MinLongitude = -77.34;
-    private const double MaxLongitude = -77.12;
-    private const double CenterLatitude = 38.9012;
-    private const double CenterLongitude = -77.2653;
+    private const double MinLatitude = 38.30;
+    private const double MaxLatitude = 39.55;
+    private const double MinLongitude = -78.25;
+    private const double MaxLongitude = -76.35;
+    private const double CenterLatitude = 38.9072;
+    private const double CenterLongitude = -77.0369;
 
     private static GeofencePolicy CreatePolicy()
     {
         var options = new GeofenceOptions
         {
-            AreaName = "Vienna & nearby (Northern Virginia)",
+            AreaName = "Washington metropolitan area",
             MinLatitude = MinLatitude,
             MaxLatitude = MaxLatitude,
             MinLongitude = MinLongitude,
@@ -48,15 +48,15 @@ public class GeofencePolicyTests
         var policy = CreatePolicy();
         var query = new ListingSearchQuery
         {
-            MinLat = 38.88,
-            MaxLat = 38.92,
+            MinLat = 38.80,
+            MaxLat = 39.10,
             MinLng = -77.30,
-            MaxLng = -77.20,
+            MaxLng = -76.80,
         };
 
         var bounds = policy.ResolveSearchBounds(query);
 
-        Assert.Equal(new BoundingBox(38.88, 38.92, -77.30, -77.20), bounds);
+        Assert.Equal(new BoundingBox(38.80, 39.10, -77.30, -76.80), bounds);
     }
 
     [Fact]
@@ -66,17 +66,17 @@ public class GeofencePolicyTests
         // North/east edges spill outside the beachhead; south/west edges stay inside it.
         var query = new ListingSearchQuery
         {
-            MinLat = 38.90,
-            MaxLat = 39.10,
-            MinLng = -77.30,
-            MaxLng = -77.05,
+            MinLat = 39.30,
+            MaxLat = 39.80,
+            MinLng = -76.80,
+            MaxLng = -76.10,
         };
 
         var bounds = policy.ResolveSearchBounds(query);
 
-        Assert.Equal(38.90, bounds.MinLatitude);
+        Assert.Equal(39.30, bounds.MinLatitude);
         Assert.Equal(MaxLatitude, bounds.MaxLatitude);
-        Assert.Equal(-77.30, bounds.MinLongitude);
+        Assert.Equal(-76.80, bounds.MinLongitude);
         Assert.Equal(MaxLongitude, bounds.MaxLongitude);
     }
 
@@ -87,10 +87,10 @@ public class GeofencePolicyTests
         // Entirely north-east of the beachhead on both axes.
         var query = new ListingSearchQuery
         {
-            MinLat = 39.50,
-            MaxLat = 39.60,
-            MinLng = -77.00,
-            MaxLng = -76.90,
+            MinLat = 40.00,
+            MaxLat = 40.10,
+            MinLng = -76.00,
+            MaxLng = -75.90,
         };
 
         var bounds = policy.ResolveSearchBounds(query);
@@ -108,13 +108,12 @@ public class GeofencePolicyTests
     public void ResolveSearchBounds_CenterAndRadius_ProducesBoundsClampedIntoBeachhead()
     {
         var policy = CreatePolicy();
-        // 50km radius from the beachhead center comfortably exceeds the ~13km-tall,
-        // ~24km-wide beachhead, so the resolved box must be clamped down to it.
+        // 250km from central DC exceeds the DMV bounds on every edge.
         var query = new ListingSearchQuery
         {
             CenterLat = CenterLatitude,
             CenterLng = CenterLongitude,
-            RadiusMeters = 50_000,
+            RadiusMeters = 250_000,
         };
 
         var bounds = policy.ResolveSearchBounds(query);
@@ -156,7 +155,29 @@ public class GeofencePolicyTests
     {
         var policy = CreatePolicy();
 
-        Assert.False(policy.IsServed(39.50, CenterLongitude));
+        Assert.False(policy.IsServed(40.00, CenterLongitude));
+    }
+
+    [Theory]
+    [InlineData(38.9072, -77.0369)] // Washington, DC
+    [InlineData(38.8048, -77.0469)] // Alexandria, VA
+    [InlineData(38.3032, -77.4605)] // Fredericksburg, VA
+    [InlineData(39.4143, -77.4105)] // Frederick, MD
+    [InlineData(38.9784, -76.4922)] // Annapolis, MD
+    [InlineData(39.2904, -76.6122)] // Baltimore, MD
+    public void IsServed_WashingtonMetroLocations_ReturnTrue(double latitude, double longitude)
+    {
+        var policy = CreatePolicy();
+
+        Assert.True(policy.IsServed(latitude, longitude));
+    }
+
+    [Fact]
+    public void IsServed_Richmond_ReturnsFalse()
+    {
+        var policy = CreatePolicy();
+
+        Assert.False(policy.IsServed(37.5407, -77.4360));
     }
 
     [Fact]

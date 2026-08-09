@@ -37,7 +37,7 @@ public class ManageServiceIntegrationTests
         new EfVenueManagerRepository(db),
         new FakeGeocodingGateway(),
         new NullAnalytics(),
-        new DisabledFeatureFlags(),
+        new ReviewRequiredFeatureFlags(),
         new AvailabilityService(
             new EfAvailabilityRepository(db), new EfVenueManagerRepository(db), new NullAnalytics(), new FixedTimeProvider(FixedNow)),
         new FixedTimeProvider(FixedNow),
@@ -353,9 +353,9 @@ public class ManageServiceIntegrationTests
             Task.CompletedTask;
     }
 
-    private sealed class DisabledFeatureFlags : IFeatureFlags
+    private sealed class ReviewRequiredFeatureFlags : IFeatureFlags
     {
-        public bool IsEnabled(string key) => false;
+        public bool IsEnabled(string key) => key == FeatureFlagKeys.ManageFirstListingReviewRequired;
     }
 
     /// <summary>Always resolves to Vienna, VA; the real geocoding gateway is out of scope here.</summary>

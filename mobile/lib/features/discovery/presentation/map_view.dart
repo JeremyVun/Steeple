@@ -12,11 +12,11 @@ import '../../../core/widgets/widgets.dart';
 import '../providers.dart';
 import 'pin_bitmaps.dart';
 
-/// Beachhead fallback camera (Vienna, VA) until the geofence/search response
+/// Washington, DC fallback camera until the geofence/search response
 /// supplies a center.
 const _fallbackCamera = CameraPosition(
-  target: LatLng(38.9007, -77.2653),
-  zoom: 13,
+  target: LatLng(38.9072, -77.0369),
+  zoom: 9,
 );
 
 /// Map half of Explore: search-as-region-settles (debounce lives in the

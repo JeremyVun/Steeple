@@ -712,7 +712,7 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   loop (402 → card → send → question → answer → counter → accept → booking) and the instant
   loop, with a memory-mirror-dropping reload mid-flow, the dev mailbox's CTA followed, and
   every state read back from the database. It mints its own venues per run and uses `psql`
-  for exactly one thing — the operator's approve on a newly claimed venue's first listing, which has no
+  for exactly one thing — the operator's approval of a new host's first listing, which has no
   API by design (D2). `STEEPLE_API` / `STEEPLE_PSQL` / `STEEPLE_DB` move its targets. §8 counts
   the desk's `GET /bookings/{id}` requests (one per booking, never two) and §9 answers for
   steeple with a fabricated page of a hundred whose `totalCount` says twenty-five, proving the

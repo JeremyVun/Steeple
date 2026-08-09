@@ -21,9 +21,9 @@ public interface IAdminWorkspace
     void UnlinkVenueManager(Guid venueManagerId);
 
     /// <summary>
-    /// The venue-scoped human gate: decides an unverified venue's first-listing publish request.
-    /// Approve verifies the venue, publishes the room, stamps first approval (which permits later
-    /// rooms at that venue) and writes a <c>listingApproved</c> inbox row; decline clears the
+    /// The host-scoped human gate: decides a new host's first-listing publish request.
+    /// Approve verifies the venue, publishes the room, stamps first approval (which permits that
+    /// host's later rooms and venues) and writes a <c>listingApproved</c> inbox row; decline clears the
     /// request and writes <c>listingDeclined</c> with the note. Any evidence the host submitted is
     /// consumed by the same decision. Returns a human-readable error, or null on success.
     /// <paramref name="operatorUser"/> is the authelia-forwarded identity, for the audit line.

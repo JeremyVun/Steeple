@@ -27,15 +27,15 @@ public class GeocodingOptions
     /// <summary>Google Geocoding API key (deployment-supplied; metered SKU).</summary>
     public string GoogleApiKey { get; set; } = "";
 
-    /// <summary>State/region token appended to the address string sent for geocoding (beachhead default).</summary>
-    public string Region { get; set; } = "VA";
+    /// <summary>Optional state/region token appended to the address string sent for geocoding.</summary>
+    public string Region { get; set; } = "";
 
     /// <summary>
     /// ISO 3166 country codes (comma-separated) the provider limits results to; empty = worldwide.
     /// Interim scoping until results are biased by the requesting user's own country
     /// (open decision — docs/backlog/README.md).
     /// </summary>
-    public string LimitToCountries { get; set; } = "US";
+    public string LimitToCountries { get; set; } = "";
 
     /// <summary>True when the Apple Maps Server credentials are complete.</summary>
     public bool HasAppleCredentials =>

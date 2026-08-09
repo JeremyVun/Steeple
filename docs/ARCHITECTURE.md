@@ -14,8 +14,8 @@ no-show handling. Web v2's real-API migration completed 2026-08-07: identity, co
 payments, hosting and moderation all run on the wire; the only demo data left is the 3D
 village's scenery in dev builds. Google/Apple/Turnstile code paths are shipped and
 env-gated — a build with no client id offers no button — and go live by configuration
-alone (`docs/runbooks/sso-and-turnstile.md`). Admin moderates the first listing at each
-newly claimed venue; later rooms at that venue publish themselves.
+alone (`docs/runbooks/sso-and-turnstile.md`). Admin moderates each host's first listing;
+after approval, that host's later rooms and venues publish themselves.
 
 **Phase 4** shipped the Flutter app (`/mobile`) — MOBILE_CONTRACTS seams, every organizer
 screen, FCM push, and the analytics/flags client proxies. Mobile association files at
@@ -221,16 +221,18 @@ externally-hosted/signed document links only, not raw deed/lease/ID contents. A 
 no decision of its own any more: it is evidence shown inside the first-listing review, and the
 listing decision marks it decided. Slugs (`Utils/Slugs.cs`) are derived once from the name and
 **immutable** — renames never break a shared listing URL.
-**Moderation model** (venue-scoped gate, hardened 2026-08-06): the human gate is an
-**unverified venue's first listing**, and the whole rule lives in `ManageService` — Admin only
-performs the decision. A publish request that clears the automatic gates (≥1 photo, open hours
-behind `manage.open_hours_required`, geofence) publishes immediately only when that venue is
-already verified; otherwise it stamps `PublishRequestedAtUtc` and waits. Admin approval sets
-`Published` + `FirstPublishedAtUtc` and verifies that venue, permitting its later rooms without
-granting the manager global trust at unrelated venues.
+**Moderation model** (host-scoped gate, reinstated 2026-08-09): the human gate is a
+**host's first listing**, and the whole rule lives in `ManageService` — Admin only performs the
+decision. A publish request that clears the automatic gates (≥1 photo, open hours behind
+`manage.open_hours_required`) publishes immediately when the caller is a trusted host; otherwise
+it stamps `PublishRequestedAtUtc` and waits while `manage.first_listing_review_required` is on.
+Turning that server-side flag off auto-publishes first listings too. Trust is derived, not stored:
+a user is trusted when they manage any room with `FirstPublishedAtUtc` set. Admin approval or a
+flag-bypassed publish sets `Published` + `FirstPublishedAtUtc` and verifies that venue, so that
+host's later rooms and venues auto-publish.
 **Invariant: published ⇒ venue verified** — every route to `Published` sets
 `Venue.IsIdentityVerified`, in `ManageService` and in Admin's decision alike. Auto-publishes
-emit `listing_moderated` with `actor: "auto:verified_venue"` so the moderation funnel stays
+emit `listing_moderated` with `actor: "auto:trusted_host"` or `"auto:review_disabled"` so the moderation funnel stays
 complete. Ordinary unlist/relist stays provider-controlled, but Admin's Unlist takedown stamps
 `OperatorUnlistedAtUtc/By`; managers receive `409 operator_unlisted` until an operator clears
 it. Takedowns apply even with existing bookings, which remain separate commitments. Edits to an
@@ -490,8 +492,8 @@ booking_occurrences 1─* payments (014; partial unique (OccurrenceId) WHERE Sta
 
 ## Geofence
 
-One hardcoded beachhead (config section `Geofence`) — currently Vienna & nearby, Northern
-Virginia (`lat 38.84–38.96, lng -77.34–-77.12`). `GeofencePolicy` clamps any requested
+One hardcoded beachhead (config section `Geofence`) — currently the Washington metropolitan
+area (`lat 38.30–39.55, lng -78.25–-76.35`). `GeofencePolicy` clamps any requested
 viewport/radius into the beachhead (out-of-area → empty results, not errors) and rejects
 out-of-area detail lookups. Hosts may create and edit venues outside these bounds; those venues
 remain outside public discovery while this policy is active. Launch-suburb swap = one config change.
@@ -503,7 +505,7 @@ remain outside public discovery while this policy is active. Launch-suburb swap 
   SQL) that runs between postgres-healthy and the apps — no application migrates.
 - **EF Core 10 + Npgsql, database-first**: Persistence mirrors the Liquibase schema by
   hand, kept in sync column-for-column. Connection string key `SteepleDb`.
-- Search is bounding-box + haversine — no PostGIS at one-suburb scale.
+- Search is bounding-box + haversine — no PostGIS at single-metro scale.
 
 ## Routes
 

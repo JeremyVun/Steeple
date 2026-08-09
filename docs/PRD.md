@@ -118,7 +118,7 @@ The 1:1 "talk it out" approach works but **does not scale** when a church receiv
 **Supply health:**
 - Listings created; rooms per church; time-to-first-application per listing.
 - Church-admin **response rate & response time** (makes the unresponsive-admin failure mode visible).
-- Supply geography: where hosts create venues, including demand outside the launch beachhead.
+- Supply geography: where hosts create venues, including demand outside the served metro.
 
 _Targets and the mission north-star are intentionally left for the founder to set once real data flows._
 
@@ -185,12 +185,12 @@ Kept deliberately simple for v1. Two primary personas — the **Organizer** (con
 
 The core v1 is a **polished, map-based marketplace** (not a flat directory — a directory would be "dead on arrival" in 2026; users expect a rich experience). Supply is **concierge-onboarded** by the founder (manually listing known churches, as in 2017) so the map is never empty — but the **demand-side product is fully built and productized**. Principle: *concierge supply, productized demand.* **Go-to-market: supply first** — concierge-onboard a cluster of churches in one NoVA suburb (the founder picks the specific suburb from her existing church/school network) so the map has density before demand arrives.
 
-- **Map-based search** of church/community spaces within a **single allowed beachhead area** (one NoVA suburb), with pins and listing previews.
+- **Map-based search** of church/community spaces across the **Washington metropolitan area**, with pins and listing previews.
 - **Filters:** proximity, day/time/recurrence, capacity/group size, activity-fit, **accessibility**.
 - **Rich listing pages:** photos, capacity, amenities (parking, kitchen, restrooms, **step-free/accessible access**), house rules, identity-verification status (SSO).
 - **Instant book by default; application → approval flow as the supplier's opt-in** *(2026-08-05, `docs/backlog/booking-modes.md`)* — every request carries intent (activity, group size, frequency); manual-mode suppliers approve, ask, or decline, instant-mode suppliers see the same intent on a confirmed booking and can rescind.
 - **Minimal trust layer:** **SSO (Sign in with Google/Apple)** at the *apply* step; written intent; basic ratings/history. (Phone OTP is a deferred paid step-up, not in the MVP.)
-- **Geo-fenced discovery:** public search and listing detail honor only the launch beachhead (cost control + focus), while host self-service accepts a geocodable venue address anywhere.
+- **Geo-fenced discovery:** public search and listing detail cover the Washington metropolitan area (DC and nearby Maryland, Virginia, and West Virginia), while host self-service accepts a geocodable venue address anywhere.
 > **Superseded 2026-08-05 → `ARCHITECTURE.md` "Web SPA":** the original consumer-web scope
 > was a read-only HTMX funnel that converted applying into the app.
 
@@ -229,7 +229,7 @@ The irreducible end-to-end loop, so the founder can put a working demo in real h
 - **No-shows & cancellations.** Either side can cancel with notice; the other party is notified and the slot is freed. No-shows are markable and **feed the two-way trust/rating profile** — for free bookings the deterrent is *reputational*, since there is no money to forfeit. *Needs: cancel flow + notice window + notifications + no-show marking (both directions).*
 - **Double-booking.** Once a slot is approved/confirmed it is **locked** and cannot be booked again. Concurrent applications for the same slot resolve **first-approval-wins**; the rest are auto-declined and notified. *Needs: availability/calendar integrity + concurrency handling.*
 - **Listing pulled / edited mid-recurring-booking.** **Confirmed recurring bookings are protected** — removing or editing a listing does not silently cancel existing commitments; ending one requires an explicit cancellation with notice that notifies the organizer. *Needs: listing lifecycle that honors active bookings + graceful cancellation path.*
-- **Fake / spoofed listings.** **A human reviews the first listing at every newly claimed venue before it goes live** — the listing, venue, and any ownership / lease-authority evidence supplied, weighed alongside the founder's knowledge of the institution. Approval verifies that venue and makes its later rooms self-serve; it does not grant the manager trust at unrelated venues. Evidence is an **input**, not a precondition. Operator abuse takedowns cannot be reversed by a manager. Steeple stores review metadata and externally hosted proof links, not raw sensitive document contents. *(Venue-scoped gate hardened 2026-08-06.)*
+- **Fake / spoofed listings.** **A human reviews each host's first listing before it goes live** — the listing, venue, and any ownership / lease-authority evidence supplied, weighed alongside the founder's knowledge of the institution. Approval verifies that venue and makes all later listings from that host self-serve, including listings at other venues. Evidence is an **input**, not a precondition. If operator capacity is unavailable, `manage.first_listing_review_required` can temporarily bypass the human gate; the normal photo/open-hours checks and durable operator takedowns still apply. Steeple stores review metadata and externally hosted proof links, not raw sensitive document contents. *(Host-scoped gate reinstated 2026-08-09.)*
 
 **Handled by two-way reviews & ratings:**
 
@@ -289,7 +289,7 @@ A deliberately boring, conventional **N-tier** — **self-hosted, no lock-in, ch
 - The authoritative application **inbox lives in Postgres**, fetched on open / pull-to-refresh — **no realtime/websocket layer** at POC scale. A dropped push never loses data; the provider sees it on next refresh.
 - **Email fallback (decision-loop):** also send a transactional **email** on new-application / approval / decline (the Google/Apple email is on hand; Apple's relay forwards). The reliable channel for low-frequency, important events to infrequent app-openers — send via a **transactional email provider** (SES / Postmark / Resend), *not* from the droplet, for deliverability (SPF/DKIM/DMARC).
 
-**Geo:** proximity + discovery geofence via a **bounding-box query on indexed lat/long** — no PostGIS needed at one-suburb scale. The server-side bounds check limits public discovery, not venue creation.
+**Geo:** proximity + discovery geofence via a **bounding-box query on indexed lat/long** — no PostGIS needed at single-metro scale. The server-side bounds check limits public discovery, not venue creation.
 
 **Build-time decisions (not blockers):** analytics sink — lean toward **logging events to Postgres** (best fits the no-lock-in ethos; GA4 or self-hosted PostHog are alternatives). *(Recurrence model now decided — bounded + materialized occurrences + `btree_gist` exclusion; see double-booking above.)*
 
@@ -299,7 +299,7 @@ A deliberately boring, conventional **N-tier** — **self-hosted, no lock-in, ch
 - **Maps API cost — investigated (2026), NOT a budget risk.** At Steeple's scale (~1K–10K map loads/mo, a few hundred geocodes/mo) maps cost **~$0/month**, nowhere near the ceiling. Why: **native mobile map SDK loads are free** — Apple MapKit (free beyond the $99/yr Apple Developer membership) and Google Maps SDK for Android (unbilled, no cap). Only geocoding + autocomplete are metered, and the volume sits inside Google's 10,000-free-calls-per-SKU/month tier (Google replaced the old flat $200 credit with per-SKU free allowances in March 2025).
   - **Recommended stack:** native Apple MapKit (iOS) + Google Maps SDK (Android), with Google Geocoding + Places Autocomplete for addresses → ~$0/mo at this volume.
   - **Escape hatch at scale:** MapLibre GL + self-hosted Protomaps/PMTiles tiles + self-hosted geocoder (Nominatim/Photon) — public Nominatim is NOT usable commercially (1 req/s, no autocomplete, attribution/policy limits).
-  - **Cost & abuse control:** **geo-fence public discovery** to hardcoded allowed areas, and use **per-IP/session rate-limits on any endpoint proxying a metered Maps SKU** (geocode/autocomplete). Host venue entry may geocode worldwide; rate limits cap that metered path.
+  - **Cost & abuse control:** **geo-fence public discovery** to the Washington metro, and use **per-IP/session rate-limits on any endpoint proxying a metered Maps SKU** (geocode/autocomplete). Host venue entry may geocode worldwide; rate limits cap that metered path.
 - **OTP/SMS cost — investigated (2026); off the MVP path.** **SSO (Sign in with Google/Apple) is the primary gate — free.** Phone OTP is a deferred paid step-up; the figures below apply only **if/when** it's enabled. No provider offers a perpetual free SMS tier (Twilio = one-time ~$15 trial only). At MVP volume (100–1,000 verifications/mo) **Twilio Verify ≈ $6–58/mo** — negligible early (~$6–18 at 100–300/mo). Key lever: use a **managed Verify product**, which is **exempt from US A2P 10DLC** (the ~$2–10/mo fixed campaign fee + ~$15 registration that would otherwise dominate at low volume); rolling your own plain SMS over 10DLC incurs those fixed fees. **Plivo Verify** is the cheapest credible option (~$0.008/verification, no platform fee) behind the swappable `ISmsOtpSender` interface. **Firebase phone auth was evaluated and rejected** — also not free (Blaze-only, **~$0.01/SMS** US, only a "first 10 SMS/day" waiver; the oft-cited "10k/mo free" is a myth conflating the SMS-*excluded* 50k free-MAU tier), and it adds a Google client-SDK + Play-Integrity/reCAPTCHA dependency — **worse on both cost and lock-in than Plivo**. Whatever the provider, **rate-limit the OTP endpoint** (SMS-pumping defence — see Architecture).
 - **Avoid becoming a PII/KYC data custodian:** identity verification, payment, and ID storage must be **delegated to third parties** (Stripe, Stripe Identity/Persona, OAuth, carriers). Holding government IDs would impose data-protection liability incompatible with a lean startup.
 - **Data protection:** even minimal PII (contact details, application content) triggers obligations (US state privacy laws; relevant if/when expanding). Minimize what is stored.

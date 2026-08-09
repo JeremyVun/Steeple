@@ -36,7 +36,7 @@ public sealed class WebDocumentRenderer : IWebDocumentRenderer
     private const int DescriptionMaxLength = 160;
 
     /// <summary>
-    /// The served area is one Northern Virginia beachhead by policy (docs/PRD.md), and a
+    /// The served area is within the United States, and a
     /// <c>PostalAddress</c> without a country is not much of an address. If Steeple ever serves a
     /// second country this becomes geofence configuration, not a constant.
     /// </summary>
@@ -278,7 +278,7 @@ public sealed class WebDocumentRenderer : IWebDocumentRenderer
             .Append("</header>");
 
     private static void AppendColophon(StringBuilder html) =>
-        html.Append("<footer class=\"rd__colophon\"><p>Steeple — community space in Northern Virginia, by the hour.</p></footer>");
+        html.Append("<footer class=\"rd__colophon\"><p>Steeple — community space near Washington, DC, by the hour.</p></footer>");
 
     private static void AppendListingBody(
         StringBuilder html,

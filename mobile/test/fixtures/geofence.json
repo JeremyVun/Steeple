@@ -1,13 +1,13 @@
 {
-  "areaName": "Northern Virginia (Vienna beachhead)",
+  "areaName": "Washington metropolitan area",
   "center": {
-    "latitude": 38.9012,
-    "longitude": -77.2653
+    "latitude": 38.9072,
+    "longitude": -77.0369
   },
   "beachhead": {
-    "minLat": 38.85,
-    "maxLat": 38.95,
-    "minLng": -77.32,
-    "maxLng": -77.21
+    "minLat": 38.30,
+    "maxLat": 39.55,
+    "minLng": -78.25,
+    "maxLng": -76.35
   }
 }

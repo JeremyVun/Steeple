@@ -23,21 +23,27 @@ already_verified | verification_pending` (409 for
 **Manage-only `status` tokens** (never on public reads — `conventions.md` §2.1):
 `draft | published | unlisted`.
 
-### Moderation model — one human gate per venue ✅ *(hardened 2026-08-06)*
-The gate is an **unverified venue's first listing**, not a person's first listing, and `ManageService` is its single
-enforcement point. Any transition to `status: "published"` first clears the automatic gates
+### Moderation model — one human gate per host ✅ *(reinstated 2026-08-09)*
+The gate is a **host's first listing**, and `ManageService` is its single enforcement point.
+It applies only while server-side flag `manage.first_listing_review_required` is enabled (the
+default); disabling it sends first listings through the same automatic path as trusted hosts.
+Trust is derived rather than stored: a caller is trusted when they manage any room whose
+`FirstPublishedAtUtc` is set. Any transition to `status: "published"` first clears the automatic gates
 (≥1 photo → `no_photos`; open hours behind `manage.open_hours_required` → `no_open_hours`).
 Then:
 
-- **Verified venue** — later rooms at a venue with `IsIdentityVerified` set publish immediately:
+- **Trusted host** — later rooms and venues publish immediately:
   `Published` + `FirstPublishedAtUtc` stamped, no queue, no `publishRequestedAtUtc`.
-- **Unverified venue** — its first listing stamps `PublishRequestedAtUtc` and waits. Wire
+- **New host** — their first listing stamps `PublishRequestedAtUtc` and waits. Wire
   representation is unchanged: the room reads as `status: "draft"` with `publishRequestedAtUtc`
   set to its manager, and 404s publicly. An explicit `draft`/`unlisted` PATCH withdraws it.
   An operator decides it once in Admin (`docs/ARCHITECTURE.md` owns the queue mechanics):
   approve → `Published` + `FirstPublishedAtUtc` (once, ever) + `listingApproved` notification;
-  decline → request cleared, note recorded, `listingDeclined`. Approval makes later rooms at
-  that venue self-serve; a new venue owned by the same manager still requires review.
+  decline → request cleared, note recorded, `listingDeclined`. Approval makes every later listing
+  from that host self-serve, including rooms at a newly created venue.
+- **Review flag disabled** — a new host's first listing publishes immediately, stamps
+  `FirstPublishedAtUtc`, verifies the venue, and emits `listing_moderated` with
+  `actor: "auto:review_disabled"`; it never joins the review queue.
 - **Invariant: published ⇒ venue verified.** Every publish path sets
   `Venue.IsIdentityVerified` (`isIdentityVerified: true` on the venue reads) — the badge means
   "belongs to a vetted host". There is no separate venue-verification decision.

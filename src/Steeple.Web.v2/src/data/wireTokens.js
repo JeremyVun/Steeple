@@ -72,6 +72,7 @@ export const WIRE_TOKEN_SETS = Object.freeze({
 
 export const FEATURE_FLAG_KEYS = Object.freeze({
   listingAvailability: 'listing.availability',
+  manageFirstListingReviewRequired: 'manage.first_listing_review_required',
   manageOpenHoursRequired: 'manage.open_hours_required',
   bookingCounterOffers: 'booking.counter_offers',
   paymentsEnabled: 'payments.enabled',

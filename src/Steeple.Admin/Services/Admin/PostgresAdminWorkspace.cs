@@ -64,7 +64,7 @@ public sealed class PostgresAdminWorkspace : IAdminWorkspace
                 activeByRoom.GetValueOrDefault(r.Id)))
             .ToList();
 
-        // The review queue: first-listing publish requests, with the venue's evidence and hosts
+        // The review queue: new-host first-listing requests, with the venue's evidence and hosts
         // folded into each item — one decision, one card (D2/D3).
         var publishRequestRooms = db.Rooms
             .AsNoTracking()

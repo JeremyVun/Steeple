@@ -66,4 +66,10 @@ public interface IManageRepository
     /// <summary>Whether the venue already has an undecided verification request.</summary>
     Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Whether the user manages at least one room that has been approved for publication before.
+    /// Trust is derived from that first approved listing rather than stored separately.
+    /// </summary>
+    Task<bool> IsTrustedHostAsync(Guid userId, CancellationToken ct = default);
+
 }

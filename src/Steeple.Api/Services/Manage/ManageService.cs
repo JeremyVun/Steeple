@@ -4,9 +4,9 @@ using Steeple.Api.Contracts.Manage;
 namespace Steeple.Api.Services.Manage;
 /// <summary>
 /// Default <see cref="IManageService"/> and the <em>single</em> enforcement point of the
-/// venue-scoped moderation model. Providers create and edit freely; publishing is the gated step,
-/// and an unverified venue's first publish becomes a publish *request* for the Admin review queue,
-/// while later rooms at that verified venue publish immediately, as does any relist of a
+/// host-scoped moderation model. Providers create and edit freely; publishing is the gated step,
+/// and a host's first publish becomes a publish *request* for the Admin review queue. After that
+/// approval, the host's later rooms and venues publish immediately, as does any relist of a
 /// previously-approved room. Every path that reaches <c>Published</c> also verifies the venue —
 /// the invariant is <em>published ⇒ venue verified</em>. Edits to live listings apply immediately
 /// but stamp <c>ProviderEditedAtUtc</c> as the dormant abuse-response seam.
@@ -426,7 +426,7 @@ public sealed class ManageService : IManageService
         // Status transition first — it can fail, and nothing should be half-applied.
         var publishNewlyRequested = false;
         var publishedNow = false;
-        var autoPublished = false;
+        string? autoPublishActor = null;
         if (requestedStatus is { } target && target != room!.Status)
         {
             if (room.Status == RoomStatus.Published)
@@ -470,15 +470,25 @@ public sealed class ManageService : IManageService
                     room.ProviderEditedAtUtc = now;
                     publishedNow = true;
                 }
-                else if (room.Venue?.IsIdentityVerified == true)
+                else if (!_flags.IsEnabled(FeatureFlagKeys.ManageFirstListingReviewRequired))
                 {
-                    // The human gate applies once per venue. A different, newly claimed venue
-                    // remains unverified and its first room still joins the operator queue.
+                    // Operational escape hatch: keep the automatic quality gates, but bypass the
+                    // human queue when there is no operator capacity to review first listings.
                     room.Status = RoomStatus.Published;
                     room.FirstPublishedAtUtc = now;
                     room.PublishRequestedAtUtc = null;
                     publishedNow = true;
-                    autoPublished = true;
+                    autoPublishActor = "auto:review_disabled";
+                }
+                else if (await _repository.IsTrustedHostAsync(callerId, ct).ConfigureAwait(false))
+                {
+                    // The human gate applies to this host's first listing only. Its approval makes
+                    // every later room and venue self-serve.
+                    room.Status = RoomStatus.Published;
+                    room.FirstPublishedAtUtc = now;
+                    room.PublishRequestedAtUtc = null;
+                    publishedNow = true;
+                    autoPublishActor = "auto:trusted_host";
                 }
                 else if (room.PublishRequestedAtUtc is null)
                 {
@@ -551,13 +561,13 @@ public sealed class ManageService : IManageService
             await TrackSafelyAsync("listing_publish_requested", new { roomId = room.Id, venueId = room.VenueId }).ConfigureAwait(false);
         }
 
-        if (autoPublished)
+        if (autoPublishActor is not null)
         {
-            // Same event Admin logs for a human decision, marked as the verified-venue auto-approval
-            // so the moderation funnel stays complete (analytics.md).
+            // Same event Admin logs for a human decision, marked with the automatic path so the
+            // moderation funnel stays complete (analytics.md).
             await TrackSafelyAsync(
                 "listing_moderated",
-                new { roomId = room.Id, venueId = room.VenueId, outcome = "approved", actor = "auto:verified_venue" })
+                new { roomId = room.Id, venueId = room.VenueId, outcome = "approved", actor = autoPublishActor })
                 .ConfigureAwait(false);
         }
 
@@ -637,8 +647,7 @@ public sealed class ManageService : IManageService
     private async Task<(GeoPoint? Point, ManageError? Error)> GeocodeAsync(
         string addressLine, string suburb, string postcode, CancellationToken ct)
     {
-        // Region is a config hint (a US state token today); an area with no such token
-        // configures it empty and the address is sent without one.
+        // Region is an optional config hint; global host entry leaves it empty.
         var regionAndPostcode = $"{_geocodingOptions.Region} {postcode}".Trim();
         var address = string.Join(", ",
             new[] { addressLine, suburb, regionAndPostcode }.Where(part => part.Length > 0));

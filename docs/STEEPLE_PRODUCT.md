@@ -31,11 +31,11 @@ Steeple is a few connected pieces, used by three kinds of people:
    └─────────────────┘            └─────────────────┘
 
                          ┌───────────────────┐
-   OPERATOR (founder) ──▶│  ADMIN DASHBOARD  │  review each new venue's first listing
+   OPERATOR (founder) ──▶│  ADMIN DASHBOARD  │  review each host's first listing
                          └───────────────────┘
 ```
 
-*Website and mobile app are two equal front doors — an organizer or a venue provider can use either. The MVP goal is self-service: venue providers list and manage their own venues, and organizers find and hire them directly. Early on the operator also seeds venues by hand so the map is never empty. The operator reviews the **first listing at every newly claimed venue**; approval confirms that venue and makes later rooms there self-serve. Approval never grants global trust at unrelated venues, and an operator takedown cannot be relisted by a manager. (Venue-scoped gate hardened 2026-08-06.)*
+*Website and mobile app are two equal front doors — an organizer or a venue provider can use either. The MVP goal is self-service: venue providers list and manage their own venues, and organizers find and hire them directly. Early on the operator also seeds venues by hand so the map is never empty. The operator reviews **each host's first listing**; approval confirms that venue and makes every later listing from that host self-serve, including at other venues. An operator takedown cannot be relisted by a manager. (Host-scoped gate reinstated 2026-08-09.)*
 
 **A booking, start to finish** — the common case, a free recurring slot:
 

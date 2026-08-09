@@ -8,7 +8,7 @@ import { effectiveRoom, roomEdits } from '../data/store.js';
 
 // Also printed verbatim in index.html's pre-rendered splash — change both.
 export const ARRIVAL = {
-  eyebrow: 'Community space in Northern Virginia',
+  eyebrow: 'Community space in the Washington, DC area',
   wordmark: 'Steeple',
   line: 'Affordable halls, studios and gyms to rent by the hour from neighborhood venues — for playgroups, classes, rehearsals and clubs.',
   cta: 'Find a space',

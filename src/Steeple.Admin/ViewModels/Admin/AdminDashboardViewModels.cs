@@ -16,7 +16,7 @@ public sealed record AdminListingRow(
     int ActiveBookings);
 
 /// <summary>
-/// A room awaiting the venue-scoped human gate: the first listing at an unverified venue.
+/// A room awaiting the host-scoped human gate: a new host's first listing.
 /// Carries everything the decision needs — listing preview, venue, and any evidence the host
 /// submitted — because approve/decline is a single decision with no separate verification step.
 /// </summary>

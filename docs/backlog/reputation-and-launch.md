@@ -199,11 +199,11 @@ lazy-sweep entry).
   JSON-LD on a couple of real listings (the "free vs paid" pair predates the 2026-07-07
   removal of free listings); CWV field pass against the deployed environment.
 
-## Slice 6 — Launch: beachhead swap + production checklist
+## Slice 6 — Launch: served-area check + production checklist
 
-**Beachhead swap:** founder picks the launch suburb → update the `Geofence` config
-section (one config change by design) → concierge-onboard the supply cluster (target per
-PRD: a dense cluster before any demand push) → purge demo seed data from production
+**Served-area check:** confirm the configured Washington metropolitan area bounds →
+concierge-onboard the initial NoVA supply cluster (target per PRD: density before any demand
+push) → purge demo seed data from production
 (keep `renovation-annex`-style Draft-visibility proof in dev/test seeds only).
 
 **Ops carry-overs** (absorbed verbatim from the retired ROADMAP — none are code):

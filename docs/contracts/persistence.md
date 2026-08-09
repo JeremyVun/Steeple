@@ -147,12 +147,12 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
 
 ## Geofence
 
-One hardcoded beachhead, config section `Geofence` in the API's appsettings — currently
-`"Vienna & nearby (Northern Virginia)"`, lat 38.84–38.96, lng −77.34–−77.12, centre
-38.9012 / −77.2653. `GeofencePolicy` clamps any requested viewport/radius into the beachhead
+One hardcoded beachhead, config section `Geofence` in the API's appsettings — currently the
+`"Washington metropolitan area"`, lat 38.30–39.55, lng −78.25–−76.35, centre
+38.9072 / −77.0369. `GeofencePolicy` clamps any requested viewport/radius into the beachhead
 (out-of-area → **empty results, not errors**) and rejects out-of-area detail lookups (404).
 Launch-suburb swap = one config change. Search is bounding-box + haversine — no PostGIS at
-one-suburb scale.
+single-metro scale.
 
-> Dev hazard: without `Geocoding:GoogleApiKey`, `StubGeocodingGateway` resolves **every**
-> address to the beachhead centre, so geofence-rejection paths are locally unreachable.
+> Dev hazard: without production geocoding credentials, `StubGeocodingGateway` resolves
+> **every** address to the beachhead centre.

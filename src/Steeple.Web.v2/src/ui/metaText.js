@@ -94,13 +94,13 @@ export function listingDescription(listing) {
  * have been somewhere and come back. tools/metadata-test.mjs reads both.
  */
 export const SITE_META = Object.freeze({
-  title: 'Steeple — Community space to rent in Northern Virginia',
+  title: 'Steeple — Community space to rent near Washington, DC',
   description:
-    'Steeple — rent affordable halls, studios and gyms by the hour from Northern Virginia venues. Five real listings, explored as one continuous scene.',
-  ogTitle: 'Steeple — community space to rent in Northern Virginia',
+    'Steeple — rent affordable halls, studios and gyms by the hour from venues across the Washington, DC area.',
+  ogTitle: 'Steeple — community space to rent near Washington, DC',
   ogDescription:
-    'Halls, studios and rooms in Northern Virginia venues, by the hour. Find one near you, see when it is open, and book it.',
-  linkedDataDescription: 'Halls, studios and rooms in Northern Virginia venues, rented by the hour.',
+    'Halls, studios and rooms across the Washington, DC area, by the hour. Find one near you, see when it is open, and book it.',
+  linkedDataDescription: 'Halls, studios and rooms across the Washington, DC area, rented by the hour.',
 });
 
 /**

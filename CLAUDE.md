@@ -2,7 +2,7 @@
 
 Steeple — hyperlocal marketplace connecting churches (spare halls/rooms) with community
 organizers. Instant-book by default with per-venue manual-approve opt-in, host-set hourly
-pricing, one NoVA beachhead. .NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL +
+pricing, one Washington-metro beachhead. .NET 10 API + Vite web SPA (v2) + HTMX admin + PostgreSQL +
 Flutter mobile. Solo-operated; lean (~$100 AUD/mo ceiling).
 
 ## Document map — read the owning doc, don't infer from code

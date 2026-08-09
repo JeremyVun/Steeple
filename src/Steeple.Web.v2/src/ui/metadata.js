@@ -46,7 +46,7 @@ import { listingDescription, listingTitle, SITE_META, squash, UNAVAILABLE } from
 const SITE = 'Steeple';
 
 /**
- * The served area is one Northern Virginia beachhead by policy, and a
+ * The served area is within the United States, and a
  * PostalAddress without a country is not much of an address. The same constant,
  * for the same reason, as the renderer's.
  */

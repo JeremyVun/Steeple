@@ -12,10 +12,10 @@ namespace Steeple.Integration.Tests.Proxies;
 
 /// <summary>
 /// The whole moderation loop across both halves that own it: <see cref="ManageService"/> (the API,
-/// where the venue-scoped review rule lives) and <see cref="PostgresAdminWorkspace"/> (the operator's
+/// where the host-scoped review rule lives) and <see cref="PostgresAdminWorkspace"/> (the operator's
 /// decision). Drives the real code against the real
-/// schema: a newly claimed venue's first listing waits for a human; approval publishes it, verifies the venue
-/// and writes the inbox row; later rooms at that venue publish themselves, while new venues wait.
+/// schema: a new host's first listing waits for a human; approval publishes it, verifies the venue
+/// and writes the inbox row; every later listing from that host publishes itself.
 /// </summary>
 [Collection(PostgresCollection.Name)]
 public class SingleGateModerationIntegrationTests
@@ -31,12 +31,12 @@ public class SingleGateModerationIntegrationTests
             .UseNpgsql(_fixture.ConnectionString)
             .Options);
 
-    private static IManageService CreateService(SteepleDbContext db) => new ManageService(
+    private static IManageService CreateService(SteepleDbContext db, bool firstListingReviewRequired = true) => new ManageService(
         new EfManageRepository(db),
         new EfVenueManagerRepository(db),
         new FakeGeocodingGateway(),
         new NullAnalytics(),
-        new DisabledFeatureFlags(),
+        new ModerationFeatureFlags(firstListingReviewRequired),
         new AvailabilityService(
             new EfAvailabilityRepository(db), new EfVenueManagerRepository(db), new NullAnalytics(), new FixedTimeProvider(FixedNow)),
         new FixedTimeProvider(FixedNow),
@@ -123,7 +123,7 @@ public class SingleGateModerationIntegrationTests
     }
 
     [Fact]
-    public async Task ApprovedHostBrandNewVenue_StillRequiresVenueScopedReview()
+    public async Task ApprovedHostBrandNewVenue_PublishesWithoutAnotherReview()
     {
         var host = await NewHostAsync();
         var (_, firstRoomId) = await CreateVenueWithPublishRequestAsync(host.Id, "Cedar Lane Meeting House", "Main Hall");
@@ -144,10 +144,44 @@ public class SingleGateModerationIntegrationTests
         await using (var db = CreateContext())
         {
             var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
-            Assert.Equal(RoomStatus.Draft, room.Status);
-            Assert.Equal(FixedNow, room.PublishRequestedAtUtc);
-            Assert.False(await db.Venues.Where(v => v.Id == secondVenueId).Select(v => v.IsIdentityVerified).SingleAsync());
+            Assert.Equal(RoomStatus.Published, room.Status);
+            Assert.Equal(FixedNow, room.FirstPublishedAtUtc);
+            Assert.Null(room.PublishRequestedAtUtc);
+            Assert.True(await db.Venues.Where(v => v.Id == secondVenueId).Select(v => v.IsIdentityVerified).SingleAsync());
         }
+
+        Assert.DoesNotContain(CreateWorkspace().Snapshot().ReviewQueue.PublishRequests, r => r.RoomId == roomId);
+    }
+
+    [Fact]
+    public async Task FirstListingReviewDisabled_NewHostPublishesWithoutEnteringTheQueue()
+    {
+        var host = await NewHostAsync();
+        Guid venueId;
+        Guid roomId;
+
+        await using (var db = CreateContext())
+        {
+            var service = CreateService(db, firstListingReviewRequired: false);
+            venueId = (await service.CreateVenueAsync(host.Id, NewSaveVenueRequest("Open Door Hall"))).Value!.Resource.Id;
+            roomId = (await service.CreateRoomAsync(host.Id, venueId, NewSaveRoomRequest("Community Room"))).Value!.Resource.Id;
+            await AddPhotoAsync(db, roomId);
+
+            var published = await service.UpdateRoomAsync(
+                host.Id, roomId, NewSaveRoomRequest("Community Room", status: "published"));
+            Assert.Null(published.Error);
+        }
+
+        await using (var db = CreateContext())
+        {
+            var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
+            Assert.Equal(RoomStatus.Published, room.Status);
+            Assert.Equal(FixedNow, room.FirstPublishedAtUtc);
+            Assert.Null(room.PublishRequestedAtUtc);
+            Assert.True(await db.Venues.Where(v => v.Id == venueId).Select(v => v.IsIdentityVerified).SingleAsync());
+        }
+
+        Assert.DoesNotContain(CreateWorkspace().Snapshot().ReviewQueue.PublishRequests, r => r.RoomId == roomId);
     }
 
     [Fact]
@@ -427,9 +461,10 @@ public class SingleGateModerationIntegrationTests
             Task.CompletedTask;
     }
 
-    private sealed class DisabledFeatureFlags : IFeatureFlags
+    private sealed class ModerationFeatureFlags(bool firstListingReviewRequired) : IFeatureFlags
     {
-        public bool IsEnabled(string key) => false;
+        public bool IsEnabled(string key) =>
+            firstListingReviewRequired && key == FeatureFlagKeys.ManageFirstListingReviewRequired;
     }
 
     /// <summary>

@@ -195,7 +195,7 @@ export async function getSuburbs() {
 /** The search area's own name and centre — the frame the map opens on. */
 export async function getGeofence() {
   return {
-    areaName: 'Vienna & Merrifield, Virginia',
-    center: { lat: CENTER.lat, lng: CENTER.lng },
+    areaName: 'Washington metropolitan area',
+    center: { lat: 38.9072, lng: -77.0369 },
   };
 }

@@ -153,6 +153,7 @@ const knownWireTokenSets = <String, List<String>>{
 
 const knownFeatureFlagKeys = <String>[
   'listing.availability',
+  'manage.first_listing_review_required',
   'manage.open_hours_required',
   'booking.counter_offers',
   'payments.enabled',

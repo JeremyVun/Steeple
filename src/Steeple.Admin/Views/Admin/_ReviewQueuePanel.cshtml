@@ -4,8 +4,8 @@
     var queue = Model.ReviewQueue;
 }
 
-@* One human gate per venue: approving its first listing publishes it, verifies the venue, and
-   permits later rooms at that venue to publish without another review. *@
+@* One human gate per host: approving the first listing publishes it, verifies the venue, and
+   permits that host's later rooms and venues to publish without another review. *@
 <div id="admin-review-panel" class="admin-stack">
     @if (reviewError is not null)
     {
@@ -13,10 +13,10 @@
     }
 
     <section class="admin-subpanel-wide" aria-labelledby="admin-first-listings-heading">
-        <h3 id="admin-first-listings-heading">First venue listings</h3>
+        <h3 id="admin-first-listings-heading">First host listings</h3>
         <p class="admin-hint">
-            A newly claimed venue's first listing is the one you decide. Approve publishes it, marks
-            that venue verified, and makes its later rooms self-serve. Decline sends
+            A new host's first listing is the one you decide. Approve publishes it, marks
+            that venue verified, and makes all their later listings self-serve. Decline sends
             the note to their inbox so they can fix it and ask again.
         </p>
         @if (queue.PublishRequests.Count == 0)

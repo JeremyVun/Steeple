@@ -248,9 +248,9 @@ void main() {
     test('round-trips GeofenceContext', () {
       final geofence = GeofenceContext.fromJson(_loadJson('geofence.json'));
 
-      expect(geofence.areaName, 'Northern Virginia (Vienna beachhead)');
-      expect(geofence.center.longitude, closeTo(-77.2653, 0.0001));
-      expect(geofence.beachhead.maxLng, closeTo(-77.21, 0.0001));
+      expect(geofence.areaName, 'Washington metropolitan area');
+      expect(geofence.center.longitude, closeTo(-77.0369, 0.0001));
+      expect(geofence.beachhead.maxLng, closeTo(-76.35, 0.0001));
     });
   });
 

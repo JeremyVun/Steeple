@@ -44,7 +44,7 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `availability_checked` ✅ | server | roomId, available, conflictCount |
 | `counter_offer_sent` ✅ | server | applicationId, roomId, superseded (bool) |
 | `counter_offer_responded` ✅ | server | applicationId, decision, timeToResponseHours |
-| `listing_moderated` ✅ | Admin (stdout, same log-line shape) **and** server (`IAnalyticsSink`, for later rooms at a verified venue) | roomId, venueId, outcome (approved/declined), actor — `actor` is the operator's `Remote-User`, or `"auto:verified_venue"` when `ManageService` publishes without another review |
+| `listing_moderated` ✅ | Admin (stdout, same log-line shape) **and** server (`IAnalyticsSink`, for automatic listing publication) | roomId, venueId, outcome (approved/declined), actor — `actor` is the operator's `Remote-User`, `"auto:trusted_host"` for later listings, or `"auto:review_disabled"` when the first-listing gate is off |
 | `listing_unlisted_by_operator` ✅ | Admin (stdout only) | roomId, venueId, actor — the abuse/DMCA takedown lever |
 | `application_submitted` gains additive `instant` ✅ *(2026-08-05)* | server | (dimension on the existing row above) |
 | `payment_method_saved` ✅ | server | brand |

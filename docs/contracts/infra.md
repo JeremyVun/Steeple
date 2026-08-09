@@ -29,10 +29,12 @@
   `booking.recurring_materialization`, `trust.phone_otp_stepup`.
 
 Flags read by the API today (as-built, `Flags:` config section): server-side gates
-`listing.availability`, `manage.open_hours_required`, `booking.counter_offers`,
+`listing.availability`, `manage.first_listing_review_required`, `manage.open_hours_required`, `booking.counter_offers`,
 `payments.enabled` plus the three
-public `mobile.*` rows. All default **off** in `appsettings.json` and are **on** in
-`appsettings.Development.json` so the dev loop exercises them.
+public `mobile.*` rows. `manage.first_listing_review_required` defaults **on** as the safe
+operating mode and can be disabled in Compose with `FIRST_LISTING_REVIEW_REQUIRED=false`; the
+other server-side rollout flags default **off** in `appsettings.json`. Development enables all
+of them so the dev loop exercises each gated path.
 
 ### Production configuration gate
 

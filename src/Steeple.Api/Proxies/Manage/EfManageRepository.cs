@@ -146,4 +146,11 @@ public sealed class EfManageRepository : IManageRepository
         _db.VenueVerificationRequests.AnyAsync(
             r => r.VenueId == venueId && r.Status == VenueVerificationStatus.Pending, ct);
 
+    /// <inheritdoc />
+    public Task<bool> IsTrustedHostAsync(Guid userId, CancellationToken ct = default) =>
+        _db.Rooms.AnyAsync(
+            r => r.FirstPublishedAtUtc != null
+                && _db.VenueManagers.Any(m => m.VenueId == r.VenueId && m.UserId == userId),
+            ct);
+
 }

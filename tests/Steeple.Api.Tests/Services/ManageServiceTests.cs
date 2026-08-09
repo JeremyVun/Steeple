@@ -49,13 +49,13 @@ public class ManageServiceTests
         Assert.DoesNotContain(analytics.Events, e => e.EventType == "listing_publish_requested");
     }
 
-    // ----- Venue-scoped review gate -------------------------------------------------------------
+    // ----- Trusted-host single gate -------------------------------------------------------------
 
     [Fact]
-    public async Task UpdateRoomAsync_VerifiedVenuePublishesNewRoom_PublishesImmediatelyWithoutQueueing()
+    public async Task UpdateRoomAsync_TrustedHostPublishesNewRoom_PublishesImmediatelyWithoutQueueing()
     {
-        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
-        venue.IsIdentityVerified = true;
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        repo.TrustedHost = true;
         AddPhoto(room);
         var service = CreateService(repo, managers, out var analytics);
 
@@ -71,7 +71,7 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_UnverifiedVenuePublishesNewRoom_StaysUnpublishedAndQueues()
+    public async Task UpdateRoomAsync_UntrustedHostPublishesNewRoom_StaysUnpublishedAndQueues()
     {
         var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
         AddPhoto(room);
@@ -88,10 +88,28 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_VerifiedVenueAutoPublish_PreservesVerifiedInvariant()
+    public async Task UpdateRoomAsync_FirstListingReviewDisabled_AutoPublishesUntrustedHost()
     {
         var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
-        venue.IsIdentityVerified = true;
+        AddPhoto(room);
+        var service = CreateService(repo, managers, out var analytics, firstListingReviewRequired: false);
+
+        var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
+
+        Assert.Null(result.Error);
+        Assert.Equal(RoomStatus.Published, room.Status);
+        Assert.Equal(FixedNow, room.FirstPublishedAtUtc);
+        Assert.Null(room.PublishRequestedAtUtc);
+        Assert.True(venue.IsIdentityVerified);
+        Assert.DoesNotContain(analytics.Events, e => e.EventType == "listing_publish_requested");
+        Assert.Contains(analytics.Events, e => e.EventType == "listing_moderated");
+    }
+
+    [Fact]
+    public async Task UpdateRoomAsync_TrustedHostAutoPublish_VerifiesTheVenue()
+    {
+        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
+        repo.TrustedHost = true;
         AddPhoto(room);
         var service = CreateService(repo, managers, out _);
 
@@ -128,10 +146,10 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_VerifiedVenueWithNoPhotos_StillBlockedByTheAutomaticGate()
+    public async Task UpdateRoomAsync_TrustedHostWithNoPhotos_StillBlockedByTheAutomaticGate()
     {
-        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
-        venue.IsIdentityVerified = true;
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        repo.TrustedHost = true;
         var service = CreateService(repo, managers, out _);
 
         var result = await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
@@ -141,10 +159,10 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_VerifiedVenueWithOpenHoursFlagOnAndNoOpenHours_StillBlocked()
+    public async Task UpdateRoomAsync_TrustedHostWithOpenHoursFlagOnAndNoOpenHours_StillBlocked()
     {
-        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
-        venue.IsIdentityVerified = true;
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
+        repo.TrustedHost = true;
         AddPhoto(room);
         var service = CreateService(repo, managers, out _, openHoursRequired: true, roomHasOpenHours: false);
 
@@ -155,15 +173,15 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateRoomAsync_VenueBecomesVerifiedBetweenRequests_PublishesTheQueuedRoom()
+    public async Task UpdateRoomAsync_HostBecomesTrustedBetweenRequests_PublishesTheQueuedRoom()
     {
-        var (repo, managers, venue, room, manager) = NewScenario(status: RoomStatus.Draft);
+        var (repo, managers, _, room, manager) = NewScenario(status: RoomStatus.Draft);
         AddPhoto(room);
         var service = CreateService(repo, managers, out _);
         await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
         Assert.NotNull(repo.Rooms.Single().PublishRequestedAtUtc);
 
-        venue.IsIdentityVerified = true; // a different listing at this venue got approved meanwhile
+        repo.TrustedHost = true; // a different listing of theirs got approved meanwhile
         await service.UpdateRoomAsync(manager.Id, room.Id, StatusOnlyRequest("published"));
 
         var stored = repo.Rooms.Single();
@@ -394,15 +412,17 @@ public class ManageServiceTests
     {
         var repo = new FakeManageRepository();
         var managers = new FakeVenueManagerRepository();
-        var geocoding = new FakeGeocodingGateway { Point = new GeoPoint(40.7128, -74.0060) }; // NYC, outside beachhead
+        var geocoding = new FakeGeocodingGateway { Point = new GeoPoint(-33.8688, 151.2093) }; // Sydney, outside beachhead
         var service = CreateService(repo, managers, out _, geocoding);
 
-        var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest());
+        var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest(
+            addressLine: "1 Martin Place", suburb: "Sydney", postcode: "2000"));
 
         Assert.Null(result.Error);
         var venue = Assert.Single(repo.Venues);
-        Assert.Equal(40.7128, venue.Latitude);
-        Assert.Equal(-74.0060, venue.Longitude);
+        Assert.Equal(-33.8688, venue.Latitude);
+        Assert.Equal(151.2093, venue.Longitude);
+        Assert.Equal("1 Martin Place, Sydney, 2000", geocoding.Address);
     }
 
     [Fact]
@@ -772,15 +792,19 @@ public class ManageServiceTests
         out FakeAnalyticsSink analytics,
         IGeocodingGateway? geocoding = null,
         bool openHoursRequired = false,
-        bool roomHasOpenHours = false)
+        bool roomHasOpenHours = false,
+        bool firstListingReviewRequired = true)
     {
         analytics = new FakeAnalyticsSink();
+        var enabledFlags = new List<string>();
+        if (openHoursRequired) enabledFlags.Add(FeatureFlagKeys.ManageOpenHoursRequired);
+        if (firstListingReviewRequired) enabledFlags.Add(FeatureFlagKeys.ManageFirstListingReviewRequired);
         return new ManageService(
             repo,
             managers,
             geocoding ?? new FakeGeocodingGateway { Point = new GeoPoint(38.9012, -77.2653) },
             analytics,
-            new FakeFeatureFlags(openHoursRequired ? new[] { "manage.open_hours_required" } : []),
+            new FakeFeatureFlags(enabledFlags),
             new FakeAvailabilityService { RoomHasOpenHours = roomHasOpenHours },
             new FixedTimeProvider(FixedNow),
             Options.Create(new GeocodingOptions()));
@@ -852,10 +876,12 @@ public class ManageServiceTests
         public GeoPoint? Point { get; set; }
 
         public bool WasCalled { get; private set; }
+        public string? Address { get; private set; }
 
         public Task<GeoPoint?> GeocodeAsync(string address, CancellationToken ct = default)
         {
             WasCalled = true;
+            Address = address;
             return Task.FromResult(Point);
         }
 
@@ -996,6 +1022,11 @@ public class ManageServiceTests
         public Task<bool> HasPendingVenueVerificationRequestAsync(Guid venueId, CancellationToken ct = default) =>
             Task.FromResult(VerificationRequests.Any(
                 r => r.VenueId == venueId && r.Status == VenueVerificationStatus.Pending));
+
+        public bool TrustedHost { get; set; }
+
+        public Task<bool> IsTrustedHostAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(TrustedHost);
 
     }
 }

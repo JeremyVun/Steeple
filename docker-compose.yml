@@ -98,6 +98,8 @@ services:
       Push__ServiceAccountJson: "${PUSH_SERVICE_ACCOUNT_JSON:-}"
       Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_JSON_PATH:-}"
       Flags__mobile.manage_enabled: "${MOBILE_MANAGE_ENABLED:-false}"
+      # Operator escape hatch: false auto-publishes new hosts' first listings.
+      Flags__manage.first_listing_review_required: "${FIRST_LISTING_REVIEW_REQUIRED:-true}"
       # Must be on whenever web.availability_picker is on (below) — the picker's calendar,
       # free windows, and live check all read this API surface (off → 404 → all-closed grid).
       Flags__listing.availability: "${LISTING_AVAILABILITY:-true}"

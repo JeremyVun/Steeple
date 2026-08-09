@@ -8,6 +8,7 @@ namespace Steeple.Api.Services.Flags;
 public static class FeatureFlagKeys
 {
     public const string ListingAvailability = "listing.availability";
+    public const string ManageFirstListingReviewRequired = "manage.first_listing_review_required";
     public const string ManageOpenHoursRequired = "manage.open_hours_required";
     public const string BookingCounterOffers = "booking.counter_offers";
     public const string PaymentsEnabled = "payments.enabled";
@@ -18,6 +19,7 @@ public static class FeatureFlagKeys
     public static readonly IReadOnlyList<string> All =
     [
         ListingAvailability,
+        ManageFirstListingReviewRequired,
         ManageOpenHoursRequired,
         BookingCounterOffers,
         PaymentsEnabled,

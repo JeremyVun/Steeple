@@ -26,9 +26,8 @@ import { createFilterPanel } from './filters.js';
 // What the Where segment says when it is not holding a suburb. The area's own
 // name stands here once the catalog answers: this is the control that decides
 // where the search is looking, so it is the honest place to say where that is.
-// The geofence names itself for a page title — "Vienna & nearby (Northern
-// Virginia)" — and the parenthetical is the part a segment this wide cannot
-// take, so it is trimmed rather than allowed to push the other questions.
+// The geofence names itself for the page title. A parenthetical qualifier is
+// trimmed rather than allowed to push the other questions.
 const ANYWHERE = 'Anywhere nearby';
 
 // .NET's DayOfWeek, which is what the API speaks: Sunday is 0.

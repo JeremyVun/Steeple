@@ -3,7 +3,7 @@
 > **Status:** Adopted 2026-07-03; the app is **built** in `/mobile` (ROADMAP Phase 4 code
 > complete — as-built detail in `ARCHITECTURE.md`; release/ops carried into the phase-6 launch
 > checklist). Unaffected by the 2026-08-05 web-v2 migration decisions: mobile talks to the same
-> `/api/v1`, and the moderation change (one operator review per newly claimed venue) touches
+> `/api/v1`, and the moderation rule (one operator review per host) touches
 > only the provider-side `manage` fast-follow, never the organizer flows below.
 > Companion to `docs/SYSTEM_DESIGN.md` (backend/auth/notifications), `CONTRACTS.md`
 > (every wire shape the app consumes), `docs/MOBILE_CONTRACTS.md` (in-app interfaces,
