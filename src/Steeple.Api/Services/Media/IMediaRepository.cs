@@ -23,8 +23,13 @@ public interface IMediaRepository
     /// </summary>
     Task<bool> TrySaveAddedPhotoAsync(RoomPhoto photo, CancellationToken ct = default);
 
-    /// <summary>Persists pending mutations on tracked entities.</summary>
-    Task SaveChangesAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Applies staged placement phases as one transaction, saving after each phase so the
+    /// non-deferrable sort-order/cover indexes never see a transient duplicate. Returns false —
+    /// transaction rolled back and every tracked entity discarded, so the caller must re-read —
+    /// when a concurrent writer took one of the positions.
+    /// </summary>
+    Task<bool> TrySavePlacementAsync(IReadOnlyList<Action> phases, CancellationToken ct = default);
 }
 
 /// <summary>Database-derived placement for a new room photo.</summary>

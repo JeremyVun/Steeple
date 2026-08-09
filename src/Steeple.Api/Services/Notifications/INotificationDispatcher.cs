@@ -1,15 +1,14 @@
 
 namespace Steeple.Api.Services.Notifications;
 /// <summary>
-/// Fan-out on write (SYSTEM_DESIGN §8): inserts the inbox row (the record of truth), then
-/// best-effort email — a send failure is logged, never surfaced; a dropped email loses nothing
-/// because the inbox row already exists. The FCM push channel joins in Phase 4.
+/// Fan-out on write (SYSTEM_DESIGN §8): atomically inserts inbox rows (the record of truth) and
+/// durable email/push outbox rows. Provider work happens after commit in a background worker.
 /// </summary>
 public interface INotificationDispatcher
 {
     /// <summary>
-    /// Notifies each recipient: one inbox row each, plus a fire-and-forget email where the
-    /// recipient has an address and <paramref name="email"/> content is provided.
+    /// Notifies each recipient: one inbox row and push delivery row each, plus an email delivery
+    /// row where the recipient has an address and <paramref name="email"/> content is provided.
     /// </summary>
     /// <param name="payload">JSON-serialized (camelCase) into the inbox row's payload document.</param>
     Task NotifyAsync(

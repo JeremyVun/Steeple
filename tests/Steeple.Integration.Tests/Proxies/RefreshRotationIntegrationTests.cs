@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Steeple.Api.Controllers.Identity;
 using Steeple.Integration.Tests.Fixtures;
@@ -220,7 +221,8 @@ public class RefreshRotationIntegrationTests
 
     private static MemoryRefreshRotationGrace NewGrace(TimeProvider? clock = null) =>
         new(Options.Create(new AuthOptions { RefreshTokenDays = 90, RefreshReuseGraceSeconds = 30 }),
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System,
+            NullLogger<MemoryRefreshRotationGrace>.Instance);
 
     private IdentityService CreateService(SteepleDbContext db, IRefreshRotationGrace grace, TimeProvider? clock = null)
     {

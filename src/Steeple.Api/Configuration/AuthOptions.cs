@@ -58,10 +58,21 @@ public sealed class AuthOptions
     /// <summary>Per-provider ID-token acceptance: which <c>aud</c> values we trust.</summary>
     public sealed class ProviderOptions
     {
+        /// <summary>Explicit provider mode: <c>enabled</c> or <c>disabled</c> in Production.</summary>
+        public string Mode { get; set; } = "";
+
         /// <summary>
         /// Accepted OAuth client ids for this provider (web client id, mobile client ids, Apple
         /// Services ID + app bundle id). An ID token whose <c>aud</c> is not listed is rejected.
         /// </summary>
         public List<string> ClientIds { get; set; } = [];
+
+        /// <summary>
+        /// Whether this provider accepts tokens. An omitted mode keeps Development's historical
+        /// client-id inference; Production validation requires an explicit mode.
+        /// </summary>
+        public bool IsEnabled =>
+            string.Equals(Mode, "enabled", StringComparison.OrdinalIgnoreCase)
+            || (string.IsNullOrWhiteSpace(Mode) && ClientIds.Any(id => !string.IsNullOrWhiteSpace(id)));
     }
 }

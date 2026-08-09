@@ -35,6 +35,8 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
 
         // The lazy expiry sweep scans undecided applications past their ExpiresAtUtc.
         builder.HasIndex(a => new { a.Status, a.ExpiresAtUtc });
+        builder.HasIndex(a => new { a.CreatedAtUtc, a.Id })
+            .HasDatabaseName("IX_applications_Retention");
 
         // Idempotent submits: a replayed (organizer, key) resolves to the original application.
         builder

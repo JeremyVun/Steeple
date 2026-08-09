@@ -116,9 +116,8 @@ with keyboard only, confirm the announce, reload, see state 2 ("Your rating — 
 **Verify:** two browsers (recipe below): host inbox shows the Finished hosting row and
 tally; the host letter shows the trust chip **only after** the organizer has a revealed
 rating (cold start renders silence — check both); host rates; both sides now see both
-ratings (reveal). Then the email leg: from the dev mailbox
-(http://localhost:5200/dev/mailbox), the host's `ratingReceived` CTA lands on the **host**
-letter, the guest's on the guest letter.
+ratings (reveal). The original email leg was retired 2026-08-09: `ratingReceived` is
+inbox/push-only passive engagement, so neither side gets mail.
 
 ## P4 — Discovery surfaces + ambience + design system
 

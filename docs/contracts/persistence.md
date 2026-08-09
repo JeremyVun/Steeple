@@ -3,7 +3,7 @@
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–018` and `src/Steeple.Persistence/` (2026-08-07).
+> Verified against `db/changelog/001–021` and `src/Steeple.Persistence/` (2026-08-09).
 
 ## Ownership rule (non-negotiable)
 
@@ -39,8 +39,14 @@ users 1─* user_agreements (per-version ToS/Privacy)   users 1─* notification
 users 1─* devices                                     venues 1─* venue_managers *─1 users
 venues 1─* venue_verification_requests 1─* venue_verification_documents
 
+notification_outbox — durable email/push envelopes written atomically with inbox rows;
+  due-row partial index, lease attempts, delivered/terminal-failure stamps (020)
+
 users 1─* idempotency_records (016: PK (UserId, Scope, Key) → ResourceId, CreatedAtUtc;
   the spent-key ledger for manage creates)
+
+data-retention indexes (021) — global oldest-first scans for terminal tokens, notifications,
+  replay keys, private correspondence, and terminal outbox rows
 
 rooms 1─* room_open_hours (per-weekday [start,end) windows)
 rooms 1─* room_blackout_dates (unique (RoomId, Date))
@@ -91,9 +97,11 @@ analytics_events — legacy table (001); the live analytics path is stdout → P
   (016). Written in the same transaction as the venue/room it bought, so the PK *is* the race
   guard: two overlapping creates with one key can only land one, and the loser rolls its
   resource back with it. `Scope` ∈ `manage.venue.create` | `manage.room.create` — persisted
-  strings, never renamed without a data migration. Rows are permanent (no TTL). Venues have no
-  owner column (ownership is `venue_managers`), which is why this is a table rather than the
-  applications module's per-row column (`contracts/manage.md`).
+  strings, never renamed without a data migration. Rows are retained for 30 days, as are
+  applications' per-row keys; the bounded retention sweep then removes the replay key without
+  touching the created resource. Venues have no owner column (ownership is `venue_managers`),
+  which is why this is a table rather than the applications module's per-row column
+  (`contracts/manage.md`).
 - **One open counter-offer per application:** partial unique index on
   `application_counter_offers (ApplicationId) WHERE Status = 0`.
 - **Priced listings only:** `rooms."PricePerHour"` NOT NULL + `CHECK (> 0)` (010 — free

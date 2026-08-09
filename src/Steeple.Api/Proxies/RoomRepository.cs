@@ -20,8 +20,9 @@ public class RoomRepository : IRoomRepository
             .ToListAsync(ct);
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
-        await BuildOrdered(criteria).ToListAsync(ct);
+    public async Task<IReadOnlyList<Room>> SearchCandidatesAsync(
+        RoomSearchCriteria criteria, int maxCandidates, CancellationToken ct = default) =>
+        await BuildOrdered(criteria).Take(maxCandidates).ToListAsync(ct);
 
     /// <inheritdoc />
     public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
@@ -70,9 +71,14 @@ public class RoomRepository : IRoomRepository
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
     /// <inheritdoc />
-    public Task<Room?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default)
+    public Task<Room?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default) =>
+        BuildSlugQuery(venueSlug, roomSlug).FirstOrDefaultAsync(ct);
+
+    /// <summary>Builds the canonical-slug lookup query; internal so SQL-shape tests can pin sargability.</summary>
+    internal IQueryable<Room> BuildSlugQuery(string venueSlug, string roomSlug)
     {
-        // Invariant lower-casing on the inputs; slugs are canonical lower-case ASCII.
+        // Normalize only the URL inputs. Managed writes and seed/import data store canonical
+        // lower-case slugs, so applying LOWER() to either indexed column would waste its index.
         var venueSlugLower = venueSlug.ToLowerInvariant();
         var roomSlugLower = roomSlug.ToLowerInvariant();
 
@@ -80,18 +86,21 @@ public class RoomRepository : IRoomRepository
             .AsNoTracking()
             .Include(r => r.Venue)
             .Include(r => r.Photos)
-            .FirstOrDefaultAsync(
-                r => r.Venue!.Slug.ToLower() == venueSlugLower && r.Slug.ToLower() == roomSlugLower,
-                ct);
+            .Where(r => r.Venue!.Slug == venueSlugLower && r.Slug == roomSlugLower);
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(
+        BoundingBox bounds, CancellationToken ct = default)
     {
         return await _db.Rooms
             .AsNoTracking()
             .Where(r => r.Status == RoomStatus.Published
                 && r.OperatorUnlistedAtUtc == null
+                && r.Venue!.Latitude >= bounds.MinLatitude
+                && r.Venue.Latitude <= bounds.MaxLatitude
+                && r.Venue.Longitude >= bounds.MinLongitude
+                && r.Venue.Longitude <= bounds.MaxLongitude
                 && r.Venue!.Suburb != "")
             .Select(r => r.Venue!.Suburb)
             .Distinct()

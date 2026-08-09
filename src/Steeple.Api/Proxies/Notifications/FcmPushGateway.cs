@@ -6,10 +6,9 @@ namespace Steeple.Api.Proxies.Notifications;
 /// <see cref="IPushGateway"/> adapter over the FirebaseAdmin SDK (Apache-2.0, $0 — SYSTEM_DESIGN
 /// §17 decision log). Sends FCM **data messages only** (CONTRACTS §9): no notification block, so
 /// the client always renders from the inbox row. An unregistered/invalid token deletes that device
-/// row (best-effort) so the registry stops sending to a dead device; every failure is logged, never
-/// thrown. Registered as a <b>singleton</b>: the dispatcher fire-and-forgets sends past the end of
-/// the request, so the gateway must not capture anything request-scoped — dead-token cleanup opens
-/// its own service scope for a fresh device registry instead.
+/// row (best-effort) so the registry stops sending to a dead device; other failures throw so the
+/// durable outbox worker can retry. Registered as a <b>singleton</b> because FirebaseMessaging is
+/// process-wide; dead-token cleanup opens its own service scope for a fresh device registry.
 /// </summary>
 public sealed class FcmPushGateway : IPushGateway
 {
@@ -55,6 +54,7 @@ public sealed class FcmPushGateway : IPushGateway
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "FCM send failed for a push token.");
+                throw;
             }
         }
     }
@@ -63,8 +63,8 @@ public sealed class FcmPushGateway : IPushGateway
     {
         try
         {
-            // A fresh scope, not a captured registry: this runs on a fire-and-forget path that may
-            // outlive the request whose scoped DbContext a captured registry would be holding.
+            // A fresh scope, not a captured registry: the singleton gateway cannot capture the
+            // outbox worker's scoped DbContext.
             await using var scope = _scopes.CreateAsyncScope();
             var devices = scope.ServiceProvider.GetRequiredService<IDeviceRegistry>();
             await devices.DeleteByTokenAsync(token, CancellationToken.None).ConfigureAwait(false);

@@ -128,27 +128,85 @@ public sealed class MediaService : IMediaService
             return ManageResult<RoomPhotoDto>.Fail(MediaErrorCodes.InvalidPhoto, "Captions are limited to 500 characters.");
         }
 
-        if (request.Caption is not null)
+        for (var attempt = 1; attempt <= MaxPlacementAttempts; attempt++)
         {
-            photo!.Caption = string.IsNullOrWhiteSpace(request.Caption) ? null : request.Caption.Trim();
-        }
-
-        if (request.SortOrder is { } sortOrder)
-        {
-            photo!.SortOrder = Math.Max(0, sortOrder);
-        }
-
-        if (request.IsPrimary == true)
-        {
-            foreach (var sibling in room!.Photos)
+            if (request.Caption is not null)
             {
-                sibling.IsPrimary = sibling.Id == photo!.Id;
+                photo!.Caption = string.IsNullOrWhiteSpace(request.Caption) ? null : request.Caption.Trim();
+            }
+
+            room!.UpdatedAtUtc = _clock.GetUtcNow();
+            if (await _photos.TrySavePlacementAsync(PlacementPhases(room, photo!, request), ct).ConfigureAwait(false))
+            {
+                return ManageResult<RoomPhotoDto>.Ok(photo!.ToDto());
+            }
+
+            (photo, room, error) = await LoadScopedPhotoAsync(callerId, photoId, ct).ConfigureAwait(false);
+            if (error is not null)
+            {
+                return new ManageResult<RoomPhotoDto>(null, error);
             }
         }
 
-        room!.UpdatedAtUtc = _clock.GetUtcNow();
-        await _photos.SaveChangesAsync(ct).ConfigureAwait(false);
-        return ManageResult<RoomPhotoDto>.Ok(photo!.ToDto());
+        throw new InvalidOperationException(
+            $"Could not settle the photo order after {MaxPlacementAttempts} concurrent attempts.");
+    }
+
+    /// <summary>
+    /// Stages an edit as phases that are each safe on their own against the non-deferrable
+    /// sort-order and cover indexes: positions vacate to a private negative range before any
+    /// sibling takes a new one, and the room loses its cover before the new cover claims it. EF's
+    /// statement order within a phase then cannot decide whether the write succeeds.
+    /// </summary>
+    private static IReadOnlyList<Action> PlacementPhases(Room room, RoomPhoto photo, UpdatePhotoRequest request)
+    {
+        List<(RoomPhoto Photo, int Position)> moved = [];
+        if (request.SortOrder is { } requested)
+        {
+            var ordered = room.Photos
+                .OrderBy(candidate => candidate.SortOrder)
+                .ThenBy(candidate => candidate.CreatedAtUtc)
+                .ThenBy(candidate => candidate.Id)
+                .ToList();
+            ordered.Remove(photo);
+            ordered.Insert(Math.Clamp(requested, 0, ordered.Count), photo);
+            moved = ordered
+                .Select((candidate, position) => (Photo: candidate, Position: position))
+                .Where(entry => entry.Photo.SortOrder != entry.Position)
+                .ToList();
+        }
+
+        var demoted = request.IsPrimary == true
+            ? room.Photos.Where(candidate => candidate.IsPrimary && candidate.Id != photo.Id).ToList()
+            : [];
+
+        return
+        [
+            () =>
+            {
+                for (var index = 0; index < moved.Count; index++)
+                {
+                    moved[index].Photo.SortOrder = -(index + 1);
+                }
+
+                foreach (var sibling in demoted)
+                {
+                    sibling.IsPrimary = false;
+                }
+            },
+            () =>
+            {
+                foreach (var (candidate, position) in moved)
+                {
+                    candidate.SortOrder = position;
+                }
+
+                if (request.IsPrimary == true)
+                {
+                    photo.IsPrimary = true;
+                }
+            },
+        ];
     }
 
     /// <inheritdoc />
@@ -160,41 +218,63 @@ public sealed class MediaService : IMediaService
             return new ManageResult<DeletedPhoto>(null, error);
         }
 
-        _photos.RemovePhoto(photo!);
-
-        // Promote the next photo when the cover is deleted.
-        if (photo!.IsPrimary)
+        for (var attempt = 1; attempt <= MaxPlacementAttempts; attempt++)
         {
-            var next = room!.Photos
-                .Where(p => p.Id != photo.Id)
-                .OrderBy(p => p.SortOrder)
-                .FirstOrDefault();
-            if (next is not null)
+            var removed = photo!;
+
+            // The cover passes to the next photo — but only once the old cover's row is gone, so
+            // the partial unique index never sees two of them.
+            var successor = removed.IsPrimary
+                ? room!.Photos
+                    .Where(candidate => candidate.Id != removed.Id)
+                    .OrderBy(candidate => candidate.SortOrder)
+                    .FirstOrDefault()
+                : null;
+            room!.UpdatedAtUtc = _clock.GetUtcNow();
+
+            var saved = await _photos.TrySavePlacementAsync(
+                [
+                    () => _photos.RemovePhoto(removed),
+                    () =>
+                    {
+                        if (successor is not null)
+                        {
+                            successor.IsPrimary = true;
+                        }
+                    },
+                ],
+                ct).ConfigureAwait(false);
+
+            if (saved)
             {
-                next.IsPrimary = true;
+                // Store cleanup is best-effort after the row is gone — an orphaned CDN object is
+                // harmless; a DB row pointing at deleted bytes is not.
+                if (removed.StorageKey is { } keyBase)
+                {
+                    try
+                    {
+                        await _store
+                            .DeleteAsync(VariantKeys(removed, keyBase), ct)
+                            .ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Never fail the delete over storage cleanup.
+                    }
+                }
+
+                return ManageResult<DeletedPhoto>.Ok(new DeletedPhoto(photoId));
+            }
+
+            (photo, room, error) = await LoadScopedPhotoAsync(callerId, photoId, ct).ConfigureAwait(false);
+            if (error is not null)
+            {
+                return new ManageResult<DeletedPhoto>(null, error);
             }
         }
 
-        room!.UpdatedAtUtc = _clock.GetUtcNow();
-        await _photos.SaveChangesAsync(ct).ConfigureAwait(false);
-
-        // Store cleanup is best-effort after the row is gone — an orphaned CDN object is
-        // harmless; a DB row pointing at deleted bytes is not.
-        if (photo.StorageKey is { } keyBase)
-        {
-            try
-            {
-                await _store
-                    .DeleteAsync(VariantKeys(photo, keyBase), ct)
-                    .ConfigureAwait(false);
-            }
-            catch
-            {
-                // Never fail the delete over storage cleanup.
-            }
-        }
-
-        return ManageResult<DeletedPhoto>.Ok(new DeletedPhoto(photoId));
+        throw new InvalidOperationException(
+            $"Could not settle the photo order after {MaxPlacementAttempts} concurrent attempts.");
     }
 
     private static IReadOnlyList<string> VariantKeys(RoomPhoto photo, string keyBase)

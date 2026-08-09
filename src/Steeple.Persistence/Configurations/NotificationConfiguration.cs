@@ -17,6 +17,8 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
 
         // Inbox reads are per-user, newest first, cursor-paginated.
         builder.HasIndex(n => new { n.UserId, n.CreatedAtUtc });
+        builder.HasIndex(n => new { n.CreatedAtUtc, n.Id })
+            .HasDatabaseName("IX_notifications_Retention");
 
         builder
             .HasOne(n => n.User)

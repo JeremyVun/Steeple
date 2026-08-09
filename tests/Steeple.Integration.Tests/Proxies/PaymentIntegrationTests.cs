@@ -94,6 +94,27 @@ public class PaymentIntegrationTests
     }
 
     [Fact]
+    public async Task PaymentsDisabled_InstantBookingStaysOfflineAndSweepDoesNoWork()
+    {
+        var organizerId = await SeedOrganizerAsync(last4: null);
+
+        await using var db = CreateContext();
+        var (applications, _, payments) = CreateStack(db, paymentsEnabled: false);
+        var result = await applications.SubmitAsync(
+            GymnasiumId, organizerId,
+            SubmitRequest(new DateOnly(2027, 8, 14), new TimeOnly(9, 0), new TimeOnly(11, 0)),
+            idempotencyKey: null, remoteIp: null);
+
+        Assert.Null(result.Error);
+        Assert.Equal("approved", result.Value!.Application.Status);
+        var booking = await db.Bookings.SingleAsync(b => b.OrganizerId == organizerId);
+        Assert.Null(booking.PricePerOccurrence);
+        Assert.Null(booking.Currency);
+        Assert.Empty(await db.Payments.Where(p => p.BookingId == booking.Id).ToListAsync());
+        Assert.Equal(SweepOutcome.Empty, await payments.SweepAsync(FixedNow));
+    }
+
+    [Fact]
     public async Task SweepTwice_AndConcurrentClaim_NeverDoubleCharges()
     {
         var organizerId = await SeedOrganizerAsync(last4: "4242");
@@ -265,16 +286,20 @@ public class PaymentIntegrationTests
     /// <see cref="PaymentService"/> over <see cref="MockPaymentGateway"/>, payments flag on,
     /// retry pacing off (tests re-attempt immediately).
     /// </summary>
-    private static (ApplicationService Applications, BookingService Bookings, PaymentService Payments) CreateStack(SteepleDbContext db)
+    private static (ApplicationService Applications, BookingService Bookings, PaymentService Payments) CreateStack(
+        SteepleDbContext db,
+        bool paymentsEnabled = true)
     {
         var clock = new FixedTimeProvider(FixedNow);
         var venueManagers = new EfVenueManagerRepository(db);
-        var flags = new TestFeatureFlags(PaymentService.PaymentsFlag);
+        var flags = paymentsEnabled
+            ? new TestFeatureFlags(PaymentService.PaymentsFlag)
+            : new TestFeatureFlags();
         var options = PaymentTestOptions.Payments(retryIntervalSeconds: 0);
 
         var payments = new PaymentService(
             new EfPaymentRepository(db), new MockPaymentGateway(), venueManagers,
-            new NullNotifications(), new NullAnalytics(), clock, options);
+            new NullNotifications(), new NullAnalytics(), flags, clock, options);
 
         var bookings = new BookingService(
             new EfBookingRepository(db), venueManagers, new NullRatings(), payments, flags,

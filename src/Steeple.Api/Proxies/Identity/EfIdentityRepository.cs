@@ -1,9 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Steeple.Api.Proxies.Identity;
 /// <summary>EF Core adapter for <see cref="IIdentityRepository"/> over <see cref="SteepleDbContext"/>.</summary>
 public sealed class EfIdentityRepository : IIdentityRepository
 {
+    /// <summary>The idempotency constraint for legal acceptances.</summary>
+    public const string AgreementVersionIndex = "IX_user_agreements_UserId_DocType_Version";
+
     private readonly SteepleDbContext _db;
     private readonly TimeProvider _clock;
 
@@ -117,23 +121,30 @@ public sealed class EfIdentityRepository : IIdentityRepository
             return;
         }
 
-        _db.UserAgreements.Add(new UserAgreement
+        var agreement = new UserAgreement
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             DocType = docType,
             Version = version,
             AcceptedAtUtc = _clock.GetUtcNow(),
-        });
+        };
+        _db.UserAgreements.Add(agreement);
 
         try
         {
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (
+            ex.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: AgreementVersionIndex,
+            })
         {
             // Two concurrent accepts of the same version raced on the unique index — the record
             // exists either way, which is all this method promises.
+            _db.Entry(agreement).State = EntityState.Detached;
         }
     }
 

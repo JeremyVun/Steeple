@@ -1,8 +1,8 @@
 
 namespace Steeple.Persistence.Models;
 /// <summary>
-/// One inbox row for a user-facing event (SYSTEM_DESIGN §8 — inbox = truth). Email/push
-/// fan-out is best-effort on top of this row.
+/// One inbox row for a user-facing event (SYSTEM_DESIGN §8 — inbox = truth). Durable email/push
+/// outbox rows are committed alongside this row by the API dispatcher.
 /// </summary>
 public class Notification
 {

@@ -34,6 +34,16 @@ Flags read by the API today (as-built, `Flags:` config section): server-side gat
 public `mobile.*` rows. All default **off** in `appsettings.json` and are **on** in
 `appsettings.Development.json` so the dev loop exercises them.
 
+### Production configuration gate
+
+`ProductionConfigurationValidator` runs before adapter registration and reports every invalid
+capability in one startup error. Production requires explicit modes for Google/Apple SSO,
+Turnstile, email, geocoding, media, and push; Apple, Resend, a real geocoder, and object storage
+are mandatory. Turnstile may be explicitly `disabled` before general release, and push may be
+explicitly `disabled`. The gate also requires an HTTPS SEO base, a non-development database
+password, a non-repository JWT key, and `payments.enabled=false` while the gateway is mock.
+Development is exempt and retains credential inference for local adapter testing.
+
 ## 9. Non-API integration contracts
 
 - **Admin edge auth (authelia):** Admin is only reachable through the authelia-gated
@@ -75,5 +85,9 @@ public `mobile.*` rows. All default **off** in `appsettings.json` and are **on**
   `1600.jpg` beneath it. Upload writes are compensated on partial variant or database failure.
   PostgreSQL enforces unique non-null `StorageKey`, unique `(RoomId, SortOrder)`, and at most
   one `IsPrimary` row per room; concurrent placement retries only those named position
-  conflicts. Changelog 019 preserves formerly shared content-hash images as URL-only legacy
+  conflicts. Those indexes are not deferrable, so every multi-row placement write (reorder,
+  make-primary, delete-and-promote) is staged in phases inside one transaction — positions vacate
+  to a private negative range and the old cover is demoted or deleted before the new one claims
+  it — rather than trusting EF's statement order within a `SaveChanges`.
+  Changelog 019 preserves formerly shared content-hash images as URL-only legacy
   rows (`StorageKey = null`), so deleting either row cannot delete bytes another row renders.

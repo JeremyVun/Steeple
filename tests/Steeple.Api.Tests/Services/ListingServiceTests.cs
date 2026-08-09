@@ -77,6 +77,20 @@ public class ListingServiceTests
         Assert.Equal(policy.Bounds, repository.SitemapBounds);
     }
 
+    [Fact]
+    public async Task GetSuburbsAsync_AsksTheRepositoryForTheServedArea()
+    {
+        var repository = new StubRoomRepository(CreateRoom(RoomStatus.Published));
+        var policy = CreatePolicy();
+        var service = new ListingService(
+            repository, policy, new FakeRatingService(), new FakeAvailabilityService(),
+            new NullAnalyticsSink(), new FixedTimeProvider());
+
+        await service.GetSuburbsAsync();
+
+        Assert.Equal(policy.Bounds, repository.SuburbBounds);
+    }
+
     private static ListingService CreateService(Room room) =>
         new(new StubRoomRepository(room), CreatePolicy(), new FakeRatingService(), new FakeAvailabilityService(),
             new NullAnalyticsSink(), new FixedTimeProvider());
@@ -132,14 +146,20 @@ public class ListingServiceTests
         public Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Room>>([]);
 
-        public Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
+        public Task<IReadOnlyList<Room>> SearchCandidatesAsync(
+            RoomSearchCriteria criteria, int maxCandidates, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Room>>([]);
 
         public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) =>
             Task.FromResult(0);
 
-        public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<string>>([]);
+        public BoundingBox? SuburbBounds { get; private set; }
+
+        public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(BoundingBox bounds, CancellationToken ct = default)
+        {
+            SuburbBounds = bounds;
+            return Task.FromResult<IReadOnlyList<string>>([]);
+        }
 
         public BoundingBox? SitemapBounds { get; private set; }
 

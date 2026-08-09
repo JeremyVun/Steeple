@@ -2,13 +2,13 @@
 namespace Steeple.Api.Services.Notifications;
 /// <summary>
 /// Port: FCM push delivery (CONTRACTS §9). Sends **data messages only** — no notification block —
-/// so clients always render from the inbox row, never from push content. Implementations must be
-/// safe to fire-and-forget: they throw only for programming errors, and report delivery failures
-/// (including invalid/unregistered tokens) by logging.
+/// so clients always render from the inbox row, never from push content. Implementations throw on
+/// retryable provider failure so the outbox worker can persist retry state; an unregistered token
+/// is cleaned up and treated as a successful terminal no-op.
 /// </summary>
 public interface IPushGateway
 {
-    /// <summary>Sends one data message to every token, best-effort.</summary>
+    /// <summary>Sends one data message to every token.</summary>
     Task SendAsync(IReadOnlyList<string> fcmTokens, PushMessage message, CancellationToken ct = default);
 }
 

@@ -7,7 +7,7 @@ using Steeple.Integration.Tests.Fixtures;
 namespace Steeple.Integration.Tests.Proxies;
 /// <summary>
 /// Integration test for the time-first ("When") search over real Postgres: the EF-translatable
-/// open-hours/blackout SQL prefilter (<see cref="RoomRepository.SearchAllAsync"/>) plus the
+/// open-hours/blackout SQL prefilter (<see cref="RoomRepository.SearchCandidatesAsync"/>) plus the
 /// <see cref="AvailabilityService"/> free-window refinement, driven end-to-end through
 /// <see cref="ListingService"/>. Seeds four rooms — only one has a free window matching an explicit
 /// 18:00–20:00 request on the target Monday — and asserts the search returns exactly that room with
@@ -141,23 +141,95 @@ public class WhenSearchIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task WhenSearch_MaterializesAndEvaluatesAtMostThreeHundredStableCandidates()
+    {
+        var venue = NewVenue();
+        venue.Name = "Candidate Cap Venue";
+        venue.Latitude = 38.8500;
+        venue.Longitude = -77.1300;
+        var rooms = Enumerable.Range(0, 301).Select(i =>
+        {
+            var room = NewRoom(venue.Id, $"cap-room-{i:D3}");
+            room.Name = $"Cap Room {i:D3}";
+            room.Slug = $"cap-room-{i:D3}";
+            return room;
+        }).ToList();
+
+        await using (var seed = CreateContext())
+        {
+            seed.Venues.Add(venue);
+            seed.Rooms.AddRange(rooms);
+            seed.RoomOpenHours.AddRange(rooms.Select(r => OpenHours(r.Id, DayOfWeek.Monday, "09:00", "17:00")));
+            await seed.SaveChangesAsync();
+        }
+
+        try
+        {
+            await using var db = CreateContext();
+            var availability = new MatchEveryCandidateAvailability();
+            var service = new ListingService(
+                new RoomRepository(db),
+                CreateGeofencePolicy(),
+                new NullRatings(),
+                availability,
+                new NullAnalytics(),
+                new FixedClock(FixedNow));
+            var when = new AvailabilityFilter(
+                IsRecurring: false, Date: TargetMonday, Weekdays: Weekdays.None, RangeKind: WhenRangeKind.AnyWindow,
+                RangeStart: default, RangeEnd: default, DurationMinutes: 120, TimeOfDayBand: null);
+            var query = new ListingSearchQuery
+            {
+                MinLat = 38.849,
+                MaxLat = 38.851,
+                MinLng = -77.131,
+                MaxLng = -77.129,
+                Page = 3,
+                PageSize = 100,
+            };
+
+            var first = await service.SearchAsync(query, when);
+            var second = await service.SearchAsync(query, when);
+
+            Assert.Equal(new[] { 300, 300 }, availability.CandidateCounts);
+            Assert.Equal(300, first.TotalCount);
+            Assert.Equal(300, second.TotalCount);
+            Assert.Equal(
+                Enumerable.Range(200, 100).Select(i => $"cap-room-{i:D3}"),
+                first.Items.Select(i => i.RoomSlug));
+            Assert.Equal(first.Items.Select(i => i.RoomId), second.Items.Select(i => i.RoomId));
+            Assert.DoesNotContain(first.Items, i => i.RoomSlug == "cap-room-300");
+        }
+        finally
+        {
+            await using var cleanup = CreateContext();
+            var roomIds = rooms.Select(r => r.Id).ToList();
+            await cleanup.RoomOpenHours.Where(h => roomIds.Contains(h.RoomId)).ExecuteDeleteAsync();
+            await cleanup.Rooms.Where(r => r.VenueId == venue.Id).ExecuteDeleteAsync();
+            await cleanup.Venues.Where(v => v.Id == venue.Id).ExecuteDeleteAsync();
+        }
+    }
+
     private ListingService CreateListingService(SteepleDbContext db) =>
         new(
             new RoomRepository(db),
-            new GeofencePolicy(Options.Create(new GeofenceOptions
-            {
-                AreaName = "Vienna",
-                MinLatitude = 38.84,
-                MaxLatitude = 38.96,
-                MinLongitude = -77.34,
-                MaxLongitude = -77.12,
-                CenterLatitude = 38.9012,
-                CenterLongitude = -77.2653,
-            })),
+            CreateGeofencePolicy(),
             new NullRatings(),
             new AvailabilityService(new EfAvailabilityRepository(db), new EfVenueManagerRepository(db), new NullAnalytics(), new FixedClock(FixedNow)),
             new NullAnalytics(),
             new FixedClock(FixedNow));
+
+    private static GeofencePolicy CreateGeofencePolicy() =>
+        new(Options.Create(new GeofenceOptions
+        {
+            AreaName = "Vienna",
+            MinLatitude = 38.84,
+            MaxLatitude = 38.96,
+            MinLongitude = -77.34,
+            MaxLongitude = -77.12,
+            CenterLatitude = 38.9012,
+            CenterLongitude = -77.2653,
+        }));
 
     private static Venue NewVenue() => new()
     {
@@ -207,6 +279,32 @@ public class WhenSearchIntegrationTests
     private sealed class NullAnalytics : IAnalyticsSink
     {
         public Task TrackAsync(string eventType, object? payload = null, string? sessionId = null, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class MatchEveryCandidateAvailability : IAvailabilityService
+    {
+        public List<int> CandidateCounts { get; } = [];
+
+        public Task<IReadOnlyDictionary<Guid, MatchedWindowDto>> FilterByWhenAsync(
+            IReadOnlyList<(Guid RoomId, string Timezone)> candidates,
+            AvailabilityFilter filter,
+            CancellationToken ct = default)
+        {
+            CandidateCounts.Add(candidates.Count);
+            return Task.FromResult<IReadOnlyDictionary<Guid, MatchedWindowDto>>(
+                candidates.ToDictionary(
+                    candidate => candidate.RoomId,
+                    _ => new MatchedWindowDto(TargetMonday, "09:00", "17:00")));
+        }
+
+        public Task<ManageResult<RoomAvailabilityRulesDto>> GetRulesAsync(Guid callerId, Guid roomId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ManageResult<RoomAvailabilityRulesDto>> SaveRulesAsync(Guid callerId, Guid roomId, SaveAvailabilityRulesRequest request, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<bool> HasOpenHoursAsync(Guid roomId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AvailabilityReadResult<RoomAvailabilityDto>> GetPublicAvailabilityAsync(Guid roomId, DateOnly from, DateOnly to, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AvailabilityReadResult<ScheduleCheckResultDto>> CheckScheduleAsync(Guid roomId, ScheduleDto? schedule, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<StoredScheduleConflicts?> GetStoredScheduleConflictsAsync(Guid roomId, ScheduleDto schedule, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<AvailabilityReadResult<VenueCalendarDto>> GetVenueCalendarAsync(Guid callerId, Guid venueId, DateOnly? from, DateOnly? to, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class NullRatings : IRatingService

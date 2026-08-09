@@ -1,25 +1,23 @@
-using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Tests.Services;
+
 /// <summary>
-/// Unit tests for <see cref="NotificationDispatcher"/>'s push wiring (Phase 4): the fan-out sends
-/// one push per recipient's own inbox row, the payload's <c>deepLink</c> is read back out of the
-/// serialized JSON, and the <c>notification_sent</c> channel label reflects push. Repository,
-/// email/push gateways, device registry, and analytics sink are all hand-rolled in-memory fakes,
-/// matching the no-mocking-library idiom used elsewhere in this test project (see
-/// <c>ApplicationServiceTests</c>).
+/// Unit tests for notification composition: inbox and channel envelopes are handed to one
+/// repository call, push points at each recipient's own inbox row, and email CTAs are composed
+/// before persistence. Provider delivery belongs to NotificationOutboxWorker integration tests.
 /// </summary>
 public class NotificationDispatcherTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 7, 4, 12, 0, 0, TimeSpan.Zero);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task NotifyAsync_RecipientWithDevices_PushesTheRecipientsOwnInboxRowId()
+    public async Task NotifyAsync_PushEnvelopePointsAtTheRecipientsOwnInboxRowId()
     {
-        var (dispatcher, repo, _, devices, push, _) = CreateDispatcher();
+        var (dispatcher, repository, _) = CreateDispatcher();
         var userId = Guid.NewGuid();
-        devices.Tokens[userId] = ["token-1", "token-2"];
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(userId, "person@example.com")],
@@ -27,18 +25,22 @@ public class NotificationDispatcherTests
             new { applicationId = Guid.NewGuid(), deepLink = "/inbox/applications/123" },
             email: null);
 
-        var row = Assert.Single(repo.Added);
-        var call = Assert.Single(push.Calls);
-        Assert.Equal(new[] { "token-1", "token-2" }, call.Tokens);
-        Assert.Equal(row.Id.ToString(), call.Message.NotificationId);
-        Assert.Equal("applicationReceived", call.Message.Type);
-        Assert.Equal("/inbox/applications/123", call.Message.DeepLink);
+        var inbox = Assert.Single(repository.Added);
+        var delivery = Assert.Single(repository.Deliveries);
+        Assert.Equal(NotificationOutboxChannel.Push, delivery.Channel);
+        Assert.Equal(NotificationType.ApplicationReceived, delivery.Kind);
+
+        var payload = Deserialize<PushOutboxPayload>(delivery);
+        Assert.Equal(userId, payload.UserId);
+        Assert.Equal(inbox.Id.ToString(), payload.NotificationId);
+        Assert.Equal("applicationReceived", payload.Type);
+        Assert.Equal("/inbox/applications/123", payload.DeepLink);
     }
 
     [Fact]
-    public async Task NotifyAsync_RecipientWithNoDevices_NeverCallsThePushGateway()
+    public async Task NotifyAsync_AlwaysEnqueuesPushSoWorkerCanResolveCurrentDevices()
     {
-        var (dispatcher, _, _, _, push, _) = CreateDispatcher();
+        var (dispatcher, repository, _) = CreateDispatcher();
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), null)],
@@ -46,29 +48,27 @@ public class NotificationDispatcherTests
             new { deepLink = "/inbox" },
             email: null);
 
-        Assert.Empty(push.Calls);
+        Assert.Equal(NotificationOutboxChannel.Push, Assert.Single(repository.Deliveries).Channel);
     }
 
     [Fact]
-    public async Task NotifyAsync_PayloadWithoutDeepLink_PushesAnEmptyDeepLink()
+    public async Task NotifyAsync_PayloadWithoutDeepLink_PersistsAnEmptyPushDeepLink()
     {
-        var (dispatcher, _, _, devices, push, _) = CreateDispatcher();
-        var userId = Guid.NewGuid();
-        devices.Tokens[userId] = ["token-1"];
+        var (dispatcher, repository, _) = CreateDispatcher();
 
         await dispatcher.NotifyAsync(
-            [new NotificationRecipient(userId, null)],
+            [new NotificationRecipient(Guid.NewGuid(), null)],
             NotificationType.BookingCancelled,
             new { bookingId = Guid.NewGuid() },
             email: null);
 
-        Assert.Equal("", Assert.Single(push.Calls).Message.DeepLink);
+        Assert.Equal("", Deserialize<PushOutboxPayload>(Assert.Single(repository.Deliveries)).DeepLink);
     }
 
     [Fact]
-    public async Task NotifyAsync_WithEmailContent_ChannelIsInboxEmailPush()
+    public async Task NotifyAsync_WithEmailContent_EnqueuesEmailAndPushAndTracksTheirChannels()
     {
-        var (dispatcher, _, _, _, _, analytics) = CreateDispatcher();
+        var (dispatcher, repository, analytics) = CreateDispatcher();
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
@@ -76,14 +76,16 @@ public class NotificationDispatcherTests
             new { deepLink = "/inbox" },
             new EmailContent("Subject", "Body"));
 
-        var tracked = Assert.Single(analytics.Events);
-        Assert.Equal("inbox+email+push", GetProp(tracked.Payload, "channel"));
+        Assert.Equal(
+            [NotificationOutboxChannel.Email, NotificationOutboxChannel.Push],
+            repository.Deliveries.Select(row => row.Channel).ToArray());
+        Assert.Equal("inbox+email+push", GetProp(Assert.Single(analytics.Events).Payload, "channel"));
     }
 
     [Fact]
     public async Task NotifyAsync_WithoutEmailContent_ChannelIsInboxPush()
     {
-        var (dispatcher, _, _, _, _, analytics) = CreateDispatcher();
+        var (dispatcher, _, analytics) = CreateDispatcher();
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), null)],
@@ -91,14 +93,13 @@ public class NotificationDispatcherTests
             new { deepLink = "/inbox" },
             email: null);
 
-        var tracked = Assert.Single(analytics.Events);
-        Assert.Equal("inbox+push", GetProp(tracked.Payload, "channel"));
+        Assert.Equal("inbox+push", GetProp(Assert.Single(analytics.Events).Payload, "channel"));
     }
 
     [Fact]
-    public async Task NotifyAsync_WithWebBaseUrl_AppendsAGotoCtaForThePayloadsDeepLink()
+    public async Task NotifyAsync_WithWebBaseUrl_AppendsAGotoCtaToThePersistedEmail()
     {
-        var (dispatcher, _, email, _, _, _) = CreateDispatcher("http://localhost:5173/");
+        var (dispatcher, repository, _) = CreateDispatcher("http://localhost:5173/");
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
@@ -106,16 +107,16 @@ public class NotificationDispatcherTests
             new { deepLink = "/bookings/9f1c1b2e-0000-4000-8000-000000000001" },
             new EmailContent("Subject", "Body"));
 
-        var sent = Assert.Single(email.Sent);
+        var sent = EmailPayload(repository);
         Assert.Equal(
             "Body\n\nOpen the booking: http://localhost:5173/?goto=%2Fbookings%2F9f1c1b2e-0000-4000-8000-000000000001",
-            sent.Content.TextBody);
+            sent.TextBody);
     }
 
     [Fact]
     public async Task NotifyAsync_PayloadWithoutDeepLink_CtaFallsBackToTheInbox()
     {
-        var (dispatcher, _, email, _, _, _) = CreateDispatcher("https://steeple.example/steeple");
+        var (dispatcher, repository, _) = CreateDispatcher("https://steeple.example/steeple");
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
@@ -125,14 +126,14 @@ public class NotificationDispatcherTests
 
         Assert.EndsWith(
             "Open the request: https://steeple.example/steeple/?goto=%2Finbox",
-            Assert.Single(email.Sent).Content.TextBody,
+            EmailPayload(repository).TextBody,
             StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task NotifyAsync_WithoutWebBaseUrl_LeavesTheBodyUntouched()
     {
-        var (dispatcher, _, email, _, _, _) = CreateDispatcher();
+        var (dispatcher, repository, _) = CreateDispatcher();
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
@@ -140,13 +141,13 @@ public class NotificationDispatcherTests
             new { deepLink = "/inbox/applications/123" },
             new EmailContent("Subject", "Body"));
 
-        Assert.Equal("Body", Assert.Single(email.Sent).Content.TextBody);
+        Assert.Equal("Body", EmailPayload(repository).TextBody);
     }
 
     [Fact]
-    public async Task NotifyAsync_WithHtmlBody_AppendsTheCtaToBothParts()
+    public async Task NotifyAsync_WithHtmlBody_AppendsTheCtaToBothPersistedParts()
     {
-        var (dispatcher, _, email, _, _, _) = CreateDispatcher("http://localhost:5173");
+        var (dispatcher, repository, _) = CreateDispatcher("http://localhost:5173");
 
         await dispatcher.NotifyAsync(
             [new NotificationRecipient(Guid.NewGuid(), "person@example.com")],
@@ -154,7 +155,7 @@ public class NotificationDispatcherTests
             new { deepLink = "/inbox/applications/abc" },
             new EmailContent("Subject", "Body", "<p>Body</p>"));
 
-        var sent = Assert.Single(email.Sent).Content;
+        var sent = EmailPayload(repository);
         Assert.Contains("/?goto=%2Finbox%2Fapplications%2Fabc", sent.TextBody, StringComparison.Ordinal);
         Assert.Contains(
             "<a href=\"http://localhost:5173/?goto=%2Finbox%2Fapplications%2Fabc\">Open the request</a>",
@@ -165,49 +166,62 @@ public class NotificationDispatcherTests
     private static (
         NotificationDispatcher Dispatcher,
         FakeNotificationRepository Repository,
-        FakeEmailGateway Email,
-        FakeDeviceRegistry Devices,
-        FakePushGateway Push,
         FakeAnalyticsSink Analytics) CreateDispatcher(string webBaseUrl = "")
     {
-        var repo = new FakeNotificationRepository();
-        var email = new FakeEmailGateway();
-        var devices = new FakeDeviceRegistry();
-        var push = new FakePushGateway();
+        var repository = new FakeNotificationRepository();
         var analytics = new FakeAnalyticsSink();
         var dispatcher = new NotificationDispatcher(
-            repo,
-            email,
-            devices,
-            push,
+            repository,
             analytics,
             new FixedTimeProvider(FixedNow),
-            Options.Create(new EmailOptions { WebBaseUrl = webBaseUrl }),
-            NullLogger<NotificationDispatcher>.Instance);
-        return (dispatcher, repo, email, devices, push, analytics);
+            Options.Create(new EmailOptions { WebBaseUrl = webBaseUrl }));
+        return (dispatcher, repository, analytics);
     }
+
+    private static EmailOutboxPayload EmailPayload(FakeNotificationRepository repository) =>
+        Deserialize<EmailOutboxPayload>(Assert.Single(
+            repository.Deliveries,
+            row => row.Channel == NotificationOutboxChannel.Email));
+
+    private static T Deserialize<T>(NotificationOutbox row) where T : class =>
+        JsonSerializer.Deserialize<T>(row.PayloadJson, JsonOptions)!;
 
     private static object? GetProp(object? payload, string name) =>
         payload?.GetType().GetProperty(name)?.GetValue(payload);
 
-    private sealed class FixedTimeProvider : TimeProvider
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
-        private readonly DateTimeOffset _now;
-
-        public FixedTimeProvider(DateTimeOffset now) => _now = now;
-
-        public override DateTimeOffset GetUtcNow() => _now;
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class FakeNotificationRepository : INotificationRepository
     {
         public List<Notification> Added { get; } = [];
+        public List<NotificationOutbox> Deliveries { get; } = [];
 
-        public Task AddRangeAsync(IReadOnlyList<Notification> notifications, CancellationToken ct = default)
+        public Task AddRangeAsync(
+            IReadOnlyList<Notification> notifications,
+            IReadOnlyList<NotificationOutbox> deliveries,
+            CancellationToken ct = default)
         {
             Added.AddRange(notifications);
+            Deliveries.AddRange(deliveries);
             return Task.CompletedTask;
         }
+
+        public Task<IReadOnlyList<NotificationOutbox>> ClaimDueAsync(
+            DateTimeOffset nowUtc, int limit, TimeSpan lease, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<NotificationOutbox>>([]);
+
+        public Task MarkDeliveredAsync(Guid id, DateTimeOffset deliveredAtUtc, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task RecordFailureAsync(
+            Guid id,
+            string error,
+            DateTimeOffset nextAttemptAtUtc,
+            DateTimeOffset? failedAtUtc,
+            CancellationToken ct = default) => Task.CompletedTask;
 
         public Task<IReadOnlyList<Notification>> GetPageAsync(
             Guid userId, DateTimeOffset? beforeCreatedAtUtc, Guid? beforeId, int limit, CancellationToken ct = default) =>
@@ -217,49 +231,15 @@ public class NotificationDispatcherTests
             Task.CompletedTask;
     }
 
-    private sealed class FakeEmailGateway : IEmailGateway
-    {
-        public List<(string ToEmail, EmailContent Content)> Sent { get; } = [];
-
-        public Task SendAsync(string toEmail, EmailContent content, CancellationToken ct = default)
-        {
-            Sent.Add((toEmail, content));
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class FakeDeviceRegistry : IDeviceRegistry
-    {
-        public Dictionary<Guid, IReadOnlyList<string>> Tokens { get; } = [];
-
-        public Task<bool> RegisterAsync(Guid userId, string fcmToken, string platform, CancellationToken ct = default) =>
-            Task.FromResult(true);
-
-        public Task UnregisterAsync(Guid userId, string fcmToken, CancellationToken ct = default) =>
-            Task.CompletedTask;
-
-        public Task<IReadOnlyList<string>> GetTokensAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(Tokens.TryGetValue(userId, out var tokens) ? tokens : []);
-
-        public Task DeleteByTokenAsync(string fcmToken, CancellationToken ct = default) => Task.CompletedTask;
-    }
-
-    private sealed class FakePushGateway : IPushGateway
-    {
-        public List<(IReadOnlyList<string> Tokens, PushMessage Message)> Calls { get; } = [];
-
-        public Task SendAsync(IReadOnlyList<string> fcmTokens, PushMessage message, CancellationToken ct = default)
-        {
-            Calls.Add((fcmTokens, message));
-            return Task.CompletedTask;
-        }
-    }
-
     private sealed class FakeAnalyticsSink : IAnalyticsSink
     {
         public List<(string EventType, object? Payload)> Events { get; } = [];
 
-        public Task TrackAsync(string eventType, object? payload = null, string? sessionId = null, CancellationToken ct = default)
+        public Task TrackAsync(
+            string eventType,
+            object? payload = null,
+            string? sessionId = null,
+            CancellationToken ct = default)
         {
             Events.Add((eventType, payload));
             return Task.CompletedTask;

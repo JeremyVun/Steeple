@@ -233,6 +233,31 @@ public class RoomRepositoryTests
     }
 
     [Fact]
+    public async Task GetBySlugAsync_QueryComparesIndexedCanonicalSlugsWithoutLoweringColumns()
+    {
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        var sql = repository
+            .BuildSlugQuery("Grace-Community-Vienna", "Fellowship-Hall")
+            .ToQueryString();
+
+        Assert.DoesNotContain("lower(", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"Slug\" =", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StoredVenueAndRoomSlugs_AreCanonicalLowercase()
+    {
+        await using var db = CreateContext();
+        var slugs = await db.Venues.Select(v => v.Slug)
+            .Concat(db.Rooms.Select(r => r.Slug))
+            .ToListAsync();
+
+        Assert.All(slugs, slug => Assert.Equal(Slugs.From(slug), slug));
+    }
+
+    [Fact]
     public async Task GetBySlugAsync_UnknownSlug_ReturnsNull()
     {
         await using var db = CreateContext();
@@ -252,6 +277,31 @@ public class RoomRepositoryTests
 
     private static readonly BoundingBox FixtureBounds = new(
         MinLatitude: 10.0, MaxLatitude: 11.0, MinLongitude: 20.0, MaxLongitude: 21.0);
+
+    private static readonly BoundingBox SuburbFixtureBounds = new(
+        MinLatitude: 25.0, MaxLatitude: 26.0, MinLongitude: 35.0, MaxLongitude: 36.0);
+
+    [Fact]
+    public async Task GetPublishedSuburbsAsync_ExcludesPublishedVenuesOutsideTheGeofence()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..10];
+        var insideSuburb = $"Inside-{suffix}";
+        var outsideSuburb = $"Outside-{suffix}";
+        await using var db = CreateContext();
+        var repository = new RoomRepository(db);
+
+        await SeedListingAsync(
+            db, $"sub-{suffix}-inside", "hall", 25.5, 35.5, RoomStatus.Published,
+            suburb: insideSuburb);
+        await SeedListingAsync(
+            db, $"sub-{suffix}-outside", "hall", 27.0, 35.5, RoomStatus.Published,
+            suburb: outsideSuburb);
+
+        var suburbs = await repository.GetPublishedSuburbsAsync(SuburbFixtureBounds);
+
+        Assert.Contains(insideSuburb, suburbs);
+        Assert.DoesNotContain(outsideSuburb, suburbs);
+    }
 
     [Fact]
     public async Task GetPublishedForSitemapAsync_AdvertisesOnlyWhatADirectReadWouldAnswer()
@@ -375,6 +425,7 @@ public class RoomRepositoryTests
         double latitude,
         double longitude,
         RoomStatus status,
+        string suburb = "Fixtureton",
         DateTimeOffset? operatorUnlistedAtUtc = null,
         DateTimeOffset? roomUpdatedAtUtc = null,
         DateTimeOffset? venueUpdatedAtUtc = null)
@@ -391,7 +442,7 @@ public class RoomRepositoryTests
                 Description = "Staged by RoomRepositoryTests.",
                 Type = VenueType.Church,
                 AddressLine = "1 Fixture Way",
-                Suburb = "Fixtureton",
+                Suburb = suburb,
                 Postcode = "00000",
                 Latitude = latitude,
                 Longitude = longitude,

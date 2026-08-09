@@ -73,12 +73,13 @@ public class EfApplicationRepository : IApplicationRepository
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
-        Guid roomId, Guid excludeApplicationId, CancellationToken ct = default) =>
+        Guid roomId, Guid excludeApplicationId, DateTimeOffset now, CancellationToken ct = default) =>
         await _db.Applications
             .Include(a => a.Organizer)
             .Where(a => a.RoomId == roomId
                 && a.Id != excludeApplicationId
-                && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.NeedsInfo))
+                && ApplicationExpiryPolicy.UndecidedStatuses.Contains(a.Status)
+                && a.ExpiresAtUtc > now)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
@@ -128,13 +129,11 @@ public class EfApplicationRepository : IApplicationRepository
         {
             query = s switch
             {
-                ApplicationStatus.Pending or ApplicationStatus.NeedsInfo or ApplicationStatus.CounterOffered =>
+                _ when ApplicationExpiryPolicy.IsExpirable(s) =>
                     query.Where(a => a.Status == s && a.ExpiresAtUtc > now),
                 ApplicationStatus.Expired => query.Where(a =>
                     a.Status == ApplicationStatus.Expired
-                    || ((a.Status == ApplicationStatus.Pending
-                            || a.Status == ApplicationStatus.NeedsInfo
-                            || a.Status == ApplicationStatus.CounterOffered)
+                    || (ApplicationExpiryPolicy.ExpirableStatuses.Contains(a.Status)
                         && a.ExpiresAtUtc <= now)),
                 _ => query.Where(a => a.Status == s),
             };

@@ -263,7 +263,7 @@ public class AvailabilityWhenFilterTests
         public Task ReplaceRulesAsync(Guid roomId, IReadOnlyList<RoomOpenHours> openHours, IReadOnlyList<RoomBlackoutDate> blackouts, DateTimeOffset updatedAtUtc, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Venue?> GetVenueWithRoomsAsync(Guid venueId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<BookingOccurrence>> GetCalendarOccurrencesAsync(IReadOnlyCollection<Guid> roomIds, DateTimeOffset fromUtc, DateTimeOffset toUtc, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(IReadOnlyCollection<Guid> roomIds, DateTimeOffset now, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class NullVenueManagers : IVenueManagerRepository

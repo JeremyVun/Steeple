@@ -44,6 +44,10 @@ fallback must answer `401`. If that fallback ever ran in production, rotate befo
 ### `POST /api/v1/auth/refresh` ✅ — `{refreshToken?, refreshTransport?}` → rotated `{accessToken, refreshToken}`. `401 invalid_refresh_token` (unknown/expired/none presented); reuse of a rotated token → `401 token_reuse` (whole family revoked, subject to the grace window below). Both body fields are optional and the body itself may be absent: with no `refreshToken` the cookie is read instead. Rate limited per IP on its own `refresh` policy (60/min), **not** the shared `auth` one — every reload of a signed-in browser spends one, and starving sign-in behind a NAT for that would be absurd.
 ### `DELETE /api/v1/auth/sessions` ✅ — revoke current session (logout; session = the access token's `sid`). Accepts **either** a bearer token **or** the refresh cookie: the access token lives fifteen minutes and the cookie ninety days, so most sign-outs arrive with a stale bearer, and one that revoked nothing was the worst of both worlds. `401` only when neither credential is present. The response expires the cookie.
 
+Expired or revoked refresh-token rows remain for 30 days, then the bounded data-retention sweep
+deletes them. A revoked row's clock starts at `RevokedAtUtc`; an otherwise live row's clock starts
+at `ExpiresAtUtc`.
+
 ## Refresh transport ✅ *(built 2026-08-06)*
 
 `refreshTransport` decides where the rotating token lives. **`body`** (default) puts it in the
@@ -74,11 +78,19 @@ ancestor, reuse still revokes the whole family.
 
 Two things enforce it together. The database decides who actually rotated: the revoke is
 conditional on the row still being unrevoked, so of two simultaneous callers exactly one writes a
-successor and one family can never fork into two live branches. The in-memory grace map decides
-what the loser is *told*: raw tokens are stored hashed, so the successor's raw value exists only in
-the process that minted it, and it is remembered there for the grace window and no longer. Sign-out,
+successor and one family can never fork into two live branches. The in-memory grace map holds one
+in-flight task per predecessor; every concurrent caller awaits it, and the successor pair becomes
+visible only after the database transaction commits. A conditional-write loss or exception faults
+every waiter and evicts the entry, so no credential can escape without a live successor row. Raw
+tokens are stored hashed, so the committed successor's raw value exists only in the process that
+minted it, and it is remembered there for the grace window and no longer. Sign-out,
 family revocation, sign-out-everywhere and account deletion all drop the matching entries at once,
 so a grace entry can never hand out a pair for a session that has just been killed.
+
+The remaining 30-second window is an explicit theft-detection tradeoff: anyone holding the same
+predecessor can receive its committed successor during the grace period because the server cannot
+distinguish a second honest tab from a thief. Every reuse accepted through the grace cache emits a
+structured warning with user and family ids; repeated events are a production monitoring signal.
 
 A restart mid-race, or a second API instance, degrades to the old behaviour — the losing tab is
 signed out — never to a security hole, because the conditional update is still the arbiter.
@@ -98,7 +110,10 @@ module boot and sign-out.
 ### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere"). Accepts
 either a bearer token or the refresh cookie, expires that cookie, and answers `401` only when
 neither credential is present.
-### `POST /api/v1/me/agreements` ✅ — `{docType: "tos"|"privacy", version}` acceptance record; idempotent per (user, doc, version). `400 unknown_doc_type`.
+### `POST /api/v1/me/agreements` ✅ — `{docType: "tos"|"privacy", version}` acceptance record;
+`version` is required and at most 50 characters. Idempotent per (user, doc, version); only a
+duplicate on that exact unique key is suppressed. `400 unknown_doc_type` or automatic validation
+`400` for an invalid version; other persistence failures surface.
 ### `POST /api/v1/me/devices` ✅ *(built 2026-07-04 — Phase 4)* — `{fcmToken, platform}` push registration (upsert by `fcmToken`; re-registering under a different account moves it); `DELETE /api/v1/me/devices/{token}` on logout, deletes only if owned by the caller (204 either way). `400 invalid_device` (platform not `ios`/`android`/`web`, or `fcmToken` empty/over 512 chars). Account deletion removes the caller's device rows.
 
 > Deviation note: `Idempotency-Key` (`conventions.md` §2) is not yet honored on

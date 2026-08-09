@@ -600,6 +600,7 @@ public class AvailabilityServiceTests
             EndTime = new TimeOnly(11, 0),
             Status = ApplicationStatus.Pending,
             CreatedAtUtc = FixedNow,
+            ExpiresAtUtc = FixedNow.AddDays(14),
         });
         var service = CreateService(repo, managers, out _);
 
@@ -837,11 +838,12 @@ public class AvailabilityServiceTests
                     .ToList());
 
         public Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
-            IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+            IReadOnlyCollection<Guid> roomIds, DateTimeOffset now, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Application>>(
                 Applications
                     .Where(a => roomIds.Contains(a.RoomId)
-                        && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
+                        && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo
+                        && a.ExpiresAtUtc > now)
                     .ToList());
 
         /// <summary>The room timestamp the last rule save asked for (sitemap lastmod).</summary>

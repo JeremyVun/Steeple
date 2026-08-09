@@ -5,11 +5,11 @@
 # Postgres is bound to localhost purely for that dev loop.
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18.4-alpine3.24
     container_name: steeple-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-steeple}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-steeple_dev_pw}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-steeple}
       # Pin the data dir so the named volume maps to PGDATA directly. The postgres:18 image
       # otherwise stores data in a versioned subdir, which would silently re-init on a major bump.
@@ -44,7 +44,7 @@ services:
       - --changelog-file=db.changelog-master.yaml
       - --url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-steeple}
       - --username=${POSTGRES_USER:-steeple}
-      - --password=${POSTGRES_PASSWORD:-steeple_dev_pw}
+      - --password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       - update
     restart: "no"
 
@@ -58,35 +58,45 @@ services:
       dockerfile: src/Steeple.Api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
+      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
       # Required deployment secret. Compose refuses to create the service when it is absent.
       Auth__Jwt__SigningKey: "${AUTH_JWT_SIGNING_KEY:?AUTH_JWT_SIGNING_KEY must be set}"
+      Auth__Google__Mode: "${GOOGLE_SSO_MODE:-disabled}"
       Auth__Google__ClientIds__0: "${GOOGLE_CLIENT_ID:-}"
-      Auth__Apple__ClientIds__0: "${APPLE_SERVICES_ID:-}"
+      Auth__Apple__Mode: "enabled"
+      Auth__Apple__ClientIds__0: "${APPLE_SERVICES_ID:?APPLE_SERVICES_ID must be set}"
+      Turnstile__Mode: "${TURNSTILE_MODE:?TURNSTILE_MODE must be enabled or disabled}"
       Turnstile__SecretKey: "${TURNSTILE_SECRET_KEY:-}"
-      # Apple Maps Server credentials (geocoding + address typeahead). All three or none:
-      # partial credentials fall back to the Google key, then the dev stub.
+      # Explicit real geocoder selection; Production never falls back to the dev stub.
+      Geocoding__Mode: "${GEOCODING_MODE:?GEOCODING_MODE must be apple or google}"
+      # Apple Maps Server credentials (geocoding + address typeahead).
       # APPLE_MAPS_PRIVATE_KEY is the .p8 body as one base64 line (strip the PEM armor).
       Geocoding__AppleTeamId: "${APPLE_MAPS_TEAM_ID:-}"
       Geocoding__AppleKeyId: "${APPLE_MAPS_KEY_ID:-}"
       Geocoding__ApplePrivateKey: "${APPLE_MAPS_PRIVATE_KEY:-}"
+      Geocoding__GoogleApiKey: "${GEOCODING_GOOGLE_API_KEY:-}"
       # ISO country codes suggestions/geocoding are limited to; empty = worldwide.
       Geocoding__LimitToCountries: "${GEOCODING_LIMIT_COUNTRIES:-US}"
       # Media (ROADMAP Phase 5): local-disk uploads return origin-independent media/... paths;
       # the web/Admin proxy them to this API. Object storage uses this as its public CDN base.
-      Media__PublicBaseUrl: "${MEDIA_PUBLIC_BASE_URL:-}"
-      Media__ServiceUrl: "${MEDIA_SERVICE_URL:-}"
-      Media__Bucket: "${MEDIA_BUCKET:-}"
-      Media__AccessKey: "${MEDIA_ACCESS_KEY:-}"
-      Media__SecretKey: "${MEDIA_SECRET_KEY:-}"
+      Media__Mode: "objectStorage"
+      Media__PublicBaseUrl: "${MEDIA_PUBLIC_BASE_URL:?MEDIA_PUBLIC_BASE_URL must be set}"
+      Media__ServiceUrl: "${MEDIA_SERVICE_URL:?MEDIA_SERVICE_URL must be set}"
+      Media__Bucket: "${MEDIA_BUCKET:?MEDIA_BUCKET must be set}"
+      Media__AccessKey: "${MEDIA_ACCESS_KEY:?MEDIA_ACCESS_KEY must be set}"
+      Media__SecretKey: "${MEDIA_SECRET_KEY:?MEDIA_SECRET_KEY must be set}"
       # The canonical public origin every crawler-facing absolute URL is built from — sitemap
       # <loc>, listing canonicals, og:url and the document <base> (docs/backlog/seo/design.md §7,
       # which requires a deployment behind a stripped prefix to set it). Empty falls back to the
       # request's own origin and earns a startup warning outside Development.
-      Seo__PublicBaseUrl: "${SEO_PUBLIC_BASE_URL:-}"
-      Email__ApiKey: "${EMAIL_API_KEY:-}"
-      Email__From: "${EMAIL_FROM:-Steeple <onboarding@resend.dev>}"
-      Email__WebBaseUrl: "${EMAIL_WEB_BASE_URL:-}"
+      Seo__PublicBaseUrl: "${SEO_PUBLIC_BASE_URL:?SEO_PUBLIC_BASE_URL must be set}"
+      Email__Mode: "resend"
+      Email__ApiKey: "${EMAIL_API_KEY:?EMAIL_API_KEY must be set}"
+      Email__From: "${EMAIL_FROM:?EMAIL_FROM must be set}"
+      Email__WebBaseUrl: "${EMAIL_WEB_BASE_URL:?EMAIL_WEB_BASE_URL must be set}"
+      Push__Mode: "${PUSH_MODE:-disabled}"
+      Push__ServiceAccountJson: "${PUSH_SERVICE_ACCOUNT_JSON:-}"
+      Push__ServiceAccountJsonPath: "${PUSH_SERVICE_ACCOUNT_JSON_PATH:-}"
       Flags__mobile.manage_enabled: "${MOBILE_MANAGE_ENABLED:-false}"
       # Must be on whenever web.availability_picker is on (below) — the picker's calendar,
       # free windows, and live check all read this API surface (off → 404 → all-closed grid).
@@ -121,8 +131,9 @@ services:
       # reads, so one entry keys both sides (sso-and-turnstile.md: "both or neither").
       args:
         VITE_GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
-        VITE_APPLE_CLIENT_ID: "${APPLE_SERVICES_ID:-}"
-        VITE_APPLE_REDIRECT_URI: "${APPLE_REDIRECT_URI:-}"
+        VITE_APPLE_CLIENT_ID: "${APPLE_SERVICES_ID:?APPLE_SERVICES_ID must be set}"
+        VITE_APPLE_REDIRECT_URI: "${APPLE_REDIRECT_URI:?APPLE_REDIRECT_URI must be set}"
+        VITE_TURNSTILE_MODE: "${TURNSTILE_MODE:?TURNSTILE_MODE must be enabled or disabled}"
         VITE_TURNSTILE_SITE_KEY: "${TURNSTILE_SITE_KEY:-}"
     ports:
       - "${WEB_PORT:-8080}:8080"
@@ -147,7 +158,7 @@ services:
       dockerfile: src/Steeple.Admin/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:-steeple_dev_pw}"
+      ConnectionStrings__SteepleDb: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-steeple};Username=${POSTGRES_USER:-steeple};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}"
     ports:
       - "${ADMIN_PORT:-8082}:8080"
     depends_on:

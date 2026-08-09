@@ -24,9 +24,10 @@ Development). Off = no 402 gate, no price snapshot, sweeper idle. Since 2026-08-
 no longer touches booking modes: instant book confirms either way (offline, uncharged) and
 `RoomDetail.bookingMode` emits the host's stored choice — the uncarded spam caps in
 `applications.md` are the guest-side guard the card was standing in for.
-Bookings confirmed while the flag was off have no price snapshot and **stay offline forever**;
-bookings confirmed while on keep charging even if the flag later flips off (mode is frozen at
-confirmation — payments.md §4).
+Bookings confirmed while the flag was off have no price snapshot and **stay offline forever**.
+Turning the flag off also hides the payment endpoints and pauses charge/refund kicks and the
+sweeper; historical payment state remains readable, and paid-mode work resumes only when the
+flag returns.
 
 **Non-negotiables enforced here:** no card data ever touches the API or DB (display
 brand/last4 only — there is no request field a PAN could ride in, and last4 must be exactly
@@ -35,6 +36,9 @@ post-commit); the DB's one-live-payment-per-occurrence index + idempotency key =
 make double-charging impossible by construction.
 
 ## Guest method-on-file ✅
+
+All endpoints below return 404 while `payments.enabled=false`; the web also omits the account
+payment block, so an unavailable setup flow has no visible entrance.
 
 - `POST /api/v1/me/payments/setup` ✅ (auth, `payments` limit: 10/min/account) → `{clientSecret, publishableKey,
   mock: true}`. Ensures the caller's provider customer and opens a setup intent. At

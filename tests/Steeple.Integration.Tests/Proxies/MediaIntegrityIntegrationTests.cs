@@ -3,6 +3,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Npgsql;
+using Steeple.Api.Contracts.Manage;
 using Steeple.Api.Proxies.Manage;
 using Steeple.Api.Proxies.Media;
 using Steeple.Api.Services.Media;
@@ -212,6 +213,100 @@ public sealed class MediaIntegrityIntegrationTests
         Assert.True(File.Exists(media.ResolveUrl(survivor.Url)));
         Assert.True(File.Exists(media.ResolveUrl(survivor.CardUrl!)));
         Assert.True(File.Exists(media.ResolveUrl(survivor.ThumbUrl!)));
+    }
+
+    [Fact]
+    public async Task MakingEachPhotoTheCoverInTurn_LeavesExactlyOneCoverEveryTime()
+    {
+        var listing = await SeedListingAsync();
+        using var media = new TemporaryMediaStore();
+        var photoIds = new[]
+        {
+            await UploadAsync(listing, media),
+            await UploadAsync(listing, media),
+            await UploadAsync(listing, media),
+        };
+
+        foreach (var photoId in new[] { photoIds[2], photoIds[0], photoIds[2], photoIds[1], photoIds[0] })
+        {
+            var updated = await UpdateAsync(listing, media, photoId, new UpdatePhotoRequest(null, true, null));
+            Assert.Null(updated.Error);
+            Assert.True(updated.Value!.IsPrimary);
+
+            await using var verify = CreateContext();
+            var photos = await verify.RoomPhotos.Where(photo => photo.RoomId == listing.RoomId).ToListAsync();
+            Assert.Equal(photoId, Assert.Single(photos, photo => photo.IsPrimary).Id);
+        }
+    }
+
+    [Fact]
+    public async Task MovingAPhotoOntoAnOccupiedPosition_ResequencesItsSiblings()
+    {
+        var listing = await SeedListingAsync();
+        using var media = new TemporaryMediaStore();
+        var first = await UploadAsync(listing, media);
+        var second = await UploadAsync(listing, media);
+        var third = await UploadAsync(listing, media);
+
+        var moved = await UpdateAsync(listing, media, third, new UpdatePhotoRequest(null, null, 0));
+        Assert.Null(moved.Error);
+        Assert.Equal(0, moved.Value!.SortOrder);
+        Assert.Equal([third, first, second], await DisplayOrderAsync(listing.RoomId));
+
+        // A position past the end lands last rather than opening a gap.
+        var pushed = await UpdateAsync(listing, media, third, new UpdatePhotoRequest(null, null, 99));
+        Assert.Null(pushed.Error);
+        Assert.Equal(2, pushed.Value!.SortOrder);
+        Assert.Equal([first, second, third], await DisplayOrderAsync(listing.RoomId));
+    }
+
+    [Fact]
+    public async Task DeletingTheCover_PromotesTheNextPhotoWithoutTwoCoversExisting()
+    {
+        var listing = await SeedListingAsync();
+        using var media = new TemporaryMediaStore();
+        var cover = await UploadAsync(listing, media);
+        var second = await UploadAsync(listing, media);
+        var third = await UploadAsync(listing, media);
+
+        await using (var db = CreateContext())
+        {
+            var deleted = await CreateService(db, new FixedImageProcessor(), media.Store)
+                .DeletePhotoAsync(listing.ManagerId, cover);
+            Assert.Null(deleted.Error);
+        }
+
+        await using var verify = CreateContext();
+        var photos = await verify.RoomPhotos.Where(photo => photo.RoomId == listing.RoomId).ToListAsync();
+        Assert.Equal([second, third], photos.OrderBy(photo => photo.SortOrder).Select(photo => photo.Id));
+        Assert.Equal(second, Assert.Single(photos, photo => photo.IsPrimary).Id);
+    }
+
+    private async Task<Guid> UploadAsync(ListingFixture listing, TemporaryMediaStore media)
+    {
+        await using var db = CreateContext();
+        var uploaded = await CreateService(db, new FixedImageProcessor(), media.Store)
+            .UploadPhotoAsync(listing.ManagerId, listing.RoomId, new MemoryStream([0x01]), null);
+        Assert.Null(uploaded.Error);
+        return uploaded.Value!.Id;
+    }
+
+    private async Task<ManageResult<RoomPhotoDto>> UpdateAsync(
+        ListingFixture listing, TemporaryMediaStore media, Guid photoId, UpdatePhotoRequest request)
+    {
+        await using var db = CreateContext();
+        return await CreateService(db, new FixedImageProcessor(), media.Store)
+            .UpdatePhotoAsync(listing.ManagerId, photoId, request);
+    }
+
+    private async Task<IReadOnlyList<Guid>> DisplayOrderAsync(Guid roomId)
+    {
+        await using var db = CreateContext();
+        return await db.RoomPhotos
+            .Where(photo => photo.RoomId == roomId)
+            .OrderBy(photo => photo.SortOrder)
+            .Select(photo => photo.Id)
+            .ToListAsync();
     }
 
     private SteepleDbContext CreateContext() =>

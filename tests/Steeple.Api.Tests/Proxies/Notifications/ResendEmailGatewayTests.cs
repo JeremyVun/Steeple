@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Steeple.Api.Proxies.Notifications;
 
@@ -17,6 +18,30 @@ public class ResendEmailGatewayTests
         await gateway.SendAsync(
             "private-person@example.com",
             new EmailContent("Private booking", "The private schedule and message body."));
+    }
+
+    [Fact]
+    public async Task SendAsync_ProviderRejection_ThrowsSoTheOutboxCanRetry()
+    {
+        using var http = new HttpClient(new RejectingHandler());
+        var gateway = new ResendEmailGateway(
+            http,
+            Options.Create(new EmailOptions { ApiKey = "test-key" }),
+            NullLogger<ResendEmailGateway>.Instance);
+
+        var exception = await Assert.ThrowsAsync<HttpRequestException>(() => gateway.SendAsync(
+            "private-person@example.com",
+            new EmailContent("Private booking", "The private schedule and message body.")));
+
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, exception.StatusCode);
+    }
+
+    private sealed class RejectingHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));
     }
 
     private sealed class FailOnLogLogger<T> : ILogger<T>

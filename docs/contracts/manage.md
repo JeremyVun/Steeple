@@ -140,7 +140,8 @@ renames never break a shared listing URL or SEO equity.
   transaction rolls back and it answers with the winner's `200`.
 
 Backing store: `idempotency_records` keyed `(UserId, Scope, Key) → ResourceId`
-(`persistence.md`). Applications keep their own column-based mechanism (004) — unchanged.
+(`persistence.md`). Keys remain replayable for 30 days; the retention sweep then deletes ledger
+rows and clears applications' older column-based keys without touching the created resource.
 
 ### Room availability rules (open hours + blackouts) ✅ *(built 2026-07-05 — availability plan commit 4)*
 
@@ -191,6 +192,8 @@ never crossing midnight.
   organizerName, overlappingDateCount}]}`. `conflicts` uses the "Guest availability reads"
   engine above (rules + confirmed bookings); `pendingOverlaps` lists other undecided
   applications for the same room whose projected dates + time ranges intersect this one's.
+  Stored-undecided rows past `expiresAtUtc` are effectively expired and excluded even before
+  the lazy expiry sweep persists their status.
   Present only on undecided applications; null otherwise or when the room has no availability
   rules.
 - `GET /api/v1/manage/venues/{id}/calendar?from&to` ✅ (manager-scoped; range ≤ 92 days →
@@ -198,7 +201,7 @@ never crossing midnight.
   name}], occurrences: [{bookingId, roomId, organizerName, localDate, startTime, endTime,
   status}], pending: [{applicationId, roomId, organizerName, startTime, endTime, dates: []}]}`.
   Occurrences are confirmed bookings' scheduled/occurred occurrences in the range; `pending`
-  projects undecided applications' would-be dates (an overlay, not a commitment).
+  projects unexpired undecided applications' would-be dates (an overlay, not a commitment).
 
 ### Photos
 - `POST /api/v1/manage/rooms/{id}/photos` ✅ — multipart `file` (≤10 MB, enforced by Kestrel
@@ -211,8 +214,14 @@ never crossing midnight.
   still the gate, because no client's word about its own bytes is worth anything.
 - `PATCH /api/v1/manage/photos/{photoId}` ✅ — `UpdatePhotoRequest {caption?, isPrimary?,
   sortOrder?}`; setting `isPrimary` demotes the previous cover. `400 invalid_photo`.
+  `sortOrder` is **move-to-position, not a raw column write** (2026-08-09): the photo takes that
+  index and its siblings re-sequence around it to a gap-free `0…n-1`, so an occupied position is
+  an ordinary move rather than a conflict, and a value past the end lands last. Every other
+  photo's `sortOrder` may therefore change; re-read the room's photos after the call. Omitting
+  `sortOrder` leaves the order (gaps included) exactly as it was.
 - `DELETE /api/v1/manage/photos/{photoId}` ✅ — deletes the row first, then best-effort deletes
-  the stored variants. `204`.
+  the stored variants. `204`. Deleting the cover promotes the next photo by display order and
+  leaves the surviving positions untouched (a gap is legal).
 - `RoomPhotoDto` ✅: `{id, url, thumbUrl?, cardUrl?, caption?, isPrimary, sortOrder}` — `id`,
   `thumbUrl`, `cardUrl` are additive (`conventions.md` §1 rule); `url` stays the full-size image
   for both new and legacy (seeded) rows. Cards prefer `cardUrl`, falling back to `url` when

@@ -59,3 +59,9 @@ databaseChangeLog:
   - include:
       file: 019-photo-integrity.sql
       relativeToChangelogFile: true
+  - include:
+      file: 020-notification-outbox.sql
+      relativeToChangelogFile: true
+  - include:
+      file: 021-data-retention-indexes.sql
+      relativeToChangelogFile: true

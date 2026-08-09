@@ -1,4 +1,3 @@
-using System.Globalization;
 using Steeple.Api.Contracts.Applications;
 using Steeple.Api.Services.Availability;
 using Steeple.Api.Services.Flags;
@@ -15,15 +14,6 @@ namespace Steeple.Api.Services.Applications;
 /// </summary>
 public sealed class ApplicationService : IApplicationService
 {
-    /// <summary>Undecided applications lapse after this long (auto-expiry — tuning is a Phase 6 item).</summary>
-    private static readonly TimeSpan ExpiryWindow = TimeSpan.FromDays(14);
-
-    /// <summary>Recurrence is always bounded (SYSTEM_DESIGN §5) — and never absurdly long.</summary>
-    private static readonly TimeSpan MaxTermLength = TimeSpan.FromDays(366);
-
-    private const int MaxGroupSize = 1000;
-    private const int MaxTextLength = 2000;
-
     /// <summary>
     /// The uncarded instant-book caps (booking-modes.md, 2026-08-08): a guest with no payment
     /// method on file may hold this many upcoming bookings at one venue / across all venues
@@ -46,7 +36,7 @@ public sealed class ApplicationService : IApplicationService
     private readonly IAvailabilityService _availability;
     private readonly IPaymentService _payments;
     private readonly IFeatureFlags _flags;
-    private readonly INotificationDispatcher _notifications;
+    private readonly ApplicationNotifications _applicationNotifications;
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
@@ -72,7 +62,7 @@ public sealed class ApplicationService : IApplicationService
         _availability = availability;
         _payments = payments;
         _flags = flags;
-        _notifications = notifications;
+        _applicationNotifications = new ApplicationNotifications(venueManagers, notifications);
         _turnstile = turnstile;
         _analytics = analytics;
         _clock = clock;
@@ -96,7 +86,7 @@ public sealed class ApplicationService : IApplicationService
             return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(existing.ToDto(includeThread: true), Created: false));
         }
 
-        var validation = ValidateSubmission(request);
+        var validation = ApplicationSchedulePolicy.ValidateSubmission(request);
         if (validation is not null)
         {
             return ApplicationResult<SubmitOutcome>.Fail(ApplicationErrorCodes.InvalidApplication, validation);
@@ -115,7 +105,8 @@ public sealed class ApplicationService : IApplicationService
         // the Availability check endpoint): a valid same-evening request from a Virginia organizer
         // must not be rejected just because UTC has already crossed midnight. Needs the room, so it
         // can't live in ValidateSubmission.
-        if (request.Schedule!.StartDate < VenueLocalToday(room.Venue.Timezone))
+        if (request.Schedule!.StartDate
+            < ApplicationSchedulePolicy.VenueLocalToday(room.Venue.Timezone, _clock.GetUtcNow()))
         {
             return ApplicationResult<SubmitOutcome>.Fail(
                 ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
@@ -143,7 +134,7 @@ public sealed class ApplicationService : IApplicationService
         }
 
         var now = _clock.GetUtcNow();
-        var schedule = ParseSchedule(request.Schedule);
+        var schedule = ApplicationSchedulePolicy.Parse(request.Schedule);
         var instant = room.Venue.BookingMode == BookingMode.Instant
             && await WithinInstantCapAsync(organizerId, room.Venue.Id, paymentsOn, ct).ConfigureAwait(false);
         var application = new Application
@@ -151,7 +142,7 @@ public sealed class ApplicationService : IApplicationService
             Id = Guid.NewGuid(),
             RoomId = room.Id,
             OrganizerId = organizerId,
-            ActivityType = ParseActivity(request.ActivityType),
+            ActivityType = ApplicationSchedulePolicy.ParseActivity(request.ActivityType),
             GroupSize = request.GroupSize,
             Frequency = schedule.Frequency,
             StartDate = schedule.StartDate,
@@ -165,7 +156,7 @@ public sealed class ApplicationService : IApplicationService
             DecidedAtUtc = instant ? now : null,
             IdempotencyKey = idempotencyKey,
             CreatedAtUtc = now,
-            ExpiresAtUtc = now + ExpiryWindow,
+            ExpiresAtUtc = now + ApplicationExpiryPolicy.Window,
         };
 
         try
@@ -191,17 +182,10 @@ public sealed class ApplicationService : IApplicationService
         var created = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The application vanished between insert and read-back.");
 
-        await NotifyManagersAsync(
+        await _applicationNotifications.NotifyManagersAsync(
             created,
             NotificationType.ApplicationReceived,
-            email: new EmailContent(
-                Subject: $"New request for {created.Room!.Name}",
-                TextBody:
-                    $"{created.Organizer!.DisplayName} asked to use {created.Room.Name} at {created.Room.Venue!.Name}.\n\n" +
-                    $"What: {Humanize(created.ActivityType.ToString())}, about {created.GroupSize} people\n" +
-                    $"When: {DescribeSchedule(created)}\n\n" +
-                    $"\"{created.IntentText}\"\n\n" +
-                    $"Approve, ask a question, or decline from your Steeple inbox."),
+            ApplicationNotifications.ApplicationReceivedEmail(created),
             ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
@@ -288,22 +272,13 @@ public sealed class ApplicationService : IApplicationService
 
         // The booking-confirmed notice, instant flavor: same ApplicationApproved type the approval
         // path uses (clients already render it), CTA deep-links straight to the booking.
-        await _notifications.NotifyAsync(
+        await _applicationNotifications.DispatchAsync(
             [new NotificationRecipient(organizer.Id, organizer.Email)],
             NotificationType.ApplicationApproved,
             payload,
-            new EmailContent(
-                Subject: $"You're booked — {room.Name} at {venue.Name}",
-                TextBody:
-                    $"Your booking of {room.Name} at {venue.Name} is confirmed.\n\n" +
-                    $"When: {DescribeSchedule(application)}\n\n" +
-                    // CTA appended centrally by NotificationDispatcher from the payload deepLink.
-                    // The card sentence is only true while payments are on (the charge kick is a
-                    // no-op otherwise — instant book itself no longer rides on the flag).
-                    ("This venue books instantly — no approval needed." +
-                        (_flags.IsEnabled(PaymentService.PaymentsFlag)
-                            ? " Your card covers each session as it comes up; the first payment is being taken now."
-                            : ""))),
+            ApplicationNotifications.InstantOrganizerEmail(
+                application,
+                _flags.IsEnabled(PaymentService.PaymentsFlag)),
             ct).ConfigureAwait(false);
 
         // Host-side notice: a booking landed without a decision from them (the rescind lever is
@@ -311,22 +286,13 @@ public sealed class ApplicationService : IApplicationService
         var managers = await _venueManagers.GetManagersAsync(venue.Id, ct).ConfigureAwait(false);
         if (managers.Count > 0)
         {
-            await _notifications.NotifyAsync(
+            await _applicationNotifications.DispatchAsync(
                 managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
                 NotificationType.BookingReceived,
                 payload,
-                new EmailContent(
-                    Subject: $"New booking: {room.Name}",
-                    TextBody:
-                        $"{organizer.DisplayName} booked {room.Name} at {venue.Name}.\n\n" +
-                        $"What: {Humanize(application.ActivityType.ToString())}, about {application.GroupSize} people\n" +
-                        $"When: {DescribeSchedule(application)}\n\n" +
-                        $"\"{application.IntentText}\"\n\n" +
-                        "Your venue books instantly, so this is confirmed. If it doesn't fit, you can " +
-                        "cancel it any time from your Steeple inbox" +
-                        (_flags.IsEnabled(PaymentService.PaymentsFlag)
-                            ? " — the organizer is refunded in full."
-                            : ".")),
+                ApplicationNotifications.InstantManagerEmail(
+                    application,
+                    _flags.IsEnabled(PaymentService.PaymentsFlag)),
                 ct).ConfigureAwait(false);
         }
 
@@ -419,7 +385,9 @@ public sealed class ApplicationService : IApplicationService
         var summary = callerIsManager
             ? (await GetOrganizerSummariesAsync([application], ct).ConfigureAwait(false)).GetValueOrDefault(application.OrganizerId)
             : null;
-        var conflicts = callerIsManager && IsUndecided(application.Status) && _flags.IsEnabled(AvailabilityFlag)
+        var conflicts = callerIsManager
+            && ApplicationExpiryPolicy.IsUndecided(application.Status)
+            && _flags.IsEnabled(AvailabilityFlag)
             ? await BuildConflictsAsync(application, ct).ConfigureAwait(false)
             : null;
         return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true, summary, conflicts));
@@ -453,7 +421,9 @@ public sealed class ApplicationService : IApplicationService
     /// </summary>
     private async Task<IReadOnlyList<PendingOverlapDto>> BuildPendingOverlapsAsync(Application application, CancellationToken ct)
     {
-        var competitors = await _repository.GetUndecidedForRoomAsync(application.RoomId, application.Id, ct).ConfigureAwait(false);
+        var competitors = await _repository
+            .GetUndecidedForRoomAsync(application.RoomId, application.Id, _clock.GetUtcNow(), ct)
+            .ConfigureAwait(false);
         if (competitors.Count == 0)
         {
             return [];
@@ -506,10 +476,11 @@ public sealed class ApplicationService : IApplicationService
         Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct)
     {
         var body = request.Body?.Trim();
-        if (string.IsNullOrEmpty(body) || body.Length > MaxTextLength)
+        if (string.IsNullOrEmpty(body) || body.Length > ApplicationSchedulePolicy.MaxTextLength)
         {
             return ApplicationResult<ApplicationDto>.Fail(
-                ApplicationErrorCodes.InvalidApplication, $"A message needs 1–{MaxTextLength} characters.");
+                ApplicationErrorCodes.InvalidApplication,
+                $"A message needs 1–{ApplicationSchedulePolicy.MaxTextLength} characters.");
         }
 
         var (application, error) = await LoadScopedAsync(applicationId, callerId, ct).ConfigureAwait(false);
@@ -522,9 +493,7 @@ public sealed class ApplicationService : IApplicationService
         // An approval does not end the correspondence: a booking still needs a
         // way to say "the side door is locked, use the hall entrance". Declined,
         // withdrawn and expired applications are closed and stay closed.
-        var open = IsUndecided(application!.Status)
-            || application.Status is ApplicationStatus.CounterOffered or ApplicationStatus.Approved;
-        if (!open)
+        if (!ApplicationTransitionRules.CanCorrespond(application!.Status))
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -538,12 +507,7 @@ public sealed class ApplicationService : IApplicationService
         // While CounterOffered the thread flows but must NOT flip status — the ball stays with the
         // organizer until they accept/decline the counter (CONTRACTS §5). Approved is the same for
         // the opposite reason: the ball is with nobody, and a message is not a new question.
-        if (application.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
-        {
-            application.Status = callerIsOrganizer
-                ? (application.Status == ApplicationStatus.NeedsInfo ? ApplicationStatus.Pending : application.Status)
-                : ApplicationStatus.NeedsInfo;
-        }
+        application.Status = ApplicationTransitionRules.AfterMessage(application.Status, callerIsOrganizer);
 
         await _repository.AddMessageAsync(
             new ApplicationMessage
@@ -557,22 +521,16 @@ public sealed class ApplicationService : IApplicationService
             ct).ConfigureAwait(false);
 
         var senderName = callerIsOrganizer ? application.Organizer!.DisplayName : application.Room!.Venue!.Name;
-        var subject = application.Status == ApplicationStatus.Approved ? "booking" : "request";
-        var email = new EmailContent(
-            Subject: $"New message about {application.Room!.Name}",
-            TextBody:
-                $"{senderName} wrote about the {subject} for {application.Room.Name} at {application.Room.Venue!.Name}:\n\n" +
-                $"\"{body}\"\n\n" +
-                $"Reply from your Steeple inbox.");
+        var email = ApplicationNotifications.MessageEmail(application, senderName, body);
 
         if (callerIsOrganizer)
         {
-            await NotifyManagersAsync(
+            await _applicationNotifications.NotifyManagersAsync(
                 application, NotificationType.ApplicationMessage, email, ct, senderName).ConfigureAwait(false);
         }
         else
         {
-            await NotifyOrganizerAsync(
+            await _applicationNotifications.NotifyOrganizerAsync(
                 application, NotificationType.ApplicationMessage, email, ct, senderName).ConfigureAwait(false);
         }
 
@@ -617,8 +575,7 @@ public sealed class ApplicationService : IApplicationService
         // application has been handed to the organizer, so the host can only *decline* it (which
         // also lapses the open counter) — approving is blocked until the organizer responds.
         var counterOffered = application.Status == ApplicationStatus.CounterOffered;
-        var canDecide = approve ? IsUndecided(application.Status) : (IsUndecided(application.Status) || counterOffered);
-        if (!canDecide)
+        if (!ApplicationTransitionRules.CanHostDecide(application.Status, approve))
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -631,7 +588,7 @@ public sealed class ApplicationService : IApplicationService
         // A host decline of a CounterOffered application lapses its open counter along with the flip.
         if (!approve && counterOffered)
         {
-            LapseOpenCounter(application);
+            ApplicationTransitionRules.OpenCounter(application)!.Status = CounterOfferStatus.Lapsed;
         }
 
         // Approval *is* the booking transaction (SYSTEM_DESIGN §5/§7): the Approved flip above is
@@ -661,7 +618,9 @@ public sealed class ApplicationService : IApplicationService
                     Id = Guid.NewGuid(),
                     ApplicationId = application.Id,
                     SenderId = callerId,
-                    Body = note.Length > MaxTextLength ? note[..MaxTextLength] : note,
+                    Body = note.Length > ApplicationSchedulePolicy.MaxTextLength
+                        ? note[..ApplicationSchedulePolicy.MaxTextLength]
+                        : note,
                     SentAtUtc = now,
                 },
                 ct).ConfigureAwait(false);
@@ -671,23 +630,9 @@ public sealed class ApplicationService : IApplicationService
             await _repository.SaveAsync(ct).ConfigureAwait(false);
         }
 
-        var venueName = application.Room!.Venue!.Name;
-        var email = approve
-            ? new EmailContent(
-                Subject: $"{venueName} said yes",
-                TextBody:
-                    $"Good news — {venueName} approved your request to use {application.Room.Name}.\n\n" +
-                    $"When: {DescribeSchedule(application)}\n\n" +
-                    (request.Message is { Length: > 0 } m ? $"They added: \"{m}\"\n\n" : "") +
-                    "Your booking is confirmed — the details are in your Steeple inbox.")
-            : new EmailContent(
-                Subject: $"About your request for {application.Room.Name}",
-                TextBody:
-                    $"{venueName} can't host your request for {application.Room.Name} this time.\n\n" +
-                    (request.Message is { Length: > 0 } dm ? $"They said: \"{dm}\"\n\n" : "") +
-                    "There are more spaces nearby on Steeple — your request details are in your inbox.");
+        var email = ApplicationNotifications.DecisionEmail(application, approve, request.Message);
 
-        await NotifyOrganizerAsync(
+        await _applicationNotifications.NotifyOrganizerAsync(
             application,
             approve ? NotificationType.ApplicationApproved : NotificationType.ApplicationDeclined,
             email,
@@ -731,7 +676,7 @@ public sealed class ApplicationService : IApplicationService
         }
 
         await SweepExpiredAsync([application], ct).ConfigureAwait(false);
-        if (!IsUndecided(application.Status) && application.Status != ApplicationStatus.CounterOffered)
+        if (!ApplicationTransitionRules.CanWithdraw(application.Status))
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
@@ -739,7 +684,10 @@ public sealed class ApplicationService : IApplicationService
 
         application.Status = ApplicationStatus.Withdrawn;
         application.DecidedAtUtc = _clock.GetUtcNow();
-        LapseOpenCounter(application); // a withdrawal past an open counter lapses it too (CONTRACTS §5)
+        if (ApplicationTransitionRules.OpenCounter(application) is { } openCounter)
+        {
+            openCounter.Status = CounterOfferStatus.Lapsed;
+        }
         await _repository.SaveAsync(ct).ConfigureAwait(false);
 
         return ApplicationResult<ApplicationDto>.Ok(application.ToDto(includeThread: true));
@@ -759,7 +707,7 @@ public sealed class ApplicationService : IApplicationService
             return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.NotFound, "Application not found.");
         }
 
-        var scheduleProblem = ValidateSchedule(request.Schedule);
+        var scheduleProblem = ApplicationSchedulePolicy.ValidateSchedule(request.Schedule);
         if (scheduleProblem is not null)
         {
             return ApplicationResult<ApplicationDto>.Fail(ApplicationErrorCodes.InvalidApplication, scheduleProblem);
@@ -783,14 +731,17 @@ public sealed class ApplicationService : IApplicationService
 
         // Counterable while the ball can still move: not yet decided/withdrawn/expired. A re-counter
         // while already CounterOffered is allowed (it supersedes the prior open counter).
-        if (!(IsUndecided(application.Status) || application.Status == ApplicationStatus.CounterOffered))
+        if (!ApplicationTransitionRules.CanCounterOffer(application.Status))
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidState, "This application has already been decided.");
         }
 
         // Same venue-local past-date guard as submit — the proposed time speaks the venue's calendar.
-        if (request.Schedule!.StartDate < VenueLocalToday(application.Room!.Venue!.Timezone))
+        if (request.Schedule!.StartDate
+            < ApplicationSchedulePolicy.VenueLocalToday(
+                application.Room!.Venue!.Timezone,
+                _clock.GetUtcNow()))
         {
             return ApplicationResult<ApplicationDto>.Fail(
                 ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
@@ -803,14 +754,16 @@ public sealed class ApplicationService : IApplicationService
         }
 
         var now = _clock.GetUtcNow();
-        var parsed = ParseSchedule(request.Schedule!);
+        var parsed = ApplicationSchedulePolicy.Parse(request.Schedule!);
         var message = request.Message?.Trim() is { Length: > 0 } m
-            ? (m.Length > MaxTextLength ? m[..MaxTextLength] : m)
+            ? (m.Length > ApplicationSchedulePolicy.MaxTextLength
+                ? m[..ApplicationSchedulePolicy.MaxTextLength]
+                : m)
             : null;
 
         // One atomic save: supersede any open counter, insert the new open one, flip to
         // CounterOffered, refresh the 14-day expiry.
-        var superseded = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
+        var superseded = ApplicationTransitionRules.OpenCounter(application);
         if (superseded is not null)
         {
             superseded.Status = CounterOfferStatus.Superseded;
@@ -834,20 +787,13 @@ public sealed class ApplicationService : IApplicationService
         application.CounterOffers.Add(counter);
         _repository.AddCounterOffer(counter);
         application.Status = ApplicationStatus.CounterOffered;
-        application.ExpiresAtUtc = now + ExpiryWindow;
+        application.ExpiresAtUtc = now + ApplicationExpiryPolicy.Window;
         await _repository.SaveAsync(ct).ConfigureAwait(false);
 
-        await NotifyOrganizerAsync(
+        await _applicationNotifications.NotifyOrganizerAsync(
             application,
             NotificationType.CounterOfferReceived,
-            new EmailContent(
-                Subject: $"{application.Room!.Venue!.Name} suggested a different time for {application.Room.Name}",
-                TextBody:
-                    $"{application.Room.Venue.Name} proposed an alternative time for your request to use {application.Room.Name}.\n\n" +
-                    $"You asked for: {DescribeSchedule(application)}\n" +
-                    $"They suggested: {DescribeSchedule(counter)}\n\n" +
-                    (counter.Message is { Length: > 0 } note ? $"They added: \"{note}\"\n\n" : "") +
-                    "Accept or decline the new time from your Steeple inbox."),
+            ApplicationNotifications.CounterOfferEmail(application, counter),
             ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
@@ -902,7 +848,7 @@ public sealed class ApplicationService : IApplicationService
 
         await SweepExpiredAsync([application], ct).ConfigureAwait(false);
 
-        var open = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
+        var open = ApplicationTransitionRules.OpenCounter(application);
         if (application.Status != ApplicationStatus.CounterOffered || open is null)
         {
             return ApplicationResult<ApplicationDto>.Fail(
@@ -916,7 +862,7 @@ public sealed class ApplicationService : IApplicationService
         {
             // Booking transaction on the COUNTER schedule — the application keeps the original ask.
             // The Approved + Accepted flips are tracked and commit atomically with the booking.
-            application.Status = ApplicationStatus.Approved;
+            application.Status = ApplicationTransitionRules.AfterCounterResponse(accepted: true);
             application.DecidedAtUtc = now;
             open.Status = CounterOfferStatus.Accepted;
             open.RespondedAtUtc = now;
@@ -935,16 +881,10 @@ public sealed class ApplicationService : IApplicationService
             // Same post-commit charge kick as approval (no-op without a price snapshot).
             await _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, ct).ConfigureAwait(false);
 
-            await NotifyManagersAsync(
+            await _applicationNotifications.NotifyManagersAsync(
                 application,
                 NotificationType.CounterOfferAccepted,
-                new EmailContent(
-                    Subject: $"{application.Organizer!.DisplayName} accepted your counter-offer for {application.Room!.Name}",
-                    TextBody:
-                        $"{application.Organizer.DisplayName} accepted your suggested time for {application.Room.Name} " +
-                        $"at {application.Room.Venue!.Name}.\n\n" +
-                        $"When: {DescribeSchedule(open)}\n\n" +
-                        "The booking is confirmed — the details are in your Steeple inbox."),
+                ApplicationNotifications.CounterResponseEmail(application, open, accepted: true),
                 ct).ConfigureAwait(false);
 
             await TrackSafelyAsync(
@@ -966,21 +906,15 @@ public sealed class ApplicationService : IApplicationService
         else
         {
             // Decline returns the ball to the venue: the application is Pending again, counter closed.
-            application.Status = ApplicationStatus.Pending;
+            application.Status = ApplicationTransitionRules.AfterCounterResponse(accepted: false);
             open.Status = CounterOfferStatus.DeclinedByOrganizer;
             open.RespondedAtUtc = now;
             await _repository.SaveAsync(ct).ConfigureAwait(false);
 
-            await NotifyManagersAsync(
+            await _applicationNotifications.NotifyManagersAsync(
                 application,
                 NotificationType.CounterOfferDeclined,
-                new EmailContent(
-                    Subject: $"{application.Organizer!.DisplayName} declined your counter-offer for {application.Room!.Name}",
-                    TextBody:
-                        $"{application.Organizer.DisplayName} declined your suggested time for {application.Room.Name} " +
-                        $"at {application.Room.Venue!.Name}.\n\n" +
-                        $"Their original request still stands: {DescribeSchedule(application)}\n\n" +
-                        "You can approve it, propose another time, or decline from your Steeple inbox."),
+                ApplicationNotifications.CounterResponseEmail(application, open, accepted: false),
                 ct).ConfigureAwait(false);
 
             await TrackSafelyAsync(
@@ -1026,9 +960,6 @@ public sealed class ApplicationService : IApplicationService
         return (application, null);
     }
 
-    private static bool IsUndecided(ApplicationStatus status) =>
-        status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo;
-
     /// <summary>
     /// Runs a state transition, answering an optimistic-concurrency loss as the domain fact it is:
     /// somebody else's transition committed first, so this one reads as a state conflict (409)
@@ -1050,28 +981,6 @@ public sealed class ApplicationService : IApplicationService
         }
     }
 
-    /// <summary>"Today" on the venue's own wall clock — the calendar every schedule speaks.</summary>
-    private DateOnly VenueLocalToday(string timezone) =>
-        DateOnly.FromDateTime(
-            TimeZoneInfo.ConvertTime(_clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(timezone)).DateTime);
-
-    /// <summary>
-    /// Expirable for the lazy sweep: the two undecided states plus CounterOffered — a counter left
-    /// unanswered lapses on the same 14-day clock (CONTRACTS §5).
-    /// </summary>
-    private static bool IsExpirable(ApplicationStatus status) =>
-        IsUndecided(status) || status == ApplicationStatus.CounterOffered;
-
-    /// <summary>Marks any open counter on the application Lapsed (a terminal flip on the parent).</summary>
-    private static void LapseOpenCounter(Application application)
-    {
-        var open = application.CounterOffers.FirstOrDefault(c => c.Status == CounterOfferStatus.Open);
-        if (open is not null)
-        {
-            open.Status = CounterOfferStatus.Lapsed;
-        }
-    }
-
     /// <summary>
     /// The approval-race auto-decline (CONTRACTS §5): the exclusion constraint already aborted the
     /// booking save, so the still-tracked Approved flip never committed. Flips the application to
@@ -1083,18 +992,16 @@ public sealed class ApplicationService : IApplicationService
     {
         application.Status = ApplicationStatus.Declined;
         application.DecidedAtUtc = now;
-        LapseOpenCounter(application);
+        if (ApplicationTransitionRules.OpenCounter(application) is { } openCounter)
+        {
+            openCounter.Status = CounterOfferStatus.Lapsed;
+        }
         await _repository.SaveAsync(ct).ConfigureAwait(false);
 
-        await NotifyOrganizerAsync(
+        await _applicationNotifications.NotifyOrganizerAsync(
             application,
             NotificationType.ApplicationDeclined,
-            new EmailContent(
-                Subject: $"About your request for {application.Room!.Name}",
-                TextBody:
-                    $"The time you asked for at {application.Room.Name} ({application.Room.Venue!.Name}) " +
-                    "was booked by another group before your request could be approved.\n\n" +
-                    "There are more spaces nearby on Steeple — your request details are in your inbox."),
+            ApplicationNotifications.SlotTakenEmail(application),
             ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
@@ -1124,7 +1031,10 @@ public sealed class ApplicationService : IApplicationService
     private async Task SweepExpiredAsync(IReadOnlyList<Application> applications, CancellationToken ct)
     {
         var now = _clock.GetUtcNow();
-        var lapsed = applications.Where(a => IsExpirable(a.Status) && a.ExpiresAtUtc <= now).ToList();
+        var lapsed = applications
+            .Where(a => ApplicationExpiryPolicy.IsEffectivelyExpired(a, now)
+                && a.Status != ApplicationStatus.Expired)
+            .ToList();
         if (lapsed.Count == 0)
         {
             return;
@@ -1134,7 +1044,7 @@ public sealed class ApplicationService : IApplicationService
         {
             if (application.Status == ApplicationStatus.CounterOffered)
             {
-                LapseOpenCounter(application);
+                ApplicationTransitionRules.OpenCounter(application)!.Status = CounterOfferStatus.Lapsed;
             }
 
             application.Status = ApplicationStatus.Expired;
@@ -1150,112 +1060,6 @@ public sealed class ApplicationService : IApplicationService
             // read re-judges expiry against it. A read must not fail over this; a mutation
             // following this sweep conflicts again on its own save and answers there.
         }
-    }
-
-    // ----- Validation & wire-token parsing ------------------------------------------------------
-
-    /// <summary>Returns a human-readable problem, or null when the submission is valid.</summary>
-    private string? ValidateSubmission(SubmitApplicationRequest request)
-    {
-        if (!TryParseActivity(request.ActivityType))
-        {
-            return $"Unknown activity type '{request.ActivityType}'.";
-        }
-
-        if (request.GroupSize is < 1 or > MaxGroupSize)
-        {
-            return $"Group size must be between 1 and {MaxGroupSize}.";
-        }
-
-        if (string.IsNullOrWhiteSpace(request.IntentText) || request.IntentText.Trim().Length > MaxTextLength)
-        {
-            return $"Tell the venue what you're planning (up to {MaxTextLength} characters).";
-        }
-
-        if (request.OrganizationName is { } org && org.Trim().Length > 200)
-        {
-            return "The group or organization name can be up to 200 characters.";
-        }
-
-        return ValidateSchedule(request.Schedule);
-    }
-
-    /// <summary>
-    /// Returns a human-readable problem, or null when the venue-local schedule is valid — the same
-    /// rules a submit enforces (bounded recurrence, weekday tokens, ordered times, no past start),
-    /// reused by the counter-offer path (CONTRACTS §5).
-    /// </summary>
-    private string? ValidateSchedule(ScheduleDto? schedule)
-    {
-        if (schedule is null)
-        {
-            return "A proposed schedule is required.";
-        }
-
-        if (!Enum.TryParse<ScheduleFrequency>(schedule.Frequency, ignoreCase: true, out var frequency)
-            || !Enum.IsDefined(frequency))
-        {
-            return $"Unknown frequency '{schedule.Frequency}'.";
-        }
-
-        if (!TryParseTime(schedule.StartTime, out var start) || !TryParseTime(schedule.EndTime, out var end))
-        {
-            return "Times must be HH:mm (24-hour), e.g. \"09:00\".";
-        }
-
-        if (end <= start)
-        {
-            return "The end time must be after the start time.";
-        }
-
-        // No past-date rule here on purpose: "today" belongs to the venue's timezone, so the
-        // callers check it against VenueLocalToday once the room (and its venue) is in hand.
-        if (frequency == ScheduleFrequency.RecurringWeekly)
-        {
-            if (schedule.EndDate is not { } endDate)
-            {
-                return "A recurring schedule needs an end date (recurring terms are always bounded).";
-            }
-
-            if (endDate < schedule.StartDate)
-            {
-                return "The end date can't be before the start date.";
-            }
-
-            if (endDate.DayNumber - schedule.StartDate.DayNumber > MaxTermLength.TotalDays)
-            {
-                return "A recurring term can run at most a year — renew it when it ends.";
-            }
-
-            if (schedule.DaysOfWeek is not { Count: > 0 } dayTokens)
-            {
-                return "A recurring schedule needs at least one day of the week.";
-            }
-
-            var days = FlagEnumExtensions.CombineTokens<Weekdays>(dayTokens, out var unknownDays);
-            if (unknownDays.Count > 0)
-            {
-                return $"Unknown day of the week '{unknownDays[0]}'.";
-            }
-
-            if (days == Weekdays.None)
-            {
-                return "A recurring schedule needs at least one day of the week.";
-            }
-
-            // A term whose selected weekdays never occur would materialize into a booking with
-            // zero occurrences — confirmed, holding nothing, and instantly "completed".
-            if (!ScheduleMaterializer.WeekdaysOccurBetween(days, schedule.StartDate, endDate))
-            {
-                return "None of the selected days fall between the start and end dates.";
-            }
-        }
-        else if (schedule.EndDate is { } endDate && endDate != schedule.StartDate)
-        {
-            return "A one-off request has a single date — leave the end date empty.";
-        }
-
-        return null;
     }
 
     /// <summary>
@@ -1288,34 +1092,6 @@ public sealed class ApplicationService : IApplicationService
             });
     }
 
-    /// <summary>Parses a validated schedule into its stored (venue-local) representation.</summary>
-    private static (ScheduleFrequency Frequency, DateOnly StartDate, DateOnly? EndDate, Weekdays? DaysOfWeek, TimeOnly StartTime, TimeOnly EndTime)
-        ParseSchedule(ScheduleDto schedule)
-    {
-        var frequency = Enum.Parse<ScheduleFrequency>(schedule.Frequency, ignoreCase: true);
-        return (
-            frequency,
-            schedule.StartDate,
-            frequency == ScheduleFrequency.RecurringWeekly ? schedule.EndDate : schedule.StartDate,
-            frequency == ScheduleFrequency.RecurringWeekly
-                ? FlagEnumExtensions.CombineTokens<Weekdays>(schedule.DaysOfWeek!, out _)
-                : null,
-            TimeOnly.ParseExact(schedule.StartTime, "HH:mm", CultureInfo.InvariantCulture),
-            TimeOnly.ParseExact(schedule.EndTime, "HH:mm", CultureInfo.InvariantCulture));
-    }
-
-    private static bool TryParseTime(string? value, out TimeOnly time) =>
-        TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
-
-    /// <summary>An activity wire token must be a single defined flag member (not None, not a mask).</summary>
-    private static bool TryParseActivity(string? token) =>
-        Enum.TryParse<ActivityType>(token, ignoreCase: true, out var parsed)
-        && parsed != ActivityType.None
-        && Enum.IsDefined(parsed);
-
-    private static ActivityType ParseActivity(string token) =>
-        Enum.Parse<ActivityType>(token, ignoreCase: true);
-
     private static bool TryParseStatusFilter(string? token, out ApplicationStatus? status)
     {
         status = null;
@@ -1335,102 +1111,6 @@ public sealed class ApplicationService : IApplicationService
 
     private static (int Page, int PageSize) ClampPaging(int page, int pageSize) =>
         (Math.Max(1, page), Math.Clamp(pageSize is 0 ? 24 : pageSize, 1, 100));
-
-    // ----- Notification fan-out -----------------------------------------------------------------
-
-    private async Task NotifyManagersAsync(
-        Application application,
-        NotificationType type,
-        EmailContent? email,
-        CancellationToken ct,
-        string? senderName = null,
-        bool messageAdded = false)
-    {
-        var managers = await _venueManagers.GetManagersAsync(application.Room!.VenueId, ct).ConfigureAwait(false);
-        if (managers.Count == 0)
-        {
-            return; // Concierge gap: no linked manager yet — the founder sees it in Admin.
-        }
-
-        await _notifications.NotifyAsync(
-            managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
-            type,
-            BuildPayload(application, senderName, messageAdded),
-            email,
-            ct).ConfigureAwait(false);
-    }
-
-    private Task NotifyOrganizerAsync(
-        Application application,
-        NotificationType type,
-        EmailContent? email,
-        CancellationToken ct,
-        string? senderName = null,
-        bool messageAdded = false) =>
-        _notifications.NotifyAsync(
-            [new NotificationRecipient(application.OrganizerId, application.Organizer?.Email)],
-            type,
-            BuildPayload(application, senderName, messageAdded),
-            email,
-            ct);
-
-    /// <summary>
-    /// The inbox row's JSON document: ids + display fields + the canonical deep link
-    /// (CONTRACTS §9 — clients render from this, never from push/email content).
-    /// </summary>
-    private static object BuildPayload(
-        Application application,
-        string? senderName = null,
-        bool messageAdded = false) => new
-    {
-        applicationId = application.Id,
-        roomId = application.RoomId,
-        roomName = application.Room!.Name,
-        venueName = application.Room.Venue!.Name,
-        venueSlug = application.Room.Venue.Slug,
-        roomSlug = application.Room.Slug,
-        organizerName = application.Organizer!.DisplayName,
-        status = FlagEnumExtensions.ToCamelCaseToken(application.Status.ToString()),
-        senderName,
-        messageAdded,
-        deepLink = $"/inbox/applications/{application.Id}",
-    };
-
-    // ----- Copy helpers (email text only — clients humanize wire tokens themselves) --------------
-
-    /// <summary>"Tuesdays 9:00–11:30 AM, Sep 1 – Dec 15" / "Tue, Sep 1, 9:00–11:30 AM" (venue-local).</summary>
-    private static string DescribeSchedule(Application application) =>
-        DescribeSchedule(
-            application.Frequency, application.DaysOfWeek, application.StartDate, application.EndDate,
-            application.StartTime, application.EndTime);
-
-    /// <summary>The same venue-local schedule copy for a counter-offer's proposed time.</summary>
-    private static string DescribeSchedule(ApplicationCounterOffer counter) =>
-        DescribeSchedule(
-            counter.Frequency, counter.DaysOfWeek, counter.StartDate, counter.EndDate,
-            counter.StartTime, counter.EndTime);
-
-    private static string DescribeSchedule(
-        ScheduleFrequency frequency, Weekdays? days, DateOnly startDate, DateOnly? endDate, TimeOnly startTime, TimeOnly endTime)
-    {
-        var start = FormatTime(startTime);
-        var end = FormatTime(endTime);
-
-        return frequency == ScheduleFrequency.RecurringWeekly
-            ? $"{ScheduleText.DescribeDays(days ?? Weekdays.None)} {start}–{end}, {FormatDate(startDate)} – {FormatDate(endDate ?? startDate)}"
-            : $"{startDate.ToString("ddd, MMM d", CultureInfo.InvariantCulture)}, {start}–{end}";
-    }
-
-    private static string FormatTime(TimeOnly time) => time.ToString("h:mm tt", CultureInfo.InvariantCulture);
-
-    private static string FormatDate(DateOnly date) => date.ToString("MMM d, yyyy", CultureInfo.InvariantCulture);
-
-    /// <summary>"stepFreeAccess"-style member name → "Step free access" (email copy only).</summary>
-    private static string Humanize(string memberName)
-    {
-        var withSpaces = string.Concat(memberName.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : c.ToString()));
-        return char.ToUpperInvariant(withSpaces[0]) + withSpaces[1..];
-    }
 
     /// <summary>Best-effort analytics — never a reason to fail the request.</summary>
     private async Task TrackSafelyAsync(string eventType, object payload, CancellationToken ct)

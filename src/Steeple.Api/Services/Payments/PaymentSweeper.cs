@@ -14,6 +14,7 @@ public sealed class PaymentSweeper : BackgroundService
     private readonly IServiceScopeFactory _scopes;
     private readonly TimeProvider _clock;
     private readonly PaymentsOptions _options;
+    private readonly IFeatureFlags _flags;
     private readonly ILogger<PaymentSweeper> _logger;
 
     /// <summary>Creates the worker.</summary>
@@ -21,11 +22,13 @@ public sealed class PaymentSweeper : BackgroundService
         IServiceScopeFactory scopes,
         TimeProvider clock,
         IOptions<PaymentsOptions> options,
+        IFeatureFlags flags,
         ILogger<PaymentSweeper> logger)
     {
         _scopes = scopes;
         _clock = clock;
         _options = options.Value;
+        _flags = flags;
         _logger = logger;
     }
 
@@ -67,6 +70,11 @@ public sealed class PaymentSweeper : BackgroundService
     /// <summary>One full pass — also invoked directly by tests (no timer, no lock retry loop).</summary>
     public async Task SweepOnceAsync(CancellationToken ct)
     {
+        if (!_flags.IsEnabled(PaymentService.PaymentsFlag))
+        {
+            return;
+        }
+
         using var scope = _scopes.CreateScope();
         var payments = scope.ServiceProvider.GetRequiredService<IPaymentService>();
         var bookings = scope.ServiceProvider.GetRequiredService<IBookingService>();

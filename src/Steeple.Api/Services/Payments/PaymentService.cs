@@ -14,7 +14,7 @@ namespace Steeple.Api.Services.Payments;
 /// </summary>
 public sealed class PaymentService : IPaymentService
 {
-    /// <summary>Feature flag gating the whole payments surface's behavior (charging, gates, instant book).</summary>
+    /// <summary>Feature flag gating payment setup, snapshots, charging, refunds, and sweeping.</summary>
     public const string PaymentsFlag = "payments.enabled";
 
     private readonly IPaymentRepository _repository;
@@ -22,6 +22,7 @@ public sealed class PaymentService : IPaymentService
     private readonly IVenueManagerRepository _venueManagers;
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
+    private readonly IFeatureFlags _flags;
     private readonly TimeProvider _clock;
     private readonly PaymentsOptions _options;
 
@@ -32,6 +33,7 @@ public sealed class PaymentService : IPaymentService
         IVenueManagerRepository venueManagers,
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
+        IFeatureFlags flags,
         TimeProvider clock,
         IOptions<PaymentsOptions> options)
     {
@@ -40,6 +42,7 @@ public sealed class PaymentService : IPaymentService
         _venueManagers = venueManagers;
         _notifications = notifications;
         _analytics = analytics;
+        _flags = flags;
         _clock = clock;
         _options = options.Value;
     }
@@ -218,9 +221,14 @@ public sealed class PaymentService : IPaymentService
     /// <inheritdoc />
     public async Task ChargeAtConfirmationAsync(Guid bookingId, CancellationToken ct = default)
     {
-        // Self-gating: bookings confirmed while payments were off have no price snapshot and
-        // yield no candidate; nothing here consults the flag so in-flight paid bookings keep
-        // charging even if the flag is later toggled off mid-term.
+        if (!_flags.IsEnabled(PaymentsFlag))
+        {
+            return;
+        }
+
+        // Bookings confirmed while payments were off have no price snapshot and yield no
+        // candidate. The explicit flag check above also pauses already-paid-mode work during a
+        // rollback; it resumes only if the payment rails are enabled again.
         var candidate = await _repository.GetFirstChargeCandidateForBookingAsync(bookingId, ct).ConfigureAwait(false);
         if (candidate is null)
         {
@@ -233,6 +241,11 @@ public sealed class PaymentService : IPaymentService
     /// <inheritdoc />
     public async Task<SweepOutcome> SweepAsync(DateTimeOffset nowUtc, CancellationToken ct = default)
     {
+        if (!_flags.IsEnabled(PaymentsFlag))
+        {
+            return SweepOutcome.Empty;
+        }
+
         var charged = 0;
         var failed = 0;
 
@@ -270,8 +283,15 @@ public sealed class PaymentService : IPaymentService
     }
 
     /// <inheritdoc />
-    public async Task RefundCancelledForBookingAsync(Guid bookingId, CancellationToken ct = default) =>
+    public async Task RefundCancelledForBookingAsync(Guid bookingId, CancellationToken ct = default)
+    {
+        if (!_flags.IsEnabled(PaymentsFlag))
+        {
+            return;
+        }
+
         await RefundCancelledAsync(bookingId, ct).ConfigureAwait(false);
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<Guid, PaymentStatus>> GetOccurrenceStatusesAsync(

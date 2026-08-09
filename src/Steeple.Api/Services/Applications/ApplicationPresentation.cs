@@ -1,11 +1,11 @@
 using Steeple.Api.Contracts.Applications;
 
-namespace Steeple.Api.Extensions;
+namespace Steeple.Api.Services.Applications;
 /// <summary>
 /// Projects Applications-module entities into their wire DTOs (CONTRACTS §5). Requires the full
 /// display graph loaded (room + venue, organizer, messages).
 /// </summary>
-public static class ApplicationMappings
+public static class ApplicationPresentation
 {
     /// <summary>
     /// Maps an application. List projections pass <paramref name="includeThread"/> false — the

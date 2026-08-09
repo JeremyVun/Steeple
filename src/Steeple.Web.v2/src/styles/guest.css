@@ -1651,7 +1651,7 @@
    file, so a shared name is this surface restyled by the other one. */
 .openedspace {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   width: 100%;
@@ -1705,6 +1705,30 @@
 .openedspace__meta {
   font-size: 12.5px;
   color: var(--ink-soft);
+}
+
+/* Quiet at rest, plain on approach — the same manners as the inbox's own way
+   on (`.jmsg__go`), which is in the DOM at all times and only visible near it. */
+.openedspace__go {
+  padding-right: 4px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--terracotta-deep);
+  opacity: 0;
+  transition: opacity 160ms var(--ease);
+}
+
+.openedspace:hover .openedspace__go,
+.openedspace:focus-visible .openedspace__go {
+  opacity: 1;
+}
+
+/* A finger cannot hover, and an affordance nobody can reveal is one nobody has:
+   where there is no pointer the way on is simply on the card. */
+@media (hover: none) {
+  .openedspace__go {
+    opacity: 1;
+  }
 }
 
 .opened__note {

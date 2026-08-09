@@ -2,10 +2,10 @@ using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Services.Reminders;
 /// <summary>
-/// Timer for <see cref="IBookingReminderService"/>: the one background loop in the API. Everything
-/// else sweeps lazily on read (SYSTEM_DESIGN §5/§7), but a reminder nobody is reading has to come
-/// from somewhere. Each tick runs in its own DI scope (the sweep is scoped over the DbContext) and
-/// swallows its failures — a bad sweep must never take the API's host down with it.
+/// Timer for <see cref="IBookingReminderService"/>. Domain-state expiry still sweeps lazily on read
+/// (SYSTEM_DESIGN §5/§7), but a reminder nobody is reading has to come from somewhere. Each tick
+/// runs in its own DI scope (the sweep is scoped over the DbContext) and swallows its failures — a
+/// bad sweep must never take the API's host down with it.
 /// </summary>
 public sealed class BookingReminderWorker : BackgroundService
 {

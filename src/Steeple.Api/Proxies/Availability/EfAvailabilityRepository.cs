@@ -98,11 +98,12 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
-        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default) =>
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset now, CancellationToken ct = default) =>
         await _db.Applications
             .Include(a => a.Organizer)
             .Where(a => roomIds.Contains(a.RoomId)
-                && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.NeedsInfo))
+                && ApplicationExpiryPolicy.UndecidedStatuses.Contains(a.Status)
+                && a.ExpiresAtUtc > now)
             .ToListAsync(ct)
             .ConfigureAwait(false);
 

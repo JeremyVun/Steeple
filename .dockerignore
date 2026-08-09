@@ -22,6 +22,15 @@ docker-compose.yml
 docker-bake.hcl
 versions.hcl
 .env
+.env.*
+!.env.example
+.secrets.env
+
+# Runtime/test data must never enter an image layer.
+**/media-store/
+**/dev-mailbox/
+**/runs/
+**/test-results/
 
 # Don't bake dev-only settings (carries the local DB connection string) into
 # production images; prod config comes from environment variables.

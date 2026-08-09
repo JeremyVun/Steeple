@@ -11,11 +11,11 @@ public interface IRoomRepository
     Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns <b>every</b> room matching the criteria (same filters + ordering as
-    /// <see cref="SearchAsync"/> but no pagination), for the time-first search path where survivors
-    /// are refined against real free windows before the page is cut. Beachhead-scale only.
+    /// Returns at most <paramref name="maxCandidates"/> rooms matching the criteria, in the same
+    /// stable order as <see cref="SearchAsync"/>, for availability refinement before paging.
     /// </summary>
-    Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default);
+    Task<IReadOnlyList<Room>> SearchCandidatesAsync(
+        RoomSearchCriteria criteria, int maxCandidates, CancellationToken ct = default);
 
     /// <summary>
     /// Returns the total count of rooms matching the criteria (ignoring pagination).
@@ -33,10 +33,10 @@ public interface IRoomRepository
     Task<Room?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the distinct suburbs that currently have at least one published room, alphabetically.
-    /// Used to populate the discovery suburb picker.
+    /// Returns the distinct suburbs inside <paramref name="bounds"/> that currently have at least
+    /// one published room, alphabetically. Used to populate the discovery suburb picker.
     /// </summary>
-    Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(BoundingBox bounds, CancellationToken ct = default);
 
     /// <summary>
     /// Returns lightweight sitemap rows (slugs + timestamp) for every published room whose venue

@@ -66,14 +66,15 @@ EMAIL_WEB_BASE_URL=https://steeple.jeremyvun.com
 ```
 
 Compose forwards these to ASP.NET's `Email__ApiKey`, `Email__From`, and
-`Email__WebBaseUrl`; use those nested names when running the API directly.
+`Email__WebBaseUrl`, and declares `Email__Mode=resend`; use those nested names when running the
+API directly.
 
-- **`EMAIL_API_KEY` / `Email__ApiKey`** — absent = no-send mode: the inbox row is still written, and recipient,
-  subject, and body are neither sent nor logged. That is correct for environments that should not mail.
+- **`EMAIL_API_KEY` / `Email__ApiKey`** — required in Production. Development uses
+  `Email__Mode=disabled`: the inbox row is still written and recipient/content is neither sent
+  nor logged.
 - **`EMAIL_WEB_BASE_URL` / `Email__WebBaseUrl`** — the public web origin *including any sub-path*. Empty means emails
   carry no links at all (a link to nowhere is worse than none). Every email's CTA is built from
-  it as `{WebBaseUrl}/?goto=<url-encoded deepLink>` — a query param, not a path, because the SPA
-  ships no server-side routes (`docs/contracts/web.md`).
+  it as `{WebBaseUrl}/?goto=<url-encoded deepLink>`.
 - **`Email__DevMailboxEnabled`** — Development only, and base appsettings omits it by
   construction. Never set it in production: it would capture recipient addresses and bodies to
   disk and expose them unauthenticated at `/dev/mailbox`.
@@ -89,8 +90,9 @@ Compose forwards these to ASP.NET's `Email__ApiKey`, `Email__From`, and
    village fallback. If it lands on the village, `Email__WebBaseUrl` or the deep link is wrong.
 5. **Logs**: Grafana/Loki — `Resend rejected an email` warnings mean the API key or From address
    is wrong; the send is best-effort so nothing else surfaces the failure.
-6. **Volume**: the Resend dashboard's daily count is the free-tier canary. Reminder emails scale
-   with confirmed bookings × parties (2 per occurrence-reminder), so watch it after launch.
+6. **Volume**: the Resend dashboard's daily count is the free-tier canary. A booking can create at
+   most two reminder emails total (organizer + managers at T−1d before its first occurrence);
+   recurring occurrences and ratings do not create email work.
 
 ## 6. Local development
 

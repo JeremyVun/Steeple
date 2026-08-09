@@ -1,12 +1,15 @@
 namespace Steeple.Api.Configuration;
 /// <summary>
-/// Media storage config (SYSTEM_DESIGN §9). With Spaces settings present the S3 adapter is used;
-/// otherwise uploads land on local disk and the API serves them at <c>/media</c> (dev loop).
+/// Media storage config (SYSTEM_DESIGN §9). Mode selects S3-compatible object storage or the
+/// local-disk Development adapter served by the API at <c>/media</c>.
 /// </summary>
 public class MediaOptions
 {
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Media";
+
+    /// <summary>Storage mode: <c>objectStorage</c> or <c>development</c>.</summary>
+    public string Mode { get; set; } = "";
 
     /// <summary>S3-compatible endpoint, e.g. <c>https://syd1.digitaloceanspaces.com</c>. Empty = local disk.</summary>
     public string ServiceUrl { get; set; } = "";
@@ -30,8 +33,14 @@ public class MediaOptions
     /// <summary>Local-disk root for dev uploads, relative to the content root.</summary>
     public string LocalRoot { get; set; } = "media-store";
 
+    /// <summary>Whether every required S3/CDN setting is present.</summary>
+    public bool HasObjectStorageConfiguration =>
+        !string.IsNullOrEmpty(ServiceUrl) && !string.IsNullOrEmpty(Bucket)
+        && !string.IsNullOrEmpty(AccessKey) && !string.IsNullOrEmpty(SecretKey)
+        && !string.IsNullOrEmpty(PublicBaseUrl);
+
     /// <summary>Whether the S3 adapter should be used.</summary>
     public bool UseObjectStorage =>
-        !string.IsNullOrEmpty(ServiceUrl) && !string.IsNullOrEmpty(Bucket)
-        && !string.IsNullOrEmpty(AccessKey) && !string.IsNullOrEmpty(SecretKey);
+        string.Equals(Mode, "objectStorage", StringComparison.OrdinalIgnoreCase)
+        || (string.IsNullOrWhiteSpace(Mode) && HasObjectStorageConfiguration);
 }

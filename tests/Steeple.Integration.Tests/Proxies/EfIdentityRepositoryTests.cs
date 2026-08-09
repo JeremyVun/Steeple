@@ -243,6 +243,19 @@ public class EfIdentityRepositoryTests
     }
 
     [Fact]
+    public async Task RecordAgreementAsync_UnrelatedDatabaseFailurePropagates()
+    {
+        await using var db = CreateContext();
+        var repository = new EfIdentityRepository(db, new FixedTimeProvider(FixedNow));
+
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() =>
+            repository.RecordAgreementAsync(Guid.NewGuid(), AgreementDocType.Tos, "2026-01-01"));
+
+        var postgres = Assert.IsType<Npgsql.PostgresException>(error.InnerException);
+        Assert.Equal(Npgsql.PostgresErrorCodes.ForeignKeyViolation, postgres.SqlState);
+    }
+
+    [Fact]
     public async Task AnonymizeUserAsync_ClearsPiiRemovesLoginsRevokesTokensButKeepsAgreements()
     {
         await using var seedDb = CreateContext();

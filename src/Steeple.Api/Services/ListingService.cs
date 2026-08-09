@@ -10,6 +10,12 @@ public sealed class ListingService : IListingService
     /// <summary>Upper bound on page size for the public, unauthenticated search endpoints.</summary>
     private const int MaxPageSize = 100;
 
+    /// <summary>Upper bound on rooms refined for availability by one anonymous search.</summary>
+    private const int MaxAvailabilityCandidates = 300;
+
+    /// <summary>Upper bound on public search page numbers.</summary>
+    private const int MaxPage = 1000;
+
     private readonly IRoomRepository _rooms;
     private readonly IGeofencePolicy _geofence;
     private readonly IRatingService _ratings;
@@ -39,10 +45,10 @@ public sealed class ListingService : IListingService
     {
         var bounds = _geofence.ResolveSearchBounds(query);
 
-        var page = query.Page < 1 ? 1 : query.Page;
+        var page = Math.Clamp(query.Page, 1, MaxPage);
         // Clamp page size so an anonymous caller can't pull the whole table in one request.
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
-        var skip = (page - 1) * pageSize;
+        var skip = checked((int)((long)(page - 1) * pageSize));
 
         // Distance is only meaningful when the query supplied a center; when present we push the
         // nearest-first ordering into the query so pagination returns the closest rooms, not page 1 by name.
@@ -62,15 +68,18 @@ public sealed class ListingService : IListingService
             When: when,
             Amenities: query.Amenities);
 
-        // Rooms to project + the true total. A When filter refines the cheap SQL prefilter against
-        // real free windows, so we fetch every prefiltered candidate, drop non-matchers, count and
-        // paginate afterwards (the SQL Skip/Take can't see availability). Plain search paginates in SQL.
+        // Rooms to project + the reported total. A When filter refines the cheap SQL prefilter against
+        // real free windows, so we fetch a bounded, deterministically ordered candidate set, drop
+        // non-matchers, count and paginate afterwards (the SQL Skip/Take can't see availability).
+        // Plain search paginates in SQL.
         IReadOnlyList<Room> rooms;
         int totalCount;
         IReadOnlyDictionary<Guid, MatchedWindowDto> matched;
         if (when is not null)
         {
-            var candidates = await _rooms.SearchAllAsync(criteria, ct).ConfigureAwait(false);
+            var candidates = await _rooms
+                .SearchCandidatesAsync(criteria, MaxAvailabilityCandidates, ct)
+                .ConfigureAwait(false);
             matched = await _availability
                 .FilterByWhenAsync(
                     candidates.Where(r => r.Venue is not null).Select(r => (r.Id, r.Venue!.Timezone)).ToList(),
@@ -174,7 +183,7 @@ public sealed class ListingService : IListingService
 
     /// <inheritdoc />
     public Task<IReadOnlyList<string>> GetSuburbsAsync(CancellationToken ct = default) =>
-        _rooms.GetPublishedSuburbsAsync(ct);
+        _rooms.GetPublishedSuburbsAsync(_geofence.Bounds, ct);
 
     /// <inheritdoc />
     public Task<IReadOnlyList<SitemapEntry>> GetSitemapEntriesAsync(CancellationToken ct = default) =>

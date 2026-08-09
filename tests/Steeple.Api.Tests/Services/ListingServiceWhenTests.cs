@@ -58,6 +58,45 @@ public class ListingServiceWhenTests
     }
 
     [Fact]
+    public async Task WhenFilter_BoundsCandidatesBeforeAvailabilityRefinement()
+    {
+        var rooms = Enumerable.Range(0, 301).Select(i => Room($"Venue {i:D3}", $"room-{i:D3}")).ToList();
+        var repo = new StubRepo(rooms);
+        var avail = new StubAvailability(rooms.ToDictionary(
+            r => r.Id,
+            _ => new MatchedWindowDto(null, "09:00", "11:00")));
+        var service = CreateService(repo, avail);
+
+        var when = new AvailabilityFilter(
+            true, null, Weekdays.Tuesday, WhenRangeKind.AnyWindow, default, default, 120, null);
+        var result = await service.SearchAsync(new ListingSearchQuery { PageSize = 100 }, when);
+
+        Assert.Equal(300, repo.MaxCandidates);
+        Assert.Equal(300, avail.SeenRoomIds.Count);
+        Assert.Equal(300, result.TotalCount);
+    }
+
+    [Theory]
+    [InlineData(int.MaxValue, int.MaxValue, 1000, 100, 99900)]
+    [InlineData(int.MinValue, int.MinValue, 1, 1, 0)]
+    public async Task Search_ClampsExtremePagingWithoutOffsetOverflow(
+        int requestedPage, int requestedPageSize, int expectedPage, int expectedPageSize, int expectedSkip)
+    {
+        var repo = new StubRepo([]);
+        var service = CreateService(repo, new StubAvailability(new Dictionary<Guid, MatchedWindowDto>()));
+
+        var result = await service.SearchAsync(new ListingSearchQuery
+        {
+            Page = requestedPage,
+            PageSize = requestedPageSize,
+        });
+
+        Assert.Equal(expectedPage, result.Page);
+        Assert.Equal(expectedPageSize, result.PageSize);
+        Assert.Equal(expectedSkip, repo.LastCriteria!.Skip);
+    }
+
+    [Fact]
     public async Task NoWhenFilter_RefinerNeverConsulted()
     {
         var a = Room("Alpha", "alpha-hall");
@@ -117,13 +156,17 @@ public class ListingServiceWhenTests
     {
         public bool SearchAllCalled { get; private set; }
 
+        public int? MaxCandidates { get; private set; }
+
         public RoomSearchCriteria? LastCriteria { get; private set; }
 
-        public Task<IReadOnlyList<Room>> SearchAllAsync(RoomSearchCriteria criteria, CancellationToken ct = default)
+        public Task<IReadOnlyList<Room>> SearchCandidatesAsync(
+            RoomSearchCriteria criteria, int maxCandidates, CancellationToken ct = default)
         {
             SearchAllCalled = true;
+            MaxCandidates = maxCandidates;
             LastCriteria = criteria;
-            return Task.FromResult(rooms);
+            return Task.FromResult<IReadOnlyList<Room>>(rooms.Take(maxCandidates).ToList());
         }
 
         public Task<IReadOnlyList<Room>> SearchAsync(RoomSearchCriteria criteria, CancellationToken ct = default)
@@ -135,7 +178,7 @@ public class ListingServiceWhenTests
         public Task<int> CountAsync(RoomSearchCriteria criteria, CancellationToken ct = default) => Task.FromResult(rooms.Count);
         public Task<Room?> GetByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Room?>(null);
         public Task<Room?> GetBySlugAsync(string venueSlug, string roomSlug, CancellationToken ct = default) => Task.FromResult<Room?>(null);
-        public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<IReadOnlyList<string>> GetPublishedSuburbsAsync(BoundingBox bounds, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
         public Task<IReadOnlyList<SitemapEntry>> GetPublishedForSitemapAsync(BoundingBox bounds, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<SitemapEntry>>([]);
     }
 

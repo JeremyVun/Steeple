@@ -24,6 +24,9 @@ public class ApplicationCounterOfferConfiguration : IEntityTypeConfiguration<App
             .HasFilter("\"Status\" = 0");
 
         builder.HasIndex(c => new { c.ApplicationId, c.CreatedAtUtc });
+        builder.HasIndex(c => new { c.CreatedAtUtc, c.Id })
+            .HasDatabaseName("IX_application_counter_offers_RetentionMessage")
+            .HasFilter("\"Message\" IS NOT NULL");
 
         builder
             .HasOne(c => c.Application)

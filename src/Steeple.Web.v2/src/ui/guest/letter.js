@@ -198,8 +198,10 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
     const photo = listing?.primaryPhotoUrl ?? listing?.photos?.[0]?.cardUrl ?? null;
     const capacity = listing?.capacity ?? room.capacity ?? null;
     const price = listing?.pricePerHour ?? room.pricePerHour ?? null;
+    // The venue is named twice over the card already — the letterhead is the
+    // room and the line under it is the venue — so the card says only what the
+    // head does not: how many it seats and what it costs.
     const facts = [
-      venue.shortName ?? venue.name,
       capacity ? `Seats ${capacity}` : null,
       price == null ? null : `$${price}/hr`,
     ].filter(Boolean);
@@ -219,6 +221,9 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
           el('span', { class: 'openedspace__name', text: listing?.name ?? room.name }),
           el('span', { class: 'openedspace__meta', text: facts.join(' · ') }),
         ]),
+        // A card that goes somewhere says so: the press was there before this
+        // and nobody found it (owner review, 2026-08-09).
+        el('span', { class: 'openedspace__go', 'aria-hidden': 'true', text: 'See the space' }),
       ]
     );
   }

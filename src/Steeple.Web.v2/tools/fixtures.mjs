@@ -155,7 +155,12 @@ export const CURRENT_AGREEMENTS = [...agreementSource.matchAll(/docType:\s*'([^'
  */
 export async function agreeCurrent(token) {
   for (const doc of CURRENT_AGREEMENTS) {
-    await call('POST', '/me/agreements', { token, body: doc });
+    const answer = await call('POST', '/me/agreements', { token, body: doc });
+    // A silent failure here degrades ~20 suites into modal-swallowed timeouts;
+    // one loud error names the real culprit instead.
+    if (answer.status !== 200 && answer.status !== 201 && answer.status !== 204) {
+      throw new Error(`agreeCurrent: ${doc.docType}@${doc.version} answered ${answer.status}`);
+    }
   }
 }
 

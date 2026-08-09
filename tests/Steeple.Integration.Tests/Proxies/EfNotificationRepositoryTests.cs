@@ -56,7 +56,7 @@ public class EfNotificationRepositoryTests
         await using (var db = CreateContext())
         {
             var repository = new EfNotificationRepository(db);
-            await repository.AddRangeAsync(notifications);
+            await repository.AddRangeAsync(notifications, []);
         }
 
         await using var readDb = CreateContext();

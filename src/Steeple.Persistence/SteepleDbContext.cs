@@ -57,6 +57,9 @@ public class SteepleDbContext : DbContext
     /// <summary>The notifications inbox (inbox = truth).</summary>
     public DbSet<Notification> Notifications => Set<Notification>();
 
+    /// <summary>Durable email/push delivery work written with notification inbox rows.</summary>
+    public DbSet<NotificationOutbox> NotificationOutbox => Set<NotificationOutbox>();
+
     /// <summary>FCM push registrations.</summary>
     public DbSet<Device> Devices => Set<Device>();
 

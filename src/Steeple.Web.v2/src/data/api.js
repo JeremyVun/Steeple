@@ -53,6 +53,7 @@ export class ApiError extends Error {
     this.code = problem?.code ?? null;
     this.detail = problem?.detail ?? null;
     this.timedOut = timedOut;
+    this.aborted = false;
   }
 }
 
@@ -306,7 +307,7 @@ const safeJson = (text) => {
  * @param {string} [params.endTime]          HH:mm
  * @param {number} [params.durationMinutes]
  * @param {number} [params.page]             1-based
- * @param {number} [params.pageSize]         ≤100
+ * @param {number} [params.pageSize]         at most 100
  * @returns {Promise<{items:WireRoomSummary[],totalCount:number,isZeroResult:boolean,page:number,pageSize:number}>}
  */
 export function searchListings(params, { signal = null } = {}) {
@@ -350,7 +351,7 @@ export function getSitemap() {
  * Null when the room is unknown or unpublished.
  * @returns {Promise<{roomId:string,timezone:string,from:string,to:string,days:Array<{date:string,isBlackout:boolean,freeWindows:Array<{startTime:string,endTime:string}>}>}|null>}
  */
-export function getRoomAvailability(roomId, { from, to } = {}) {
+export function getRoomAvailability(roomId, { from, to } = /** @type {any} */ ({})) {
   return get(`/listings/${encodeURIComponent(roomId)}/availability`, { from, to }, { notFoundAsNull: true });
 }
 
@@ -451,7 +452,7 @@ export function getMe(accessToken) {
  * version. Idempotent per (user, docType, version); `400 unknown_doc_type` for
  * anything but `tos` and `privacy`.
  */
-export function acceptAgreement(docType, version, { accessToken } = {}) {
+export function acceptAgreement(docType, version, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', '/me/agreements', { docType, version }, { accessToken });
 }
 
@@ -481,7 +482,7 @@ export function acceptAgreement(docType, version, { accessToken } = {}) {
  * @param {{activityType:string,groupSize:number,schedule:WireSchedule,intentText:string,turnstileToken:string|null,organizationName?:string|null}} body
  * @returns {Promise<object>} ApplicationDto
  */
-export function submitApplication(roomId, body, { accessToken, idempotencyKey = null } = {}) {
+export function submitApplication(roomId, body, { accessToken, idempotencyKey = null } = /** @type {any} */ ({})) {
   return send('POST', `/listings/${encodeURIComponent(roomId)}/applications`, body, {
     accessToken,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
@@ -522,7 +523,7 @@ export function getApplication(applicationId, accessToken) {
  * application as it now stands.
  * @returns {Promise<object>} ApplicationDto
  */
-export function postApplicationMessage(applicationId, body, { accessToken } = {}) {
+export function postApplicationMessage(applicationId, body, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', `/applications/${encodeURIComponent(applicationId)}/messages`, { body }, { accessToken });
 }
 
@@ -533,7 +534,7 @@ export function postApplicationMessage(applicationId, body, { accessToken } = {}
  * @param {'approve'|'decline'} decision
  * @returns {Promise<object>} ApplicationDto
  */
-export function postDecision(applicationId, decision, message = null, { accessToken } = {}) {
+export function postDecision(applicationId, decision, message = null, { accessToken } = /** @type {any} */ ({})) {
   return send(
     'POST',
     `/applications/${encodeURIComponent(applicationId)}/decision`,
@@ -543,7 +544,7 @@ export function postDecision(applicationId, decision, message = null, { accessTo
 }
 
 /** `POST /applications/{id}/withdraw` — the organizer takes it back. */
-export function postWithdraw(applicationId, { accessToken } = {}) {
+export function postWithdraw(applicationId, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', `/applications/${encodeURIComponent(applicationId)}/withdraw`, null, { accessToken });
 }
 
@@ -554,7 +555,7 @@ export function postWithdraw(applicationId, { accessToken } = {}) {
  * @param {{schedule:WireSchedule, message?:string|null}} body
  * @returns {Promise<object>} ApplicationDto
  */
-export function postCounterOffer(applicationId, body, { accessToken } = {}) {
+export function postCounterOffer(applicationId, body, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', `/applications/${encodeURIComponent(applicationId)}/counter-offer`, body, { accessToken });
 }
 
@@ -564,7 +565,7 @@ export function postCounterOffer(applicationId, body, { accessToken } = {}) {
  * @param {'accept'|'decline'} decision
  * @returns {Promise<object>} ApplicationDto
  */
-export function postCounterOfferResponse(applicationId, decision, { accessToken } = {}) {
+export function postCounterOfferResponse(applicationId, decision, { accessToken } = /** @type {any} */ ({})) {
   return send(
     'POST',
     `/applications/${encodeURIComponent(applicationId)}/counter-offer/respond`,
@@ -601,7 +602,7 @@ export function getManagedBookings(accessToken, { status = null, page = null, pa
  * it now stands.
  * @returns {Promise<object>} BookingDto
  */
-export function cancelBooking(bookingId, { reason = null } = {}, { accessToken } = {}) {
+export function cancelBooking(bookingId, { reason = null } = /** @type {any} */ ({}), { accessToken } = /** @type {any} */ ({})) {
   return send('POST', `/bookings/${encodeURIComponent(bookingId)}/cancel`, { reason }, { accessToken });
 }
 
@@ -620,7 +621,7 @@ export function cancelBooking(bookingId, { reason = null } = {}, { accessToken }
  * feature is off") · `429` at 5/min per account.
  * @returns {Promise<null>}
  */
-export function submitRating(bookingId, { stars, comment = null } = {}, { accessToken } = {}) {
+export function submitRating(bookingId, { stars, comment = null } = /** @type {any} */ ({}), { accessToken } = /** @type {any} */ ({})) {
   return send(
     'POST',
     `/bookings/${encodeURIComponent(bookingId)}/ratings`,
@@ -639,7 +640,7 @@ export function submitRating(bookingId, { stars, comment = null } = {}, { access
  * `POST /me/payments/setup` → `{clientSecret, publishableKey, mock}`.
  * `mock: true` says to render the mock card form rather than Stripe Elements.
  */
-export function createPaymentSetup({ accessToken } = {}) {
+export function createPaymentSetup({ accessToken } = /** @type {any} */ ({})) {
   return send('POST', '/me/payments/setup', null, { accessToken });
 }
 
@@ -648,7 +649,7 @@ export function createPaymentSetup({ accessToken } = {}) {
  * exactly four digits; anything else answers `400 invalid_payment`.
  * @returns {Promise<{hasPaymentMethod:boolean,method:object|null,mock:boolean}>}
  */
-export function confirmMockPaymentSetup({ clientSecret, brand, last4 }, { accessToken } = {}) {
+export function confirmMockPaymentSetup({ clientSecret, brand, last4 }, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', '/me/payments/setup/mock-confirm', { clientSecret, brand, last4 }, { accessToken });
 }
 
@@ -670,7 +671,7 @@ export function getVenuePayments(venueId, accessToken) {
 }
 
 /** `POST /manage/venues/{id}/payments/onboarding` → `{url, mock}`. */
-export function startVenuePayoutOnboarding(venueId, { accessToken } = {}) {
+export function startVenuePayoutOnboarding(venueId, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/payments/onboarding`, null, {
     accessToken,
   });
@@ -682,7 +683,7 @@ export function startVenuePayoutOnboarding(venueId, { accessToken } = {}) {
  * `400 invalid_payment` before onboarding has been started.
  * @returns {Promise<object>} VenuePaymentStateDto
  */
-export function completeMockVenuePayoutOnboarding(venueId, { accessToken } = {}) {
+export function completeMockVenuePayoutOnboarding(venueId, { accessToken } = /** @type {any} */ ({})) {
   return send(
     'POST',
     `/manage/venues/${encodeURIComponent(venueId)}/payments/onboarding/mock-complete`,
@@ -717,7 +718,7 @@ export function postEvents({ sessionId, events }, { accessToken = null } = {}) {
 }
 
 /** `POST /me/notifications/read` — marks rows read; ids not yours are ignored. */
-export function markNotificationsRead(ids, { accessToken } = {}) {
+export function markNotificationsRead(ids, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', '/me/notifications/read', { ids }, { accessToken });
 }
 
@@ -796,7 +797,7 @@ export function getManagedVenue(venueId, accessToken) {
  * @param {{name:string,description:string,addressLine:string,suburb:string,postcode:string,venueType?:string,contactEmail?:string|null}} body
  * @returns {Promise<WireManagedVenue>}
  */
-export function createManagedVenue(body, { accessToken, idempotencyKey = null } = {}) {
+export function createManagedVenue(body, { accessToken, idempotencyKey = null } = /** @type {any} */ ({})) {
   return send('POST', '/manage/venues', body, {
     accessToken,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
@@ -804,7 +805,7 @@ export function createManagedVenue(body, { accessToken, idempotencyKey = null } 
 }
 
 /** `PATCH /manage/venues/{id}` — null fields stay as they are; address changes re-geocode. */
-export function updateManagedVenue(venueId, body, { accessToken } = {}) {
+export function updateManagedVenue(venueId, body, { accessToken } = /** @type {any} */ ({})) {
   return send('PATCH', `/manage/venues/${encodeURIComponent(venueId)}`, body, { accessToken });
 }
 
@@ -817,7 +818,7 @@ export function updateManagedVenue(venueId, body, { accessToken } = {}) {
  * creating a second one — same idiom as `createManagedVenue` above.
  * @returns {Promise<WireManagedRoom>}
  */
-export function createManagedRoom(venueId, body, { accessToken, idempotencyKey = null } = {}) {
+export function createManagedRoom(venueId, body, { accessToken, idempotencyKey = null } = /** @type {any} */ ({})) {
   return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/rooms`, body, {
     accessToken,
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
@@ -834,7 +835,7 @@ export function createManagedRoom(venueId, body, { accessToken, idempotencyKey =
  * hours (`no_open_hours`).
  * @returns {Promise<WireManagedRoom>}
  */
-export function updateManagedRoom(roomId, body, { accessToken } = {}) {
+export function updateManagedRoom(roomId, body, { accessToken } = /** @type {any} */ ({})) {
   return send('PATCH', `/manage/rooms/${encodeURIComponent(roomId)}`, body, { accessToken });
 }
 
@@ -850,9 +851,9 @@ export function getManagedRoom(roomId, accessToken) {
  * @param {File|Blob} file
  * @returns {Promise<WireRoomPhoto>}
  */
-export function uploadRoomPhoto(roomId, file, { caption = null, accessToken } = {}) {
+export function uploadRoomPhoto(roomId, file, { caption = null, accessToken } = /** @type {any} */ ({})) {
   const form = new FormData();
-  form.append('file', file, file.name ?? 'photo.jpg');
+  form.append('file', file, file instanceof File ? file.name : 'photo.jpg');
   if (caption) form.append('caption', caption);
   return upload(`/manage/rooms/${encodeURIComponent(roomId)}/photos`, form, { accessToken });
 }
@@ -868,6 +869,6 @@ export function getRoomAvailabilityRules(roomId, accessToken) {
  * ≤6 windows a day, no overlaps, ≤200 blackouts, none of them in the past.
  * @param {{days:Array<{dayOfWeek:string,windows:Array<{startTime:string,endTime:string}>}>,blackouts:Array<{date:string,reason:string|null}>}} body
  */
-export function saveRoomAvailabilityRules(roomId, body, { accessToken } = {}) {
+export function saveRoomAvailabilityRules(roomId, body, { accessToken } = /** @type {any} */ ({})) {
   return send('PUT', `/manage/rooms/${encodeURIComponent(roomId)}/availability`, body, { accessToken });
 }

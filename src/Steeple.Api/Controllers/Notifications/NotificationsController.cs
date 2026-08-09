@@ -13,6 +13,9 @@ namespace Steeple.Api.Controllers.Notifications;
 [Route("api/v1/me/notifications")]
 public sealed class NotificationsController : ControllerBase
 {
+    private const int MaxReadIds = 100;
+    private const long MaxReadBodyBytes = 8 * 1024;
+
     private readonly INotificationService _notifications;
 
     public NotificationsController(INotificationService notifications) => _notifications = notifications;
@@ -25,9 +28,19 @@ public sealed class NotificationsController : ControllerBase
 
     /// <summary>Marks rows read. Ids not belonging to the caller are ignored.</summary>
     [HttpPost("read")]
+    [RequestSizeLimit(MaxReadBodyBytes)]
     public async Task<IActionResult> MarkRead([FromBody] MarkNotificationsReadRequest request, CancellationToken ct)
     {
-        await _notifications.MarkReadAsync(User.GetUserId(), request.Ids ?? [], ct);
+        var ids = request.Ids ?? [];
+        if (ids.Count > MaxReadIds)
+        {
+            return Problem(
+                detail: $"At most {MaxReadIds} notification ids may be marked read at once.",
+                statusCode: StatusCodes.Status400BadRequest,
+                extensions: new Dictionary<string, object?> { ["code"] = "too_many_notification_ids" });
+        }
+
+        await _notifications.MarkReadAsync(User.GetUserId(), ids, ct);
         return NoContent();
     }
 }

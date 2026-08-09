@@ -157,7 +157,7 @@ storages by hand and find nothing private.
 **Verify (real flow):** on `:5173`, upload the same image twice to one room through the
 host chain, delete one, confirm the survivor still renders (web + Admin).
 
-## [ ] P4 — API correctness batch (four small fixes)
+## [X] P4 — API correctness batch (four small fixes)
 
 Independent work orders; one agent can take all four. Every new test proven to bite.
 
@@ -189,7 +189,7 @@ Independent work orders; one agent can take all four. Every new test proven to b
 **Verify:** `dotnet test` (unit + integration) green; `BookingIntegrityTests` green;
 live: `session-tabs-test.mjs` still proves concurrent-tab refresh survives.
 
-## [ ] P5 — Durable delivery (notification outbox)
+## [X] P5 — Durable delivery (notification outbox)
 
 The design's interim await option is skipped — go straight to the outbox.
 
@@ -215,10 +215,10 @@ The design's interim await option is skipped — go straight to the outbox.
 **Verify (real flow):** dev mailbox — trigger a notification, stop the API between
 commit and delivery (or fault the gateway), restart, watch the email arrive.
 
-## [ ] P6 — Bound time-filtered discovery
+## [X] P6 — Bound time-filtered discovery
 
-1. **Hard candidate cap** on the `when`-filtered path (`ListingService.SearchAllAsync`
-   usage → `RoomRepository` → `AvailabilityService`): a named constant (default **300**;
+1. **Hard candidate cap** on the `when`-filtered path (`ListingService` →
+   `IRoomRepository.SearchCandidatesAsync` → `AvailabilityService`): a named constant (default **300**;
    record any different choice) bounding rooms materialized and availability-evaluated
    per anonymous request, with deterministic ordering so truncation is stable.
 2. **Page arithmetic:** cap `page` (default 1000) and compute offsets in checked/wider
@@ -237,11 +237,12 @@ commit and delivery (or fault the gateway), restart, watch the email arrive.
 **Verify:** `when`-filtered search on `:5173` behaves identically at beachhead scale;
 full `dotnet test`.
 
-## [ ] P7 — Data-retention sweeper (after P5)
+## [X] P7 — Data-retention sweeper (after P5)
 
 Owner-approved policies: refresh tokens 30d after expiry/revocation · notifications
 12mo · idempotency records 30d · correspondence 2y after application/booking closure ·
-legal acceptances kept indefinitely (post-anonymization) · plus P5's outbox rows.
+legal acceptances kept indefinitely (post-anonymization) · P5 notification-outbox rows
+30d after delivery/terminal failure.
 
 1. **One `DataRetentionWorker`** (BookingReminderWorker idiom): per-class delete queries
    in bounded batches (default 500/pass), spans config-backed with the owner defaults.
@@ -257,7 +258,14 @@ legal acceptances kept indefinitely (post-anonymization) · plus P5's outbox row
 **Verify:** integration suite green; a manual pass against the dev DB with shortened
 spans confirms batches and logging.
 
-## [ ] P8 — Production configuration, payments audit, Apple
+**Completed 2026-08-09:** one daily worker now applies all five policies with a shared
+per-class 500-row ceiling; correspondence redacts private text without deleting the financial
+graph; application and ledger replay keys share the 30-day policy; `user_agreements` is outside
+the sweep. Changeset 021 was applied through Liquibase to the dev database and mirrored into the
+production changelog. Isolated shortened-span PostgreSQL tests prove over/under-age boundaries and
+batching without aging shared dev data; full gate: 508 unit + 138 integration tests green.
+
+## [X] P8 — Production configuration, payments audit, Apple
 
 1. **One Production startup validator** (Program.cs idiom already exists for JWT/mock-
    payments — extend, don't scatter): every external capability declares an explicit
@@ -291,7 +299,21 @@ spans confirms batches and logging.
 **Verify:** compose stack boots green with a valid config; each deliberately-broken
 config fails at startup with an error naming the capability; `dotnet test`.
 
-## [ ] P9 — Web structural splits + static quality gates
+**Completed 2026-08-09:** one centralized Production validator now enforces explicit
+external-capability modes, Apple plus at least one SSO provider, non-development
+database/media/geocoding/email configuration, SEO, Turnstile, push, JWT, and the
+payments/mock invariant; Development remains exempt. Payments-off now hides the API,
+prevents setup/gating/snapshots/charges/sweeps, and leaves newly created bookings
+offline, with flag-on/off unit and PostgreSQL contract coverage. Deployment ignores,
+exact container image tags, a checked-in environment template, compose mappings, and
+an automated production-bundle Google+Apple button smoke landed. The owner-only Apple
+Developer and real-sign-in steps are recorded in the SSO/Turnstile runbook. An
+isolated Production-shaped compose project migrated and reached healthy status for
+Postgres, API, web, and admin, and the full gate passed: 530 unit + 139 integration
+tests, web tests, provider smoke, and a clean production npm audit.
+No schema change was needed, so the production changelog was unchanged.
+
+## [X] P9 — Web structural splits + static quality gates
 
 Three file-disjoint work orders — parallelizable as separate agents if wanted.
 
@@ -315,7 +337,19 @@ Three file-disjoint work orders — parallelizable as separate agents if wanted.
 invocation, judged against known-stale sets); screenshots reviewed as a hostile design
 review; `dotnet test` untouched.
 
-## [ ] P10 — `ApplicationService` decomposition (best after P4)
+**Completed 2026-08-09:** `store.js` is now a small public coordinator over focused
+draft, fixture, host-state, mapping, model, and schedule modules; the host listing flow
+delegates Place, Describe, and Availability to workflow modules without changing its public
+seam. PostCSS scopes guest and host rules to their surface roots while preserving existing
+specificity and load order. `npm run check` now gates the node suites, ESLint, a JSDoc/checkJs
+allowlist covering API/session/router/store seams, the clean production audit, and an isolated
+axe pass over browse, room, inbox, and letter. Hostile-input (71/71), host navigation (31/31),
+and cross-surface card (26/26) browser suites passed; six guest/host/desk/listing screenshots
+were reviewed with no cascade bleed or layout regression. Both bundle modes, all three store
+timezones, 531 unit tests, and 139 integration tests passed. No schema changed, so neither
+repository nor production Liquibase changelogs required a P9 changeset.
+
+## [X] P10 — `ApplicationService` decomposition (best after P4)
 
 Extract within `Services/Applications/` (same deployable, ports and controllers
 untouched): pure transition rules, schedule validation, effective-expiry policy (P4's
@@ -323,6 +357,14 @@ predicates centralize here), notification composition, presentation/DTO mapping.
 Verbatim moves where possible. Gates: `dotnet test` untouched-green and
 `BookingIntegrityTests` green (this is bookings/approval — the concurrency proof is
 mandatory), plus one live apply→approve→book drive on `:5173`.
+
+**Completed 2026-08-09:** `ApplicationService` now orchestrates focused sibling components for
+transition rules, schedule policy, shared effective-expiry semantics, notification composition,
+and DTO presentation. The P4 calendar, competing-demand, and effective-status queries consume the
+same expiry status sets as the service. Controllers, ports, and behavior stayed unchanged. The
+full .NET gate passed (531 unit + 139 integration tests), including `BookingIntegrityTests`; a
+Development live drive produced `pending → approved → confirmed` with three occurrences. No
+schema changed, so neither repository nor production Liquibase changelogs needed a P10 changeset.
 
 ## [ ] P11 — Wire-token golden contract
 
@@ -362,21 +404,21 @@ watch all three sides go red, revert.
       recover it and fail.
 - [X] Photos: per-row object keys, compensation on failure, DB constraints (unique
       key, unique sort order, one primary) — each proven to bite.
-- [ ] Expiry, agreements, refresh rotation, and bulk-read caps fixed with tests that
+- [X] Expiry, agreements, refresh rotation, and bulk-read caps fixed with tests that
       were shown to fail before the fix.
-- [ ] Notifications deliver through a transactional outbox with retries and observable
+- [X] Notifications deliver through a transactional outbox with retries and observable
       terminal failure; process loss loses nothing.
-- [ ] Time-filtered discovery is hard-bounded; page math can't wrap; slug lookups are
+- [X] Time-filtered discovery is hard-bounded; page math can't wrap; slug lookups are
       sargable; suburbs respect the geofence; availability materialization recorded as
       a deliberate gap.
 - [ ] Retention sweeper enforces every owner-approved span in bounded batches;
       agreements provably never swept; the correspondence/financial-records note
       exists.
-- [ ] Production startup validates every external capability with explicit modes;
+- [X] Production startup validates every external capability with explicit modes;
       Turnstile-disabled is explicit; Apple is required and validated; ignore rules and
       image pins landed; payments flag audited with on/off contract tests. Owner
       actions for Apple handed to Jeremy as a checklist.
-- [ ] `store.js`, `host/listing.js`+CSS, and `ApplicationService` are split with
+- [X] `store.js`, `host/listing.js`+CSS, and `ApplicationService` are split with
       untouched-green suites; web has lint, JSDoc type-check, audit, and a11y gates.
 - [ ] One token table gates C#, web, and mobile wire enums, and was proven to bite.
 - [ ] Docs separate current truth from history; owning docs updated in the same change

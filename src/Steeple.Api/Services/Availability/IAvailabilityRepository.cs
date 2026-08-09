@@ -55,11 +55,11 @@ public interface IAvailabilityRepository
 
     /// <summary>
     /// The undecided (<c>Pending|NeedsInfo</c>) applications on the given rooms, organizer loaded
-    /// — the pending overlay the calendar projects onto the range. Read-only cross-module read
+    /// and not expired at <paramref name="now"/> — the pending overlay the calendar projects onto the range. Read-only cross-module read
     /// (same stance as the confirmed-occurrence reads: the Availability surface reads, never writes).
     /// </summary>
     Task<IReadOnlyList<Application>> GetUndecidedApplicationsForRoomsAsync(
-        IReadOnlyCollection<Guid> roomIds, CancellationToken ct = default);
+        IReadOnlyCollection<Guid> roomIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
     /// Replaces the room's entire rule set (delete existing rows, insert the supplied ones) in one

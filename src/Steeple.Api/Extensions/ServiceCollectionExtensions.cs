@@ -23,6 +23,8 @@ public static class ServiceCollectionExtensions
         IConfiguration configuration,
         IHostEnvironment environment)
     {
+        ProductionConfigurationValidator.Validate(configuration, environment);
+
         services.Configure<GeofenceOptions>(configuration.GetSection(GeofenceOptions.SectionName));
 
         // Geofence is configuration-derived and stateless -> singleton.
@@ -43,13 +45,14 @@ public static class ServiceCollectionExtensions
 
         services.AddSteepleIdentity(configuration, environment);
         services.AddSteepleApplications(configuration, environment);
-        services.AddSteeplePayments(configuration, environment);
+        services.AddSteeplePayments(configuration);
         services.AddSteepleManage(configuration);
         services.AddSteepleAvailability();
         services.AddSteepleMedia(configuration);
         services.AddSteepleFlags(configuration);
         services.AddSteepleAnalyticsIngest();
         services.AddSteepleReminders(configuration);
+        services.AddSteepleRetention(configuration);
         services.AddSteepleSeo(configuration);
         services.AddSteepleRateLimiting();
 
@@ -79,8 +82,7 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private static IServiceCollection AddSteeplePayments(
         this IServiceCollection services,
-        IConfiguration configuration,
-        IHostEnvironment environment)
+        IConfiguration configuration)
     {
         services.Configure<PaymentsOptions>(configuration.GetSection(PaymentsOptions.SectionName));
 
@@ -91,12 +93,6 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException($"Unsupported payment gateway '{payments.Gateway}'.");
         }
 
-        if (environment.IsProduction() && paymentsEnabled)
-        {
-            throw new InvalidOperationException(
-                "Production cannot enable 'payments.enabled' while Payments:Gateway is 'mock'.");
-        }
-
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IPaymentRepository, EfPaymentRepository>();
 
@@ -104,7 +100,10 @@ public static class ServiceCollectionExtensions
         // HttpClient registration behind the same port.
         services.AddSingleton<IPaymentGateway, MockPaymentGateway>();
 
-        services.AddHostedService<PaymentSweeper>();
+        if (paymentsEnabled)
+        {
+            services.AddHostedService<PaymentSweeper>();
+        }
 
         return services;
     }
@@ -124,12 +123,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IManageRepository, EfManageRepository>();
 
         var geocoding = configuration.GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions();
-        if (geocoding.HasAppleCredentials)
+        if (geocoding.UseApple)
         {
             services.AddSingleton<AppleMapsTokenProvider>();
             services.AddHttpClient<IGeocodingGateway, AppleMapsGeocodingGateway>();
         }
-        else if (!string.IsNullOrEmpty(geocoding.GoogleApiKey))
+        else if (geocoding.UseGoogle)
         {
             services.AddHttpClient<IGeocodingGateway, GoogleGeocodingGateway>();
         }
@@ -197,9 +196,9 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Upcoming-booking reminders: the sweep (scoped, over the DbContext) plus the one background
-    /// timer in the API. Disabling the worker leaves the sweep resolvable, so tests and the dev
-    /// loop can still drive it directly.
+    /// Upcoming-booking reminders: the sweep (scoped, over the DbContext) plus its background
+    /// timer. Disabling the worker leaves the sweep resolvable, so tests and the dev loop can still
+    /// drive it directly.
     /// </summary>
     private static IServiceCollection AddSteepleReminders(this IServiceCollection services, IConfiguration configuration)
     {
@@ -212,6 +211,25 @@ public static class ServiceCollectionExtensions
         if (reminders.Enabled)
         {
             services.AddHostedService<BookingReminderWorker>();
+        }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Owner-approved data retention: one scoped bounded sweep and one optional daily worker.
+    /// Disabling scheduling leaves the sweep resolvable for manual and integration-test passes.
+    /// </summary>
+    private static IServiceCollection AddSteepleRetention(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<DataRetentionOptions>(configuration.GetSection(DataRetentionOptions.SectionName));
+        services.AddScoped<IDataRetentionService, DataRetentionService>();
+
+        var retention = configuration.GetSection(DataRetentionOptions.SectionName)
+            .Get<DataRetentionOptions>() ?? new DataRetentionOptions();
+        if (retention.Enabled)
+        {
+            services.AddHostedService<DataRetentionWorker>();
         }
 
         return services;
@@ -234,6 +252,8 @@ public static class ServiceCollectionExtensions
         IHostEnvironment environment)
     {
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
+        services.Configure<NotificationOutboxOptions>(
+            configuration.GetSection(NotificationOutboxOptions.SectionName));
 
         services.AddScoped<IApplicationService, ApplicationService>();
         services.AddScoped<IApplicationRepository, EfApplicationRepository>();
@@ -252,8 +272,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
 
-        // Stateless over HttpClient + options; sends are fire-and-forget from scoped callers, so
-        // the gateway must not capture scoped state -> typed client, resolved per use.
+        // Stateless over HttpClient + options. The outbox worker resolves this inside the fresh
+        // scope it owns for each bounded batch.
         services.AddHttpClient<ResendEmailGateway>();
 
         var email = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
@@ -274,6 +294,13 @@ public static class ServiceCollectionExtensions
 
         services.AddSteeplePush(configuration);
 
+        var outbox = configuration.GetSection(NotificationOutboxOptions.SectionName)
+            .Get<NotificationOutboxOptions>() ?? new NotificationOutboxOptions();
+        if (outbox.Enabled)
+        {
+            services.AddHostedService<NotificationOutboxWorker>();
+        }
+
         return services;
     }
 
@@ -290,7 +317,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDeviceRegistry, EfDeviceRegistry>();
 
         var push = configuration.GetSection(PushOptions.SectionName).Get<PushOptions>() ?? new PushOptions();
-        if (!string.IsNullOrEmpty(push.ServiceAccountJson) || !string.IsNullOrEmpty(push.ServiceAccountJsonPath))
+        if (push.IsEnabled)
         {
             // One FirebaseApp per process; created lazily so environments without Push
             // configured never touch the SDK.
@@ -301,9 +328,7 @@ public static class ServiceCollectionExtensions
                     : GoogleCredential.FromFile(push.ServiceAccountJsonPath);
                 return FirebaseApp.Create(new AppOptions { Credential = credential });
             });
-            // Singleton on purpose: NotificationDispatcher fire-and-forgets sends past the end of
-            // the request, so the gateway must never capture request-scoped services (it opens its
-            // own scope for dead-token cleanup).
+            // FirebaseApp is process-wide; the gateway opens its own scope for dead-token cleanup.
             services.AddSingleton<IPushGateway, FcmPushGateway>();
         }
         else

@@ -1120,18 +1120,18 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       'button',
       {
         type: 'button',
-        class: 'spacecard',
+        class: 'letterspace',
         'aria-label': `Open the listing for ${room.name}`,
         onclick: () =>
           onListing?.({ venueId: application.venueId, roomId: application.roomId, step: 'describe' }),
       },
       [
         room.photo
-          ? el('img', { class: 'spacecard__photo', src: room.photo, alt: '' })
-          : el('span', { class: 'spacecard__photo spacecard__photo--none', 'aria-hidden': 'true' }),
-        el('span', { class: 'spacecard__body' }, [
-          el('span', { class: 'spacecard__name', text: room.name }),
-          el('span', { class: 'spacecard__meta', text: facts.join(' · ') }),
+          ? el('img', { class: 'letterspace__photo', src: room.photo, alt: '' })
+          : el('span', { class: 'letterspace__photo letterspace__photo--none', 'aria-hidden': 'true' }),
+        el('span', { class: 'letterspace__body' }, [
+          el('span', { class: 'letterspace__name', text: room.name }),
+          el('span', { class: 'letterspace__meta', text: facts.join(' · ') }),
         ]),
       ]
     );

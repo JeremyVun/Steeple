@@ -29,6 +29,9 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         // The lazy renewal-due sweep scans confirmed bookings by their term end.
         builder.HasIndex(b => new { b.Status, b.EndDate });
+        builder.HasIndex(b => new { b.CancelledAtUtc, b.Id })
+            .HasDatabaseName("IX_bookings_RetentionCancelReason")
+            .HasFilter("\"CancelReason\" IS NOT NULL");
 
         builder
             .HasOne(b => b.Application)

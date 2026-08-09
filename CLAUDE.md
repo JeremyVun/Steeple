@@ -54,7 +54,7 @@ Web → (HTTP only) → Api → Persistence ← Admin        mobile → (HTTP on
   auth **by design** — authelia gates it at the edge proxy in the deployed environment.
   Four screens only (2026-08-05, D3): overview, `/admin/review` (first-listing decisions +
   rating hide/unhide), `/admin/listings` (Unlist takedown), `/admin/venue-managers`.
-- `/db/changelog` — Liquibase formatted SQL (`001…018-*.sql` + master manifest).
+- `/db/changelog` — Liquibase formatted SQL (`001…020-*.sql` + master manifest).
   **Owns the schema; no application ever migrates.**
 - `/tests` — `Steeple.Api.Tests` (xUnit unit: geofence, geo math, listing visibility,
   `ScheduleMaterializer` DST) + `Steeple.Integration.Tests` (Testcontainers Postgres,
@@ -91,9 +91,9 @@ dotnet run --project src/Steeple.Admin
 docker compose down -v && docker compose up -d   # full DB reset (re-runs migrate + seed)
 ```
 
-- Compose needs `AUTH_JWT_SIGNING_KEY` (env or `.env`) and **refuses the repository dev
-  key** — its containers run Production and the security-round guard fails closed
-  (api crash-loops). Generate one: `openssl rand -base64 48`.
+- Compose is Production-shaped and requires the values inventoried in `.env.example`, including
+  a non-development database password, Apple, Resend, real geocoding/media, SEO, and explicit
+  Turnstile mode. Generate `AUTH_JWT_SIGNING_KEY` with `openssl rand -base64 48`.
 - Emails sent locally are captured at http://localhost:5200/dev/mailbox (`.json` for
   harnesses) — Development only, and their CTAs are real links into the SPA.
 - Razor views hot-reload in Development; C# changes need restart.
@@ -216,7 +216,7 @@ app-time ~6× slow: suites wait on state, never wall-clock.
 - `src/data/providers.js` — Google/Apple, the only file that knows a third party exists; a
   provider with no `VITE_*` client id is not offered at all, SDKs load on first attempt.
 - `src/data/turnstile.js` — the widget; no `VITE_TURNSTILE_SITE_KEY` ⇒ no widget and null
-  tokens (the API fails open without a secret — key both sides or neither).
+  tokens. Production requires explicit enabled/disabled mode and keys both sides when enabled.
 - `src/data/agreements.js` — the two legal documents at shipping versions; a first *panel*
   sign-in is asked to agree inline, and a session that still owes an acceptance is gated —
   the panel returns until they agree or sign out, and declining/dismissing signs out
@@ -226,8 +226,9 @@ app-time ~6× slow: suites wait on state, never wall-clock.
   `refused | offline | signedOut | unavailable` — never a guess (D4/D5).
 - `src/data/store.js` — a **memory-only mirror** of what steeple holds, scoped to the active
   person (D6). It decides nothing; reload or identity change discards it and real reads refill
-  it. Old `steeple-village-store:*` keys are purged at boot/sign-out. The demo fixture is
-  dev-build village scenery only and never persists.
+  it. Draft operations, wire mapping, schedules, host state, and the dev fixture live under
+  `src/data/store/` behind the same exports. Old `steeple-village-store:*` keys are purged at
+  boot/sign-out. The demo fixture is dev-build village scenery only and never persists.
 - `src/data/analytics.js` — the interaction batcher to `POST /api/v1/events` (CONTRACTS
   §7); nothing user-visible ships dark.
 - `src/data/photo.js` — a picked file made into the file that is sent: EXIF orientation
@@ -323,12 +324,16 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
   does it now that its own claim is DOM state rather than a fade.
 
 **Hazards (each verified against code, 2026-08-07):**
-- Class names are never shared across guest and host surfaces: stylesheets load
-  main → map → panels → guest → host, so a shared name means `host.css` silently restyles
-  the guest surface. The booking-mode radios are `.mode*` (not the sheet's `.choice*`),
+- Guest and host CSS is transform-scoped by `postcss.config.js` to `.guest` and `.hostdesk`
+  with zero-specificity roots, preserving the established main → map → panels → guest → host
+  order while making a generic class incapable of crossing between those surfaces. Keep the
+  block names distinct as well: booking-mode radios are `.mode*` (not the sheet's `.choice*`),
   and the host's opened letter is `.letterpage__*` (2026-08-07 — its `.letter__sheet` rule
   had bled `overflow:hidden` onto the guest request sheet and made it unscrollable);
-  `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own.
+  `.pill--quiet` in `host.css` loads after `map.css`, so map surfaces style their own. The
+  host letter's space card is `.letterspace*` (2026-08-09 — as `.spacecard` it had been
+  reshaping the venue sheet's standing photo cards, `tools/space-card-test.mjs` §5 guards
+  it), and the guest letter's is `.openedspace*`.
 - Local-disk room photos store origin-independent `media/...` paths; Vite/web nginx/Admin proxy
   them and mobile resolves them against its API base. Object-storage photos remain absolute at
   the permanent CDN origin, which must be added to web nginx CSP `img-src` and
@@ -343,10 +348,9 @@ and payout screen (gateway stand-ins), no Turnstile until keyed.
 - Behind a proxy, a dead API answers **502** (nginx may answer **504** on a stopped
   upstream); `neverArrived()` covers 0/502/503 and deliberately not 504 — a timeout may
   have committed.
-- The compose stack runs Production and **refuses the repository dev JWT key**
-  (security-round guard): set `AUTH_JWT_SIGNING_KEY` to `openssl rand -base64 48` output
-  or the api container crash-loops. Dev SSO and the dev mailbox exist only on a
-  Development API — compose (:8080) cannot sign anybody in until the owner keys a provider.
+- The compose stack runs Production and fails startup with a capability-named error for any
+  missing/Development external adapter. Apple is required; Turnstile may be explicitly disabled
+  pre-release. Dev SSO and the dev mailbox exist only on a Development API.
 
 **Design taste (Jeremy):** calm, sophisticated, professional — never childish or tacky;
 A/B alternatives ship behind query params (`?map= ?desk= ?letter= ?world=off`),

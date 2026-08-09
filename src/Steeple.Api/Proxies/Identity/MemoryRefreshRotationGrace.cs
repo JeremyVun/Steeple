@@ -20,25 +20,39 @@ public sealed class MemoryRefreshRotationGrace : IRefreshRotationGrace
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.Ordinal);
     private readonly TimeProvider _clock;
     private readonly AuthOptions _options;
+    private readonly ILogger<MemoryRefreshRotationGrace> _logger;
 
     /// <summary>Creates the cache.</summary>
-    public MemoryRefreshRotationGrace(IOptions<AuthOptions> options, TimeProvider clock)
+    public MemoryRefreshRotationGrace(
+        IOptions<AuthOptions> options,
+        TimeProvider clock,
+        ILogger<MemoryRefreshRotationGrace> logger)
     {
         _options = options.Value;
         _clock = clock;
+        _logger = logger;
     }
 
     /// <inheritdoc />
-    public RefreshResponse Claim(string presentedTokenHash, Guid userId, Guid familyId, RefreshResponse candidate)
+    public async Task<RefreshResponse> RotateAsync(
+        string presentedTokenHash,
+        Guid userId,
+        Guid familyId,
+        Func<Task<RefreshResponse>> rotation,
+        CancellationToken ct = default)
     {
         if (_options.RefreshReuseGraceSeconds <= 0)
         {
-            return candidate;
+            return await rotation().ConfigureAwait(false);
         }
 
         var now = _clock.GetUtcNow();
         Sweep(now);
-        var mine = new Entry(candidate, userId, familyId, now.AddSeconds(_options.RefreshReuseGraceSeconds));
+        var mine = new Entry(
+            new TaskCompletionSource<RefreshResponse>(TaskCreationOptions.RunContinuationsAsynchronously),
+            userId,
+            familyId,
+            now.AddSeconds(_options.RefreshReuseGraceSeconds));
 
         // AddOrUpdate rather than GetOrAdd: an entry that has aged out of the window belongs to a
         // rotation that is over, and the next caller is starting a new one.
@@ -47,17 +61,38 @@ public sealed class MemoryRefreshRotationGrace : IRefreshRotationGrace
             mine,
             (_, existing) => existing.ExpiresAtUtc > now ? existing : mine);
 
-        return held.Response;
+        if (ReferenceEquals(held, mine))
+        {
+            try
+            {
+                mine.Completion.TrySetResult(await rotation().ConfigureAwait(false));
+            }
+            catch (Exception ex)
+            {
+                mine.Completion.TrySetException(ex);
+                _entries.TryRemove(KeyValuePair.Create(presentedTokenHash, mine));
+            }
+        }
+        else
+        {
+            LogGraceReuse(held);
+        }
+
+        return await held.Completion.Task.WaitAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public RefreshResponse? Recall(string presentedTokenHash) =>
-        _entries.TryGetValue(presentedTokenHash, out var entry) && entry.ExpiresAtUtc > _clock.GetUtcNow()
-            ? entry.Response
-            : null;
+    public Task<RefreshResponse>? Recall(string presentedTokenHash)
+    {
+        if (_entries.TryGetValue(presentedTokenHash, out var entry)
+            && entry.ExpiresAtUtc > _clock.GetUtcNow())
+        {
+            LogGraceReuse(entry);
+            return entry.Completion.Task;
+        }
 
-    /// <inheritdoc />
-    public void Release(string presentedTokenHash) => _entries.TryRemove(presentedTokenHash, out _);
+        return null;
+    }
 
     /// <inheritdoc />
     public void ForgetFamily(Guid familyId) => Forget(entry => entry.FamilyId == familyId);
@@ -91,5 +126,16 @@ public sealed class MemoryRefreshRotationGrace : IRefreshRotationGrace
         }
     }
 
-    private sealed record Entry(RefreshResponse Response, Guid UserId, Guid FamilyId, DateTimeOffset ExpiresAtUtc);
+    private void LogGraceReuse(Entry entry) =>
+        _logger.LogWarning(
+            "Refresh rotation grace reused a successor for user {UserId}, family {FamilyId}; " +
+            "monitor repeated events because the predecessor may be shared or stolen.",
+            entry.UserId,
+            entry.FamilyId);
+
+    private sealed record Entry(
+        TaskCompletionSource<RefreshResponse> Completion,
+        Guid UserId,
+        Guid FamilyId,
+        DateTimeOffset ExpiresAtUtc);
 }

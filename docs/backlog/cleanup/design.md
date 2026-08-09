@@ -19,7 +19,8 @@ refresh-token rotation, search growth, and production configuration.
   Production while the only gateway is mock; retain the mock adapter and UI for Development.
 - Retention defaults are accepted: refresh tokens 30 days after expiry/revocation, notifications
   12 months, idempotency records 30 days, correspondence 2 years after closure, and legal
-  acceptances indefinitely after account anonymization.
+  acceptances indefinitely after account anonymization. Delivered or terminally failed
+  notification-outbox rows are retained for 30 days.
 - Production should require email, real geocoding, object storage, the SEO base URL, strong
   database credentials, and at least one SSO provider. Turnstile may remain explicitly disabled
   during pre-release and becomes a general-release launch gate.

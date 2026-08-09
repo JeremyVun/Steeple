@@ -345,6 +345,10 @@ the wire answers (D4; storage privacy rewrite 2026-08-09). It decides nothing: t
 in per shape and no local status machine to disagree with the server's. Reload discards the
 mirror and unfinished local work; server reads fill it again.
 
+`store.js` is the public coordinator. Its sibling `store/` modules own drafts, wire mapping,
+calendar calculations, host-local state, stable vocabulary, and the dev-only fixture behind the
+same exports, so callers do not know which piece holds an operation.
+
 - `mirrorApplication(dto, {thread?})` — one `ApplicationDto`, held whole. A **list** read
   carries no thread (`messages: []`) and leaves the one already held alone; a **detail** read
   replaces it. `counterOffer` is the latest live counter — steeple returns no history, so
@@ -602,6 +606,11 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   borrowing it in 2026-08-09's inbox rework. Inbox messages are `.jmsg*`, the hosting buckets
   `.jsub`, the row's schedule/standing line `.jrow__meta` and the head's unread count
   `.journal__unread`/`.journal__dot`; none of those names exists in `host.css`.
+- `postcss.config.js` scopes every rule emitted from `guest.css` to `.guest` and every rule from
+  `host.css` to `.hostdesk` through `:where(...)`. This keeps the existing cascade specificity
+  and load order but makes cross-surface bleed structurally impossible. The listing flow's Place,
+  Describe, and Availability panels live in `ui/host/listing/`; `listing.js` coordinates writes,
+  publishing, navigation, and the unchanged public `createListingFlow` seam.
 - **`.choice*` belongs to the request sheet** (`styles/guest.css`, the composer's radios) and
   guest.css loads after host.css. The desk's booking-mode radios are `.mode*` for that reason —
   the first version reused `.choice` and was silently restyled into an unreadable block.

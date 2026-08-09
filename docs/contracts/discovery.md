@@ -20,6 +20,7 @@ compare the bounds it asked for with the `appliedBounds` the response echoes bac
 served area is one configured beachhead today by policy, not by contract — the geo query
 shape (center+radius / viewport) is the go-global interface, already live
 (SYSTEM_DESIGN §17, 2026-08-07; serving more areas evolves `GET /geofence` additively).
+`page` is clamped to 1–1000 and `pageSize` to 1–100; offsets use checked wide arithmetic.
 
 Response `ListingSearchResult`:
 ```jsonc
@@ -59,6 +60,9 @@ set for one-off searches, absent for recurring ones.
   (never silently ignored). `date` + `daysOfWeek` together → `400 invalid_when`. Behind
   `listing.availability` (flag off: When params are ignored and results carry no
   `matchedWindow`).
+- One anonymous When search evaluates at most the first 300 SQL-prefiltered rooms. The candidate
+  query is deterministically ordered before truncation; `totalCount` is the number of matching
+  survivors inside that bounded set, not an unbounded inventory count.
 
 ### `GET /api/v1/listings/by-slug/{venueSlug}/{roomSlug}` ✅ · `GET /api/v1/listings/{id}` ✅
 Response `RoomDetail`: summary fields + `description, houseRules, amenities[],
@@ -91,6 +95,9 @@ are excluded. Response:
 `{items:[{stars, comment?, raterName, createdAtUtc}], totalCount, page, pageSize}`.
 
 ### `GET /api/v1/suburbs` ✅ → `["Vienna", …]` · `GET /api/v1/sitemap` ✅ → `[{venueSlug, roomSlug, lastModifiedUtc}]` · `GET /api/v1/geofence` ✅ → `{areaName, center, beachhead}`
+
+`suburbs` includes only localities with a Published, non-taken-down room inside the configured
+discovery geofence.
 
 ### `GET /api/v1/sitemap.xml` ✅ *(built 2026-08-07 — `v2_migration` D9)*
 The same rows as `sitemap`, as sitemaps.org XML (`application/xml`, `Cache-Control` 1h): the home

@@ -45,6 +45,7 @@
     <Using Include="Steeple.Api.Services.Payments" />
     <Using Include="Steeple.Api.Services.Manage" />
     <Using Include="Steeple.Api.Services.Reminders" />
+    <Using Include="Steeple.Api.Services.Retention" />
     <Using Include="Steeple.Api.Contracts" />
     <Using Include="Steeple.Api.Contracts.Identity" />
     <Using Include="Steeple.Api.Contracts.Availability" />

@@ -18,7 +18,11 @@
 //   §3 the guest's letter has the same identification, with a photograph, and
 //      pressing it opens the room sheet the request was written from;
 //   §4 the guest's letter says WHERE, with the venue's street address, and the
-//      address can be taken away in one press.
+//      address can be taken away in one press;
+//   §5 the venue sheet's own room cards are still the venue sheet's. Both
+//      surfaces called their card `.spacecard` until 2026-08-09 and host.css
+//      loads last, so the letter's small horizontal card had been reshaping the
+//      guest sheet's standing photo cards for as long as it existed.
 //
 // Screenshots are taken LAST: a headless page stops advancing CSS transitions
 // after its first `screenshot()`, so anything asserted after one is a lie.
@@ -141,16 +145,18 @@ try {
   );
   await press(hostPage, `.jrow--hosting[data-id="${booked.id}"]`);
   await hostPage.waitForFunction(
-    () => Boolean(document.querySelector('.letterpage.is-open .spacecard img')),
+    () => Boolean(document.querySelector('.letterpage.is-open .letterspace img')),
     { timeout: 30000 }
   );
   // The photograph is a fetch; a card judged before it lands is judged on a box.
   await hostPage.waitForFunction(
-    () => document.querySelector('.spacecard img')?.naturalHeight > 0,
+    // Scoped to the letter: the desk keeps space cards of its own, and the
+    // first one in the document is not the one being judged.
+    () => document.querySelector('.letterpage .letterspace img')?.naturalHeight > 0,
     { timeout: 30000 }
   );
 
-  const laptop = await cardState(hostPage, '.letterpage .spacecard');
+  const laptop = await cardState(hostPage, '.letterpage .letterspace');
   eq('the host card is a button', laptop.tag, 'BUTTON');
   eq('with the room named on it', laptop.name, roomName);
   check('and the two facts a decision leans on', /Seats 40/.test(laptop.meta) && /\$20\/hr/.test(laptop.meta), laptop.meta);
@@ -160,7 +166,7 @@ try {
 
   await hostPage.setViewport({ width: 430, height: 932 });
   await hostPage.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
-  const phone = await cardState(hostPage, '.letterpage .spacecard');
+  const phone = await cardState(hostPage, '.letterpage .letterspace');
   check('on a phone the card is not squashed', phone.height >= 90, `${phone.height}px`);
   eq('and the picture is inside it', phone.photoInside, true);
   eq('the name is still on it', phone.name, roomName);
@@ -168,7 +174,7 @@ try {
   await hostPage.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
 
   // ── §2 pressing it opens the listing ──────────────────────────────────────
-  await press(hostPage, '.letterpage .spacecard');
+  await press(hostPage, '.letterpage .letterspace');
   await hostPage.waitForFunction(() => Boolean(document.querySelector('.listing')), { timeout: 30000 });
   const opened = await hostPage.evaluate(() => ({
     listing: Boolean(document.querySelector('.listing')),
@@ -208,7 +214,9 @@ try {
   const card = await cardState(guestPage, '.opened .openedspace');
   eq('the guest card is a button too', card.tag, 'BUTTON');
   eq('naming the space', card.name, roomName);
-  check('with the venue and the facts', /Seats 40/.test(card.meta) && /\$20\/hr/.test(card.meta), card.meta);
+  // The head above it already names the room and the venue; the card says the
+  // two things it does not.
+  check('with what the letterhead does not say', card.meta === 'Seats 40 · $20/hr', card.meta);
   check('a photograph you can see', card.photoHeight >= 72 && card.loaded, `${card.photoHeight}px`);
 
   // ── §4 where, and taking it with you ──────────────────────────────────────
@@ -251,7 +259,32 @@ try {
     sheet: Boolean(document.querySelector('.sheet--room, .roomsheet, .sheet')),
   }));
   eq('pressing the guest card opens the space', room.view, 'room');
-  eq('the one the request is about', room.roomId, booked.roomSlug ?? room.roomId);
+  eq('the one the request is about', room.roomId, host.roomSlug);
+
+  // ── §5 the venue sheet's own cards are still its own ──────────────────────
+  // `.spacecard` belonged to two surfaces at once until 2026-08-09, and
+  // host.css loads last: the letter's little horizontal card was reshaping the
+  // venue sheet's standing photo cards. This is the guard on the two names
+  // staying apart (CLAUDE.md's hazard, in the one place it actually bit).
+  await guestPage.evaluate((slug) => window.__steeple.setView('venue', { venueId: slug }), host.venueSlug);
+  await guestPage.waitForSelector('.sheet--venue .spacecard', { timeout: 30000 });
+  const venueCard = await guestPage.evaluate(() => {
+    const card = document.querySelector('.sheet--venue .spacecard');
+    const photo = card.querySelector('.spacecard__photo');
+    return {
+      display: getComputedStyle(card).display,
+      photoWidth: Math.round(photo.getBoundingClientRect().width),
+      cardWidth: Math.round(card.getBoundingClientRect().width),
+      letterCard: card.classList.contains('letterspace'),
+    };
+  });
+  eq('the venue sheet still stacks its cards', venueCard.display, 'flex');
+  check(
+    'and its photograph is the width of the card, not a thumbnail beside it',
+    venueCard.photoWidth >= venueCard.cardWidth - 2,
+    `${venueCard.photoWidth} of ${venueCard.cardWidth}`
+  );
+  eq('the letter has not lent it its own name', venueCard.letterCard, false);
 
   // ── shots, last ───────────────────────────────────────────────────────────
   if (SHOTS) {

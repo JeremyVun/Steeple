@@ -17,14 +17,24 @@ namespace Steeple.Api.Controllers.Payments;
 public sealed class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _payments;
+    private readonly IFeatureFlags _flags;
 
-    public PaymentsController(IPaymentService payments) => _payments = payments;
+    public PaymentsController(IPaymentService payments, IFeatureFlags flags)
+    {
+        _payments = payments;
+        _flags = flags;
+    }
+
+    private bool Enabled => _flags.IsEnabled(PaymentService.PaymentsFlag);
 
     /// <summary>Ensures the caller's payment customer and opens a setup intent for saving a method.</summary>
     [HttpPost("me/payments/setup")]
     [EnableRateLimiting(RateLimitPolicies.Payments)]
-    public async Task<ActionResult<SetupIntentResponse>> CreateSetup(CancellationToken ct) =>
-        Ok(await _payments.CreateSetupAsync(User.GetUserId(), ct));
+    public async Task<ActionResult<SetupIntentResponse>> CreateSetup(CancellationToken ct)
+    {
+        if (!Enabled) return NotFound();
+        return Ok(await _payments.CreateSetupAsync(User.GetUserId(), ct));
+    }
 
     /// <summary>Mock confirm: records the saved method's brand + last4 (display data only, never a PAN).</summary>
     [HttpPost("me/payments/setup/mock-confirm")]
@@ -33,20 +43,25 @@ public sealed class PaymentsController : ControllerBase
     public async Task<ActionResult<MyPaymentsDto>> MockConfirmSetup(
         [FromBody] MockConfirmSetupRequest request, CancellationToken ct)
     {
+        if (!Enabled) return NotFound();
         var result = await _payments.ConfirmMockSetupAsync(User.GetUserId(), request, ct);
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }
 
     /// <summary>The caller's saved-method summary.</summary>
     [HttpGet("me/payments")]
-    public async Task<ActionResult<MyPaymentsDto>> GetMyPayments(CancellationToken ct) =>
-        Ok(await _payments.GetMyPaymentsAsync(User.GetUserId(), ct));
+    public async Task<ActionResult<MyPaymentsDto>> GetMyPayments(CancellationToken ct)
+    {
+        if (!Enabled) return NotFound();
+        return Ok(await _payments.GetMyPaymentsAsync(User.GetUserId(), ct));
+    }
 
     /// <summary>Starts (or resumes) payout onboarding for a managed venue; returns the onboarding link.</summary>
     [HttpPost("manage/venues/{id:guid}/payments/onboarding")]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<OnboardingLinkDto>> StartOnboarding(Guid id, CancellationToken ct)
     {
+        if (!Enabled) return NotFound();
         var result = await _payments.StartOnboardingAsync(User.GetUserId(), id, ct);
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }
@@ -57,6 +72,7 @@ public sealed class PaymentsController : ControllerBase
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<VenuePaymentStateDto>> MockCompleteOnboarding(Guid id, CancellationToken ct)
     {
+        if (!Enabled) return NotFound();
         var result = await _payments.CompleteMockOnboardingAsync(User.GetUserId(), id, ct);
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }
@@ -65,6 +81,7 @@ public sealed class PaymentsController : ControllerBase
     [HttpGet("manage/venues/{id:guid}/payments")]
     public async Task<ActionResult<VenuePaymentStateDto>> GetVenuePayments(Guid id, CancellationToken ct)
     {
+        if (!Enabled) return NotFound();
         var result = await _payments.GetVenuePaymentsAsync(User.GetUserId(), id, ct);
         return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
     }

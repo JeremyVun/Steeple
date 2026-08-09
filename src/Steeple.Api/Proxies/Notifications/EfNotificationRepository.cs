@@ -11,11 +11,76 @@ public class EfNotificationRepository : INotificationRepository
     public EfNotificationRepository(SteepleDbContext db) => _db = db;
 
     /// <inheritdoc />
-    public async Task AddRangeAsync(IReadOnlyList<Notification> notifications, CancellationToken ct = default)
+    public async Task AddRangeAsync(
+        IReadOnlyList<Notification> notifications,
+        IReadOnlyList<NotificationOutbox> deliveries,
+        CancellationToken ct = default)
     {
         _db.Notifications.AddRange(notifications);
+        _db.NotificationOutbox.AddRange(deliveries);
         await _db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<NotificationOutbox>> ClaimDueAsync(
+        DateTimeOffset nowUtc,
+        int limit,
+        TimeSpan lease,
+        CancellationToken ct = default)
+    {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        var rows = await _db.NotificationOutbox
+            .FromSqlInterpolated($$"""
+                SELECT *
+                FROM notification_outbox
+                WHERE "DeliveredAtUtc" IS NULL
+                  AND "FailedAtUtc" IS NULL
+                  AND "NextAttemptAtUtc" <= {{nowUtc}}
+                ORDER BY "NextAttemptAtUtc", "CreatedAtUtc", "Id"
+                FOR UPDATE SKIP LOCKED
+                LIMIT {{limit}}
+                """)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var leaseUntil = nowUtc + lease;
+        foreach (var row in rows)
+        {
+            row.Attempts++;
+            row.NextAttemptAtUtc = leaseUntil;
+        }
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await transaction.CommitAsync(ct).ConfigureAwait(false);
+        return rows;
+    }
+
+    /// <inheritdoc />
+    public Task MarkDeliveredAsync(Guid id, DateTimeOffset deliveredAtUtc, CancellationToken ct = default) =>
+        _db.NotificationOutbox
+            .Where(row => row.Id == id && row.DeliveredAtUtc == null && row.FailedAtUtc == null)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(row => row.DeliveredAtUtc, deliveredAtUtc)
+                    .SetProperty(row => row.LastError, (string?)null),
+                ct);
+
+    /// <inheritdoc />
+    public Task RecordFailureAsync(
+        Guid id,
+        string error,
+        DateTimeOffset nextAttemptAtUtc,
+        DateTimeOffset? failedAtUtc,
+        CancellationToken ct = default) =>
+        _db.NotificationOutbox
+            .Where(row => row.Id == id && row.DeliveredAtUtc == null && row.FailedAtUtc == null)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(row => row.LastError, error)
+                    .SetProperty(row => row.NextAttemptAtUtc, nextAttemptAtUtc)
+                    .SetProperty(row => row.FailedAtUtc, failedAtUtc),
+                ct);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<Notification>> GetPageAsync(

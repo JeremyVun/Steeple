@@ -19,6 +19,9 @@ public class IdempotencyRecordConfiguration : IEntityTypeConfiguration<Idempoten
 
         builder.Property(r => r.Scope).HasMaxLength(64).IsRequired();
 
+        builder.HasIndex(r => new { r.CreatedAtUtc, r.UserId, r.Scope, r.Key })
+            .HasDatabaseName("IX_idempotency_records_Retention");
+
         builder
             .HasOne<User>()
             .WithMany()

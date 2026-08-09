@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Tests.Services;
@@ -262,6 +264,81 @@ public class IdentityServiceTests
     }
 
     [Fact]
+    public async Task RefreshAsync_ConcurrentCallerCannotReceivePairBeforeRotationCommits()
+    {
+        var repo = new FakeIdentityRepository(FixedNow) { BlockReplacement = true };
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-commit-first", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+
+        var first = service.RefreshAsync(session.Value!.RefreshToken!);
+        await repo.ReplacementStarted.Task;
+        var second = service.RefreshAsync(session.Value.RefreshToken!);
+        await Task.Yield();
+
+        Assert.False(second.IsCompleted);
+
+        repo.AllowReplacement.TrySetResult();
+        var results = await Task.WhenAll(first, second);
+        Assert.All(results, result => Assert.Null(result.Error));
+        Assert.Equal(results[0].Value!.RefreshToken, results[1].Value!.RefreshToken);
+        Assert.Single(repo.RefreshTokens, token => token.RevokedAtUtc is null);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ConditionalWriteFailureFailsEveryConcurrentCaller()
+    {
+        var repo = new FakeIdentityRepository(FixedNow)
+        {
+            BlockReplacement = true,
+            ReplacementSucceeds = false,
+        };
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-write-lost", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+
+        var first = service.RefreshAsync(session.Value!.RefreshToken!);
+        await repo.ReplacementStarted.Task;
+        var second = service.RefreshAsync(session.Value.RefreshToken!);
+        await Task.Yield();
+        Assert.False(second.IsCompleted);
+
+        repo.AllowReplacement.TrySetResult();
+        var results = await Task.WhenAll(first, second);
+        Assert.All(results, result => Assert.Equal(IdentityErrorCodes.InvalidRefreshToken, result.Error!.Code));
+        Assert.Single(repo.RefreshTokens);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_RotationExceptionFaultsEveryConcurrentCallerAndEvictsTheEntry()
+    {
+        var failure = new InvalidOperationException("database connection failed mid-rotation");
+        var repo = new FakeIdentityRepository(FixedNow)
+        {
+            BlockReplacement = true,
+            ReplacementException = failure,
+        };
+        var service = CreateService(repo, out _, out _,
+            resolve: _ => new VerifiedIdentity("google-sub-write-threw", "person@example.com", "Alex"));
+        var session = await service.CreateSessionAsync(Request(), remoteIp: null);
+
+        var first = service.RefreshAsync(session.Value!.RefreshToken!);
+        await repo.ReplacementStarted.Task;
+        var second = service.RefreshAsync(session.Value.RefreshToken!);
+        await Task.Yield();
+        Assert.False(second.IsCompleted);
+
+        repo.AllowReplacement.TrySetResult();
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await first));
+        Assert.Same(failure, await Assert.ThrowsAsync<InvalidOperationException>(async () => await second));
+
+        repo.BlockReplacement = false;
+        repo.ReplacementException = null;
+        var retry = await service.RefreshAsync(session.Value.RefreshToken!);
+        Assert.Null(retry.Error);
+    }
+
+    [Fact]
     public async Task RefreshAsync_GraceDisabled_ReplayRevokesImmediately()
     {
         var repo = new FakeIdentityRepository(FixedNow);
@@ -272,7 +349,7 @@ public class IdentityServiceTests
             [new FakeIdTokenVerifier(AuthProvider.Google, _ => new VerifiedIdentity("google-sub-10", "p@x.com", "Alex"))],
             new FakeAccessTokenIssuer(),
             new FakeTurnstileVerifier(),
-            new MemoryRefreshRotationGrace(options, clock),
+            new MemoryRefreshRotationGrace(options, clock, NullLogger<MemoryRefreshRotationGrace>.Instance),
             new NullAnalyticsSink(),
             options,
             clock);
@@ -412,6 +489,48 @@ public class IdentityServiceTests
         Assert.Equal("2026-01-01", recorded.Version);
     }
 
+    [Fact]
+    public async Task RecordAgreementAsync_OversizedVersion_ReturnsFalseWithoutTouchingRepository()
+    {
+        var repo = new FakeIdentityRepository(FixedNow);
+        var service = CreateService(repo, out _, out _, resolve: _ => null);
+
+        var ok = await service.RecordAgreementAsync(
+            Guid.NewGuid(), new AcceptAgreementRequest("tos", new string('v', 51)));
+
+        Assert.False(ok);
+        Assert.Empty(repo.RecordedAgreements);
+    }
+
+    [Fact]
+    public void AcceptAgreementRequest_ValidationLivesOnConstructorParameters()
+    {
+        // MVC reads a record's validation from its primary-constructor parameters, and it
+        // throws at request time — a 500 on every call — when the same metadata is
+        // property-targeted ([property: …]). Validator.TryValidateObject can only see the
+        // property-targeted form, so it cannot stand in for the pipeline here; this pins
+        // the parameter placement directly instead.
+        var ctor = Assert.Single(typeof(AcceptAgreementRequest).GetConstructors());
+        var version = Assert.Single(
+            ctor.GetParameters(), p => p.Name == nameof(AcceptAgreementRequest.Version));
+        var docType = Assert.Single(
+            ctor.GetParameters(), p => p.Name == nameof(AcceptAgreementRequest.DocType));
+
+        Assert.True(version.IsDefined(typeof(RequiredAttribute), false));
+        Assert.True(docType.IsDefined(typeof(RequiredAttribute), false));
+        var length = Assert.IsType<StringLengthAttribute>(Assert.Single(
+            version.GetCustomAttributes(typeof(StringLengthAttribute), false)));
+        Assert.Equal(50, length.MaximumLength);
+        Assert.Equal(1, length.MinimumLength);
+
+        foreach (var property in typeof(AcceptAgreementRequest).GetProperties())
+        {
+            Assert.False(
+                property.IsDefined(typeof(ValidationAttribute), true),
+                $"{property.Name} carries property-targeted validation metadata, which MVC rejects on record primary-constructor parameters.");
+        }
+    }
+
     private static CreateSessionRequest Request(string provider = "google", string? displayName = null) =>
         new(provider, "raw-id-token", Nonce: null, TurnstileToken: "turnstile-token", DisplayName: displayName, Device: null);
 
@@ -443,7 +562,7 @@ public class IdentityServiceTests
             verifiers,
             accessTokens,
             turnstile,
-            new MemoryRefreshRotationGrace(options, clock),
+            new MemoryRefreshRotationGrace(options, clock, NullLogger<MemoryRefreshRotationGrace>.Instance),
             new NullAnalyticsSink(),
             options,
             clock);
@@ -515,6 +634,18 @@ public class IdentityServiceTests
 
         public List<(Guid UserId, AgreementDocType DocType, string Version)> RecordedAgreements { get; } = [];
 
+        public bool BlockReplacement { get; set; }
+
+        public bool ReplacementSucceeds { get; set; } = true;
+
+        public Exception? ReplacementException { get; set; }
+
+        public TaskCompletionSource ReplacementStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource AllowReplacement { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Task<UserLogin?> FindLoginAsync(AuthProvider provider, string subject, CancellationToken ct = default) =>
             Task.FromResult(Logins.FirstOrDefault(l => l.Provider == provider && l.Subject == subject));
 
@@ -549,19 +680,35 @@ public class IdentityServiceTests
             return Task.FromResult(token);
         }
 
-        public Task<bool> TryReplaceRefreshTokenAsync(
+        public async Task<bool> TryReplaceRefreshTokenAsync(
             RefreshToken current, RefreshToken next, DateTimeOffset revokedAtUtc, CancellationToken ct = default)
         {
+            ReplacementStarted.TrySetResult();
+            if (BlockReplacement)
+            {
+                await AllowReplacement.Task.WaitAsync(ct);
+            }
+
+            if (ReplacementException is not null)
+            {
+                throw ReplacementException;
+            }
+
+            if (!ReplacementSucceeds)
+            {
+                return false;
+            }
+
             // `current` is the same tracked instance already in the list, so the conditional revoke
             // is a check on the object itself — the same "only if still unrevoked" the SQL does.
             if (current.RevokedAtUtc is not null)
             {
-                return Task.FromResult(false);
+                return false;
             }
 
             current.RevokedAtUtc = revokedAtUtc;
             RefreshTokens.Add(next);
-            return Task.FromResult(true);
+            return true;
         }
 
         public Task RevokeFamilyAsync(Guid familyId, CancellationToken ct = default)

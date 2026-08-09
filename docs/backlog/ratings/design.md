@@ -66,7 +66,7 @@ nothing.
 | Inbox drive: row nudges + tally + rate-eligible hosting rows | Organizer trust signal on the instant-book path (needs an additive `BookingDto` field; instant hosts make no accept decision, so no chip is missing a moment) |
 | `organizer.ratingSummary` chip on the host letter (manual venues) | `web.ratings` feature flag / a web flags client — the kill switch is "render nothing when the server sends no `rating`/`ratings` field" |
 | ★ average + count on search cards and the room sheet headline | Venue-panel average (secondary placement) |
-| `ratingReceived` in ambient notifications + email CTA landing right | Desk "Finished bookings" record (bookkeeping, not the loop) |
+| `ratingReceived` in ambient notifications (email removed 2026-08-09 as passive-engagement mail) | Desk "Finished bookings" record (bookkeeping, not the loop) |
 | Optional comment **input** on the rate form; the other side's comment shown booking-scoped once revealed | Public display of comments (that *is* the reviews block) |
 
 Comment decision spelled out (D6): "no review comments for MVP" cuts the **public**

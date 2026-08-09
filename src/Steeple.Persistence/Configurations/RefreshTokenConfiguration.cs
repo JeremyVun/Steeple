@@ -21,6 +21,13 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
         // Family revocation (reuse detection / sign-out) updates by FamilyId.
         builder.HasIndex(t => t.FamilyId);
 
+        builder.HasIndex(t => new { t.RevokedAtUtc, t.Id })
+            .HasDatabaseName("IX_refresh_tokens_RetentionRevoked")
+            .HasFilter("\"RevokedAtUtc\" IS NOT NULL");
+        builder.HasIndex(t => new { t.ExpiresAtUtc, t.Id })
+            .HasDatabaseName("IX_refresh_tokens_RetentionExpired")
+            .HasFilter("\"RevokedAtUtc\" IS NULL");
+
         builder
             .HasOne(t => t.User)
             .WithMany()

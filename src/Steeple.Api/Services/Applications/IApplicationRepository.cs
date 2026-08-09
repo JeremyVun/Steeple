@@ -48,11 +48,11 @@ public interface IApplicationRepository
 
     /// <summary>
     /// The other undecided (<c>Pending|NeedsInfo</c>) applications on a room, excluding one, each
-    /// with its organizer loaded — the competing pending demand shown in the manager-review conflict
+    /// with its organizer loaded and not expired at <paramref name="now"/> — the competing pending demand shown in the manager-review conflict
     /// digest (CONTRACTS §6). Full graph is not needed; only schedule fields + organizer name.
     /// </summary>
     Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
-        Guid roomId, Guid excludeApplicationId, CancellationToken ct = default);
+        Guid roomId, Guid excludeApplicationId, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>Appends a thread message (also flushing any pending changes to its tracked application).</summary>
     Task AddMessageAsync(ApplicationMessage message, CancellationToken ct = default);

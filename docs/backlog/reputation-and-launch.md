@@ -14,6 +14,12 @@ declared-vs-actual-activity and unresponsive-admin failure modes, and gives "Mar
 trust profile that compounds. The rest of the phase is everything that must be true on
 the day real users arrive: renewal loop closed, SEO finished, production config real.
 
+## Recorded gaps
+
+- Time-filtered discovery currently refines a deterministic, hard-capped set of 300 SQL candidates
+  in memory. Move availability into queryable or materialized data only when inventory pressure
+  makes that bound insufficient; the beachhead does not yet justify the added write/query machinery.
+
 ## Slice 1 — Ratings & reviews (two-way, post-completion)
 
 > **Completed 2026-07-05:** star ratings, optional review comments, double-blind reveal,
@@ -206,9 +212,9 @@ PRD: a dense cluster before any demand push) → purge demo seed data from produ
 | Carry-over (origin) | What must happen |
 |---|---|
 | Flags SDK wiring (Phase 0) | SDK source lives outside this repo; wire Api/Web/Admin to it when it lands here. Config-backed `IFeatureFlags` (same key names) meanwhile |
-| Production SSO (Phase 1) | **Client wiring is `v2_migration` Phase 4 (D1/D7)** — Google Identity Services + Sign in with Apple JS, Turnstile widget, agreements prompt. Ops-side leftovers stay here: create the Google OAuth client + Apple Services ID, set `Auth__Google__ClientIds` / `Auth__Apple__ClientIds` / `Turnstile__SecretKey` / production `AUTH_JWT_SIGNING_KEY`, and verify token refresh survives a frontend redeploy. (No DataProtection key ring to provision — that was a v1-BFF concern; v2 keeps tokens client-side) |
+| Production SSO (Phase 1) | Client wiring is shipped. Ops-side leftovers: complete `docs/runbooks/sso-and-turnstile.md` — Apple Services ID/domain/return URL, production values and redeploy, then the once-only-name/private-relay/repeat-sign-in real test. Turnstile may be explicitly disabled pre-release; general release flips it to enabled on both web and API. |
 | Real-hands demo (Phases 2–3) | Moving web v2's inbox/request decisions off the demo store is **`v2_migration` Phase 2 (D4/D5)**. Ops-side leftovers: set `Email__ApiKey`/`Email__From`/`Email__WebBaseUrl` — the whole procedure (Resend account, SPF/DKIM/DMARC for jeremyvun.com, From address, verification) is **`docs/runbooks/email.md`**; link concierge venue managers in Admin; drive apply → church emailed → approve → organizer notified with a real church + organizer; confirm `application_decided.timeToDecisionHours` visible in Grafana |
-| Production provider self-service (Phase 5) | Set `GEOCODING_GOOGLE_API_KEY` (real geocoding replaces the stub) + `MEDIA_*` Spaces credentials (uploads land on Spaces/CDN, closes the dev loopback-port deviation); enable mobile management once its build ships; register the DMCA agent with the Copyright Office (takedown path itself already exists) |
+| Production provider self-service (Phase 5) | Set `GEOCODING_MODE=google` + `GEOCODING_GOOGLE_API_KEY` (or complete Apple Maps mode), plus `MEDIA_*` Spaces credentials; enable mobile management once its build ships; register the DMCA agent with the Copyright Office |
 | Mobile release (Phase 4) | Firebase project + config files; Google Maps + SSO client ids; Xcode signing/entitlements; official Google sign-in brand asset; TestFlight (founder + first organizers) → App Store; Android closed testing (founder's testers); profile against MOBILE_DESIGN §4 budgets on real devices |
 
 **Launch-day hygiene:** uptime monitor → phone confirmed firing; one restore drill from a

@@ -299,11 +299,6 @@ public sealed class RatingService : IRatingService
     private async Task NotifyOtherSideAsync(Booking booking, RatingRateeType rateeType, CancellationToken ct)
     {
         var payload = BuildPayload(booking);
-        var email = new EmailContent(
-            Subject: $"You received a rating for {booking.Room!.Name}",
-            TextBody:
-                $"You received a rating for {booking.Room.Name} at {booking.Room.Venue!.Name}.\n\n" +
-                "Rate back from your booking detail to reveal both ratings.");
 
         if (rateeType == RatingRateeType.Venue)
         {
@@ -317,7 +312,7 @@ public sealed class RatingService : IRatingService
                 managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
                 NotificationType.RatingReceived,
                 payload,
-                email,
+                email: null,
                 ct).ConfigureAwait(false);
         }
         else
@@ -326,7 +321,7 @@ public sealed class RatingService : IRatingService
                 [new NotificationRecipient(booking.OrganizerId, booking.Organizer?.Email)],
                 NotificationType.RatingReceived,
                 payload,
-                email,
+                email: null,
                 ct).ConfigureAwait(false);
         }
     }

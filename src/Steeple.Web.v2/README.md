@@ -398,11 +398,15 @@ crossfade and stills the ambient drift. Text meets WCAG AA on its own paper.
 ## Quality gates
 
 ```bash
-npm test
-npm run audit:prod
+npm run check       # tests, ESLint, checkJs, production audit, focused axe pass
 npm run build
 npm run build:flat
 ```
+
+`tsconfig.check.json` is the growing JSDoc/checkJs allowlist for the router,
+wire, session, and store seams. `tools/accessibility-test.mjs` starts its own
+flat server and audits browse, the room sheet, inbox, and opened letter without
+requiring an API or database.
 
 ## Verification tools
 

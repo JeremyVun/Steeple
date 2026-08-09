@@ -3,42 +3,30 @@ using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Services.Notifications;
 /// <summary>
-/// Default <see cref="INotificationDispatcher"/>: writes the inbox rows first (inbox = truth),
-/// then fires the email and push sends without awaiting them — a slow or failing provider must
-/// never hold up or fail the request that triggered the notification (SYSTEM_DESIGN §8).
+/// Default <see cref="INotificationDispatcher"/>: atomically writes inbox rows (inbox = truth)
+/// and durable email/push work. Providers are called only by <see cref="NotificationOutboxWorker"/>
+/// in a worker-owned scope (SYSTEM_DESIGN §8).
 /// </summary>
 public sealed class NotificationDispatcher : INotificationDispatcher
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly INotificationRepository _repository;
-    private readonly IEmailGateway _email;
-    private readonly IDeviceRegistry _devices;
-    private readonly IPushGateway _push;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
     private readonly EmailOptions _emailOptions;
-    private readonly ILogger<NotificationDispatcher> _logger;
 
     /// <summary>Creates the dispatcher from its ports.</summary>
     public NotificationDispatcher(
         INotificationRepository repository,
-        IEmailGateway email,
-        IDeviceRegistry devices,
-        IPushGateway push,
         IAnalyticsSink analytics,
         TimeProvider clock,
-        IOptions<EmailOptions> emailOptions,
-        ILogger<NotificationDispatcher> logger)
+        IOptions<EmailOptions> emailOptions)
     {
         _repository = repository;
-        _email = email;
-        _devices = devices;
-        _push = push;
         _analytics = analytics;
         _clock = clock;
         _emailOptions = emailOptions.Value;
-        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -67,40 +55,64 @@ public sealed class NotificationDispatcher : INotificationDispatcher
             CreatedAtUtc = now,
         }).ToList();
 
-        await _repository.AddRangeAsync(rows, ct).ConfigureAwait(false);
+        var deliveries = new List<NotificationOutbox>(rows.Count * (email is null ? 1 : 2));
+        var typeToken = FlagEnumExtensions.ToCamelCaseToken(type.ToString());
+        EmailContent? composedEmail = null;
 
         if (email is not null)
         {
             // One composition for the whole fan-out: the CTA points at the payload's own deep
             // link, so email, push and the inbox row can never disagree about where this event
             // lives (docs/contracts/web.md — deep links from email/push into the SPA).
-            var composed = WithCallToAction(email, type, deepLink);
-
-            foreach (var recipient in recipients.Where(r => !string.IsNullOrEmpty(r.Email)))
-            {
-                // Deliberately not awaited: the inbox row is already the record of truth, and the
-                // gateway is a singleton over HttpClient, safe to outlive this scoped request.
-                // CancellationToken.None so an aborted request doesn't cancel a send already decided on.
-                _ = SendEmailSafelyAsync(recipient.Email!, composed, type);
-            }
+            composedEmail = WithCallToAction(email, type, deepLink);
         }
 
-        // Push, one send per recipient's own inbox row (notificationId = that row's id) — the
-        // client fetches/renders from the inbox, this only ever points at it (CONTRACTS §9).
-        // Token lookup is awaited here: the device registry shares this request's scoped
-        // DbContext, which must never be touched from an unawaited task. Only the gateway
-        // send (singleton over HttpClient) is safe to outlive the request.
-        foreach (var row in rows)
+        for (var index = 0; index < rows.Count; index++)
         {
-            var tokens = await _devices.GetTokensAsync(row.UserId, ct).ConfigureAwait(false);
-            if (tokens.Count > 0)
+            var row = rows[index];
+            var recipient = recipients[index];
+
+            if (composedEmail is not null && !string.IsNullOrEmpty(recipient.Email))
             {
-                _ = SendPushSafelyAsync(tokens, row, type, deepLink);
+                deliveries.Add(NewDelivery(
+                    NotificationOutboxChannel.Email,
+                    type,
+                    new EmailOutboxPayload(
+                        recipient.Email!,
+                        composedEmail.Subject,
+                        composedEmail.TextBody,
+                        composedEmail.HtmlBody),
+                    now));
             }
+
+            // Push work exists for every recipient. The worker resolves that user's current tokens
+            // inside its own scope; no registered devices is a successful no-op.
+            deliveries.Add(NewDelivery(
+                NotificationOutboxChannel.Push,
+                type,
+                new PushOutboxPayload(row.UserId, row.Id.ToString(), typeToken, deepLink ?? ""),
+                now));
         }
 
+        // One SaveChanges call is the transaction boundary: an inbox row can never commit without
+        // all delivery work decided for it, and failed provider calls happen later in the worker.
+        await _repository.AddRangeAsync(rows, deliveries, ct).ConfigureAwait(false);
         await TrackSafelyAsync(type, recipients.Count, email is not null).ConfigureAwait(false);
     }
+
+    private static NotificationOutbox NewDelivery(
+        NotificationOutboxChannel channel,
+        NotificationType kind,
+        object payload,
+        DateTimeOffset now) => new()
+    {
+        Id = Guid.NewGuid(),
+        Channel = channel,
+        Kind = kind,
+        PayloadJson = JsonSerializer.Serialize(payload, PayloadJsonOptions),
+        CreatedAtUtc = now,
+        NextAttemptAtUtc = now,
+    };
 
     /// <summary>
     /// Appends the CTA to every part the mail carries. Without a configured
@@ -122,36 +134,6 @@ public sealed class NotificationDispatcher : INotificationDispatcher
                 ? email.HtmlBody
                 : email.HtmlBody + EmailCta.HtmlLine(type, url),
         };
-    }
-
-    private async Task SendEmailSafelyAsync(string toEmail, EmailContent email, NotificationType type)
-    {
-        try
-        {
-            await _email.SendAsync(toEmail, email, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Email fan-out failed for a {NotificationType} notification.", type);
-        }
-    }
-
-    private async Task SendPushSafelyAsync(
-        IReadOnlyList<string> tokens, Notification row, NotificationType type, string? deepLink)
-    {
-        try
-        {
-            var message = new PushMessage(
-                NotificationId: row.Id.ToString(),
-                Type: FlagEnumExtensions.ToCamelCaseToken(type.ToString()),
-                DeepLink: deepLink ?? "");
-
-            await _push.SendAsync(tokens, message, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Push fan-out failed for a {NotificationType} notification.", type);
-        }
     }
 
     /// <summary>Deserializes the payload's optional <c>deepLink</c> field.</summary>
@@ -178,9 +160,9 @@ public sealed class NotificationDispatcher : INotificationDispatcher
                 new
                 {
                     type = FlagEnumExtensions.ToCamelCaseToken(type.ToString()),
-                    // Push is now attempted for every recipient (fire-and-forget, no-op for
-                    // devices with no registered tokens) — the channel label reflects that
-                    // unconditionally, same as it did for "inbox" before push existed.
+                    // Push is enqueued for every recipient (delivery is a no-op when no device is
+                    // registered). This event means the transaction committed, not that a remote
+                    // provider acknowledged delivery; terminal failures are logged separately.
                     channel = emailed ? "inbox+email+push" : "inbox+push",
                     recipientCount,
                 }).ConfigureAwait(false);

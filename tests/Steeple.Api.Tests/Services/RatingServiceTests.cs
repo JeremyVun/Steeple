@@ -24,7 +24,8 @@ public class RatingServiceTests
         Assert.Equal(OccurrenceStatus.Occurred, scenario.Booking.Occurrences.Single().Status);
         Assert.Contains(notifications.Calls, c =>
             c.Type == NotificationType.RatingReceived
-            && c.Recipients.Any(r => r.UserId == scenario.Manager.Id));
+            && c.Recipients.Any(r => r.UserId == scenario.Manager.Id)
+            && c.Email is null);
         Assert.Contains(analytics.Events, e => e.EventType == "rating_submitted");
     }
 
@@ -514,7 +515,10 @@ public class RatingServiceTests
 
     private sealed class FakeNotificationDispatcher : INotificationDispatcher
     {
-        public List<(IReadOnlyList<NotificationRecipient> Recipients, NotificationType Type)> Calls { get; } = [];
+        public List<(
+            IReadOnlyList<NotificationRecipient> Recipients,
+            NotificationType Type,
+            EmailContent? Email)> Calls { get; } = [];
 
         public Task NotifyAsync(
             IReadOnlyList<NotificationRecipient> recipients,
@@ -523,7 +527,7 @@ public class RatingServiceTests
             EmailContent? email,
             CancellationToken ct = default)
         {
-            Calls.Add((recipients, type));
+            Calls.Add((recipients, type, email));
             return Task.CompletedTask;
         }
     }

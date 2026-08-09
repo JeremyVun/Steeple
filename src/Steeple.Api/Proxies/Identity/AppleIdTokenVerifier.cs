@@ -21,7 +21,8 @@ public sealed class AppleIdTokenVerifier : OidcIdTokenVerifier
 
     /// <inheritdoc />
     // The Services ID (web) and the app bundle id (mobile) both appear as `aud`.
-    protected override IReadOnlyCollection<string> ValidAudiences => _options.Apple.ClientIds;
+    protected override IReadOnlyCollection<string> ValidAudiences =>
+        _options.Apple.IsEnabled ? _options.Apple.ClientIds : [];
 
     /// <inheritdoc />
     protected override VerifiedIdentity ToIdentity(string subject, IDictionary<string, object> claims)

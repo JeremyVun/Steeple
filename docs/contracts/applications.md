@@ -114,6 +114,20 @@ At most one counter is ever `open` (DB partial unique index); history rows stay 
   stay closed.
   Errors: `409 invalid_state` on a closed application, `400 invalid_application`,
   `429 rate_limited`.
+
+**Correspondence retention (2026-08-09):** private user-authored text is removed two years
+after the correspondence closes. A declined or withdrawn application closes at `DecidedAtUtc`;
+an expired application closes at `ExpiresAtUtc` — **effectively** expired counts, so a
+`pending`/`needsInfo`/`counterOffered` row nobody ever read again (its lapse never persisted by
+the lazy sweep) is closed by its deadline all the same; an approved application stays open with its
+booking until cancellation or the final occurrence ends. The sweep deletes
+`application_messages` and clears the application's `IntentText`/`OrganizationName`, counter-offer
+notes, and the booking cancellation reason. It deliberately preserves the application, booking,
+occurrence, payment, and rating rows — including structured schedules, lifecycle status, price
+snapshots, amounts, currency, and provider transaction references — so message deletion cannot
+erase or weaken financial, availability, dispute, or rating history. Notification inbox/outbox
+copies follow their separate 12-month/30-day policies.
+
 - `POST /api/v1/applications/{id}/decision` ✅ (provider, `apply` limit since 2026-08-07) —
   `{decision: "approve"|"decline", message?}`.
   `403 not_venue_manager` · `409 invalid_state` once decided. ✅ Phase 3: **approve is the
@@ -207,11 +221,28 @@ moderation decision, `manage.md`): `{roomId, roomName, venueName, venueSlug, roo
 status: "published" | "declined", note?, deepLink}` (`note` is the operator's optional
 decline/approve comment; `deepLink` is `/space/{venueSlug}/{roomSlug}` on approval, `/inbox`
 on decline).
-`POST /api/v1/me/notifications/read` — `{ids: […]}` (foreign/unknown ids ignored). FCM pushes
+`POST /api/v1/me/notifications/read` — `{ids: […]}` (at most 100 ids, matching the maximum
+inbox page; foreign/unknown ids ignored). More than 100 → `400 too_many_notification_ids`;
+the request body is capped at 8 KiB. FCM pushes
 carry `{notificationId, type, deepLink}` only — the inbox row is the payload of record.
 Email fan-out (Resend adapter behind `IEmailGateway`) and push fan-out (FCM adapter behind
-`IPushGateway` ✅, built 2026-07-04) are both fire-and-forget on the same events; without a
-configured `Email:ApiKey` / `Push:ServiceAccountJson[Path]` the API logs sends instead (dev).
+`IPushGateway` ✅, built 2026-07-04) are durable: the dispatcher writes channel-specific
+`notification_outbox` rows in the same transaction as the inbox rows, and
+`NotificationOutboxWorker` delivers bounded leased batches. Provider failures retry with
+exponential backoff; exhausted rows stamp `FailedAtUtc` and emit an error for Loki/Grafana.
+Process loss leaves a lease that becomes due again. Delivery is therefore **at least once**: a
+provider may accept a message immediately before process loss prevents the success stamp, so
+consumers must tolerate a rare duplicate. Without configured `Email:ApiKey` /
+`Push:ServiceAccountJson[Path]`, the Development adapters capture/log and accept delivery locally.
+Channel policy is intentionally quieter than inbox policy: API-dispatched events always create an
+inbox row and push work, but `ratingReceived` never creates email work. `bookingReminder` creates
+email only for the T−1d reminder on a booking's **first** occurrence; T−7d and later recurring
+occurrences remain inbox/push-only. Direct correspondence, decisions, booking changes, renewal,
+and financial events retain email because they require action or change a commitment. Admin
+listing moderation remains inbox-only by design.
+Inbox notifications are retained for 12 months. Delivered or terminally failed outbox envelopes
+are retained for 30 days after their terminal stamp; unfinished outbox work has no age-based
+deletion path.
 Every email ends with one CTA line the **dispatcher** composes from the payload's own `deepLink`
 — `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` (`web.md`), or nothing at all where no web
 origin is configured. Composition sites never build URLs; gateways never edit bodies.
@@ -223,7 +254,8 @@ origin is configured. Composition sites never build URLs; gateways never edit bo
 2. At the domain site, one call: `INotificationDispatcher.NotifyAsync(recipients, type,
    payload, email?)`. The payload carries the display fields plus `deepLink` (a path from
    `infra.md`'s registry). The inbox row is the record of truth; email + push fan-out,
-   the CTA, and `notification_sent` analytics ride free.
+   the CTA, and `notification_sent` analytics ride free. That event means the inbox/outbox
+   transaction committed; provider terminal failures are a separate worker error signal.
 3. Web: one `case` in `lineFor` (`Web.v2/src/ui/notifications.js`) — having a sentence IS
    the print test — plus an optional `ACTION_LABEL` entry. Inbox rendering, unread/read,
    and deep-link follow come free. Mobile: the equivalent in

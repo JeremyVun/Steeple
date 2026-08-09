@@ -246,8 +246,9 @@ public sealed class AvailabilityService : IAvailabilityService
             return AvailabilityReadResult<VenueCalendarDto>.NotFound();
         }
 
+        var now = _clock.GetUtcNow();
         var tz = TimeZoneInfo.FindSystemTimeZoneById(venue.Timezone);
-        var todayLocal = VenueLocalToday(venue.Timezone, _clock.GetUtcNow());
+        var todayLocal = VenueLocalToday(venue.Timezone, now);
         var fromDate = from ?? todayLocal;
         var toDate = to ?? todayLocal.AddDays(DefaultCalendarSpanDays);
 
@@ -281,7 +282,7 @@ public sealed class AvailabilityService : IAvailabilityService
                     FlagEnumExtensions.ToCamelCaseToken(o.Status.ToString())))
                 .ToList();
 
-            var apps = await _repository.GetUndecidedApplicationsForRoomsAsync(roomIds, ct).ConfigureAwait(false);
+            var apps = await _repository.GetUndecidedApplicationsForRoomsAsync(roomIds, now, ct).ConfigureAwait(false);
             foreach (var app in apps)
             {
                 var dates = MaterializeLocalDates(app, tz).Where(d => d >= fromDate && d <= toDate).OrderBy(d => d).ToList();

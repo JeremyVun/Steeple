@@ -28,7 +28,7 @@ public class BookingReminderServiceTests
         Assert.All(notifications.Calls, c => Assert.Equal(NotificationType.BookingReminder, c.Type));
         Assert.Contains(notifications.Calls, c => c.Recipients.Any(r => r.UserId == organizer.Id));
         Assert.Contains(notifications.Calls, c => c.Recipients.Any(r => r.UserId == manager.Id));
-        Assert.All(notifications.Calls, c => Assert.StartsWith("Coming up:", c.Email!.Subject, StringComparison.Ordinal));
+        Assert.All(notifications.Calls, c => Assert.Null(c.Email));
         Assert.Equal("comingUp", GetProp(notifications.Calls[0].Payload, "reminderKind"));
         Assert.Equal($"/bookings/{booking.Id}", GetProp(notifications.Calls[0].Payload, "deepLink"));
     }
@@ -83,7 +83,7 @@ public class BookingReminderServiceTests
         var reminded = Assert.Single(repo.Claims);
         Assert.Equal(BookingReminderKind.ComingUp, reminded.Kind);
         Assert.Equal(booking.Occurrences.OrderBy(o => o.StartUtc).First().Id, reminded.OccurrenceId);
-        Assert.All(notifications.Calls, c => Assert.Contains("a week", c.Email!.TextBody, StringComparison.Ordinal));
+        Assert.All(notifications.Calls, c => Assert.Null(c.Email));
     }
 
     [Fact]
@@ -97,6 +97,24 @@ public class BookingReminderServiceTests
 
         var claim = Assert.Single(repo.Claims);
         Assert.Equal(BookingReminderKind.Tomorrow, claim.Kind);
+    }
+
+    [Fact]
+    public async Task RunOnceAsync_LaterRecurringOccurrenceTomorrow_UsesInboxAndPushWithoutEmail()
+    {
+        var (repo, managers, room, organizer, _) = NewScenario();
+        var booking = NewBooking(
+            room,
+            organizer,
+            [TimeSpan.FromDays(-7), TimeSpan.FromHours(20)],
+            BookingType.Recurring);
+        booking.Occurrences.OrderBy(item => item.StartUtc).First().Status = OccurrenceStatus.Occurred;
+        repo.Bookings.Add(booking);
+        var service = CreateService(repo, managers, out var notifications, out _);
+
+        Assert.Equal(1, await service.RunOnceAsync());
+        Assert.Equal(2, notifications.Calls.Count);
+        Assert.All(notifications.Calls, call => Assert.Null(call.Email));
     }
 
     [Fact]

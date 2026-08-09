@@ -184,6 +184,30 @@ public class EfApplicationRepositoryTests
     }
 
     [Fact]
+    public async Task GetUndecidedForRoomAsync_ExcludesStoredPendingRowsPastTheirDeadline()
+    {
+        var liveOrganizer = NewUser("Live Rival");
+        var expiredOrganizer = NewUser("Expired Rival");
+        var live = NewApplication(liveOrganizer.Id);
+        var expired = NewApplication(expiredOrganizer.Id);
+        expired.ExpiresAtUtc = FixedNow.AddSeconds(-1);
+
+        await using (var seedDb = CreateContext())
+        {
+            seedDb.Users.AddRange(liveOrganizer, expiredOrganizer);
+            seedDb.Applications.AddRange(live, expired);
+            await seedDb.SaveChangesAsync();
+        }
+
+        await using var db = CreateContext();
+        var competitors = await new EfApplicationRepository(db)
+            .GetUndecidedForRoomAsync(PublishedRoomId, Guid.NewGuid(), FixedNow);
+
+        Assert.Contains(competitors, a => a.Id == live.Id);
+        Assert.DoesNotContain(competitors, a => a.Id == expired.Id);
+    }
+
+    [Fact]
     public async Task AddMessageAsync_PersistsAndSubsequentGetAsyncReturnsIt()
     {
         await using var seedDb = CreateContext();

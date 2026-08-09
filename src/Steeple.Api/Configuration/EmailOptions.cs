@@ -1,14 +1,16 @@
 
 namespace Steeple.Api.Configuration;
 /// <summary>
-/// Transactional email config (SYSTEM_DESIGN §8). With no <see cref="ApiKey"/> the gateway runs
-/// in no-send mode (local dev / pre-provider environments) — the inbox row is still written, so
-/// nothing is lost. Deployment supplies the key via <c>Email__ApiKey</c>.
+/// Transactional email config (SYSTEM_DESIGN §8). Production explicitly selects Resend;
+/// Development can select disabled/no-send while the inbox row remains the record of truth.
 /// </summary>
 public sealed class EmailOptions
 {
     /// <summary>Configuration section name.</summary>
     public const string SectionName = "Email";
+
+    /// <summary>Production mode selecting Resend delivery; <c>disabled</c> is Development-only.</summary>
+    public string Mode { get; set; } = "";
 
     /// <summary>Resend API key; empty = no-send mode (no external sends or private-content logs).</summary>
     public string ApiKey { get; set; } = "";
@@ -28,4 +30,9 @@ public sealed class EmailOptions
     /// it, so deployed environments neither capture nor expose anything.
     /// </summary>
     public bool DevMailboxEnabled { get; set; }
+
+    /// <summary>Whether external delivery is active, with legacy key inference only outside validated Production.</summary>
+    public bool DeliveryEnabled =>
+        (string.Equals(Mode, "resend", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(ApiKey))
+        || (string.IsNullOrWhiteSpace(Mode) && !string.IsNullOrWhiteSpace(ApiKey));
 }

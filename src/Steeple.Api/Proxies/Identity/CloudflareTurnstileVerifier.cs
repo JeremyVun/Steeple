@@ -2,9 +2,8 @@ using Microsoft.Extensions.Options;
 
 namespace Steeple.Api.Proxies.Identity;
 /// <summary>
-/// Cloudflare Turnstile siteverify adapter. With no secret configured the check is disabled and
-/// every request passes — local dev and pre-Cloudflare environments; the deployed environment
-/// must set <c>Turnstile__SecretKey</c>. Verification failures (network, non-2xx) fail closed.
+/// Cloudflare Turnstile siteverify adapter. Explicit disabled mode passes requests; enabled mode
+/// verifies against Cloudflare and fails closed on missing tokens, network errors, or non-2xx.
 /// </summary>
 public sealed class CloudflareTurnstileVerifier : ITurnstileVerifier
 {
@@ -25,7 +24,7 @@ public sealed class CloudflareTurnstileVerifier : ITurnstileVerifier
     /// <inheritdoc />
     public async Task<bool> VerifyAsync(string? token, string? remoteIp, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(_options.SecretKey))
+        if (!_options.IsEnabled)
         {
             return true;
         }

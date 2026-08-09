@@ -16,17 +16,19 @@ namespace Steeple.Api.Services.Identity;
 public interface IRefreshRotationGrace
 {
     /// <summary>
-    /// Claims the right to rotate <paramref name="presentedTokenHash"/>. The first caller gets its
-    /// own <paramref name="candidate"/> back and owns the rotation; every later caller inside the
-    /// grace window gets the owner's answer instead and must not touch the database.
+    /// Runs one committed rotation for <paramref name="presentedTokenHash"/>. Concurrent callers
+    /// await the same task; the successor is published only after <paramref name="rotation"/>
+    /// completes. A fault reaches every waiter and evicts the entry so a later request can retry.
     /// </summary>
-    RefreshResponse Claim(string presentedTokenHash, Guid userId, Guid familyId, RefreshResponse candidate);
+    Task<RefreshResponse> RotateAsync(
+        string presentedTokenHash,
+        Guid userId,
+        Guid familyId,
+        Func<Task<RefreshResponse>> rotation,
+        CancellationToken ct = default);
 
-    /// <summary>The answer a token was already rotated into, when that happened inside the grace window.</summary>
-    RefreshResponse? Recall(string presentedTokenHash);
-
-    /// <summary>Releases a claim whose database rotation did not happen after all.</summary>
-    void Release(string presentedTokenHash);
+    /// <summary>The committed answer, or in-flight task, for a token rotated inside the grace window.</summary>
+    Task<RefreshResponse>? Recall(string presentedTokenHash);
 
     /// <summary>
     /// Forgets every claim in a family. Called when the family is revoked — a grace entry must never

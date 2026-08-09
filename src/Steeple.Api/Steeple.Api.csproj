@@ -22,6 +22,10 @@
     <ProjectReference Include="..\Steeple.Persistence\Steeple.Persistence.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Steeple.Integration.Tests" />
+  </ItemGroup>
+
   <!-- Folder-matched namespaces exposed project-wide, mirroring the other projects' convention. -->
   <ItemGroup>
     <Using Include="Steeple.Persistence" />
@@ -42,6 +46,7 @@
     <Using Include="Steeple.Api.Services.Media" />
     <Using Include="Steeple.Api.Services.Notifications" />
     <Using Include="Steeple.Api.Services.Reminders" />
+    <Using Include="Steeple.Api.Services.Retention" />
     <Using Include="Steeple.Api.Services.Payments" />
     <Using Include="Steeple.Api.Services.Seo" />
     <Using Include="Steeple.Api.Proxies" />

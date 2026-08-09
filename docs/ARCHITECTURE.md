@@ -68,24 +68,24 @@ JwtBearer auth (`MapInboundClaims=false`) → rate limiting → ProblemDetails e
 |---|---|
 | `IRoomRepository` | `RoomRepository` (EF, bounding-box query) |
 | `IGeofencePolicy` | `GeofencePolicy` (pure logic over the `Geofence` config section, incl. the served area's IANA timezone). Area-neutral port (`Bounds`/`IsServed`/`TimezoneId`) — the single-beachhead scope lives in this implementation only (SYSTEM_DESIGN §17, 2026-08-07) |
-| `IGeocodingGateway` | `AppleMapsGeocodingGateway` (geocodes provider address entry **and** answers the address typeahead; US-scoped, beachhead-biased; ES256 team JWT → `/v1/token` access-token cache in singleton `AppleMapsTokenProvider`) when `Geocoding:AppleTeamId/AppleKeyId/ApplePrivateKey` are set; else `GoogleGeocodingGateway` (geocode only) on `Geocoding:GoogleApiKey`; else `StubGeocodingGateway` (beachhead centre + canned suggestions) |
+| `IGeocodingGateway` | Explicit `Geocoding:Mode`: `apple` selects `AppleMapsGeocodingGateway` (geocode + typeahead; ES256 team JWT/access-token cache), `google` selects `GoogleGeocodingGateway` (geocode only), and `development` selects `StubGeocodingGateway`; Production rejects the development adapter |
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (structured JSON line → stdout → Promtail/Loki) |
-| `IIdTokenVerifier` ×2 | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery; fail-closed without client ids) |
+| `IIdTokenVerifier` ×2 | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery; explicit enabled/disabled modes; Apple required in Production) |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
 | `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; key required; known repository keys rejected in Production) |
-| `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
+| `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (explicit enabled/disabled mode; disabled is legal only as a pre-release choice) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
-| `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
-| `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM data-message push per recipient) |
-| `IEmailGateway` | `ResendEmailGateway` (HTTP API; no-send/no-PII-log without `Email:ApiKey`) |
-| `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) / `LoggingPushGateway` when unconfigured |
+| `INotificationRepository` | `EfNotificationRepository` (atomic inbox/outbox writes, lease-based bounded outbox claims, cursor paging, caller-scoped mark-read) |
+| `INotificationDispatcher` | `NotificationDispatcher` (inbox + durable email/FCM work in one transaction; no provider call on request paths) |
+| `IEmailGateway` | `ResendEmailGateway` (HTTP API; required `resend` mode in Production, disabled/no-send in Development) |
+| `IPushGateway` | Explicit `Push:Mode`: `fcm` selects `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup); `disabled` selects `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save) |
 | `IPaymentGateway` | `MockPaymentGateway` (mock era — instant success, synthetic ids, card ending 0002 declines; the Stripe adapter is the drop-in at Stripe-time) |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first payment rows under the one-live-payment partial unique index; SQLSTATE 23505 → lost claim; session advisory lock for the sweep) |
 | `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only — Admin writes the venue↔manager links) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-slot processing cap, auto-orient, metadata strip, JPEG variants; ImageSharp 3.1.x) |
-| `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) / `LocalDiskMediaStore` (dev fallback, served at `/media`) — chosen at startup by whether `Media:ServiceUrl` etc. are configured |
+| `IMediaStore` | Explicit `Media:Mode`: `objectStorage` selects `S3MediaStore` (DO Spaces, public-read/CDN); `development` selects `LocalDiskMediaStore` (served at `/media`); Production requires object storage |
 
 ## Modules (as built)
 
@@ -116,9 +116,18 @@ flip it; behind `booking.counter_offers`). Party-scoped reads —
 non-parties 404, and unknown ≡ unpublished on submit (no existence leak). Decisions
 restricted to `venue_managers`. 14-day expiry is a **lazy sweep on read** (no worker).
 `GET /manage/venues` tells clients whether to show a provider surface.
+`ApplicationService` is the use-case orchestrator; sibling application-module components own
+the pure transition rules, schedule validation/parsing, effective-expiry policy shared with EF
+queries, notification composition/fan-out, and entity-to-wire presentation mapping. Controllers
+and ports still target the single application-service seam.
 
-**Notifications** — dispatcher writes the inbox row first (inbox = truth), then
-fire-and-forget plain-text email (optional HTML alternative part). The dispatcher composes
+**Notifications** — the dispatcher writes inbox rows (inbox = truth) and channel-specific
+`notification_outbox` rows in one transaction. `NotificationOutboxWorker` polls a bounded batch
+in a fresh DI scope, leases due rows with `FOR UPDATE SKIP LOCKED`, and calls the email/push
+gateways only after commit. Provider failure retries with exponential backoff; the fifth failure
+stamps `FailedAtUtc` and logs an error for Loki/Grafana. A crashed lease becomes due again, so
+process loss does not lose work. Delivery is at-least-once: provider acceptance immediately before
+a lost success stamp can produce a duplicate. The dispatcher composes
 each email's closing CTA from the payload's own `deepLink` —
 `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` — so email, push and the inbox row can never
 point at different things, and no composition site builds URLs. `GET /me/notifications` is
@@ -126,12 +135,27 @@ cursor-paginated (opaque `(CreatedAtUtc, Id)` cursor); `POST /me/notifications/r
 caller-scoped. In Development (`Email:DevMailboxEnabled`, omitted from base appsettings) a
 decorator captures every send to a file-backed **dev mailbox** browsable at `/dev/mailbox`
 (`.json` for harnesses) so local CTAs are actually clickable.
+Email is reserved for direct correspondence, actions, commitment changes and financial events.
+Ratings are inbox/push-only. Booking reminders remain T−7d/T−1d in inbox/push, but email fires
+only at T−1d for the booking's first occurrence; recurring sessions do not produce recurring mail.
 
-**Reminders** — the API's one `BackgroundService` (default cadence 15 min, `Reminders:`
+**Data retention** — `DataRetentionWorker` runs one config-backed daily pass in a fresh scope,
+with at most 500 rows handled per class. It removes terminal refresh tokens after 30 days,
+notifications after 12 months, replay keys after 30 days, private correspondence two years after
+application/booking closure, and delivered/terminal outbox rows after 30 days. Closure is judged on
+**effective** application status: an undecided row past `ExpiresAtUtc` is closed by its deadline
+even though only a read path's lazy sweep ever persists `expired`, so an abandoned application
+nobody opens again is still redacted on time. Correspondence
+cleanup deletes thread rows and redacts intent, organization, counter-offer, and cancellation text;
+the structured application/booking/occurrence/payment/rating graph survives. Legal agreements are
+not a sweep target and remain indefinitely after anonymization. Changeset 021 supplies the global
+age-scan indexes.
+
+**Reminders** — a `BackgroundService` (default cadence 15 min, `Reminders:`
 options). For confirmed bookings it sends a "coming up" nudge 7 days before the booking's
 **first** upcoming occurrence and a "tomorrow" nudge 1 day before **every** occurrence
-(asymmetric on purpose: a weekly booking would otherwise collect two emails a week), to the
-organizer *and* the venue's managers, through the normal dispatcher. Each send is claimed in
+(both parties, inbox/push). Only the T−1d nudge for the booking's first occurrence also sends
+email. Each send is claimed in
 the `booking_reminders` ledger (unique `(OccurrenceId, Kind)`) before it goes out, so a double
 run can't double-send; a failed dispatch releases its claim for the next sweep. Bookings and
 occurrences are read-only to this module.
@@ -172,8 +196,10 @@ listing detail emits the host's stored mode verbatim (2026-08-08 — instant no 
 on `payments.enabled`; an uncarded guest over the spam caps falls back to request→approve
 at submit, `docs/contracts/applications.md`).
 The Payments controller is removed from endpoint discovery outside Development while mock is
-the only gateway. Production startup rejects `payments.enabled=true` with `Payments:Gateway=mock`, and changeset
-017 clears synthetic provider state before a real gateway can use the tables.
+the only gateway, and every action returns 404 when the flag is off. The service and worker also
+short-circuit, and the worker is not registered at startup while off. Production rejects
+`payments.enabled=true` with `Payments:Gateway=mock`; changeset 017 clears synthetic provider
+state before a real gateway can use the tables.
 
 **Ratings** — Phase 6 Slice 1. `POST /bookings/{id}/ratings` writes one immutable
 rating per booking direction (`RateeType = Venue` for organizer→venue,
@@ -218,7 +244,8 @@ honor `Idempotency-Key`; a replay by the same user returns the original as `200`
 is `201`). The store is `idempotency_records` (016), keyed `(UserId, Scope, Key) → ResourceId`,
 written in the same `SaveChanges` as the resource — so the primary key is the race guard and a
 timed-out-then-retried create can't leave a host with two venues. Applications' older per-row
-`IdempotencyKey` column (004) stays as it is; venues have no owner column to hang one off.
+`IdempotencyKey` column (004) follows the same 30-day replay window; venues have no owner column
+to hang one off.
 Semantics for clients: `docs/contracts/manage.md`.
 
 **Availability** (availability plan, commit 4) — a room's bookable rules: open hours
@@ -250,9 +277,9 @@ stores each row's variants under its UUID-owned `rooms/{roomId}/{photoId}/` pref
 variant write or later database failure compensates every attempted object write. Placement is
 database-derived and retried on concurrent sort-order/primary conflicts. PostgreSQL enforces a
 unique non-null storage prefix, unique `(RoomId, SortOrder)`, and at most one primary per room;
-changelog 019 repairs earlier collisions before adding the guards. `IMediaStore` is `S3MediaStore` (DO Spaces,
-public-read/CDN) when `Media:ServiceUrl`/bucket/keys are configured, else `LocalDiskMediaStore`
-(dev; the API serves `/media`, while clients receive origin-independent `media/...` paths and
+changelog 019 repairs earlier collisions before adding the guards. `Media:Mode=objectStorage`
+selects `S3MediaStore` (DO Spaces, public-read/CDN); Development local-disk mode selects
+`LocalDiskMediaStore` (the API serves `/media`, while clients receive origin-independent `media/...` paths and
 resolve/proxy them through their current first-party origin). `RoomPhotoDto` carries
 `id`/`thumbUrl`/`cardUrl` alongside the legacy `url`
 (full-size, still populated for seeded picsum rows); cards prefer `cardUrl`. Metadata
@@ -294,8 +321,9 @@ asked to agree, a session still owing one is gated until it agrees or signs out
 `catalog.js` — product vocabulary over the wire with a bundled fallback when the API is
 away. `correspondence.js` — everything after a request is written; every failure is a
 verdict (`refused | offline | signedOut | unavailable`), never a guess.
-`store.js` — a per-person localStorage **mirror** of steeple's answers
-(`steeple-village-store:{userId}`); it decides nothing. `analytics.js` — the interaction
+`store.js` — a memory-only mirror of steeple's answers; its `store/` siblings separate drafts,
+mapping, schedules, host state, and dev fixtures behind unchanged exports. It decides nothing,
+and legacy persisted mirror keys are purged. `analytics.js` — the interaction
 batcher to `POST /api/v1/events` (CONTRACTS §7); nothing user-visible ships dark.
 
 *On the wire, end to end:* catalog, sign-in/out, agreements, the apply calendar
@@ -411,6 +439,12 @@ users 1─* devices                                     venues 1─* venue_manag
 venues 1─* venue_verification_requests 1─* venue_verification_documents
 users 1─* idempotency_records (016: PK (UserId, Scope, Key) → ResourceId; manage creates)
 
+notification_outbox (020): durable email/push envelopes; due-row partial index; lease attempts;
+  delivered or terminal-failure stamps (30-day retention after either terminal stamp)
+
+data-retention indexes (021): global oldest-first scans for terminal tokens, notifications,
+  replay keys, private correspondence, and terminal outbox rows
+
 rooms 1─* applications *─1 users (organizer)
   ActivityType, GroupSize, venue-local schedule (dates/times + optional DayOfWeek),
   IntentText, Status, ExpiresAtUtc; unique filtered (OrganizerId, IdempotencyKey)
@@ -502,6 +536,10 @@ Web + Admin can sit under a sub-path (e.g. `jeremyvun.com/steeple`) or a domain 
 
 Compose runs the ASP.NET containers in **Production** and serves web from nginx; only
 web/admin publish general host ports. nginx proxies `/api` over the private Compose network.
+Before registration, the API's single Production validator requires explicit external modes,
+Apple SSO, Resend, real geocoding, object storage, HTTPS public bases, and non-development JWT
+and database credentials. Turnstile-disabled and push-disabled are legal only when named. The
+checked-in `.env.example` is the deployment input inventory; actual values remain uncommitted.
 The api is compose-internal, **except** a `127.0.0.1`-bound loopback port
 (`API_PORT`, default 8081) that exists purely so browsers can fetch photo URLs when the dev
 stack has no Spaces credentials configured and falls back to `LocalDiskMediaStore` (which the

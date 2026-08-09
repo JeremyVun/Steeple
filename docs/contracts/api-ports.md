@@ -4,7 +4,7 @@
 > the adapter that implements it, and the rules a new module must follow. Wire shapes are in
 > `discovery.md` / `identity.md` / `applications.md` / `manage.md`;
 > conventions/governance: see `conventions.md`. Verified against
-> `src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs` (2026-08-07).
+> `src/Steeple.Api/Extensions/ServiceCollectionExtensions.cs` (2026-08-09).
 
 ## Layering
 
@@ -38,7 +38,7 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Bookings | confirmation transaction (instant submit/manual approval/counter acceptance), occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
 | Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `ChargePlanner` (pure) |
-| Notifications | inbox rows (= truth), cursor paging, email/push fan-out (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
+| Notifications | inbox rows (= truth), cursor paging, transactional email/push outbox + delivery worker (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `NotificationOutboxWorker`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
 | Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller; its worker is enabled by `ReminderOptions.Enabled`) | `IBookingReminderService`, `IBookingReminderRepository` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
 | Availability | open hours + blackouts; free-window computation for guests, hosts, and the publish gate | `IAvailabilityService`, `IAvailabilityRepository`, `AvailabilityCalculator` (pure) |
@@ -55,13 +55,13 @@ publish gate and Listings' public `openHours` both go through the port).
 |---|---|
 | `IRoomRepository` | `RoomRepository` (EF, bounding-box query) |
 | `IGeofencePolicy` | `GeofencePolicy` (pure logic over the `Geofence` config section; singleton). **The served-area seam**: `Bounds`/`Center`/`AreaName`/`TimezoneId`/`IsServed`/`ResolveSearchBounds` are area-neutral by design — the single beachhead is this implementation's policy, and serving more areas (or the world) is a new implementation behind this port (SYSTEM_DESIGN §17, 2026-08-07) |
-| `IGeocodingGateway` | `AppleMapsGeocodingGateway` (typed HttpClient + singleton `AppleMapsTokenProvider` ES256-JWT/access-token cache; geocode **and** autocomplete, US-scoped, beachhead-biased) when `Geocoding:AppleTeamId/AppleKeyId/ApplePrivateKey` are all set; else `GoogleGeocodingGateway` (geocode only) when `Geocoding:GoogleApiKey` is set; else `StubGeocodingGateway` (every address → beachhead centre, canned suggestions) |
+| `IGeocodingGateway` | Explicit `Geocoding:Mode`: `apple` selects `AppleMapsGeocodingGateway` (geocode + autocomplete; ES256-JWT/access-token cache), `google` selects `GoogleGeocodingGateway`, and Development may select `StubGeocodingGateway` |
 | `IAnalyticsSink` | `StdoutLogAnalyticsSink` (one structured JSON line → stdout → Promtail/Loki) |
-| `IIdTokenVerifier` ×2 (+1) | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery, fail-closed without client ids); `DevIdTokenVerifier` registered **only** when `Auth:DevLoginEnabled` |
+| `IIdTokenVerifier` ×2 (+1) | `GoogleIdTokenVerifier` / `AppleIdTokenVerifier` (JWKS via cached OIDC discovery, explicit enabled/disabled modes); `DevIdTokenVerifier` registered **only** when `Auth:DevLoginEnabled` |
 | `IIdentityRepository` | `EfIdentityRepository` (users, logins, refresh tokens, agreements) |
 | `IAccessTokenIssuer` | `JwtAccessTokenIssuer` (HS256; key required; repository-known keys rejected in Production) |
-| `IRefreshRotationGrace` | `MemoryRefreshRotationGrace` (per-process successor-pair cache for concurrent browser refreshes) |
-| `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (disabled when no secret configured — dev) |
+| `IRefreshRotationGrace` | `MemoryRefreshRotationGrace` (one per-process commit task per predecessor; concurrent browser refreshes await the committed successor pair) |
+| `ITurnstileVerifier` | `CloudflareTurnstileVerifier` (explicit enabled/disabled mode; enabled failures fail closed) |
 | `IApplicationRepository` | `EfApplicationRepository` (full display-graph loads) |
 | `IVenueManagerRepository` | `EfVenueManagerRepository` (read-only; Admin writes the links) |
 | `IManageRepository` | `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
@@ -70,23 +70,24 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IRatingRepository` | `EfRatingRepository` |
 | `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — `StripePaymentGateway` is the drop-in at Stripe-time |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |
-| `INotificationRepository` | `EfNotificationRepository` (cursor paging, caller-scoped mark-read) |
-| `INotificationDispatcher` | `NotificationDispatcher` (inbox row first, then best-effort email + FCM push per recipient) |
-| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; no-send and no PII logging without `Email:ApiKey`); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` (Development only) |
+| `INotificationRepository` | `EfNotificationRepository` (atomic inbox/outbox insert, lease-based bounded outbox claims with `SKIP LOCKED`, delivery/failure stamps, cursor paging, caller-scoped mark-read) |
+| `INotificationDispatcher` | `NotificationDispatcher` (inbox + email/push outbox rows in one transaction; no provider calls on request paths) |
+| `IEmailGateway` | `ResendEmailGateway` (typed HttpClient; `resend` mode required in Production, disabled/no-PII-log in Development); wrapped by `DevMailboxEmailGateway` when `Email:DevMailboxEnabled` |
 | `IDevMailbox` | `FileDevMailbox` (JSON-lines under the content root, capped ring; registered **only** with `Email:DevMailboxEnabled`) |
 | `IBookingReminderRepository` | `EfBookingReminderRepository` (read-only over bookings/occurrences; claims via `INSERT … ON CONFLICT DO NOTHING`) |
-| `IPushGateway` | `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup) when a service account is configured, else `LoggingPushGateway` |
+| `IPushGateway` | Explicit `Push:Mode`: `fcm` selects `FcmPushGateway`; `disabled` selects `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-process concurrency cap, auto-orient, full metadata strip, 400/800/1600px JPEG variants, SHA-256 keys; ImageSharp 3.1.x) |
 | `IMediaRepository` | `EfMediaRepository` (manager-scoped room/photo rows) |
-| `IMediaStore` | `S3MediaStore` (DO Spaces, public-read/CDN) when `MediaOptions.UseObjectStorage`, else `LocalDiskMediaStore` (dev; served by the API at `/media`) |
+| `IMediaStore` | Explicit `Media:Mode`: `objectStorage` selects `S3MediaStore`; Development local-disk mode selects `LocalDiskMediaStore` served at `/media` |
 | `IFeatureFlags` | `ConfigFeatureFlags` (reads the `Flags:` config section — never a network call) |
 | `IPublicFlagsService` | `PublicFlagsService` (hardcoded public allowlist — see `infra.md`) |
 | `IEventIngestService` | `EventIngestService` (validate/allowlist/enrich, no persistence of its own) |
 
 Lifetimes follow one rule: anything touching `SteepleDbContext` is **scoped**; pure/config-derived
 and cache-holding things (geofence policy, analytics sink, token issuer, JWKS verifiers, image
-processor, media store, flags) are **singletons**.
+processor, media store, flags) are **singletons**. `NotificationOutboxWorker` opens one fresh scope
+per bounded batch, so its transient email gateway and EF context live through every delivery stamp.
 
 ## Rate-limit policies (`Extensions/RateLimitingExtensions.cs`)
 

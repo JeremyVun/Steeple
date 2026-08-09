@@ -56,7 +56,30 @@ public sealed class EfMediaRepository : IMediaRepository
     }
 
     /// <inheritdoc />
-    public Task SaveChangesAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+    public async Task<bool> TrySavePlacementAsync(IReadOnlyList<Action> phases, CancellationToken ct = default)
+    {
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        try
+        {
+            foreach (var phase in phases)
+            {
+                phase();
+                await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            }
+
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (DbUpdateException exception) when (IsPlacementConflict(exception))
+        {
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
+
+            // Rolled-back mutations must not be replayed on the retry, and a concurrent writer's
+            // rows are not in this context at all. Only a fresh read can decide the new order.
+            _db.ChangeTracker.Clear();
+            return false;
+        }
+    }
 
     private static bool IsPlacementConflict(DbUpdateException exception) =>
         exception.InnerException is PostgresException

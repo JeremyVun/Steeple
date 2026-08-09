@@ -39,6 +39,7 @@ public class VenueCalendarIntegrationTests
         var manager = new User { Id = Guid.NewGuid(), DisplayName = "Provider Pat", Email = $"{Guid.NewGuid():N}@example.com", CreatedAtUtc = FixedNow };
         var bookedOrganizer = new User { Id = Guid.NewGuid(), DisplayName = "Bella Booked", Email = $"{Guid.NewGuid():N}@example.com", CreatedAtUtc = FixedNow };
         var pendingOrganizer = new User { Id = Guid.NewGuid(), DisplayName = "Priya Pending", Email = $"{Guid.NewGuid():N}@example.com", CreatedAtUtc = FixedNow };
+        var expiredOrganizer = new User { Id = Guid.NewGuid(), DisplayName = "Elliot Expired", Email = $"{Guid.NewGuid():N}@example.com", CreatedAtUtc = FixedNow };
         var venue = new Venue
         {
             Id = Guid.NewGuid(),
@@ -132,14 +133,31 @@ public class VenueCalendarIntegrationTests
             CreatedAtUtc = FixedNow,
             ExpiresAtUtc = FixedNow.AddDays(14),
         };
+        var expiredApp = new Application
+        {
+            Id = Guid.NewGuid(),
+            RoomId = room.Id,
+            OrganizerId = expiredOrganizer.Id,
+            ActivityType = ActivityType.Community,
+            GroupSize = 8,
+            Frequency = ScheduleFrequency.OneOff,
+            StartDate = pendingDate.AddDays(1),
+            EndDate = pendingDate.AddDays(1),
+            StartTime = new TimeOnly(15, 0),
+            EndTime = new TimeOnly(16, 0),
+            IntentText = "This request has already expired.",
+            Status = ApplicationStatus.Pending,
+            CreatedAtUtc = FixedNow.AddDays(-15),
+            ExpiresAtUtc = FixedNow.AddSeconds(-1),
+        };
 
         await using (var seedDb = CreateContext())
         {
-            seedDb.Users.AddRange(manager, bookedOrganizer, pendingOrganizer);
+            seedDb.Users.AddRange(manager, bookedOrganizer, pendingOrganizer, expiredOrganizer);
             seedDb.Venues.Add(venue);
             seedDb.Rooms.Add(room);
             seedDb.VenueManagers.Add(new VenueManager { Id = Guid.NewGuid(), VenueId = venue.Id, UserId = manager.Id, CreatedAtUtc = FixedNow });
-            seedDb.Applications.AddRange(approvedApp, pendingApp);
+            seedDb.Applications.AddRange(approvedApp, pendingApp, expiredApp);
             seedDb.Bookings.Add(booking);
             seedDb.BookingOccurrences.Add(occurrence);
             await seedDb.SaveChangesAsync();
@@ -165,6 +183,7 @@ public class VenueCalendarIntegrationTests
         Assert.Equal(pendingApp.Id, pending.ApplicationId);
         Assert.Equal("Priya Pending", pending.OrganizerName);
         Assert.Equal([pendingDate], pending.Dates);
+        Assert.DoesNotContain(result.Value.Pending, p => p.ApplicationId == expiredApp.Id);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider

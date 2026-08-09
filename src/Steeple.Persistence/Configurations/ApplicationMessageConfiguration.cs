@@ -15,6 +15,8 @@ public class ApplicationMessageConfiguration : IEntityTypeConfiguration<Applicat
         builder.Property(m => m.Body).IsRequired().HasMaxLength(2000);
 
         builder.HasIndex(m => new { m.ApplicationId, m.SentAtUtc });
+        builder.HasIndex(m => new { m.SentAtUtc, m.Id })
+            .HasDatabaseName("IX_application_messages_Retention");
 
         builder
             .HasOne(m => m.Sender)

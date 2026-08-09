@@ -22,7 +22,8 @@ public sealed class GoogleIdTokenVerifier : OidcIdTokenVerifier
         ["https://accounts.google.com", "accounts.google.com"];
 
     /// <inheritdoc />
-    protected override IReadOnlyCollection<string> ValidAudiences => _options.Google.ClientIds;
+    protected override IReadOnlyCollection<string> ValidAudiences =>
+        _options.Google.IsEnabled ? _options.Google.ClientIds : [];
 
     /// <inheritdoc />
     protected override VerifiedIdentity ToIdentity(string subject, IDictionary<string, object> claims)

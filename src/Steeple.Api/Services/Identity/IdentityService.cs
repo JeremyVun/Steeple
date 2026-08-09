@@ -161,7 +161,8 @@ public sealed class IdentityService : IIdentityService
             // dies so a stolen token can't keep a session alive.
             if (_grace.Recall(presentedHash) is { } alreadyRotated)
             {
-                return IdentityResult<RefreshResponse>.Ok(alreadyRotated);
+                return IdentityResult<RefreshResponse>.Ok(
+                    await alreadyRotated.WaitAsync(ct).ConfigureAwait(false));
             }
 
             await _repository.RevokeFamilyAsync(presented.FamilyId, ct).ConfigureAwait(false);
@@ -176,42 +177,48 @@ public sealed class IdentityService : IIdentityService
                 IdentityErrorCodes.InvalidRefreshToken, "The refresh token has expired.");
         }
 
-        var nextToken = RefreshTokenCrypto.GenerateToken();
-        var candidate = new RefreshResponse(
-            _accessTokens.IssueAccessToken(presented.User, presented.FamilyId), nextToken);
-
-        // Claim the rotation before writing it. Simultaneous callers agree here on whose pair the
-        // session continues with — the raw successor exists only in this process, so the loser
-        // could not otherwise be told what the winner was handed.
-        var claimed = _grace.Claim(presentedHash, presented.UserId, presented.FamilyId, candidate);
-        if (!ReferenceEquals(claimed, candidate))
+        try
         {
-            return IdentityResult<RefreshResponse>.Ok(claimed);
+            var committed = await _grace.RotateAsync(
+                presentedHash,
+                presented.UserId,
+                presented.FamilyId,
+                async () =>
+                {
+                    var nextToken = RefreshTokenCrypto.GenerateToken();
+                    var candidate = new RefreshResponse(
+                        _accessTokens.IssueAccessToken(presented.User, presented.FamilyId),
+                        nextToken);
+                    var next = new RefreshToken
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = presented.UserId,
+                        FamilyId = presented.FamilyId,
+                        TokenHash = RefreshTokenCrypto.HashToken(nextToken),
+                        DeviceLabel = presented.DeviceLabel,
+                        Platform = presented.Platform,
+                        CreatedAtUtc = now,
+                        ExpiresAtUtc = now.AddDays(_options.RefreshTokenDays),
+                    };
+
+                    if (!await _repository.TryReplaceRefreshTokenAsync(presented, next, now, ct).ConfigureAwait(false))
+                    {
+                        throw new RefreshRotationNotCommittedException();
+                    }
+
+                    return candidate;
+                },
+                ct).ConfigureAwait(false);
+
+            return IdentityResult<RefreshResponse>.Ok(committed);
         }
-
-        var next = new RefreshToken
+        catch (RefreshRotationNotCommittedException)
         {
-            Id = Guid.NewGuid(),
-            UserId = presented.UserId,
-            FamilyId = presented.FamilyId,
-            TokenHash = RefreshTokenCrypto.HashToken(nextToken),
-            DeviceLabel = presented.DeviceLabel,
-            Platform = presented.Platform,
-            CreatedAtUtc = now,
-            ExpiresAtUtc = now.AddDays(_options.RefreshTokenDays),
-        };
-
-        if (!await _repository.TryReplaceRefreshTokenAsync(presented, next, now, ct).ConfigureAwait(false))
-        {
-            // The row was revoked between the read and the write — a sign-out, a family
-            // revocation, or a rotation by another process. Nothing was written, so the claim must
-            // not stand: it would hand a pair to callers that no row backs.
-            _grace.Release(presentedHash);
+            // The row was revoked between the read and the conditional write. The shared task
+            // faults and is evicted, so no waiter receives the uncommitted candidate.
             return IdentityResult<RefreshResponse>.Fail(
                 IdentityErrorCodes.InvalidRefreshToken, "The refresh token is no longer usable.");
         }
-
-        return IdentityResult<RefreshResponse>.Ok(candidate);
     }
 
     /// <inheritdoc />
@@ -269,13 +276,15 @@ public sealed class IdentityService : IIdentityService
     /// <inheritdoc />
     public async Task<bool> RecordAgreementAsync(Guid userId, AcceptAgreementRequest request, CancellationToken ct = default)
     {
+        var version = request.Version?.Trim();
         if (!Enum.TryParse<AgreementDocType>(request.DocType, ignoreCase: true, out var docType)
-            || string.IsNullOrWhiteSpace(request.Version))
+            || string.IsNullOrWhiteSpace(version)
+            || version.Length > 50)
         {
             return false;
         }
 
-        await _repository.RecordAgreementAsync(userId, docType, request.Version.Trim(), ct).ConfigureAwait(false);
+        await _repository.RecordAgreementAsync(userId, docType, version, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -325,6 +334,8 @@ public sealed class IdentityService : IIdentityService
         var at = email?.IndexOf('@') ?? -1;
         return at > 0 ? email![..at] : null;
     }
+
+    private sealed class RefreshRotationNotCommittedException : Exception { }
 
     /// <summary>Best-effort analytics — never a reason to fail sign-in.</summary>
     private async Task TrackSafelyAsync(string eventType, object payload, CancellationToken ct)

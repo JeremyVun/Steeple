@@ -1765,12 +1765,13 @@ public class ApplicationServiceTests
             Page(Applications.Where(a => venueIds.Contains((a.Room ?? Rooms.First(r => r.Id == a.RoomId)).VenueId)), status, now, page, pageSize);
 
         public Task<IReadOnlyList<Application>> GetUndecidedForRoomAsync(
-            Guid roomId, Guid excludeApplicationId, CancellationToken ct = default)
+            Guid roomId, Guid excludeApplicationId, DateTimeOffset now, CancellationToken ct = default)
         {
             var items = Applications
                 .Where(a => a.RoomId == roomId
                     && a.Id != excludeApplicationId
-                    && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo)
+                    && a.Status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo
+                    && a.ExpiresAtUtc > now)
                 .ToList();
             foreach (var application in items)
             {

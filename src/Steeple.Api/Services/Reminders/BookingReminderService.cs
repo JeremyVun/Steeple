@@ -9,10 +9,10 @@ namespace Steeple.Api.Services.Reminders;
 ///   <item>"Coming up" fires a week before the booking's <em>first</em> upcoming occurrence.</item>
 ///   <item>"Tomorrow" fires the day before <em>every</em> occurrence.</item>
 /// </list>
-/// The asymmetry is deliberate: a weekly recurring booking would otherwise collect two emails
-/// every week forever — the week-out nudge is about the commitment, the day-before one is about
-/// the date. Every send is claimed in the <c>booking_reminders</c> ledger first (unique on
-/// occurrence + kind), so a double run, a restart mid-sweep or a second replica cannot double-send.
+/// Both nudges remain in inbox/push. Email is deliberately narrower: only the day-before nudge for
+/// the booking's first occurrence, so a weekly booking never becomes a permanent email subscription.
+/// Every send is claimed in the <c>booking_reminders</c> ledger first (unique on occurrence + kind),
+/// so a double run, a restart mid-sweep or a second replica cannot double-send.
 /// </summary>
 public sealed class BookingReminderService : IBookingReminderService
 {
@@ -115,12 +115,17 @@ public sealed class BookingReminderService : IBookingReminderService
             var venue = room.Venue!;
             var organizerName = booking.Organizer!.DisplayName;
             var recipientCount = 0;
+            // Email only once, on the eve of the booking's first occurrence. The inbox and push
+            // still carry every reminder, but a weekly booking must not become two recurring
+            // emails forever (one to each party), and the confirmation already covers T-7.
+            var emailFirstTomorrow = kind == BookingReminderKind.Tomorrow
+                && booking.Occurrences.OrderBy(item => item.StartUtc).First().Id == occurrence.Id;
 
             await _notifications.NotifyAsync(
                 [new NotificationRecipient(booking.OrganizerId, booking.Organizer.Email)],
                 NotificationType.BookingReminder,
                 payload,
-                OrganizerEmail(kind, room.Name, venue.Name, when),
+                emailFirstTomorrow ? OrganizerTomorrowEmail(room.Name, venue.Name, when) : null,
                 ct).ConfigureAwait(false);
             recipientCount++;
 
@@ -131,7 +136,7 @@ public sealed class BookingReminderService : IBookingReminderService
                     managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
                     NotificationType.BookingReminder,
                     payload,
-                    HostEmail(kind, room.Name, organizerName, when),
+                    emailFirstTomorrow ? HostTomorrowEmail(room.Name, organizerName, when) : null,
                     ct).ConfigureAwait(false);
                 recipientCount += managers.Count;
             }
@@ -148,39 +153,22 @@ public sealed class BookingReminderService : IBookingReminderService
         }
     }
 
-    private static EmailContent OrganizerEmail(
-        BookingReminderKind kind, string roomName, string venueName, string when) =>
-        kind == BookingReminderKind.Tomorrow
-            ? new EmailContent(
-                Subject: $"Tomorrow: {roomName} at {venueName}",
-                TextBody:
-                    $"A reminder that you have {roomName} at {venueName} booked tomorrow.\n\n" +
-                    $"When: {when}\n\n" +
-                    "If your plans have changed, cancelling from your booking frees the time for " +
-                    "someone else.")
-            : new EmailContent(
-                Subject: $"Coming up: {roomName} at {venueName}",
-                TextBody:
-                    $"Your booking of {roomName} at {venueName} is a week away.\n\n" +
-                    $"When: {when}\n\n" +
-                    "Nothing to do — this is just so the date doesn't arrive as a surprise. Your host " +
-                    "has been reminded too.");
+    private static EmailContent OrganizerTomorrowEmail(string roomName, string venueName, string when) =>
+        new(
+            Subject: $"Tomorrow: {roomName} at {venueName}",
+            TextBody:
+                $"A reminder that you have {roomName} at {venueName} booked tomorrow.\n\n" +
+                $"When: {when}\n\n" +
+                "If your plans have changed, cancelling from your booking frees the time for " +
+                "someone else.");
 
-    private static EmailContent HostEmail(
-        BookingReminderKind kind, string roomName, string organizerName, string when) =>
-        kind == BookingReminderKind.Tomorrow
-            ? new EmailContent(
-                Subject: $"Tomorrow: {organizerName} in {roomName}",
-                TextBody:
-                    $"{organizerName} has {roomName} booked tomorrow.\n\n" +
-                    $"When: {when}\n\n" +
-                    "Worth a last look at access and setup — they've had the same reminder.")
-            : new EmailContent(
-                Subject: $"Coming up: {organizerName} in {roomName}",
-                TextBody:
-                    $"{organizerName} has {roomName} booked a week from now.\n\n" +
-                    $"When: {when}\n\n" +
-                    "Nothing to do yet — a closer reminder follows the day before.");
+    private static EmailContent HostTomorrowEmail(string roomName, string organizerName, string when) =>
+        new(
+            Subject: $"Tomorrow: {organizerName} in {roomName}",
+            TextBody:
+                $"{organizerName} has {roomName} booked tomorrow.\n\n" +
+                $"When: {when}\n\n" +
+                "Worth a last look at access and setup — they've had the same reminder.");
 
     /// <summary>
     /// The inbox row's document. Same shape as the Bookings module's payload (clients render from
