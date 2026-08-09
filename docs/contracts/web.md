@@ -421,7 +421,11 @@ it is contained by construction: its letters are written under the seed's own id
   in Development); application submit (`Idempotency-Key`,
   result mirrored into the local store); the whole hosting chain — dev SSO → `POST` venue →
   room → photo upload → `PUT` availability → `PATCH {status:'published'}` (publish requires a
-  photo; moderation answers `draft` + `publishRequestedAtUtc`).
+  photo; moderation answers `draft` + `publishRequestedAtUtc`). A listing draft is module-memory
+  only and a full reload may discard it. If the session dies without a reload, the open draft and
+  step stay visible but Publish is blocked; after reauthentication, already-saved availability is
+  re-read from `GET /manage/rooms/{id}/availability` into the new identity-scoped mirror before
+  Publish is offered again. Sign-out itself still leaves no private mirror in browser storage.
 - **Real (Phase 1, 2026-08-05):** the account surface. The porch carries the account in both
   states — a monogram + card with Sign out signed in, one quiet "Sign in"
   chip signed out, which opens the identity panel the flows use (`ui/signIn.js` wraps

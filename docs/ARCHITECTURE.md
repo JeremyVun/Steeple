@@ -215,8 +215,8 @@ revealed, non-hidden venue-directed comments newest-first. Admin can hide/unhide
 **Manage** (provider self-service, Phase 5) — venue-manager-scoped venue/room CRUD plus host
 ownership/lease-authority verification; wire shapes and endpoint list are `CONTRACTS.md` §6.
 `SaveVenueRequest`/`SaveRoomRequest` treat `null` fields as "unchanged" on PATCH. Address
-create/edit geocodes via `IGeocodingGateway` and re-checks the geofence (`400
-geofence_rejected` outside it). Verification requests store evidence summaries and
+create/edit geocodes via `IGeocodingGateway` and accepts any resolved location; the discovery
+geofence does not constrain host supply entry. Verification requests store evidence summaries and
 externally-hosted/signed document links only, not raw deed/lease/ID contents. A submission has
 no decision of its own any more: it is evidence shown inside the first-listing review, and the
 listing decision marks it decided. Slugs (`Utils/Slugs.cs`) are derived once from the name and
@@ -493,7 +493,8 @@ booking_occurrences 1─* payments (014; partial unique (OccurrenceId) WHERE Sta
 One hardcoded beachhead (config section `Geofence`) — currently Vienna & nearby, Northern
 Virginia (`lat 38.84–38.96, lng -77.34–-77.12`). `GeofencePolicy` clamps any requested
 viewport/radius into the beachhead (out-of-area → empty results, not errors) and rejects
-out-of-area detail lookups. Launch-suburb swap = one config change.
+out-of-area detail lookups. Hosts may create and edit venues outside these bounds; those venues
+remain outside public discovery while this policy is active. Launch-suburb swap = one config change.
 
 ## Data / persistence
 

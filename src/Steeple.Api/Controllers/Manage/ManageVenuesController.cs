@@ -41,7 +41,7 @@ public sealed class ManageVenuesController : ControllerBase
     }
 
     /// <summary>
-    /// Creates a venue (geocoded + geofenced); the caller becomes its first manager. Replays with
+    /// Creates a geocoded venue; the caller becomes its first manager. Replays with
     /// the same <c>Idempotency-Key</c> return the original venue as <c>200</c>.
     /// </summary>
     [HttpPost]
@@ -60,7 +60,7 @@ public sealed class ManageVenuesController : ControllerBase
             : Ok(outcome.Resource);
     }
 
-    /// <summary>Applies non-null fields; address changes re-geocode (geofenced).</summary>
+    /// <summary>Applies non-null fields; address changes are re-geocoded.</summary>
     [HttpPatch("{id:guid}")]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedVenueDetailDto>> Update(Guid id, [FromBody] SaveVenueRequest request, CancellationToken ct)

@@ -217,6 +217,11 @@ export function readRoom(roomId) {
   return attempt((token) => api.getManagedRoom(roomId, token));
 }
 
+/** The saved availability needed to resume a half-written listing after reauthentication. */
+export function readHours(roomId) {
+  return attempt((token) => api.getRoomAvailabilityRules(roomId, token));
+}
+
 /** Send the photograph the room cannot be published without. */
 export function savePhoto(draft) {
   const file = draft.room.photo?.file;

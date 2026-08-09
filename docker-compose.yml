@@ -134,7 +134,9 @@ services:
         VITE_APPLE_CLIENT_ID: "${APPLE_SERVICES_ID:?APPLE_SERVICES_ID must be set}"
         VITE_APPLE_REDIRECT_URI: "${APPLE_REDIRECT_URI:?APPLE_REDIRECT_URI must be set}"
         VITE_TURNSTILE_MODE: "${TURNSTILE_MODE:?TURNSTILE_MODE must be enabled or disabled}"
-        VITE_TURNSTILE_SITE_KEY: "${TURNSTILE_SITE_KEY:-}"
+      secrets:
+        - source: turnstile_site_key
+          target: TURNSTILE_SITE_KEY
     ports:
       - "${WEB_PORT:-8080}:8080"
     depends_on:
@@ -183,3 +185,7 @@ networks:
 volumes:
   steeple_pgdata:
   steeple_api_media:
+
+secrets:
+  turnstile_site_key:
+    environment: TURNSTILE_SITE_KEY

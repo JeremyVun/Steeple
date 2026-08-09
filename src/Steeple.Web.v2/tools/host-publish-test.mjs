@@ -28,7 +28,16 @@
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low&world=off"
 //   node tools/host-publish-test.mjs "http://localhost:5332/?q=low" --shots hp
 
-import { API, agreeCurrent, apiIsUp, closeBrowsers, launch, signIn, stamp } from './fixtures.mjs';
+import {
+  API,
+  agreeCurrent,
+  apiIsUp,
+  closeBrowsers,
+  isEnvironmentNoise,
+  launch,
+  signIn,
+  stamp,
+} from './fixtures.mjs';
 import { writeRoomPhoto } from './host-photo.mjs';
 
 const url = process.argv[2] ?? 'http://localhost:5332/?q=low&world=off';
@@ -80,10 +89,9 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1440, height: 900 });
 page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
 page.on('console', (msg) => {
-  if (msg.type() !== 'error') return;
-  const text = msg.text();
-  if (text.includes('GL Driver Message') || text.includes('GPU stall')) return;
-  problems.push(`[console.error] ${text}`);
+  if (msg.type() === 'error' && !isEnvironmentNoise(msg)) {
+    problems.push(`[console.error] ${msg.text()}`);
+  }
 });
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

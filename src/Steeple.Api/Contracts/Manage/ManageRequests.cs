@@ -2,7 +2,7 @@ namespace Steeple.Api.Contracts.Manage;
 /// <summary>
 /// Create/update payload for a managed venue (CONTRACTS §6). One shape serves POST and PATCH:
 /// on create the service requires name/description/address/suburb/postcode; on update, null
-/// means "unchanged". Address-affecting changes re-geocode server-side (geofenced).
+/// means "unchanged". Address-affecting changes are re-geocoded server-side.
 /// </summary>
 public record SaveVenueRequest(
     string? Name,

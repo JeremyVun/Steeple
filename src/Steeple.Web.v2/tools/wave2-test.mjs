@@ -39,7 +39,19 @@
 // second event that only a manual venue can produce, and no seeded venue is one.
 // That beat lives in correspondence-test, off-world, where a manual venue exists.
 
-import { apiIsUp, at, call, closeBrowsers, goRoute, launch, mintGuest, routes, signInPage, stamp } from './fixtures.mjs';
+import {
+  agreeCurrent,
+  apiIsUp,
+  at,
+  call,
+  closeBrowsers,
+  goRoute,
+  launch,
+  mintGuest,
+  routes,
+  signInPage,
+  stamp,
+} from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -95,6 +107,10 @@ if (listing.status !== 200) {
     email: `village-${style}-${stamp}@example.org`,
     name: 'Maria Alvarez',
   });
+  // The animated correspondence beat is the subject here. Answer the current
+  // agreements on the wire so their first-sign-in gate cannot stand over the
+  // room CTA and turn this into an agreement-dismissal test.
+  await agreeCurrent(guest.token);
 
   const browser = await launch();
   const page = await browser.newPage();

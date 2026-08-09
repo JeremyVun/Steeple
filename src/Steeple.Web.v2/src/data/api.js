@@ -786,10 +786,9 @@ export function getManagedVenue(venueId, accessToken) {
 }
 
 /**
- * `POST /manage/venues` — create, geocoded and geofenced server-side from
- * address/suburb/postcode. Name, description and the three address fields are
- * required; a location outside the beachhead answers `geofence_rejected` and an
- * address that resolves to nothing answers `invalid_venue`.
+ * `POST /manage/venues` — create, geocoded server-side from address/suburb/postcode.
+ * Name, description and the three address fields are required; an address that
+ * resolves to nothing answers `invalid_venue`.
  *
  * An `Idempotency-Key` makes a replay (the 4s client abort can fire after the
  * server has already committed) answer with the original venue instead of

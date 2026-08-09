@@ -15,13 +15,12 @@ ARG VITE_GOOGLE_CLIENT_ID=
 ARG VITE_APPLE_CLIENT_ID=
 ARG VITE_APPLE_REDIRECT_URI=
 ARG VITE_TURNSTILE_MODE=
-ARG VITE_TURNSTILE_SITE_KEY=
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID \
     VITE_APPLE_CLIENT_ID=$VITE_APPLE_CLIENT_ID \
-    VITE_APPLE_REDIRECT_URI=$VITE_APPLE_REDIRECT_URI \
-    VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+    VITE_APPLE_REDIRECT_URI=$VITE_APPLE_REDIRECT_URI
 
-RUN test -n "$VITE_APPLE_CLIENT_ID" \
+RUN --mount=type=secret,id=TURNSTILE_SITE_KEY,env=VITE_TURNSTILE_SITE_KEY \
+    test -n "$VITE_APPLE_CLIENT_ID" \
     && test -n "$VITE_APPLE_REDIRECT_URI" \
     && if [ "$VITE_TURNSTILE_MODE" = "disabled" ]; then \
          test -z "$VITE_TURNSTILE_SITE_KEY"; \
@@ -29,9 +28,8 @@ RUN test -n "$VITE_APPLE_CLIENT_ID" \
          test -n "$VITE_TURNSTILE_SITE_KEY"; \
        else \
          false; \
-       fi
-
-RUN npm run build
+       fi \
+    && npm run build
 
 FROM nginx:1.31.3-alpine3.24 AS final
 COPY src/Steeple.Web.v2/nginx.conf /etc/nginx/conf.d/default.conf

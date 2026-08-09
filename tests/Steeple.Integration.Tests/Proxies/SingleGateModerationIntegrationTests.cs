@@ -35,7 +35,6 @@ public class SingleGateModerationIntegrationTests
         new EfManageRepository(db),
         new EfVenueManagerRepository(db),
         new FakeGeocodingGateway(),
-        new FakeGeofencePolicy(),
         new NullAnalytics(),
         new DisabledFeatureFlags(),
         new AvailabilityService(
@@ -451,17 +450,4 @@ public class SingleGateModerationIntegrationTests
             Task.FromResult<IReadOnlyList<AddressSuggestion>>([]);
     }
 
-    private sealed class FakeGeofencePolicy : IGeofencePolicy
-    {
-        public string TimezoneId => "America/New_York";
-        public BoundingBox Bounds => new(38.50, 38.96, -77.70, -77.12);
-
-        public GeoPoint Center => new(38.9012, -77.2653);
-
-        public string AreaName => "Vienna & nearby (Northern Virginia)";
-
-        public bool IsServed(double latitude, double longitude) => Bounds.Contains(latitude, longitude);
-
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
-    }
 }

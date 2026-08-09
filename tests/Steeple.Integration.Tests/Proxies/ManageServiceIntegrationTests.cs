@@ -36,7 +36,6 @@ public class ManageServiceIntegrationTests
         new EfManageRepository(db),
         new EfVenueManagerRepository(db),
         new FakeGeocodingGateway(),
-        new FakeGeofencePolicy(),
         new NullAnalytics(),
         new DisabledFeatureFlags(),
         new AvailabilityService(
@@ -359,8 +358,7 @@ public class ManageServiceIntegrationTests
         public bool IsEnabled(string key) => false;
     }
 
-    /// <summary>Always resolves inside the beachhead (Vienna, VA) — the real Google gateway is out
-    /// of scope for these tests; the geofence rejection path is covered by <c>ManageServiceTests</c>.</summary>
+    /// <summary>Always resolves to Vienna, VA; the real geocoding gateway is out of scope here.</summary>
     private sealed class FakeGeocodingGateway : IGeocodingGateway
     {
         public Task<GeoPoint?> GeocodeAsync(string address, CancellationToken ct = default) =>
@@ -370,17 +368,4 @@ public class ManageServiceIntegrationTests
             Task.FromResult<IReadOnlyList<AddressSuggestion>>([]);
     }
 
-    private sealed class FakeGeofencePolicy : IGeofencePolicy
-    {
-        public string TimezoneId => "America/New_York";
-        public BoundingBox Bounds => new(38.84, 38.96, -77.34, -77.12);
-
-        public GeoPoint Center => new(38.9012, -77.2653);
-
-        public string AreaName => "Vienna & nearby (Northern Virginia)";
-
-        public bool IsServed(double latitude, double longitude) => Bounds.Contains(latitude, longitude);
-
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
-    }
 }

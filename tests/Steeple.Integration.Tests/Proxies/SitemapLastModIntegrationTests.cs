@@ -445,7 +445,6 @@ public class SitemapLastModIntegrationTests
         new EfManageRepository(db),
         new EfVenueManagerRepository(db),
         new FixtureGeocoder(),
-        new FixtureGeofence(),
         new NullAnalytics(),
         new NoFeatureFlags(),
         CreateAvailabilityService(db, now),
@@ -497,21 +496,6 @@ public class SitemapLastModIntegrationTests
 
         public Task<IReadOnlyList<AddressSuggestion>> AutocompleteAsync(string text, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<AddressSuggestion>>([]);
-    }
-
-    private sealed class FixtureGeofence : IGeofencePolicy
-    {
-        public BoundingBox Bounds => FixtureArea;
-
-        public GeoPoint Center => FixtureCentre;
-
-        public string AreaName => "Fixtureton";
-
-        public string TimezoneId => "America/New_York";
-
-        public bool IsServed(double latitude, double longitude) => Bounds.Contains(latitude, longitude);
-
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
     }
 
     /// <summary>Answers any bytes with the fixed variant set; the pipeline itself has its own tests.</summary>

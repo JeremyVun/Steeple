@@ -64,11 +64,28 @@
 - The isolated real-flow suite passed **108/108**: search → sign-in → apply or instant
   book → host questions/counter/decision → booking → notifications → double-blind rating
   and reveal from both sides.
+- Both debug bundles built. The complete sequential Web.v2 live matrix then passed across
+  account/agreements, discovery/map/routes/SEO, correspondence/bookings/payments, session
+  races, host listing/offline/session/publish flows, input/hit testing, accessibility, photos,
+  surface ownership, and flat/world boots. Named counts included host publish **156/156**,
+  host session **25/25**, discovery **58/58**, payments **69/69**, input **71/71**, surface
+  **60/60**, session tabs **39/39**, SEO routes **97/97**, and the flat debug bundle **23/23**.
+  Only the pre-recorded stale sets remained: guest **41/45**, exactly six Atlas world checks,
+  and the retired seed/manual assumption from booking-flow §5 (the 108/108 correspondence
+  suite is the live gate for both booking modes).
+- The adversarial pass found and closed two product regressions: first-listing review copy now
+  follows the no-exclamation-mark voice rule, and a listing whose session dies re-reads its
+  already-saved availability after reauthentication before offering Publish. Stale harness
+  assumptions around agreements, clean-seed counts, search readiness, anonymous refresh, and
+  viewport-clipped result counts were corrected and rerun green.
 - A Production-shaped stack reached healthy status with the required capability names.
   The negative smoke enabled Turnstile with an empty secret and exited before startup with
   the named validator error: `Turnstile: enabled mode requires SecretKey`.
 - The repository and production copies of changesets 019–021 are byte-identical. P12 made
   no schema change, so it added no changeset and did not modify the production changelog.
+- Repository Playtest cases remain archived Web.v1 artifacts; their README explicitly forbids
+  running or refreshing them against v2, so no human-owned baseline was mutated. The live v2
+  real-input gates above provide the current regression coverage.
 
 ## Deviations from the written plan
 

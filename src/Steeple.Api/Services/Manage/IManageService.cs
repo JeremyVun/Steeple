@@ -13,14 +13,14 @@ public interface IManageService
     Task<ManageResult<ManagedVenueDetailDto>> GetVenueAsync(Guid callerId, Guid venueId, CancellationToken ct = default);
 
     /// <summary>
-    /// Creates a venue (geocoded + geofenced) and links the caller as its first manager. A replay
+    /// Creates a geocoded venue and links the caller as its first manager. A replay
     /// of <paramref name="idempotencyKey"/> by the same caller returns the original venue with
     /// <c>Created: false</c> instead of making a second one.
     /// </summary>
     Task<ManageResult<CreateOutcome<ManagedVenueDetailDto>>> CreateVenueAsync(
         Guid callerId, SaveVenueRequest request, Guid? idempotencyKey = null, CancellationToken ct = default);
 
-    /// <summary>Applies the non-null fields; address changes re-geocode (geofenced).</summary>
+    /// <summary>Applies the non-null fields; address changes are re-geocoded.</summary>
     Task<ManageResult<ManagedVenueDetailDto>> UpdateVenueAsync(Guid callerId, Guid venueId, SaveVenueRequest request, CancellationToken ct = default);
 
     /// <summary>Submits ownership / lease-authority evidence for operator verification.</summary>
@@ -82,9 +82,6 @@ public static class ManageErrorCodes
 
     /// <summary>Room payload failed validation.</summary>
     public const string InvalidRoom = "invalid_room";
-
-    /// <summary>The address geocodes outside the beachhead (or not at all).</summary>
-    public const string GeofenceRejected = "geofence_rejected";
 
     /// <summary>Unpublishing is blocked by future confirmed occurrences.</summary>
     public const string HasActiveBookings = "has_active_bookings";

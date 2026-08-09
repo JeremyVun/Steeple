@@ -49,6 +49,7 @@ import {
   blackoutsFor,
   editRoom,
   effectiveRoom,
+  mirrorRoomAvailability,
   openHoursFor,
   placedVenues,
   removeBlackout,
@@ -263,9 +264,25 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
   // flow's footer. Without this the way forward stays greyed out behind a
   // session that already exists — and the Publish step's own list of what is
   // missing would go on naming a session that is now here.
-  manage.onSession(() => {
+  manage.onSession(async () => {
     if (element.hidden || !draft) return;
-    if (manage.signedIn()) draft.offline = null;
+    const resuming = draft;
+    if (manage.signedIn()) {
+      draft.offline = null;
+      // Sign-out correctly drops the identity-scoped store. The listing draft
+      // itself stays on the page, and by this point its hours have already
+      // been saved against the remote room. Re-read that server truth after
+      // authentication instead of persisting a private draft or pretending
+      // the now-empty mirror means the host never set availability.
+      if (resuming.remote.roomId) {
+        const hours = await manage.readHours(resuming.remote.roomId);
+        if (draft !== resuming || !manage.signedIn()) return;
+        if (hours.ok) {
+          mirrorRoomAvailability(resuming.venueId, resuming.roomId, hours.value);
+          resuming.sentHours = hoursSnapshot();
+        }
+      }
+    }
     renderBody();
   });
 
@@ -524,7 +541,6 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     // Where the field that offends lives, and what the way there is called.
     const WHERE = {
       invalid_venue: { step: 'place', label: 'Edit the venue' },
-      geofence_rejected: { step: 'place', label: 'Edit the address' },
       invalid_room: { step: 'describe', label: 'Edit the space' },
     };
     const at = WHERE[answer.code];
@@ -682,7 +698,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
           el('h3', { class: 'eyebrow', text: 'In review' }),
           el('p', {
             class: 'prose',
-            text: `Thanks for listing! As this is your first listing, ${room.name} has been sent for review. We'll be in touch shortly!`,
+            text: `Thanks for listing. As this is your first listing, ${room.name} has been sent for review. We'll be in touch shortly.`,
           }),
         ]),
         noticeBlock(),

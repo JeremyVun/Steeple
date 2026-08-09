@@ -14,7 +14,7 @@ identical to an unknown id (no existence leak). Rate limits: `manage` policy (30
 every **manage** write below except photo upload, which uses `media` (12/min/account, the
 expensive image pipeline); the anonymous availability check uses `availability` (30/min/IP).
 Errors are ProblemDetails with `code` ∈ `not_found | invalid_venue | invalid_room |
-invalid_photo | invalid_image | invalid_verification | geofence_rejected | has_active_bookings |
+invalid_photo | invalid_image | invalid_verification | has_active_bookings |
 operator_unlisted | no_photos | no_open_hours | invalid_availability | invalid_range |
 already_verified | verification_pending` (409 for
 `has_active_bookings`, `operator_unlisted`, `already_verified`, `verification_pending`; 404 for
@@ -26,8 +26,8 @@ already_verified | verification_pending` (409 for
 ### Moderation model — one human gate per venue ✅ *(hardened 2026-08-06)*
 The gate is an **unverified venue's first listing**, not a person's first listing, and `ManageService` is its single
 enforcement point. Any transition to `status: "published"` first clears the automatic gates
-(≥1 photo → `no_photos`; open hours behind `manage.open_hours_required` → `no_open_hours`;
-geofence on the venue's address). Then:
+(≥1 photo → `no_photos`; open hours behind `manage.open_hours_required` → `no_open_hours`).
+Then:
 
 - **Verified venue** — later rooms at a venue with `IsIdentityVerified` set publish immediately:
   `Published` + `FirstPublishedAtUtc` stamped, no queue, no `publishRequestedAtUtc`.
@@ -64,18 +64,17 @@ geofence on the venue's address). Then:
 - `POST /api/v1/manage/venues` ✅ — `SaveVenueRequest` (name/description/address required on
   create; suburb/postcode optional since 2026-08-07 — the web form stopped asking and derives
   them from the picked suggestion, falling back to parsing its label); the caller becomes the
-  first `venue_manager`. Address is geocoded
-  server-side (`IGeocodingGateway`) and geofence-checked → `400 geofence_rejected` outside the
-  beachhead. `201` with the created `ManagedVenueDetailDto`.
+  first `venue_manager`. Address is geocoded server-side (`IGeocodingGateway`); any geocodable
+  location is accepted. `201` with the created `ManagedVenueDetailDto`.
 - `GET /api/v1/manage/address-suggestions?q=` ✅ *(additive 2026-08-07)* — address typeahead
   for the venue address form. Signed-in, `manage` rate-limit policy. →
   `[{label, latitude, longitude, addressLine?, suburb?, postcode?}]` (≤ 6; structured parts
   null when the provider doesn't break the address down — clients fall back to the label).
   Input under 3 chars **and** provider outages both answer `[]`, never an error. Backed by
-  `IGeocodingGateway.AutocompleteAsync` (Apple Maps Server adapter in production; canned
-  beachhead suggestions from the dev stub).
+  `IGeocodingGateway.AutocompleteAsync` (Apple Maps Server adapter in production; canned local
+  suggestions from the dev stub).
 - `PATCH /api/v1/manage/venues/{id}` ✅ — same `SaveVenueRequest` shape; `null` fields mean
-  "unchanged". Address-affecting changes re-geocode (same geofence check) and stamp
+  "unchanged". Address-affecting changes re-geocode and stamp
   `ProviderEditedAtUtc`.
 - `SaveVenueRequest.bookingMode` ✅ *(additive 2026-08-05 — `docs/backlog/booking-modes.md`)* —
   `"instant" | "manual"`; null = unchanged; create default **instant**. Unknown token →

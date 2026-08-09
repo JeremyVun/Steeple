@@ -1,10 +1,10 @@
 variable "STEEPLE_WEB_VERSION" { default = "latest"  }
 variable "STEEPLE_API_VERSION" { default = "latest"  }
 variable "STEEPLE_ADMIN_VERSION" { default = "latest"  }
-variable "GOOGLE_CLIENT_ID" { default = "" }
-variable "APPLE_SERVICES_ID" { default = "" }
-variable "APPLE_REDIRECT_URI" { default = "" }
-variable "TURNSTILE_MODE" { default = "" }
+variable "GOOGLE_CLIENT_ID" { default = "825180596634-73nh8sm0748c83urievs0ikr1chfurt7.apps.googleusercontent.com" }
+variable "APPLE_SERVICES_ID" { default = "com.steeple.app.web" }
+variable "APPLE_REDIRECT_URI" { default = "https://steeple.jeremyvun.com/" }
+variable "TURNSTILE_MODE" { default = "disabled" }
 variable "TURNSTILE_SITE_KEY" { default = "" }
 
 # Only targets whose projects exist today are in the default group, so a bare
@@ -27,8 +27,10 @@ target "steeple-web" {
     VITE_APPLE_CLIENT_ID = APPLE_SERVICES_ID
     VITE_APPLE_REDIRECT_URI = APPLE_REDIRECT_URI
     VITE_TURNSTILE_MODE = TURNSTILE_MODE
-    VITE_TURNSTILE_SITE_KEY = TURNSTILE_SITE_KEY
   }
+  secret = TURNSTILE_SITE_KEY == "" ? [] : [
+    { type = "env", id = "TURNSTILE_SITE_KEY" }
+  ]
   tags = [
     "registry.jeremyvun.com/steeple-web:${STEEPLE_WEB_VERSION}",
     "registry.jeremyvun.com/steeple-web:latest"

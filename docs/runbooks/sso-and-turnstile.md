@@ -26,7 +26,10 @@ production graph and asserts that Google and Apple controls both render when con
 Pre-release may set `TURNSTILE_MODE=disabled` with both key values empty. General release must
 set `TURNSTILE_MODE=enabled`, `TURNSTILE_SECRET_KEY`, and `TURNSTILE_SITE_KEY`. The API fails
 closed when enabled verification cannot complete; the web image rejects enabled-without-site-key
-and disabled-with-site-key combinations.
+and disabled-with-site-key combinations. Compose and Bake expose the site key to the web build as
+a BuildKit secret, not an image argument or environment layer. The key is still public in the
+browser bundle by design. If only the site key changes, rebuild the web image without cache because
+BuildKit does not invalidate a build step when secret contents change.
 
 ## Real Apple acceptance test
 

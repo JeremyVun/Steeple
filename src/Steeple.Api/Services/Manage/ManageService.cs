@@ -16,7 +16,6 @@ public sealed class ManageService : IManageService
     private readonly IManageRepository _repository;
     private readonly IVenueManagerRepository _venueManagers;
     private readonly IGeocodingGateway _geocoding;
-    private readonly IGeofencePolicy _geofence;
     private readonly IAnalyticsSink _analytics;
     private readonly IFeatureFlags _flags;
     private readonly IAvailabilityService _availability;
@@ -28,7 +27,6 @@ public sealed class ManageService : IManageService
         IManageRepository repository,
         IVenueManagerRepository venueManagers,
         IGeocodingGateway geocoding,
-        IGeofencePolicy geofence,
         IAnalyticsSink analytics,
         IFeatureFlags flags,
         IAvailabilityService availability,
@@ -38,7 +36,6 @@ public sealed class ManageService : IManageService
         _repository = repository;
         _venueManagers = venueManagers;
         _geocoding = geocoding;
-        _geofence = geofence;
         _analytics = analytics;
         _flags = flags;
         _availability = availability;
@@ -101,7 +98,7 @@ public sealed class ManageService : IManageService
 
         var venueType = FlagEnumExtensions.ParseToken<VenueType>(request.VenueType) ?? VenueType.Church;
 
-        var location = await GeocodeInServedAreaAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
+        var location = await GeocodeAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
         if (location.Error is not null)
         {
             return new ManageResult<CreateOutcome<ManagedVenueDetailDto>>(null, location.Error);
@@ -197,7 +194,7 @@ public sealed class ManageService : IManageService
 
         if (addressChanged)
         {
-            var location = await GeocodeInServedAreaAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
+            var location = await GeocodeAsync(addressLine, suburb, postcode, ct).ConfigureAwait(false);
             if (location.Error is not null)
             {
                 return new ManageResult<ManagedVenueDetailDto>(null, location.Error);
@@ -637,7 +634,7 @@ public sealed class ManageService : IManageService
         return (room, null);
     }
 
-    private async Task<(GeoPoint? Point, ManageError? Error)> GeocodeInServedAreaAsync(
+    private async Task<(GeoPoint? Point, ManageError? Error)> GeocodeAsync(
         string addressLine, string suburb, string postcode, CancellationToken ct)
     {
         // Region is a config hint (a US state token today); an area with no such token
@@ -651,13 +648,6 @@ public sealed class ManageService : IManageService
             return (null, new ManageError(
                 ManageErrorCodes.InvalidVenue,
                 "We couldn't find that address — check the street, suburb, and ZIP."));
-        }
-
-        if (!_geofence.IsServed(point.Value.Latitude, point.Value.Longitude))
-        {
-            return (null, new ManageError(
-                ManageErrorCodes.GeofenceRejected,
-                $"Steeple currently serves {_geofence.AreaName} only — that address is outside the area."));
         }
 
         return (point, null);

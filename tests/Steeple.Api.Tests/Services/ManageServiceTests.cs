@@ -4,7 +4,7 @@ namespace Steeple.Api.Tests.Services;
 /// <summary>
 /// Unit tests for <see cref="ManageService"/>: the publish moderation gate (never-approved rooms
 /// join the Admin queue; previously-approved rooms relist directly), publish-request withdrawal,
-/// the unpublish-blocked-by-bookings guard, and the geofence rejection on venue save
+/// the unpublish-blocked-by-bookings guard, and venue geocoding
 /// (SYSTEM_DESIGN §9/§10, ROADMAP Phase 5). Ports are hand-rolled in-memory fakes, matching the
 /// no-mocking-library idiom used elsewhere in this test project (see <c>ApplicationServiceTests</c>).
 /// </summary>
@@ -387,22 +387,22 @@ public class ManageServiceTests
         Assert.Equal(RoomStatus.Unlisted, repo.Rooms.Single().Status);
     }
 
-    // ----- Geofence rejection on venue save -----------------------------------------------------
+    // ----- Venue geocoding ----------------------------------------------------------------------
 
     [Fact]
-    public async Task CreateVenueAsync_AddressGeocodesOutsideBeachhead_ReturnsGeofenceRejectedAndPersistsNothing()
+    public async Task CreateVenueAsync_AddressGeocodesOutsideBeachhead_SucceedsAndPersistsCoordinates()
     {
         var repo = new FakeManageRepository();
         var managers = new FakeVenueManagerRepository();
         var geocoding = new FakeGeocodingGateway { Point = new GeoPoint(40.7128, -74.0060) }; // NYC, outside beachhead
-        var geofence = new FakeGeofencePolicy { WithinBeachhead = false };
-        var service = CreateService(repo, managers, out _, geocoding, geofence);
+        var service = CreateService(repo, managers, out _, geocoding);
 
         var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest());
 
-        Assert.Null(result.Value);
-        Assert.Equal(ManageErrorCodes.GeofenceRejected, result.Error!.Code);
-        Assert.Empty(repo.Venues);
+        Assert.Null(result.Error);
+        var venue = Assert.Single(repo.Venues);
+        Assert.Equal(40.7128, venue.Latitude);
+        Assert.Equal(-74.0060, venue.Longitude);
     }
 
     [Fact]
@@ -426,8 +426,7 @@ public class ManageServiceTests
         var repo = new FakeManageRepository();
         var managers = new FakeVenueManagerRepository();
         var geocoding = new FakeGeocodingGateway { Point = new GeoPoint(38.9012, -77.2653) }; // Vienna, VA
-        var geofence = new FakeGeofencePolicy { WithinBeachhead = true };
-        var service = CreateService(repo, managers, out _, geocoding, geofence);
+        var service = CreateService(repo, managers, out _, geocoding);
 
         var result = await service.CreateVenueAsync(Guid.NewGuid(), NewSaveVenueRequest());
 
@@ -437,20 +436,19 @@ public class ManageServiceTests
     }
 
     [Fact]
-    public async Task UpdateVenueAsync_AddressChangedToOutsideBeachhead_RejectsAndLeavesOriginalCoordinates()
+    public async Task UpdateVenueAsync_AddressChangedToOutsideBeachhead_SucceedsAndUpdatesCoordinates()
     {
         var (repo, managers, venue, _, manager) = NewScenario();
-        var originalLat = venue.Latitude;
         var geocoding = new FakeGeocodingGateway { Point = new GeoPoint(40.7128, -74.0060) };
-        var geofence = new FakeGeofencePolicy { WithinBeachhead = false };
-        var service = CreateService(repo, managers, out _, geocoding, geofence);
+        var service = CreateService(repo, managers, out _, geocoding);
 
         var result = await service.UpdateVenueAsync(
             manager.Id, venue.Id, NewSaveVenueRequest(addressLine: "123 New Street"));
 
-        Assert.Null(result.Value);
-        Assert.Equal(ManageErrorCodes.GeofenceRejected, result.Error!.Code);
-        Assert.Equal(originalLat, repo.Venues.Single().Latitude);
+        Assert.Null(result.Error);
+        var updated = Assert.Single(repo.Venues);
+        Assert.Equal(40.7128, updated.Latitude);
+        Assert.Equal(-74.0060, updated.Longitude);
     }
 
     [Fact]
@@ -773,7 +771,6 @@ public class ManageServiceTests
         FakeVenueManagerRepository managers,
         out FakeAnalyticsSink analytics,
         IGeocodingGateway? geocoding = null,
-        IGeofencePolicy? geofence = null,
         bool openHoursRequired = false,
         bool roomHasOpenHours = false)
     {
@@ -782,7 +779,6 @@ public class ManageServiceTests
             repo,
             managers,
             geocoding ?? new FakeGeocodingGateway { Point = new GeoPoint(38.9012, -77.2653) },
-            geofence ?? new FakeGeofencePolicy { WithinBeachhead = true },
             analytics,
             new FakeFeatureFlags(openHoursRequired ? new[] { "manage.open_hours_required" } : []),
             new FakeAvailabilityService { RoomHasOpenHours = roomHasOpenHours },
@@ -865,22 +861,6 @@ public class ManageServiceTests
 
         public Task<IReadOnlyList<AddressSuggestion>> AutocompleteAsync(string text, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<AddressSuggestion>>([]);
-    }
-
-    private sealed class FakeGeofencePolicy : IGeofencePolicy
-    {
-        public bool WithinBeachhead { get; set; } = true;
-
-        public string TimezoneId => "America/New_York";
-        public BoundingBox Bounds => new(38.84, 38.96, -77.34, -77.12);
-
-        public GeoPoint Center => new(38.9012, -77.2653);
-
-        public string AreaName => "Vienna & nearby (Northern Virginia)";
-
-        public bool IsServed(double latitude, double longitude) => WithinBeachhead;
-
-        public BoundingBox ResolveSearchBounds(ListingSearchQuery query) => Bounds;
     }
 
     private sealed class FakeVenueManagerRepository : IVenueManagerRepository

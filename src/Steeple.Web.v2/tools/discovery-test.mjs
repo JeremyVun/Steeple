@@ -300,7 +300,8 @@ try {
     await page.waitForSelector('.pill--filter[data-filter="Piano"]', { visible: true });
     await press('.pill--filter[data-filter="Piano"]');
     await settled(
-      `[...document.querySelectorAll('.dm-row')].some((r) => r.dataset.venue === '${SEED_VENUE}')`,
+      `document.querySelectorAll('.dm-row').length > 0 && ` +
+        `[...document.querySelectorAll('.dm-row')].every((r) => r.dataset.venue === '${SEED_VENUE}')`,
       'the piano search'
     );
     await page.keyboard.press('Escape');
