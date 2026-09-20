@@ -380,7 +380,7 @@ check('the review shows where steeple put it', await visible('.placed .minimap')
 // session rather than a decoration.
 check('the review says whose listing it will be', /Listed by/.test((await text('.listing .facts')) ?? ''), (await text('.listing .facts'))?.slice(-60));
 check('under the name steeple holds', /Ruth Ellery/.test((await text('.facts__by')) ?? ''), await text('.facts__by'));
-check('with the brand words exact', /Identity verified \(SSO\)/.test((await text('.listing .verified')) ?? ''));
+check('with the brand words exact', /Signed in/.test((await text('.listing .verified')) ?? ''));
 await shot('05-review');
 await click('[data-action="advance"]', 'Publish this space');
 await wait(4000);

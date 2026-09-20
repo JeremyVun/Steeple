@@ -20,7 +20,8 @@ export const ARRIVAL = {
 /** Where the breadcrumb, the back links and the announcer all come home to. */
 export const HOME_LABEL = 'All spaces';
 
-export const VERIFIED_LABEL = 'Identity verified (SSO)';
+export const VERIFIED_LABEL = 'Venue verified';
+export const SIGNED_IN_LABEL = 'Signed in';
 
 /**
  * The space as it stands now: what the catalog answered about it, with any host

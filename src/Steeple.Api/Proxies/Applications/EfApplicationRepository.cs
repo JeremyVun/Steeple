@@ -140,10 +140,16 @@ public class EfApplicationRepository : IApplicationRepository
         }
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var offset = ((long)page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ([], total);
+        }
+
         var items = await query
             .OrderByDescending(a => a.CreatedAtUtc)
             .ThenByDescending(a => a.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip((int)offset)
             .Take(pageSize)
             .ToListAsync(ct)
             .ConfigureAwait(false);

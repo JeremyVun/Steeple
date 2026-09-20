@@ -155,8 +155,9 @@ freeing slots, two-way no-show marking feeding ratings, stale applications auto-
 
 ## 8. Notifications
 
-- **Inbox = truth** (`notifications` rows), fetched on open / pull-to-refresh — no
-  realtime layer at this scale. Built, with transactional email/push fan-out persisted in
+- **Inbox = truth** (`notifications` rows). Visible signed-in web product tabs receive
+  content-free SSE invalidations from a PostgreSQL insert trigger and refresh snapshots;
+  mobile retains FCM and pull-to-refresh. Transactional email/push fan-out is persisted in
   `notification_outbox` in the same transaction as the inbox row; a bounded worker retries
   provider failure and process loss with an at-least-once guarantee.
 - ✅ **FCM push** joins the same `INotificationDispatcher` fan-out (registered `devices`;
@@ -334,3 +335,15 @@ Every seam, what opens it, and what it costs when opened:
 | 2026-08-09 | **Host supply entry is global even while discovery remains beachhead-scoped.** `ManageService` geocodes create/edit addresses but no longer asks `IGeofencePolicy` to accept their coordinates; any resolved location can be stored. Search, public detail, sitemap, suburbs, and rating eligibility retain the served-area policy, so out-of-area supply stays manager-visible but is not publicly discoverable until that policy expands. | Owner direction: hosts must be able to create anywhere. Supply interest outside the served area is useful expansion evidence and does not require prematurely widening the public marketplace. This also keeps the beachhead where it belongs—as a launch/discovery policy rather than a data-entry validation. |
 | 2026-08-09 | **The single public discovery area expands from Vienna/NoVA to the Washington metropolitan area.** The configured bounds are `38.30–39.55, -78.25–-76.35`, centered on Washington, DC; this covers DC and nearby Maryland, Virginia, and West Virginia while retaining the existing one-area wire and policy. Static web metadata and the mobile fallback frame use the same regional description. Host geocoding remains worldwide (`Region` and `LimitToCountries` empty), independent of discovery scope. | Owner direction: public discovery should represent the broader Washington-area market rather than only NoVA. A wider single box is sufficient now; the `areas` table remains reserved for genuinely separate metros. |
 | 2026-08-09 | **Moderation returns to one review per host, with an operator-capacity escape hatch.** A host's first listing waits for an operator; approval derives host trust from any managed room with `FirstPublishedAtUtc` set, after which all of that host's later rooms and venues auto-publish. Server-side flag `manage.first_listing_review_required` defaults on but may be turned off to auto-publish first listings when the founder cannot service the queue; photo/open-hours gates and durable takedowns remain. Each automatic publish verifies its venue, preserving **published ⇒ venue verified**, and identifies whether trust or the disabled review flag allowed it in analytics. This reinstates the 2026-08-05 host-scoped gate and supersedes only the venue-scoping clause of the 2026-08-06 hardening decision; its other controls stand. | Owner direction: review establishes the host once; repeatedly reviewing the same host at each new venue adds operator work without a corresponding trust decision, and an unattended queue must not halt supply when no operator time is available. |
+| 2026-09-05 | **Live web inbox arrivals use a PostgreSQL insert trigger, one dedicated API LISTEN connection and bounded SSE subscriptions.** Four streams/user, 256/process, one coalescing signal slot/subscriber; each response ends at JWT expiry or five minutes. Visible signed-in product tabs refresh snapshots on invalidation; disconnected recovery is bounded and receipts remain explicit. | Admin writes inbox rows outside the API dispatcher, so the commit boundary is the only all-writer signal source. NOTIFY queue exhaustion can fail the producing commit; this coupling is owner-approved. Snapshots repair missed signals, with no replay store, new vendor, mobile stream or live read-state synchronization. |
+
+### 2026-09-06 — Stripe host onboarding before guest payments
+
+The owner chose Connect and confirmed the platform account is Australian. A separate sandbox
+`IConnectOnboardingGateway` allows host onboarding while the guest gateway remains mock/off.
+Express hosted onboarding reuses the existing payout UI and leaves country/capability choice
+to Stripe Dashboard configuration. Stripe.net (MIT) and Flutter url_launcher (BSD-3-Clause)
+are free client libraries; provider Connect usage fees remain separate. No new vendor added.
+Host opt-in records future intent only. Live AU-to-US fund flow and merchant responsibilities
+remain undecided. Account webhooks reconcile inline with a minimal ledger and provider retries;
+general payment-event background recovery remains in the payments backlog.

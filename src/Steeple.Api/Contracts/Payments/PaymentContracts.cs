@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Steeple.Api.Contracts.Payments;
 
 /// <summary>
@@ -28,11 +30,18 @@ public record MyPaymentsDto(bool HasPaymentMethod, SavedPaymentMethodDto? Method
 /// </summary>
 public record OnboardingLinkDto(string Url, bool Mock);
 
+public record SetVenuePaymentOptInRequest([property: JsonRequired] bool OptedIn);
+
+public record DashboardLinkDto(string Url, bool Mock);
+
+public sealed record WebhookReceiptDto(bool Received);
+
 /// <summary>
 /// <c>GET /api/v1/manage/venues/{id}/payments</c> response (payments.md §9 wire fields kept so
 /// Stripe hosted onboarding slots in later). All-false with <c>OnboardingStarted</c> false =
 /// never onboarded.
 /// </summary>
+[method: JsonConstructor]
 public record VenuePaymentStateDto(
     bool OnboardingStarted,
     bool DetailsSubmitted,
@@ -40,4 +49,36 @@ public record VenuePaymentStateDto(
     bool PayoutsEnabled,
     bool OptedIn,
     string? DashboardUrl,
-    bool Mock);
+    bool Mock,
+    string Status,
+    IReadOnlyList<string> RequirementsDue,
+    string? DisabledReason,
+    bool TestMode,
+    bool CanOpenDashboard,
+    bool OnlinePaymentsAvailable)
+{
+    public VenuePaymentStateDto(
+        bool onboardingStarted,
+        bool detailsSubmitted,
+        bool chargesEnabled,
+        bool payoutsEnabled,
+        bool optedIn,
+        string? dashboardUrl,
+        bool mock)
+        : this(
+            onboardingStarted,
+            detailsSubmitted,
+            chargesEnabled,
+            payoutsEnabled,
+            optedIn,
+            dashboardUrl,
+            mock,
+            onboardingStarted ? "incomplete" : "notStarted",
+            [],
+            null,
+            true,
+            false,
+            false)
+    {
+    }
+}

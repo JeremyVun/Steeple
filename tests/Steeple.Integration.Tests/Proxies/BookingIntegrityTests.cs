@@ -244,6 +244,24 @@ public class BookingIntegrityTests
         }
     }
 
+    [Fact]
+    public async Task GetForOrganizerAsync_ExtremePage_ReturnsEmptyWithCorrectTotal()
+    {
+        var date = new DateOnly(2029, 2, 7);
+        var (applicationId, organizerId) = await SeedApplicationAsync(
+            ClassroomBId, ScheduleFrequency.OneOff, date, date, null, new TimeOnly(9, 0), new TimeOnly(10, 0));
+        await using var db = CreateContext();
+        var application = await new EfApplicationRepository(db).GetAsync(applicationId);
+        application!.Status = ApplicationStatus.Approved;
+        Assert.False((await CreateBookingService(db).ConfirmFromApplicationAsync(application)).SlotTaken);
+
+        var (items, total) = await new EfBookingRepository(db)
+            .GetForOrganizerAsync(organizerId, null, FixedNow, int.MaxValue, 100);
+
+        Assert.Empty(items);
+        Assert.Equal(1, total);
+    }
+
     // ----- Test rig ------------------------------------------------------------------------------
 
     private SteepleDbContext CreateContext() =>

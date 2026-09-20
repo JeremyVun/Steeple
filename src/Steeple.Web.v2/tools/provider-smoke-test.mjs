@@ -100,6 +100,14 @@ try {
   await page.waitForFunction('window.__steepleReady === true', { timeout: 60_000 });
   await page.evaluate('__steeple.roll.set(1)');
   await page.waitForFunction('__steeple.state.roll === 1', { timeout: 20_000 });
+  await page.waitForFunction(() => {
+    const trouble = document.querySelector('.dm-trouble');
+    return trouble && !trouble.hidden && trouble.textContent.includes('could not be reached');
+  }, { timeout: 20_000 });
+  const inventedInventory = await page.evaluate(() =>
+    document.querySelectorAll('.dm-row, .dm-pin').length);
+  if (inventedInventory !== 0) throw new Error('production outage exposed demo listings or map pins');
+  console.log('ok  production outage shows a retry message with no demo listings or map pins');
   await page.click('.account');
   await page.waitForSelector('.signin .identity__providers', { timeout: 20_000 });
   await page.waitForSelector('.signin .identity__google button', { timeout: 20_000 });

@@ -52,6 +52,11 @@ and `mobile/lib/**/models/` is the hand-kept mobile mirror.
 | Rate limits | `429` + `Retry-After`. Public writable endpoints additionally require a Turnstile token field where noted |
 | Unknown fields | Clients must ignore them (see §1.1) |
 
+Application and booking lists normalize paging even for callers with no managed venues:
+`page` ≥ 1, `pageSize` 1–100 (`0` uses 24). Application, booking and review pages beyond
+the result count return empty items with the correct total; large page numbers never wrap
+their offsets or repeat the first page.
+
 ### 2.1 Wire enum token registry ✅
 
 [`tests/fixtures/wire-tokens.json`](../../tests/fixtures/wire-tokens.json) is the sole

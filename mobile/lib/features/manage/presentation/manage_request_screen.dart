@@ -8,6 +8,7 @@ import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../profile/providers.dart' show ensureCurrentAgreements;
 import '../application/manage_request_providers.dart';
 
 /// A provider's view of one application, with approve/decline actions
@@ -19,7 +20,8 @@ class ManageRequestScreen extends ConsumerStatefulWidget {
   final String applicationId;
 
   @override
-  ConsumerState<ManageRequestScreen> createState() => _ManageRequestScreenState();
+  ConsumerState<ManageRequestScreen> createState() =>
+      _ManageRequestScreenState();
 }
 
 class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
@@ -41,7 +43,9 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
       body: AsyncValueView(
         value: state,
         skeleton: () => const Skeleton(child: _RequestSkeleton()),
-        onRetry: () => ref.read(manageRequestProvider(widget.applicationId).notifier).refresh(),
+        onRetry: () => ref
+            .read(manageRequestProvider(widget.applicationId).notifier)
+            .refresh(),
         data: _buildDetail,
       ),
     );
@@ -51,7 +55,8 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
     final colors = context.steepleColors;
     final status = application.statusValue;
     final awaitingOrganizer = status == ApplicationStatus.counterOffered;
-    final undecided = status == ApplicationStatus.pending ||
+    final undecided =
+        status == ApplicationStatus.pending ||
         status == ApplicationStatus.needsInfo ||
         awaitingOrganizer;
 
@@ -66,25 +71,36 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
               children: [
                 Text(
                   application.roomName,
-                  style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+                  style: SteepleTypography.headlineSerif.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: SteepleTokens.space1),
                 Text(
                   application.venueName,
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: SteepleTokens.space3),
-                StatusChip(statusRaw: application.status, domain: StatusDomain.application),
+                StatusChip(
+                  statusRaw: application.status,
+                  domain: StatusDomain.application,
+                ),
                 const SizedBox(height: SteepleTokens.space3),
                 Text(
                   scheduleSummary(application.schedule),
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: SteepleTokens.space1),
                 Text(
                   '${application.organizer.displayName} · Group of ${application.groupSize} · '
                   '${wireTokenLabel(application.activityType)}',
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -131,8 +147,12 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _deciding ? null : () => _confirmDecide(approve: false),
-                  style: OutlinedButton.styleFrom(foregroundColor: colors.danger.fg),
+                  onPressed: _deciding
+                      ? null
+                      : () => _confirmDecide(approve: false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.danger.fg,
+                  ),
                   child: const Text('Decline'),
                 ),
               ),
@@ -160,15 +180,23 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
             const SizedBox(height: SteepleTokens.space2),
             Text(
               'Waiting on the organizer to accept or decline your suggested time.',
-              style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+              style: SteepleTypography.caption.copyWith(
+                color: colors.textTertiary,
+              ),
             ),
           ],
           const SizedBox(height: SteepleTokens.space3),
           Center(
             child: TextButton.icon(
-              onPressed: _deciding ? null : () => _openCounterSheet(application),
+              onPressed: _deciding
+                  ? null
+                  : () => _openCounterSheet(application),
               icon: const Icon(Icons.schedule_rounded, size: 18),
-              label: Text(awaitingOrganizer ? 'Suggest a different time' : 'Suggest another time'),
+              label: Text(
+                awaitingOrganizer
+                    ? 'Suggest a different time'
+                    : 'Suggest another time',
+              ),
             ),
           ),
         ],
@@ -177,6 +205,7 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
   }
 
   Future<void> _openCounterSheet(Application application) async {
+    if (!await ensureCurrentAgreements(context, ref) || !mounted) return;
     final submitted = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -191,7 +220,11 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
     );
     if (submitted == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Time suggested — waiting to hear back from the organizer.')),
+        const SnackBar(
+          content: Text(
+            'Time suggested — waiting to hear back from the organizer.',
+          ),
+        ),
       );
     }
   }
@@ -201,7 +234,9 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(approve ? 'Approve this application?' : 'Decline this application?'),
+        title: Text(
+          approve ? 'Approve this application?' : 'Decline this application?',
+        ),
         content: Text(
           approve
               ? "This creates a booking and lets the organizer know they're confirmed."
@@ -214,7 +249,9 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: approve ? colors.actionPrimary : colors.danger.fg,
+              backgroundColor: approve
+                  ? colors.actionPrimary
+                  : colors.danger.fg,
               foregroundColor: Theme.of(context).colorScheme.onPrimary,
             ),
             onPressed: () => Navigator.pop(context, true),
@@ -224,6 +261,8 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    if (approve && !await ensureCurrentAgreements(context, ref)) return;
+    if (!mounted) return;
 
     setState(() => _deciding = true);
     final message = _messageController.text.trim();
@@ -232,16 +271,17 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
           .read(manageRequestProvider(widget.applicationId).notifier)
           .decide(approve: approve, message: message.isEmpty ? null : message);
       if (!mounted) return;
-      final autoDeclined = approve && updated.statusValue != ApplicationStatus.approved;
+      final autoDeclined =
+          approve && updated.statusValue != ApplicationStatus.approved;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             autoDeclined
                 ? 'That time slot was just booked elsewhere — this application was '
-                    'automatically declined instead.'
+                      'automatically declined instead.'
                 : approve
-                    ? 'Application approved.'
-                    : 'Application declined.',
+                ? 'Application approved.'
+                : 'Application declined.',
           ),
         ),
       );
@@ -267,7 +307,8 @@ class _CounterOfferSheet extends StatefulWidget {
   const _CounterOfferSheet({required this.initial, required this.onSubmit});
 
   final ProposedSchedule initial;
-  final Future<void> Function(ProposedSchedule schedule, String? message) onSubmit;
+  final Future<void> Function(ProposedSchedule schedule, String? message)
+  onSubmit;
 
   @override
   State<_CounterOfferSheet> createState() => _CounterOfferSheetState();
@@ -275,7 +316,13 @@ class _CounterOfferSheet extends StatefulWidget {
 
 class _CounterOfferSheetState extends State<_CounterOfferSheet> {
   static const _days = [
-    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday', //
   ];
   static const _dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -294,9 +341,12 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
 
   bool get _complete {
     final s = _schedule;
-    if (s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) return false;
+    if (s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) {
+      return false;
+    }
     if (s.endTime.compareTo(s.startTime) <= 0) return false;
-    if (_recurring && (s.endDate == null || (s.daysOfWeek ?? const []).isEmpty)) {
+    if (_recurring &&
+        (s.endDate == null || (s.daysOfWeek ?? const []).isEmpty)) {
       return false;
     }
     return true;
@@ -322,9 +372,9 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
   }
 
   void _update(ProposedSchedule next) => setState(() {
-        _schedule = next;
-        _conflictDetail = null; // the schedule moved on; drop the stale verdict
-      });
+    _schedule = next;
+    _conflictDetail = null; // the schedule moved on; drop the stale verdict
+  });
 
   Future<void> _pickDate(BuildContext context, {required bool isEnd}) async {
     final now = DateTime.now();
@@ -335,9 +385,11 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
       initialDate: now,
     );
     if (picked == null) return;
-    _update(isEnd
-        ? _schedule.copyWith(endDate: _fmtDate(picked))
-        : _schedule.copyWith(startDate: _fmtDate(picked)));
+    _update(
+      isEnd
+          ? _schedule.copyWith(endDate: _fmtDate(picked))
+          : _schedule.copyWith(startDate: _fmtDate(picked)),
+    );
   }
 
   Future<void> _pickTime(BuildContext context, {required bool isEnd}) async {
@@ -348,9 +400,11 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
     );
     if (picked == null) return;
     final hhmm = _fmtTime(picked);
-    _update(isEnd
-        ? _schedule.copyWith(endTime: hhmm)
-        : _schedule.copyWith(startTime: hhmm));
+    _update(
+      isEnd
+          ? _schedule.copyWith(endTime: hhmm)
+          : _schedule.copyWith(startTime: hhmm),
+    );
   }
 
   Future<void> _submit() async {
@@ -368,9 +422,10 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
       setState(() {
         _submitting = false;
         _conflictDetail = switch (appError?.code) {
-          'schedule_unavailable' => appError?.detail ??
-              'That time is outside your open hours, on a blackout date, or already '
-                  'booked. Pick another time.',
+          'schedule_unavailable' =>
+            appError?.detail ??
+                'That time is outside your open hours, on a blackout date, or already '
+                    'booked. Pick another time.',
           'invalid_state' => 'This request has already been decided.',
           _ => "Couldn't send your suggestion. Try again in a moment.",
         };
@@ -383,7 +438,8 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
     final colors = context.steepleColors;
     final s = _schedule;
 
-    Widget pickerTile(String label, String value, VoidCallback onTap) => Expanded(
+    Widget pickerTile(String label, String value, VoidCallback onTap) =>
+        Expanded(
           child: OutlinedButton(
             onPressed: onTap,
             style: OutlinedButton.styleFrom(
@@ -414,12 +470,16 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
           children: [
             Text(
               'Suggest another time',
-              style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+              style: SteepleTypography.headlineSerif.copyWith(
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space1),
             Text(
               'They asked for ${scheduleSummary(widget.initial)}. Offer an alternative below.',
-              style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space4),
             Wrap(
@@ -428,12 +488,14 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                 FilterChipPill(
                   label: 'One time',
                   selected: !_recurring,
-                  onTap: () => _update(s.copyWith(frequency: 'oneOff', endDate: null)),
+                  onTap: () =>
+                      _update(s.copyWith(frequency: 'oneOff', endDate: null)),
                 ),
                 FilterChipPill(
                   label: 'Weekly',
                   selected: _recurring,
-                  onTap: () => _update(s.copyWith(frequency: 'recurringWeekly')),
+                  onTap: () =>
+                      _update(s.copyWith(frequency: 'recurringWeekly')),
                 ),
               ],
             ),
@@ -447,23 +509,37 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                 ),
                 if (_recurring) ...[
                   const SizedBox(width: SteepleTokens.space2),
-                  pickerTile('Until', s.endDate ?? '', () => _pickDate(context, isEnd: true)),
+                  pickerTile(
+                    'Until',
+                    s.endDate ?? '',
+                    () => _pickDate(context, isEnd: true),
+                  ),
                 ],
               ],
             ),
             const SizedBox(height: SteepleTokens.space3),
             Row(
               children: [
-                pickerTile('From', s.startTime, () => _pickTime(context, isEnd: false)),
+                pickerTile(
+                  'From',
+                  s.startTime,
+                  () => _pickTime(context, isEnd: false),
+                ),
                 const SizedBox(width: SteepleTokens.space2),
-                pickerTile('To', s.endTime, () => _pickTime(context, isEnd: true)),
+                pickerTile(
+                  'To',
+                  s.endTime,
+                  () => _pickTime(context, isEnd: true),
+                ),
               ],
             ),
             if (_recurring) ...[
               const SizedBox(height: SteepleTokens.space3),
               Text(
                 'Which days',
-                style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                style: SteepleTypography.caption.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
               const SizedBox(height: SteepleTokens.space2),
               Wrap(
@@ -476,7 +552,10 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                       selected: (s.daysOfWeek ?? const []).contains(_days[i]),
                       onTap: () => _update(
                         s.copyWith(
-                          daysOfWeek: _toggleDay(s.daysOfWeek ?? const [], _days[i]),
+                          daysOfWeek: _toggleDay(
+                            s.daysOfWeek ?? const [],
+                            _days[i],
+                          ),
                         ),
                       ),
                     ),
@@ -490,14 +569,17 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
               decoration: const InputDecoration(
-                hintText: 'Add a note (optional) — e.g. why this time works better.',
+                hintText:
+                    'Add a note (optional) — e.g. why this time works better.',
               ),
             ),
             if (_complete) ...[
               const SizedBox(height: SteepleTokens.space3),
               Text(
                 scheduleSummary(s),
-                style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                style: SteepleTypography.bodySm.copyWith(
+                  color: colors.textPrimary,
+                ),
               ),
             ],
             if (_conflictDetail != null) ...[
@@ -510,7 +592,9 @@ class _CounterOfferSheetState extends State<_CounterOfferSheet> {
                 ),
                 child: Text(
                   _conflictDetail!,
-                  style: SteepleTypography.bodySm.copyWith(color: colors.danger.fg),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.danger.fg,
+                  ),
                 ),
               ),
             ],

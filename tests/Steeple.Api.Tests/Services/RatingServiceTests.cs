@@ -279,6 +279,22 @@ public class RatingServiceTests
         Assert.Equal(0, page.TotalCount);
     }
 
+    [Fact]
+    public async Task GetVenueReviewsAsync_ExtremePage_ReturnsEmptyWithoutWrappingToFirstPage()
+    {
+        var scenario = NewScenario(TimeSpan.FromDays(-20), BookingStatus.Completed);
+        scenario.Booking.Occurrences.Single().Status = OccurrenceStatus.Occurred;
+        var service = CreateService(scenario, out var ratings, out _, out _);
+        ratings.Ratings.Add(NewRating(scenario.Booking, RatingRateeType.Venue,
+            scenario.Organizer.Id, 5, "Public review.", scenario.Organizer));
+
+        var page = await service.GetVenueReviewsAsync(scenario.Venue.Id, int.MaxValue, 50, FixedNow);
+
+        Assert.Equal(1, page.TotalCount);
+        Assert.Empty(page.Items);
+        Assert.Equal(int.MaxValue, page.Page);
+    }
+
     private static Scenario NewScenario(TimeSpan occurrenceEndOffset, BookingStatus status = BookingStatus.Confirmed)
     {
         var venue = new Venue

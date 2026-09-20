@@ -46,7 +46,7 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
   // once per letter (memoised per room in data/catalog.js, and free when the
   // room has already been opened) and the page redraws when it lands.
   let listing = null;
-  let confirming = null; // 'withdraw' | 'declineCounter' | null
+  let confirming = null; // 'withdraw' | 'declineCounter' | 'rate' | 'noShow:<id>' | null
   // What steeple said when it last refused something here. It is not the
   // store's, so it is held apart and cleared the moment anything is tried again.
   let refusal = '';
@@ -79,11 +79,16 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
    */
   async function move(work, said) {
     if (working) return null;
+    const movingApplicationId = applicationId;
     working = true;
     refusal = '';
     render();
     const answer = await work();
     working = false;
+    if (applicationId !== movingApplicationId) {
+      render();
+      return null;
+    }
     if (!answer.ok) {
       refusal = answer.problem;
       render();
@@ -123,7 +128,8 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
     // head prints nothing rather than the one word that would be a lie about
     // money. What this booking actually costs is on the held block below, from
     // the booking's own snapshot.
-    const priced = room.pricePerHour !== null && room.pricePerHour !== undefined;
+    const priced = app.status !== APP_STATUS.approved
+      && room.pricePerHour !== null && room.pricePerHour !== undefined;
     const { amount, unit, free } = priceParts(room);
     return el('header', { class: 'opened__head', dataset: { tone: statusTone(app.status) } }, [
       el('div', { class: 'opened__heading' }, [
@@ -197,7 +203,7 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
   function spaceCard(app, venue, room) {
     const photo = listing?.primaryPhotoUrl ?? listing?.photos?.[0]?.cardUrl ?? null;
     const capacity = listing?.capacity ?? room.capacity ?? null;
-    const price = listing?.pricePerHour ?? room.pricePerHour ?? null;
+    const price = app.status === APP_STATUS.approved ? null : (listing?.pricePerHour ?? room.pricePerHour ?? null);
     // The venue is named twice over the card already — the letterhead is the
     // room and the line under it is the venue — so the card says only what the
     // head does not: how many it seats and what it costs.
@@ -366,6 +372,7 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
   function occurrenceBlock(app) {
     const booking = bookingFor(app.id);
     if (!booking) return null;
+    const venue = venueOf(app);
     const dates = occurrencesFor(booking.id);
     const today = todayIso();
     const ahead = dates.filter((o) => o.date >= today);
@@ -399,11 +406,29 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
         { class: 'held__list' },
         dates.map((o) => {
           const word = chargeWord(o.paymentStatus, 'guest');
+          const occurrenceName = `${formatDate(o.date, { weekday: true, short: true })}, ${formatTimeRange(
+            o.start,
+            o.end
+          )}`;
+          const markedByOrganizer = o.noShowMarkedBy === booking.organizerId;
+          const noShowLine =
+            o.status === 'noShow'
+              ? !o.noShowMarkedBy
+                ? 'Recorded.'
+                : markedByOrganizer
+                  ? `Your group marked ${venue.shortName} as absent.`
+                  : `${venue.shortName} marked your group as absent.`
+              : null;
+          const asked = confirming === `noShow:${o.id}`;
           return el(
             'li',
             {
               class: `held__item${o.date < today ? ' is-past' : ''}`,
-              dataset: { charge: o.paymentStatus ?? 'none' },
+              dataset: {
+                charge: o.paymentStatus ?? 'none',
+                occurrence: o.id,
+                status: o.status,
+              },
             },
             [
               el('span', { class: 'held__date', text: formatDate(o.date, { weekday: true, short: true }) }),
@@ -414,6 +439,80 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
                     text: word,
                   })
                 : null,
+              noShowLine
+                ? el('p', {
+                    class: 'held__attendance',
+                    dataset: { result: 'no-show', occurrence: o.id },
+                    role: 'status',
+                    tabindex: '-1',
+                    text: `No-show · ${noShowLine}`,
+                  })
+                : o.status === 'cancelled'
+                  ? el('p', { class: 'held__attendance', text: 'Cancelled' })
+                  : o.status === 'occurred'
+                    ? asked
+                      ? el('div', { class: 'held__no-show-confirm' }, [
+                          el('p', {
+                            class: 'prose prose--sm',
+                            text: `Mark ${venue.shortName} as absent for ${occurrenceName}? This is final and becomes part of ${venue.shortName}'s trust history.`,
+                          }),
+                          el('div', { class: 'held__no-show-actions' }, [
+                            el(
+                              'button',
+                              {
+                                type: 'button',
+                                class: 'pill pill--primary',
+                                'aria-label': `Confirm no-show for ${venue.shortName} on ${occurrenceName}`,
+                                dataset: { action: 'no-show-confirm', occurrence: o.id },
+                                onclick: () =>
+                                  move(
+                                    () => wire.markOccurrenceNoShow(o.id),
+                                    () => `No-show recorded for ${venue.shortName} on ${occurrenceName}.`
+                                  ).then((marked) => {
+                                    if (!marked || applicationId !== app.id) return;
+                                    [...body.querySelectorAll('[data-result="no-show"]')]
+                                      .find((node) => node.dataset.occurrence === o.id)
+                                      ?.focus();
+                                  }),
+                              },
+                              'Yes, mark no-show'
+                            ),
+                            el(
+                              'button',
+                              {
+                                type: 'button',
+                                class: 'linkish',
+                                dataset: { action: 'no-show-cancel', occurrence: o.id },
+                                onclick: () => {
+                                  confirming = null;
+                                  render();
+                                  [...body.querySelectorAll('[data-action="no-show-open"]')]
+                                    .find((node) => node.dataset.occurrence === o.id)
+                                    ?.focus();
+                                },
+                              },
+                              'Not now'
+                            ),
+                          ]),
+                        ])
+                      : el(
+                          'button',
+                          {
+                            type: 'button',
+                            class: 'linkish held__no-show',
+                            'aria-label': `Report a no-show for ${venue.shortName} on ${occurrenceName}`,
+                            dataset: { action: 'no-show-open', occurrence: o.id },
+                            onclick: () => {
+                              confirming = `noShow:${o.id}`;
+                              render();
+                              [...body.querySelectorAll('[data-action="no-show-confirm"]')]
+                                .find((node) => node.dataset.occurrence === o.id)
+                                ?.focus();
+                            },
+                          },
+                          'Report a no-show'
+                        )
+                    : el('p', { class: 'held__attendance', text: 'Scheduled' }),
             ].filter(Boolean)
           );
         })

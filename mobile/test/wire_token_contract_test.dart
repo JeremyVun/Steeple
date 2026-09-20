@@ -49,6 +49,7 @@ void main() {
       'counterOfferStatuses': CounterOfferStatus.tokens.keys,
       'notificationTypes': NotificationType.tokens.keys,
       'occurrenceStatuses': OccurrenceStatus.tokens.keys,
+      'paymentAccountStatuses': PaymentOnboardingStatus.tokens.keys,
       'roomStatuses': ManagedRoomStatus.tokens.keys,
       'scheduleFrequencies': ScheduleFrequency.tokens.keys,
       'venueTypes': VenueType.tokens.keys,

@@ -19,6 +19,7 @@ import '../features/manage/presentation/manage_home_screen.dart';
 import '../features/manage/presentation/manage_request_screen.dart';
 import '../features/manage/presentation/manage_room_hours_screen.dart';
 import '../features/manage/presentation/manage_room_screen.dart';
+import '../features/manage/presentation/payment_onboarding_screen.dart';
 import '../features/profile/presentation/profile_screen.dart';
 import '../features/profile/presentation/sign_in_screen.dart';
 import 'screens/force_upgrade_screen.dart';
@@ -119,6 +120,13 @@ GoRouter createRouter(Ref ref, RouterRefresh refresh) {
             name: RouteNames.manageCalendar,
             path: 'calendar',
             builder: (context, state) => const ManageCalendarScreen(),
+          ),
+          GoRoute(
+            name: RouteNames.managePayments,
+            path: 'venues/:id/payments',
+            builder: (context, state) => PaymentOnboardingScreen(
+              venueId: state.pathParameters['id']!,
+            ),
           ),
           GoRoute(
             name: RouteNames.manageRequest,

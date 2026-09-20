@@ -38,10 +38,16 @@ class EnvConfig {
 
   static EnvConfig fromDartDefines() {
     const envRaw = String.fromEnvironment('STEEPLE_ENV', defaultValue: 'dev');
-    const apiUrl = String.fromEnvironment('STEEPLE_API_URL', defaultValue: 'http://localhost:5200');
+    const apiUrl = String.fromEnvironment(
+      'STEEPLE_API_URL',
+      defaultValue: 'http://localhost:5200',
+    );
     const dsn = String.fromEnvironment('STEEPLE_SENTRY_DSN');
     const fakes = bool.fromEnvironment('STEEPLE_FAKES');
-    const host = String.fromEnvironment('STEEPLE_WEB_HOST', defaultValue: 'steeple.example');
+    const host = String.fromEnvironment(
+      'STEEPLE_WEB_HOST',
+      defaultValue: 'steeple.jeremyvun.com',
+    );
     const build = int.fromEnvironment('STEEPLE_BUILD', defaultValue: 1);
     return EnvConfig(
       env: envRaw == 'prod' ? SteepleEnv.prod : SteepleEnv.dev,
@@ -57,5 +63,7 @@ class EnvConfig {
 /// Overridden with the parsed config in `bootstrap.dart` — reading it without
 /// the override is a wiring bug, so fail loudly.
 final envProvider = Provider<EnvConfig>(
-  (ref) => throw UnimplementedError('envProvider must be overridden in ProviderScope'),
+  (ref) => throw UnimplementedError(
+    'envProvider must be overridden in ProviderScope',
+  ),
 );

@@ -48,13 +48,15 @@ public class ListingServiceWhenTests
         var repo = new StubRepo([a, b]);
         var window = new MatchedWindowDto(null, "09:00", "11:00");
         var avail = new StubAvailability(new Dictionary<Guid, MatchedWindowDto> { [a.Id] = window, [b.Id] = window });
-        var service = CreateService(repo, avail);
+        var ratings = new FakeRatings();
+        var service = CreateService(repo, avail, ratings);
 
         var when = new AvailabilityFilter(true, null, Weekdays.Tuesday, WhenRangeKind.AnyWindow, default, default, 120, null);
         var result = await service.SearchAsync(new ListingSearchQuery { PageSize = 1, Page = 2 }, when);
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal("bravo-hall", Assert.Single(result.Items).RoomSlug);
+        Assert.Equal([b.VenueId], ratings.SeenVenueIds);
     }
 
     [Fact]
@@ -113,8 +115,8 @@ public class ListingServiceWhenTests
 
     // ----- helpers -----------------------------------------------------------------------------
 
-    private static ListingService CreateService(StubRepo repo, StubAvailability avail) =>
-        new(repo, CreatePolicy(), new FakeRatings(), avail, new NullAnalytics(), new FixedClock());
+    private static ListingService CreateService(StubRepo repo, StubAvailability avail, FakeRatings? ratings = null) =>
+        new(repo, CreatePolicy(), ratings ?? new FakeRatings(), avail, new NullAnalytics(), new FixedClock());
 
     private static Room Room(string venueName, string roomSlug)
     {
@@ -218,9 +220,14 @@ public class ListingServiceWhenTests
 
     private sealed class FakeRatings : IRatingService
     {
+        public List<Guid> SeenVenueIds { get; } = [];
         public Task<BookingResult<RatingSubmissionResult>> SubmitAsync(Guid bookingId, Guid callerId, SubmitRatingRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyDictionary<Guid, BookingRatingsDto>> GetBookingOverviewsAsync(IReadOnlyList<Booking> bookings, Guid callerId, DateTimeOffset nowUtc, CancellationToken ct = default) => Task.FromResult<IReadOnlyDictionary<Guid, BookingRatingsDto>>(new Dictionary<Guid, BookingRatingsDto>());
-        public Task<IReadOnlyDictionary<Guid, RatingSummaryDto>> GetVenueSummariesAsync(IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default) => Task.FromResult<IReadOnlyDictionary<Guid, RatingSummaryDto>>(new Dictionary<Guid, RatingSummaryDto>());
+        public Task<IReadOnlyDictionary<Guid, RatingSummaryDto>> GetVenueSummariesAsync(IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default)
+        {
+            SeenVenueIds.AddRange(venueIds);
+            return Task.FromResult<IReadOnlyDictionary<Guid, RatingSummaryDto>>(new Dictionary<Guid, RatingSummaryDto>());
+        }
         public Task<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>> GetOrganizerSummariesAsync(IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default) => Task.FromResult<IReadOnlyDictionary<Guid, OrganizerRatingSummaryDto>>(new Dictionary<Guid, OrganizerRatingSummaryDto>());
         public Task<VenueReviewPageDto> GetVenueReviewsAsync(Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default) => Task.FromResult(new VenueReviewPageDto([], 0, Math.Max(page, 1), Math.Clamp(pageSize, 1, 50)));
     }

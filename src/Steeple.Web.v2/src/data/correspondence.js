@@ -88,6 +88,9 @@ export function problemText(error) {
   if (timedOut(error)) {
     return 'Steeple is taking longer than usual to answer. This may still have gone through — give it a moment before trying again.';
   }
+  if (error?.code === 'payment_provider_unavailable') {
+    return error.detail || 'Stripe is unavailable right now. Try again in a moment.';
+  }
   if (neverArrived(error?.status)) {
     return 'Steeple could not be reached just now — nothing was sent. Try again in a moment.';
   }
@@ -108,7 +111,7 @@ export function problemText(error) {
  *
  * @template T
  * @param {(accessToken:string) => Promise<T>} work
- * @returns {Promise<{ok:true,value:T}|{ok:false,reach:string,code:string|null,problem:string,status:number}>}
+ * @returns {Promise<{ok:true,value:T}|{ok:false,reach:string,code:string|null,problem:string,status:number,retryAfterMs:number|null}>}
  */
 async function attempt(work) {
   try {
@@ -124,7 +127,14 @@ async function attempt(work) {
           : status === 404
             ? 'unavailable'
             : 'refused';
-    return { ok: false, reach, status, code: error?.code ?? null, problem: problemText(error) };
+    return {
+      ok: false,
+      reach,
+      status,
+      code: error?.code ?? null,
+      problem: problemText(error),
+      retryAfterMs: error?.retryAfterMs ?? null,
+    };
   }
 }
 
@@ -581,6 +591,15 @@ export async function cancelBooking(bookingId, reason = null) {
   return { ok: true, value: mirrorBooking(answer.value) };
 }
 
+/** Record the other party's absence exactly as steeple returns it. */
+export async function markOccurrenceNoShow(occurrenceId) {
+  const answer = await attempt((token) =>
+    api.markOccurrenceNoShow(occurrenceId, { accessToken: token })
+  );
+  if (!answer.ok) return answer;
+  return { ok: true, value: mirrorBooking(answer.value) };
+}
+
 // ── how a venue takes bookings, and how it gets paid ─────────────────────────
 
 /** `instant` or `manual`, as steeple holds it. Changing it binds new requests only. */
@@ -588,7 +607,7 @@ export async function setBookingMode(venueId, bookingMode) {
   return attempt((token) => api.updateManagedVenue(venueId, { bookingMode }, { accessToken: token }));
 }
 
-/** Where this venue stands with payouts. Never a gate in the mock era — a prompt. */
+/** Where this venue stands with Stripe onboarding and its future payment preference. */
 export async function venuePayments(venueId) {
   return attempt((token) => api.getVenuePayments(venueId, token));
 }
@@ -607,15 +626,51 @@ export async function finishMockPayouts(venueId) {
   return attempt((token) => api.completeMockVenuePayoutOnboarding(venueId, { accessToken: token }));
 }
 
+/** Save whether this venue wants online payments once Steeple activates them. */
+export async function setPayoutOptIn(venueId, optedIn) {
+  return attempt((token) => api.setVenuePaymentOptIn(venueId, optedIn, { accessToken: token }));
+}
+
+/** Ask Stripe for a fresh, short-lived dashboard link. */
+export async function openPayoutDashboard(venueId) {
+  return attempt((token) => api.createVenuePaymentDashboard(venueId, { accessToken: token }));
+}
+
 // ── what steeple wrote to you while you were away ────────────────────────────
 
-/** The notification inbox, newest first. Read quietly; never polled. */
+/** The notification inbox snapshot, newest first. */
 export async function notifications({ pageSize = 24 } = {}) {
   if (!session.isSignedIn()) return { ok: false, reach: 'signedOut', problem: 'Sign in to see this.' };
   return attempt((token) => api.getMyNotifications(token, { pageSize }));
 }
 
-/** Mark rows read. Best effort — a slip that showed was still delivered. */
+/** Open an authenticated response without holding the session gate for its lifetime. */
+export async function openNotificationStream({ signal = null } = {}) {
+  let opened = null;
+  try {
+    const response = await session.withAccess(async (token) => {
+      if (signal?.aborted) {
+        const error = new api.ApiError('notification stream was withdrawn');
+        error.aborted = true;
+        throw error;
+      }
+      opened = await api.openNotificationStream(token, { signal });
+      return opened;
+    });
+    if (signal?.aborted) {
+      void response.body.cancel().catch(() => {});
+      const error = new api.ApiError('notification stream was withdrawn');
+      error.aborted = true;
+      throw error;
+    }
+    return response;
+  } catch (error) {
+    void opened?.body?.cancel().catch(() => {});
+    throw error;
+  }
+}
+
+/** Submit explicit read receipts for held inbox rows. */
 export async function markNotificationsRead(ids) {
   if (!ids?.length) return { ok: true, value: null };
   return attempt((token) => api.markNotificationsRead(ids, { accessToken: token }));

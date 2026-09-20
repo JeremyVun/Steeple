@@ -45,6 +45,7 @@ public sealed class ManageVenuesController : ControllerBase
     /// the same <c>Idempotency-Key</c> return the original venue as <c>200</c>.
     /// </summary>
     [HttpPost]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedVenueDetailDto>> Create([FromBody] SaveVenueRequest request, CancellationToken ct)
     {
@@ -84,6 +85,7 @@ public sealed class ManageVenuesController : ControllerBase
     /// <c>Idempotency-Key</c> return the original room as <c>200</c>.
     /// </summary>
     [HttpPost("{id:guid}/rooms")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedRoomDto>> CreateRoom(Guid id, [FromBody] SaveRoomRequest request, CancellationToken ct)
     {

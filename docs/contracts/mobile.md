@@ -173,6 +173,7 @@ features can import them without touching `app/router.dart` (§2 dependency cont
 | `signIn` | `/signin` | (modal) | – | Query `from` = post-auth redirect |
 | `forceUpgrade` | `/upgrade` | (blocking) | – | Unskippable when `mobile.force_upgrade` is on |
 | `manage` | `/manage` | (pushed, root navigator) | ✔ | Provider dashboard (Phase 5); entry point is the "Your spaces" section on `profile`, behind `mobile.manage_enabled` |
+| `managePayments` | `/manage/venues/:id/payments` | (pushed, root navigator) | ✔ | Venue payment setup behind `payments.onboarding`; external Stripe browser, refresh on foreground |
 | `manageRequest` | `/manage/requests/:id` | (pushed, root navigator) | ✔ | Approve/decline one application |
 | `manageRoom` | `/manage/rooms/:id` | (pushed, root navigator) | ✔ | Basic room edit + publish-state actions; "Hours & blackouts" tile → `manageRoomHours` |
 | `manageRoomHours` | `/manage/rooms/:id/hours` | (pushed, root navigator) | ✔ | Open-hours (7 days Sunday-first) + blackout editor; one replace-all `PUT` (`saveOpenHours`) with local pre-validation (≤6 windows/day, end>start, no intra-day overlap) |
@@ -439,3 +440,45 @@ not copied into this package. `test/wire_token_contract_test.dart` reads it duri
 5. Anything touching lists/maps/startup: profile run against MOBILE_DESIGN §4 budgets.
 6. New wire shape consumed → fixture added + CONTRACTS.md legend checked (✅ vs 🔲).
 7. New seam (interface, route, provider, flag, event) → this doc updated in the same PR.
+
+## Notification invalidation mirror (2026-09-06)
+
+`core/models/notification_invalidation.dart` and `notification_invalidation.json` mirror
+the additive `{}` data of `GET /me/notifications/stream` (`applications.md`). Mobile
+never opens that endpoint: FCM plus inbox snapshots remains its delivery mechanism.
+Unknown fields are tolerated. No new notification kind or stream lifecycle is added.
+
+## Host payment onboarding (2026-09-06)
+
+`core/models/payments.dart` mirrors `VenuePaymentState` and `PaymentExternalLink` from
+`contracts/payments.md`; `PaymentOnboardingStatus` includes unknown fallback and shares the
+`paymentAccountStatuses` golden registry. Fixtures cover state and both link responses.
+`StatusChip` adds `StatusDomain.payment` using the existing semantic color tokens.
+
+Manage's public seam adds `paymentRepositoryProvider`, `paymentLinkLauncherProvider`,
+`PaymentRepository` (state/startOnboarding/setOptIn/dashboard), and fixture implementation.
+`venuePaymentProvider(venueId)` stays screen-local under manage/application and invalidates
+state across account changes. `managePayments` opens `PaymentOnboardingScreen`; the managed
+venue entry is gated by `payments.onboarding`, independent of guest `payments.enabled`.
+
+The screen launches only validated HTTPS `connect.stripe.com` links using url_launcher in
+external-application mode; no WebView. Async links are abandoned after disposal, venue change,
+navigation away, or identity change. Foreground resumes retrieve account state; users can also
+pull to refresh. The callback returns to the web desk, with no new mobile association in this
+slice. Status is provider-derived, opt-in requires ready, and an opted-in restricted account
+can opt out. The UI describes sandbox setup and future preference, not active guest payments.
+
+Payment setup emits the existing `payout_step_opened` client event with state `prompt` and
+surface `mobile`; provider readiness and preference events remain server-authoritative.
+
+## Release safeguards (2026-09-20)
+
+`Booking.payment` mirrors `{mode, perOccurrenceAmount?, currency?, nextChargeAtUtc?}`.
+Offline bookings show the frozen price and direct-payment instruction; missing legacy prices
+stay unknown. `booking.json` covers an offline price snapshot.
+
+`core/models/legal_documents.dart` shares the API/web document versions. Profile's public seam
+exports `ensureCurrentAgreements` and `openLegalDocument`; apply, host approvals/counter-offers, guest acceptance and room edits wait for explicit agreement
+before writing and preserves the draft on refusal/failure. Profile offers review and both legal
+links. Links use `EnvConfig.canonicalWebHost` (default `steeple.jeremyvun.com`). Production
+native apply remains disabled until its Turnstile integration and provider setup are verified.

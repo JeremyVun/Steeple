@@ -7,6 +7,8 @@ import 'data/profile_repository.dart';
 
 export 'data/fake/fake_profile_repository.dart';
 export 'data/profile_repository.dart';
+export 'presentation/agreement_gate.dart'
+    show ensureCurrentAgreements, openLegalDocument;
 
 /// Public surface of the profile feature (MOBILE_CONTRACTS §8).
 final profileRepositoryProvider = Provider<ProfileRepository>(
@@ -14,7 +16,9 @@ final profileRepositoryProvider = Provider<ProfileRepository>(
 );
 
 /// Rebuilds on sign-in/out so a fresh account never sees stale profile data.
-final meProvider = AsyncNotifierProvider<MeNotifier, MeResponse>(MeNotifier.new);
+final meProvider = AsyncNotifierProvider<MeNotifier, MeResponse>(
+  MeNotifier.new,
+);
 
 class MeNotifier extends AsyncNotifier<MeResponse> {
   @override

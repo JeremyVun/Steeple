@@ -11,15 +11,8 @@
   to render when the app does not, and be readable by a crawler that runs
   nothing (docs/contracts/seo.md).
 
-  The text began as the deprecated v1 web's (Steeple.Web.v1/Views/Site/Terms.cshtml
-  @ 2026-07-04) and was corrected at 2026-08-07 where v1's words describe a product
-  that no longer exists: v2 takes payment through Steeple's processor rather than
-  leaving every arrangement to be settled venue-side, so the version moved with the
-  words.
-
-  ⚠ PREVIEW TEXT, NOT LEGAL ADVICE. This is a plain-English summary written by the
-  founder, and the page says so. A lawyer's version is a launch gate
-  (docs/backlog/phase-6-reputation-and-launch.md), not a migration deliverable.
+  Preview copy corrected against the implemented offline-payment flow on 2026-09-20.
+  Owner/legal approval and a monitored contact address remain release gates.
 -->
 <html lang="en">
   <head>
@@ -110,7 +103,7 @@
         The basics of using Steeple, and how trust and safety work here. This is a plain-English
         summary for our early preview.
       </p>
-      <p class="version">Version 2026-08-07</p>
+      <p class="version">Version 2026-09-20</p>
 
       <h2>What Steeple is</h2>
       <p>
@@ -129,18 +122,23 @@
 
       <h2>Payments</h2>
       <p>
-        Where a venue charges for a space, Steeple takes the payment through its payment processor
-        and passes it on to the venue, less any fee we tell you about before you book. A recurring
-        booking is charged per session, at the price shown when the booking was confirmed. If a
-        booking is cancelled, the sessions that have not happened are released and anything already
-        charged for them is refunded. We never see or hold your card number — the processor does.
+        Your booking shows the price per session and how payment is arranged. For a booking paid
+        directly to the venue, Steeple does not collect payment or issue refunds. Confirm when and
+        how to pay, and the venue's refund terms, with the host before booking. The price recorded
+        when a booking is confirmed stays with that booking if the listing price later changes.
+      </p>
+      <p>
+        Cancelling in Steeple updates the booking schedule; it does not settle money paid directly
+        to a venue. Organisers must give at least 48 hours' notice to release a session through
+        Steeple. Sessions within that window remain booked; contact the host if you cannot attend.
       </p>
 
       <h2>Trust &amp; safety</h2>
       <p>
-        We confirm the identity of the people who run each venue: a verified host has signed in with
-        Google or Apple, so we know who they are. Verification tells you who you're dealing with — it
-        isn't a safety inspection or an endorsement.
+        Signing in with Google or Apple gives someone access to an account. It does not verify
+        their identity, ownership of a venue, or authority to rent it out. A verified venue has had
+        its authority evidence reviewed by Steeple. That review is not a safety inspection,
+        background check, or endorsement.
       </p>
       <p>
         Steeple does not run background checks on hosts or organisers, and we don't vet how spaces
@@ -153,9 +151,9 @@
       <h2>Your account</h2>
       <p>
         You sign in with Google or Apple; keep that provider account secure, because it's how you
-        prove who you are here. Signing in accepts the then-current version of these terms and the
-        privacy policy — we record which version you accepted, and we'll ask again if they change in
-        a way that matters. You can delete your account at any time from your account page.
+        access your account here. We ask you to accept these terms and the privacy policy before
+        making a booking request or publishing a space. We record the version you accept and ask
+        again when it changes. You can delete your account from your account page.
       </p>
 
       <h2>Acceptable use</h2>

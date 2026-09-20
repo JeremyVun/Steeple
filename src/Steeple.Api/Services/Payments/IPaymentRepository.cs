@@ -14,8 +14,24 @@ public interface IPaymentRepository
     /// <summary>The venue's payout account state. Null when onboarding never started.</summary>
     Task<VenuePaymentAccount?> GetVenueAccountAsync(Guid venueId, CancellationToken ct = default);
 
-    /// <summary>Persists a new venue payout account.</summary>
-    Task AddVenueAccountAsync(VenuePaymentAccount account, CancellationToken ct = default);
+    /// <summary>Gets or atomically creates the durable identity for provider provisioning.</summary>
+    Task<VenuePaymentAccount> GetOrCreateVenueProvisioningAsync(
+        Guid venueId, string provider, DateTimeOffset nowUtc, CancellationToken ct = default);
+
+    /// <summary>Finds a local onboarding account from a provider account id.</summary>
+    Task<VenuePaymentAccount?> GetVenueAccountByProviderIdAsync(string providerAccountId, CancellationToken ct = default);
+
+    /// <summary>Reloads a tracked account after waiting for its cross-instance state lock.</summary>
+    Task ReloadVenueAccountAsync(VenuePaymentAccount account, CancellationToken ct = default);
+
+    /// <summary>Adds a verified webhook event to the replay ledger, or returns the existing row.</summary>
+    Task<(PaymentWebhookEvent Event, bool Added)> GetOrAddWebhookEventAsync(PaymentWebhookEvent webhookEvent, CancellationToken ct = default);
+
+    /// <summary>Serializes provider-state refreshes for one connected account across API instances.</summary>
+    Task AcquireAccountStateLockAsync(string providerAccountId, CancellationToken ct = default);
+
+    /// <summary>Releases the connected-account state lock.</summary>
+    Task ReleaseAccountStateLockAsync(string providerAccountId, CancellationToken ct = default);
 
     /// <summary>
     /// Claims an occurrence by inserting the payment row. Returns <c>false</c> when the

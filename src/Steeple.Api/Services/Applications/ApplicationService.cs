@@ -317,7 +317,7 @@ public sealed class ApplicationService : IApplicationService
                 ApplicationErrorCodes.InvalidApplication, $"Unknown status '{status}'.");
         }
 
-        (page, pageSize) = ClampPaging(page, pageSize);
+        (page, pageSize) = Paging.Normalize(page, pageSize);
         var (items, total) = await _repository
             .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
@@ -338,14 +338,14 @@ public sealed class ApplicationService : IApplicationService
                 ApplicationErrorCodes.InvalidApplication, $"Unknown status '{status}'.");
         }
 
+        (page, pageSize) = Paging.Normalize(page, pageSize);
         var venueIds = await _venueManagers.GetManagedVenueIdsAsync(managerId, ct).ConfigureAwait(false);
         if (venueIds.Count == 0)
         {
             // Not a provider (yet): an empty inbox, not an error — the surface stays discoverable.
-            return ApplicationResult<ApplicationListResult>.Ok(new ApplicationListResult([], 0, 1, pageSize));
+            return ApplicationResult<ApplicationListResult>.Ok(new ApplicationListResult([], 0, page, pageSize));
         }
 
-        (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
             .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
@@ -1102,9 +1102,6 @@ public sealed class ApplicationService : IApplicationService
 
         return false;
     }
-
-    private static (int Page, int PageSize) ClampPaging(int page, int pageSize) =>
-        (Math.Max(1, page), Math.Clamp(pageSize is 0 ? 24 : pageSize, 1, 100));
 
     /// <summary>Best-effort analytics — never a reason to fail the request.</summary>
     private async Task TrackSafelyAsync(string eventType, object payload, CancellationToken ct)

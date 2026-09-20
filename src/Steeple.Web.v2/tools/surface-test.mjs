@@ -216,7 +216,7 @@ async function press(page, sel, { touch = false } = {}) {
   console.log('\n4. the venue sheet\'s standing line (§2.3, §2.4)');
   await page.evaluate('__steeple.setView("venue",{venueId:"grace-community-vienna"})');
   await wait(2000);
-  check('the verified mark says the words verbatim', (await textOf(page, '.verified')).includes('Identity verified (SSO)'), await textOf(page, '.verified'));
+  check('the verified mark says the words verbatim', (await textOf(page, '.verified')).includes('Venue verified'), await textOf(page, '.verified'));
   const quiet = await page.evaluate(() => {
     const n = document.querySelector('.sheet--venue .verified');
     const css = getComputedStyle(n);

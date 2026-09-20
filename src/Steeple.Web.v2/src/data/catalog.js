@@ -16,9 +16,8 @@
 //     labels back. Unknown tokens are humanized rather than dropped: steeple is
 //     allowed to add them without a version bump.
 //
-// The seed stands behind the wire for one case only — nothing served /api/v1 —
-// and never for a steeple that answered and said no; see `absent` below, and
-// `readFailure` for what a caller says when it did.
+// Production reads only the API. The bundled fallback is available in development.
+// Failed production reads reach the caller as ApiError and render the retry state.
 //
 // The 3D village is deliberately NOT a consumer: it is scenery, staged from the
 // bundled seed. The map and list are the truth; the village is the brand.
@@ -33,6 +32,9 @@ import {
 } from './vocabulary.js';
 
 const PAGE_SIZE = 100;
+// Demo inventory is development-only. A production outage must never advertise
+// fictional spaces or availability, including provisional map pins.
+const ALLOW_DEMO_CATALOG = import.meta.env?.DEV === true;
 
 /** The frame the map opens on, before the geofence has named itself. */
 export const AREA_CENTER = bundled.AREA_CENTER;
@@ -42,31 +44,9 @@ export const AREA_CENTER = bundled.AREA_CENTER;
 // started after the page was opened is picked up without a reload.
 const RETRY_AFTER_MS = 30_000;
 
-// A read that failed means one of two things, and the whole honesty of this
-// surface is in telling them apart.
-//
-// ABSENT — nothing served /api/v1 at this origin. Either nothing answered at
-// all (status 0: a dead fetch, a timeout), or the thing standing in front of
-// the API answered for it: vite in development and nginx in a container both
-// say 502 with no upstream, and a static host with no API behind it says 404
-// to everything. This is the case the bundled seed was built for, and that
-// promise stays — the product is browsable with steeple away.
-//
-// ANSWERED — steeple itself, saying no: 400, 403, 429, 500. The service is
-// there and it did not give the rooms. Handing back the seed here was the bug
-// this replaced: the seed cannot answer a schedule term, so an API that
-// refused a Tuesday-evening search printed nine rooms as though every one of
-// them were free on Tuesday evening. False availability is the one thing this
-// surface must never invent, so an answered failure is thrown to the caller,
-// which says so in words.
-//
-// 404 sits with ABSENT deliberately. No read here has a not-found case of its
-// own — the only one that could, a listing by slug, is turned into `null` by
-// api.js before it can throw, and is vouched for by the sitemap below — so a
-// thrown 404 is an origin that does not serve steeple rather than steeple
-// saying "no such thing". `neverArrived` in data/correspondence.js is the
-// writing half of the same judgement, learned the same way and kept separate
-// on purpose: a write must never read a 404 as "steeple is away".
+// Unavailable origins share a retry window. Only development may answer these
+// failures with demo inventory; a production outage must remain visibly unavailable.
+// Listing-by-slug 404 is translated to null in api.js before it reaches this predicate.
 const absent = (status) => status === 0 || status === 404 || status === 502 || status === 503;
 
 let quietUntil = 0;
@@ -86,7 +66,7 @@ function fallBackToSeed(error) {
   console.info(`[catalog] steeple API unavailable (${error.message}) — reading the bundled seed.`);
 }
 
-/** Ask the API; answer from the seed if nothing served it; throw if it said no. */
+/** Ask the API. Only development may substitute the seed for an absent origin. */
 async function live(fromApi, fromSeed) {
   if (Date.now() < quietUntil) {
     if (quietFailure) throw quietFailure;
@@ -101,16 +81,13 @@ async function live(fromApi, fromSeed) {
     // Reading it as "nothing served /api/v1" would put a working catalog on the
     // seed for thirty seconds every time somebody typed quickly.
     if (error?.aborted) throw error;
-    if (absent(error?.status ?? 0)) {
+    if (ALLOW_DEMO_CATALOG && absent(error?.status ?? 0)) {
       fallBackToSeed(error);
       return fromSeed();
     }
-    // A rate limit is the one answered failure that gets worse for being
-    // re-asked, so it — and only it — takes the quiet window with it, and every
-    // read inside that window says the same thing rather than adding to the
-    // pace. Any other refusal may be about the question rather than the
-    // service, so the next question is asked.
-    if (error?.status === 429) {
+    // Back off for unavailable APIs and rate limits. Other failures may be
+    // query-specific, so the next question is still asked.
+    if (error?.status === 429 || absent(error?.status ?? 0)) {
       quietUntil = Date.now() + RETRY_AFTER_MS;
       quietFailure = error;
     }
@@ -122,7 +99,7 @@ async function live(fromApi, fromSeed) {
  * What a failed read means, in the vocabulary the correspondence already
  * speaks (data/correspondence.js): 'busy' when steeple asked to be asked again
  * shortly, 'refused' when it answered no, 'absent' when nothing served it at
- * all — which the reads below never throw, because that is the seed's case.
+ * all. Production throws in all three cases.
  *
  * The sentence is ours rather than steeple's `detail`: a read's problem
  * document is written for whoever is holding the query, and nobody browsing a
@@ -172,7 +149,7 @@ const weekday = (value) => {
 // The wire has no short display name and no venue description. The village's
 // bundled seed is keyed by the very same slugs, so it lends both where it can,
 // and the venue's own name stands in where it cannot (CONTRACT4 §5).
-const scenery = (venueSlug) => bundled.getVenueRecord(venueSlug);
+const scenery = (venueSlug) => ALLOW_DEMO_CATALOG ? bundled.getVenueRecord(venueSlug) : null;
 
 const shortNameFor = (venueSlug, venueName) =>
   scenery(venueSlug)?.shortName ?? venueName.replace(/\s+Church$/, '');
@@ -194,6 +171,7 @@ function photoFrom(photo) {
 function summaryFrom(item) {
   return {
     id: `${item.venueSlug}:${item.roomSlug}`,
+    venueId: item.venueId,
     venueSlug: item.venueSlug,
     roomSlug: item.roomSlug,
     name: item.roomName,
@@ -220,6 +198,7 @@ function summaryFrom(item) {
 function profileFrom(venue) {
   const bundledVenue = scenery(venue.slug);
   return {
+    venueId: venue.venueId,
     slug: venue.slug,
     name: venue.name,
     shortName: shortNameFor(venue.slug, venue.name),
@@ -278,6 +257,7 @@ function listingFrom(detail) {
 
   return {
     id: `${venue.slug}:${detail.roomSlug}`,
+    venueId: venue.venueId,
     // steeple's own id for the room. The product navigates by slug pair, but
     // every write and the availability feed are addressed by this, so it comes
     // along rather than being fetched a second time at the commitment point.
@@ -335,17 +315,17 @@ function listingFrom(detail) {
 
 const venues = new Map();
 
-// The seed's venues stand on the map from the first frame: a map that opens
+// In development, seed venues stand on the map from the first frame. A map that opens
 // empty and fills in is a map that flickers, and these are the same five
 // steeple serves. They are provisional — the first answer that actually came
 // from steeple clears them, so a live catalog with other venues never leaves a
 // phantom pin behind.
-let seededRoster = true;
+let seededRoster = ALLOW_DEMO_CATALOG;
 
 function record(venueSlug) {
   let held = venues.get(venueSlug);
   if (held) return held;
-  held = scenery(venueSlug) ?? {
+  held = (ALLOW_DEMO_CATALOG ? scenery(venueSlug) : null) ?? {
     id: venueSlug,
     slug: venueSlug,
     name: venueSlug,
@@ -366,7 +346,7 @@ function record(venueSlug) {
   return held;
 }
 
-for (const slug of bundled.venueSlugs()) record(slug);
+if (ALLOW_DEMO_CATALOG) for (const slug of bundled.venueSlugs()) record(slug);
 
 /** Later answers add; they never blank a field an earlier one filled. */
 const said = (values) =>
@@ -413,6 +393,7 @@ function noteSummaries(items, fromSeed) {
     Object.assign(
       venue,
       said({
+        venueId: item.venueId,
         name: item.venueName,
         shortName: item.venueShortName,
         suburb: item.suburb,
@@ -432,6 +413,7 @@ function noteListing(listing, fromSeed) {
   Object.assign(
     venue,
     said({
+      venueId: profile.venueId ?? listing.venueId,
       name: profile.name ?? listing.venueName,
       shortName: profile.shortName ?? listing.venueShortName,
       suburb: profile.suburb ?? listing.suburb,
@@ -717,6 +699,16 @@ export async function getRoomAvailability(roomId, { from, to } = {}) {
   } catch {
     return null;
   }
+}
+
+/**
+ * @param {string} venueId
+ * @param {{page?:number,pageSize?:number,signal?:AbortSignal|null}} [options]
+ * @returns {Promise<{items:Array<{stars:number,comment?:string|null,raterName:string,createdAtUtc:string}>,totalCount:number,page:number,pageSize:number}|null>}
+ */
+export async function getVenueReviews(venueId, { page = 1, pageSize = 10, signal = null } = {}) {
+  if (!venueId) return null;
+  return api.getVenueReviews(venueId, { page, pageSize, signal });
 }
 
 /** The Where segment's vocabulary. Throws on a refusal, like every read here. */

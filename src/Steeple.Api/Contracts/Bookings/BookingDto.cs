@@ -35,8 +35,8 @@ public record BookingDto(
 
 /// <summary>
 /// The booking's payment posture (additive 2026-08-05 — docs/contracts/payments.md).
-/// <c>mode</c> ∈ <c>inApp | offline</c>: bookings confirmed while payments were enabled carry the
-/// per-occurrence price snapshot and charge in-app; legacy/offline bookings never charge.
+/// <c>mode</c> ∈ <c>inApp | offline</c>: collection choice is independent of price. New offline
+/// bookings also carry a per-occurrence price snapshot; legacy unknown prices stay null.
 /// <c>nextChargeAtUtc</c> is when the next unpaid occurrence is due to charge (null when nothing
 /// remains to charge or the booking is offline).
 /// </summary>

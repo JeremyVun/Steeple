@@ -6,7 +6,7 @@ import '../models/wire_tokens.dart';
 /// Which status family a wire token belongs to (the same token can mean
 /// different things per domain — `cancelled` is danger on a booking but
 /// neutral on an occurrence).
-enum StatusDomain { application, booking, occurrence, room }
+enum StatusDomain { application, booking, occurrence, room, payment }
 
 /// The one status chip (DESIGN_SYSTEM §8.4): tint background + role fg,
 /// bodySm 600 label. Unknown tokens → neutral + humanized raw token, so a
@@ -73,6 +73,14 @@ class StatusChip extends StatelessWidget {
           'draft' => (c.neutral, 'Draft'),
           'published' => (c.success, 'Published'),
           'unlisted' => (c.neutral, 'Unlisted'),
+          _ => null,
+        },
+      StatusDomain.payment => switch (statusRaw) {
+          'notStarted' => (c.neutral, 'Not started'),
+          'incomplete' => (c.warning, 'Incomplete'),
+          'pending' => (c.info, 'Pending'),
+          'restricted' => (c.danger, 'Action needed'),
+          'ready' => (c.success, 'Ready'),
           _ => null,
         },
     };

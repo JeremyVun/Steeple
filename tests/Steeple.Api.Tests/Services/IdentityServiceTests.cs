@@ -461,13 +461,18 @@ public class IdentityServiceTests
         Assert.Contains(me.Agreements, a => a.DocType == "privacy");
     }
 
-    [Fact]
-    public async Task RecordAgreementAsync_UnknownDocType_ReturnsFalseWithoutTouchingRepository()
+    [Theory]
+    [InlineData("cookies")]
+    [InlineData("999")]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("tos, privacy")]
+    public async Task RecordAgreementAsync_UnknownDocType_ReturnsFalseWithoutTouchingRepository(string docType)
     {
         var repo = new FakeIdentityRepository(FixedNow);
         var service = CreateService(repo, out _, out _, resolve: _ => null);
 
-        var ok = await service.RecordAgreementAsync(Guid.NewGuid(), new AcceptAgreementRequest("cookies", "2026-01-01"));
+        var ok = await service.RecordAgreementAsync(Guid.NewGuid(), new AcceptAgreementRequest(docType, "2026-01-01"));
 
         Assert.False(ok);
         Assert.Empty(repo.RecordedAgreements);
@@ -480,13 +485,24 @@ public class IdentityServiceTests
         var service = CreateService(repo, out _, out _, resolve: _ => null);
         var userId = Guid.NewGuid();
 
-        var ok = await service.RecordAgreementAsync(userId, new AcceptAgreementRequest("tos", "2026-01-01"));
+        var ok = await service.RecordAgreementAsync(userId, new AcceptAgreementRequest("tos", CurrentAgreements.Version));
 
         Assert.True(ok);
         var recorded = Assert.Single(repo.RecordedAgreements);
         Assert.Equal(userId, recorded.UserId);
         Assert.Equal(AgreementDocType.Tos, recorded.DocType);
-        Assert.Equal("2026-01-01", recorded.Version);
+        Assert.Equal(CurrentAgreements.Version, recorded.Version);
+    }
+
+    [Theory]
+    [InlineData("2026-08-07")]
+    [InlineData("2099-01-01")]
+    public async Task RecordAgreementAsync_UnsupportedVersion_IsNotRecorded(string version)
+    {
+        var repo = new FakeIdentityRepository(FixedNow);
+        var service = CreateService(repo, out _, out _, resolve: _ => null);
+        Assert.False(await service.RecordAgreementAsync(Guid.NewGuid(), new AcceptAgreementRequest("tos", version)));
+        Assert.Empty(repo.RecordedAgreements);
     }
 
     [Fact]

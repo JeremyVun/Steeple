@@ -52,8 +52,9 @@ public static class ScheduleMaterializer
     public static bool WeekdaysOccurBetween(Weekdays daysOfWeek, DateOnly startDate, DateOnly endDate)
     {
         var lastDayNumber = Math.Min(endDate.DayNumber, startDate.DayNumber + 6);
-        for (var date = startDate; date.DayNumber <= lastDayNumber; date = date.AddDays(1))
+        for (var dayNumber = startDate.DayNumber; dayNumber <= lastDayNumber; dayNumber++)
         {
+            var date = DateOnly.FromDayNumber(dayNumber);
             if (daysOfWeek.HasFlag(WeekdayBit(date)))
             {
                 return true;
@@ -65,10 +66,11 @@ public static class ScheduleMaterializer
 
     private static IEnumerable<DateOnly> WeeklyDates(DateOnly startDate, DateOnly endDate, Weekdays daysOfWeek)
     {
-        // Day-by-day scan (≤ 366 iterations — terms are bounded) keeps multi-weekday output
+        // Day-by-day scan (≤ 367 inclusive dates — terms are bounded) keeps multi-weekday output
         // provably date-ordered without merging per-weekday arithmetic sequences.
-        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        for (var dayNumber = startDate.DayNumber; dayNumber <= endDate.DayNumber; dayNumber++)
         {
+            var date = DateOnly.FromDayNumber(dayNumber);
             if (daysOfWeek.HasFlag(WeekdayBit(date)))
             {
                 yield return date;

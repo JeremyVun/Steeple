@@ -31,9 +31,17 @@ const on = await load('on', async () => ({
 }));
 assert.equal(await on.isEnabled('payments.enabled'), true);
 
+const onboarding = await load('onboarding', async () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ 'payments.enabled': false, 'payments.onboarding': true }),
+}));
+assert.equal(await onboarding.isEnabled('payments.enabled'), false);
+assert.equal(await onboarding.isEnabled('payments.onboarding'), true);
+
 const offline = await load('offline', async () => {
   throw new Error('offline');
 });
 assert.equal(await offline.isEnabled('payments.enabled'), false);
 
-console.log('ok    public flags are cached and payments fails closed');
+console.log('ok    public flags are cached and onboarding is independent of guest payments');

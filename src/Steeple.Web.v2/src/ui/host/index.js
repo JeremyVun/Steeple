@@ -19,7 +19,10 @@ import {
   refreshRoomHours,
   venuePayments,
 } from '../../data/correspondence.js';
+import { isEnabled } from '../../data/flags.js';
 import * as session from '../../data/session.js';
+import { FEATURE_FLAG_KEYS } from '../../data/wireTokens.js';
+import { clearPaymentReturn, readPaymentReturn } from '../../core/router.js';
 import {
   currentOrganizerId,
   getApplication,
@@ -50,6 +53,7 @@ function setOpen(node, open) {
 }
 
 export function createHostFlows({ announce, porch, askToSignIn } = {}) {
+  let paymentMode = 'off';
   const desk = createDesk({
     announce,
     variant: state.desk,
@@ -69,12 +73,14 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
         readDesk({ again: true }).then(() => desk.render());
         return;
       }
+      desk.setPayouts(null);
       setView('desk', { venueId });
+      readPayouts(venueId).then(() => desk.render());
     },
     onSetUpPayouts: (id) => {
       const venue = venueOf(id, placedVenues());
       if (!venue?.remoteId) return;
-      payoutScreen.open({ id: venue.remoteId, name: venue.name });
+      payoutScreen.open({ id: venue.remoteId, name: venue.name, paymentMode });
     },
   });
 
@@ -84,6 +90,16 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       desk.setPayouts(payments);
       desk.render();
     },
+  });
+
+  const paymentFlags = Promise.all([
+    isEnabled(FEATURE_FLAG_KEYS.paymentsOnboarding),
+    isEnabled(FEATURE_FLAG_KEYS.paymentsEnabled),
+  ]).then(([onboarding, legacy]) => {
+    paymentMode = onboarding ? 'onboarding' : legacy ? 'legacy' : 'off';
+    desk.setPaymentMode(paymentMode);
+    desk.render();
+    return paymentMode;
   });
 
   // Where this letter was opened from, so the way out goes back there. The same
@@ -167,6 +183,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
     desk.setReading(false);
     if (answer.ok) mirrorManagedVenues(answer.value);
     const slugs = mine();
+    await paymentFlags;
     if (slugs.length) {
       // When each room is open, from steeple rather than from this browser's
       // memory of setting it — the Spaces tab was printing "No open hours set"
@@ -187,6 +204,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
       await refreshManagedBookings();
       await readPayouts();
     }
+    handlePaymentReturn(answer.ok ? answer.value : []);
     return slugs;
   }
 
@@ -195,14 +213,45 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
    * prompt is about the venue on screen; a failure leaves it unread rather than
    * printing "not set up" about a question that was never answered.
    */
-  async function readPayouts() {
-    const venue = venueOf(state.venueId ?? deskVenue(), placedVenues());
+  async function readPayouts(forVenue = state.venueId ?? deskVenue()) {
+    if (paymentMode === 'off') {
+      desk.setPayouts(null);
+      return;
+    }
+    const venue = venueOf(forVenue, placedVenues());
     if (!venue?.remoteId) {
       desk.setPayouts(null);
       return;
     }
     const answer = await venuePayments(venue.remoteId);
-    desk.setPayouts(answer.ok ? answer.value : null);
+    if (forVenue !== (state.venueId ?? deskVenue())) return;
+    if (answer.ok) desk.setPayouts(answer.value);
+    else desk.setPayouts(null, answer.problem);
+  }
+
+  function handlePaymentReturn(ownedVenues) {
+    const returned = readPaymentReturn();
+    if (!returned) return;
+    const owned = ownedVenues.find(
+      (item) => item.id?.toLowerCase() === returned.venueId.toLowerCase()
+    );
+    clearPaymentReturn();
+    if (paymentMode !== 'onboarding') {
+      announce?.('Stripe payout setup is not available here.');
+      return;
+    }
+    if (!owned) {
+      announce?.('That payout setup does not belong to a venue you manage.');
+      return;
+    }
+    const venue = venueOf(owned.slug, placedVenues());
+    setView('desk', { venueId: owned.slug }, { history: 'replace' });
+    payoutScreen.open({
+      id: owned.id,
+      name: venue?.name ?? owned.name,
+      paymentMode,
+      returnAction: returned.action,
+    });
   }
 
   /** Ask steeple, once, unless `again` insists (a listing just landed, or the desk was opened). */
@@ -220,6 +269,7 @@ export function createHostFlows({ announce, porch, askToSignIn } = {}) {
   session.onSessionChange((held) => {
     read = false;
     if (!held) {
+      payoutScreen.close();
       desk.setReading(false);
       // Hosting belongs to whoever was signed in. Signing out leaves it, and
       // leaves it empty — a desk must never outlive the session that earned it.

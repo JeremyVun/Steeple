@@ -16,6 +16,19 @@ public class AvailabilityWhenFilterTests
     // ----- one-off, explicit range -------------------------------------------------------------
 
     [Fact]
+    public async Task OneOff_MaximumDate_MatchesWithoutOverflow()
+    {
+        var room = Guid.NewGuid();
+        var repo = new FakeRepo();
+        var date = DateOnly.MaxValue;
+        repo.OpenHours.Add(Hours(room, date.DayOfWeek, "09:00", "22:00"));
+
+        var matched = await Refine(repo, [room], OneOff(date, WhenRangeKind.Explicit, "18:00", "20:00"));
+
+        Assert.Equal(date, Assert.Contains(room, matched).Date);
+    }
+
+    [Fact]
     public async Task Explicit_RangeFree_Matches_AndCarriesTheContainingWindow()
     {
         var room = Guid.NewGuid();

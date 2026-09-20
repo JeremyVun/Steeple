@@ -33,7 +33,8 @@ import { priceText } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import {
   FAILURE_LADDER_HOST,
-  RESCIND_WARNING,
+  rescindWarning,
+  cancellationLine,
   chargeWord,
   isTrouble,
   money,
@@ -57,7 +58,7 @@ import {
 import { publishState } from './manage.js';
 import { createRibbon } from './ribbon.js';
 
-const VERIFIED_LABEL = 'Identity verified';
+const VERIFIED_LABEL = 'Signed in';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // How a venue takes bookings, in one short sentence each. The host is choosing
@@ -130,6 +131,8 @@ export function createDesk({
   // as the host flow last read it. Null = not asked yet, which is not the same
   // sentence as "not set up" and must never be printed as one.
   let payouts = null;
+  let payoutProblem = '';
+  let paymentMode = 'off';
   // Whether steeple is still being asked what this person looks after. "None
   // yet" and "not asked yet" are different sentences and must read differently.
   let reading = true;
@@ -346,7 +349,7 @@ export function createDesk({
     });
 
     return el('div', { class: 'booking__confirm' }, [
-      el('p', { class: 'prose prose--sm booking__warning', text: RESCIND_WARNING }),
+      el('p', { class: 'prose prose--sm booking__warning', text: rescindWarning(booking) }),
       el('label', { class: 'field__label', for: 'rescind-note', text: 'Why, in your words' }),
       reason,
       el('div', { class: 'booking__actions' }, [
@@ -359,7 +362,7 @@ export function createDesk({
             onclick: () =>
               move(
                 () => wire.cancelBooking(booking.id, reason.value),
-                'Cancelled. Every remaining date is free again and the group has been refunded in full.'
+                cancellationLine(booking)
               ),
           },
           'Yes, cancel it'
@@ -428,7 +431,49 @@ export function createDesk({
   // reason attached to it.
 
   function payoutPrompt(entries) {
-    if (!payouts || payouts.payoutsEnabled) return null;
+    if (paymentMode === 'off') return null;
+    if (!payouts) {
+      if (!payoutProblem) return null;
+      return el('section', { class: 'payout', dataset: { state: 'unavailable' } }, [
+        el('p', { class: 'eyebrow', text: 'Payouts' }),
+        el('p', { class: 'prose prose--sm', text: payoutProblem }),
+        el('button', {
+          type: 'button',
+          class: 'pill pill--primary',
+          dataset: { action: 'payouts' },
+          onclick: () => onSetUpPayouts?.(venueId),
+        }, 'Check payouts'),
+      ]);
+    }
+    if (paymentMode === 'onboarding') {
+      const status = payouts.status ?? (payouts.payoutsEnabled ? 'ready' : payouts.onboardingStarted ? 'incomplete' : 'notStarted');
+      const statusText = {
+        notStarted: 'Stripe setup has not started.',
+        incomplete: 'Stripe setup is incomplete.',
+        pending: 'Stripe is reviewing this account.',
+        restricted: 'Stripe needs more information.',
+        ready: payouts.optedIn
+          ? 'Stripe setup is complete. You plan to use online payments when they become available.'
+          : 'Stripe setup is complete.',
+      }[status] ?? 'Check this venue’s Stripe setup.';
+      return el('section', { class: `payout${status === 'ready' ? ' payout--done' : ''}`, dataset: { state: status } }, [
+        status === 'ready' ? el('span', { class: 'verified__dot', 'aria-hidden': 'true' }) : null,
+        el('div', { class: 'payout__body' }, [
+          el('p', { class: 'eyebrow', text: 'Payouts' }),
+          el('p', { class: 'prose prose--sm', text: statusText }),
+          payouts.testMode
+            ? el('p', { class: 'payout__note', text: 'Test mode. Online booking payments are not active.' })
+            : null,
+        ].filter(Boolean)),
+        el('button', {
+          type: 'button',
+          class: status === 'ready' ? 'linkish' : 'pill pill--primary',
+          dataset: { action: 'payouts' },
+          onclick: () => onSetUpPayouts?.(venueId),
+        }, status === 'notStarted' ? 'Set up payouts' : status === 'ready' ? 'Manage payouts' : 'Continue setup'),
+      ].filter(Boolean));
+    }
+    if (payouts.payoutsEnabled) return null;
     const owed = entries.reduce((total, entry) => {
       const amount = Number(entry.booking.payment?.perOccurrenceAmount ?? 0);
       if (!Number.isFinite(amount) || entry.booking.payment?.mode !== 'inApp') return total;
@@ -460,7 +505,7 @@ export function createDesk({
   }
 
   function payoutConnected() {
-    if (!payouts?.payoutsEnabled) return null;
+    if (paymentMode !== 'legacy' || !payouts?.payoutsEnabled) return null;
     return el('p', { class: 'payout payout--done', dataset: { state: 'connected' } }, [
       el('span', { class: 'verified__dot', 'aria-hidden': 'true' }),
       'Payouts are set up. Payments are simulated while Steeple is on its test gateway — no money moves yet.',
@@ -836,8 +881,12 @@ export function createDesk({
       refusal = '';
     },
     /** Where this venue stands with payouts, as the host flow last read it. */
-    setPayouts(next) {
+    setPayouts(next, problem = '') {
       payouts = next ?? null;
+      payoutProblem = problem;
+    },
+    setPaymentMode(next) {
+      paymentMode = next;
     },
     setVariant(next) {
       if (next === variant) return;

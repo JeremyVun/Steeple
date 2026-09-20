@@ -87,6 +87,22 @@ public class EfApplicationRepositoryTests
     }
 
     [Fact]
+    public async Task GetForOrganizerAsync_ExtremePage_ReturnsEmptyWithCorrectTotal()
+    {
+        await using var db = CreateContext();
+        var organizer = NewUser();
+        db.Users.Add(organizer);
+        db.Applications.Add(NewApplication(organizer.Id));
+        await db.SaveChangesAsync();
+
+        var (items, total) = await new EfApplicationRepository(db)
+            .GetForOrganizerAsync(organizer.Id, null, FixedNow, int.MaxValue, 100);
+
+        Assert.Empty(items);
+        Assert.Equal(1, total);
+    }
+
+    [Fact]
     public async Task GetAsync_UnknownId_ReturnsNull()
     {
         await using var db = CreateContext();

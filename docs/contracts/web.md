@@ -1,5 +1,7 @@
 # Contracts — Steeple.Web.v2 seams
 
+SSE additions verified against source on 2026-09-06.
+
 > **Scope:** the frozen seams of the active web frontend (`src/Steeple.Web.v2`) — `api.js`
 > (the wire), `wireTokens.js` (the complete API token mirror), `session.js` (credentials),
 > `catalog.js` (product vocabulary + offline fallback),
@@ -91,9 +93,9 @@ navigation meaning. The renderer remains stopped for the whole product act.
 no shape invented. Base is the document-relative `'api/v1'` so the same bundle works at `/`
 and behind a stripped proxy prefix.
 
-- `ApiError {message, status, problem, code, detail, timedOut}` — `status: 0` means no response
+- `ApiError {message, status, problem, code, detail, timedOut, retryAfterMs}` — `status: 0` means no response
   arrived; `timedOut` distinguishes a request the browser stopped waiting for from one it could
-  not send. A failure that arrived carries the RFC 9457 problem document verbatim with its stable
+  not send. A JSON-request failure that arrived carries the RFC 9457 problem document verbatim with its stable
   `code` lifted out.
 - Timeouts: **4s** for reads, **15s** for JSON writes and **20s** for photo upload.
   `notFoundAsNull` turns a
@@ -111,23 +113,62 @@ and behind a stripped proxy prefix.
 
 | Wired (called today) | Caller |
 |---|---|
-| `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
+| `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability`, `getVenueReviews` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
 | `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
 | `submitApplication` | `ui/guest/send.js` |
-| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `submitRating` (2026-08-08), `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
+| `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `submitRating` (2026-08-08), `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead`, `openNotificationStream` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
 | `suggestAddresses`, `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 | `getRoomAvailabilityRules` | `correspondence.js` (the desk's hours read) |
 | `acceptAgreement` (what is owed rides on `getMe`) | `agreements.js` |
 | `postEvents` | `analytics.js` (the interaction batcher) |
+| `markOccurrenceNoShow` | `correspondence.js`, from both booking letters |
 
-**Not present in `api.js` at all** (no client function exists yet): occurrence no-show
-(`POST /occurrences/{id}/no-show`), the public reviews read (`GET /venues/{id}/ratings` —
-deferred with the reviews block, and v2 holds no venue GUID to address it with),
-`POST /me/devices`.
+`POST /me/devices` has no web client function.
 
 A request whose body is `undefined` carries no body and declares no content type — the
-revocations below are the only such calls; `null` still means the empty JSON document that
+revocations and no-show mark use this form; `null` still means the empty JSON document that
 every other write sends.
+
+## Live inbox transport and feed (2026-09-06)
+
+`api.openNotificationStream(accessToken, {signal})` opens a document-relative bearer fetch
+with a separate 10-second header deadline, `Accept: text/event-stream` and `cache: no-store`.
+The caller's cancellation lasts through body consumption. Non-success responses throw
+`ApiError` with parsed `retryAfterMs`; ordinary snapshot errors carry that metadata too.
+Stream admission errors cancel their bodies immediately and carry status/cooldown rather
+than waiting on a possibly stalled ProblemDetails body.
+`correspondence.openNotificationStream` returns the response through `session.withAccess`
+before consuming it, allowing its one 401 refresh/retry and identity checks to complete.
+Abandoned responses are cancelled. No URL/cookie-only bearer or browser token storage.
+
+`data/notificationStream.js` incrementally parses UTF-8 SSE with LF/CRLF/CR line endings;
+only complete `invalidate` events with JSON object data prompt a snapshot. Comments and
+unknown events are ignored. Invalid known events and incomplete frames over 8 KiB fail;
+EOF fragments are discarded. Reader cancellation/release belongs to the consumer.
+
+`data/notificationFeed.js` owns identity generations, dirty reads, receipt overlays and
+connection epochs; `ui/notifications.js` owns copy, announcements, navigation and lifecycle
+wiring. Public `read`, `rows`, `wake`, `onRoll`, `open`, `lineFor` and
+`notifications:change` stay compatible. Snapshots hold the newest 24 rows before printable
+type filtering; the badge counts only unread printable rows on this page.
+
+Streaming eligibility is signed-in + visible + product (`roll >= 1`). Hidden, landing,
+signed-out and pagehidden states cancel streams/retries. Return refreshes and opens a
+stream; its initial event requires a post-admission read. No product read waits for 3D or
+SSE. Connected streams do not poll. Disconnected recovery asks at most once per minute;
+failed snapshots retain rows/dirty work and retry with jitter and snapshot Retry-After.
+Automatic dirty reads start at most once/second; an event during a read guarantees a
+trailing read and continued events cannot postpone it. Old identities cannot apply rows,
+announce or schedule work; late stream EOF cannot close a newer attempt.
+
+EOF/error/75 seconds without bytes reconnects with uniform jitter between half and all of
+`min(30s, 1s × 2^n)`, reset after 60 healthy seconds. Retry-After is a minimum (default
+60s for 429, 5s for 503), preserved across visibility/online wakes. Heartbeats reset idle
+time without fetching. Announce unread IDs once per identity, only while eligible.
+Opening a row stamps read locally and submits the receipt. Pending receipts and successful
+receipts awaiting a snapshot started after acknowledgement overlay stale snapshots. Failed
+writes release that overlay for the next authoritative read. No automatic receipt, live
+thread content or sibling read-state event is introduced.
 
 ## `src/data/session.js` — who is signed in, and the proof (rewritten 2026-08-09)
 
@@ -219,7 +260,7 @@ answer to `store.js`'s mirror, and returns a verdict — never a guess.
   never arrives, the pass **upserts only and deletes nothing** — an incomplete list has no
   standing to say what does not exist. Held to it by `correspondence-test.mjs` §9.
 - Payouts (host): `venuePayments(venueId)`, `startPayouts(venueId)`, `finishMockPayouts(venueId)`.
-- Notifications: `notifications({pageSize})`, `markNotificationsRead(ids)`.
+- Notifications: `notifications({pageSize})`, `markNotificationsRead(ids)`, `openNotificationStream({signal})`.
 - Venue settings: `setBookingMode(venueId, 'instant'|'manual')` (`PATCH /manage/venues/{id}`).
 - `toWireSchedule(schedule)` and `problemText(error)` are shared with `ui/guest/send.js`.
 
@@ -230,6 +271,21 @@ status `0`, `502` or `503`) · `slow` (the browser timed out; the request may st
 `signedOut` (401) · `unavailable` (404 — a route that is not there, e.g.
 counter-offers with `booking.counter_offers` off: an absent feature, not an error).
 An approve that answers `409 slot_taken` is a product moment, not a failure message.
+
+### Ratings and attendance
+
+Both letters submit ratings through `rateBooking`, then re-read the booking: reveal and
+eligibility remain server-owned. The web offers rating forms only for completed/cancelled
+bookings with `ratings.canRate`; absent rating blocks render nothing.
+
+Both letters offer a no-show action on `occurred` occurrences. Scheduled, future, cancelled
+and already-marked occurrences have no action. Confirmation names the date, time and other
+party and states that the record is final and contributes to trust history. Cancelling
+confirmation restores focus to the opener; submitting disables repeat presses. The move
+posts no body to `/occurrences/{id}/no-show` and mirrors the returned `BookingDto`, including
+occurrence `noShowMarkedBy`. No status is patched optimistically. Refusals show the server's
+detail, including a competing mark's `409 invalid_state`; a late response must not change
+the letter currently open. `rating_submitted` and `no_show_marked` remain server-emitted.
 
 ## `src/data/catalog.js` — product vocabulary over the wire
 
@@ -249,13 +305,29 @@ windows. **`getRoomAvailability(roomId, {from, to})` has no bundled fallback and
 hand somebody about to commit to a date. The 3D village is deliberately **not** a consumer — it
 is staged from the bundled seed; the map and list are the truth.
 
-**The seed stands in for an absent steeple, never for a refusal** (2026-08-06). The catalog
-sorts a failed read into two cases and they are the contract:
+`getVenueReviews(venueId, {page, pageSize, signal})` reads public, revealed comments without
+bundled fallback. Catalog summaries, listing profiles and held venues preserve the API's
+venue GUID alongside their navigation slug. Room sheets show venue-level comments below
+house rules, with reviewer name, accessible star facts and date. The details scroller is
+a named region reachable with Tab and scrollable from the keyboard. A missing GUID, empty
+first page or failed first read renders no section. “More reviews” requests subsequent
+pages using this endpoint's `totalCount`, never the aggregate `rating.count`. Later failures
+retain the rows and allow retry; successful appends preserve scroll and deliberate focus.
+Changing rooms invalidates outstanding review responses, and late listing details do not
+erase reviews already loaded for the current room.
 
-| | statuses | what a read does |
+**Production never falls back to demo inventory** (2026-09-20). The development server alone
+may use `bundledCatalog.js` when no API responds. Production starts with no provisional
+seed pins and uses no seed descriptions or rooms; API failures show the existing retry state.
+
+| Failure | Statuses | Production behavior |
 |---|---|---|
-| **absent** — nothing served `/api/v1` | `0` (dead fetch / 4s timeout), `502`, `503`, `404` | answers from `bundledCatalog.js` (same signatures; seed slugs match the bundled ids 1:1), goes quiet **30s** so one dead API costs one timeout rather than one per keystroke, logs `console.info` **once** — a working state, never an error — and `isLive()` reads `false` |
-| **answered** — steeple said no | `400`, `401`, `403`, `429`, `500`, … | **throws the `ApiError`**; the caller says so |
+| Unavailable | `0`, `404`, `502`, `503` | Throw `ApiError`; cache the failure for 30 seconds to avoid hammering the API. |
+| Refused | `400`, `401`, `403`, `429`, `500`, … | Throw `ApiError`; `429` also has a 30-second quiet window. |
+
+`tools/release-safety-test.mjs` builds the production catalogue and proves these failures never
+return demo rooms or provisional pins. `provider-smoke-test.mjs` checks the rendered outage.
+The older catalogue-honesty harness's seed expectations apply to development only.
 
 `502`/`503` sit with *absent* because this page is always served from behind a proxy: vite in
 development and nginx in a container both answer **502** for a dead API, so the browser never
@@ -299,12 +371,9 @@ rooms a venue has. One record per slug, filled in as answers land:
 | `readVenue(slug)` | async | the venue **in full**: sitemap → `getListing` per room. Held for the session; answers from what is held when steeple cannot be reached; `null` when nothing anywhere knows the slug. |
 | `forgetVenues()` | | publishing or editing a space is the one moment a held venue stops being true (`ui/map/index.js`, on `store:change`) |
 
-The bundled seed still lends what the wire has no field for — a short display name, a venue
-description, and the one line a sheet says about a space being **prepared** (a Draft never
-leaves the API, so the live catalog cannot contradict it; it only adds) — and stands in whole
-when nothing served `/api/v1`. The seed's five are on the map from the first frame, marked
-**provisional**: the first answer that actually came from steeple clears them, so a live catalog
-with other venues never leaves a phantom pin.
+In development, the bundled seed can lend display names/descriptions and provisional map
+pins. Production records start from the API alone. Its initial map roster is empty until a
+successful live read (or a server-rendered listing bootstrap) provides real venue coordinates.
 
 **The rule this replaced:** pins and the two property sheets were built from `src/data/venues.js`
 — the 3D village's scenery — while the results came from the catalog. A venue a host listed had
@@ -442,11 +511,9 @@ it is contained by construction: its letters are written under the seed's own id
   `ui/guest/sso.js` in the shared `.modal__layer`). The inbox tab, its badge, the journal and
   an opened letter render only for a signed-in guest; a cold link to `/journal` or
   `/letter/…` while signed out lands in the village **and the address bar is corrected with
-  it** (a `replace`: a route that could not be honoured is not a place anybody chose). Verification copy is gated on fact everywhere it is printed: account-owned surfaces use
-  "Identity verified (SSO)" from the session, while host views use "Identity verified" for the
-  organizer recorded on an application and for the managed venue's verified flag. It is only
-  printed where a **counterparty** reads it — the identity panel (confirming the sign-in that
-  just happened), a listing, a request a host opens. Since 2026-08-09 the guest inbox head
+  it** (a `replace`: a route that could not be honoured is not a place anybody chose). Account and organizer labels say
+  "Signed in"; they do not claim identity verification. "Venue verified" is reserved for the
+  venue's stored verification flag. Since 2026-08-09 the guest inbox head
   carries no chip: verification told to yourself is a fact you cannot act on, and it outshouted
   the tally line beside it.
 - **Real (Phase 2, 2026-08-05):** the whole of the correspondence. The guest inbox is
@@ -522,7 +589,7 @@ it is contained by construction: its letters are written under the seed's own id
     one honest sentence each, scoped in copy to new asks only.
   - **Notifications are messages in the inbox** (`ui/notifications.js`, reworked 2026-08-09 —
     they were transient corner slips, which gave a host news with nothing to press). `GET
-    /me/notifications` is read on sign-in, on arriving at the product surface and on opening the
+    /me/notifications` is refreshed by live arrival invalidations, on returning to the visible product surface and on opening the
     inbox; every row of
     `bookingReminder | paymentFailed | occurrenceRefunded | bookingReceived | listingApproved |
     applicationMessage | applicationApproved | applicationDeclined | ratingReceived`
@@ -818,3 +885,20 @@ the live ownership gate for guest/host/shared CSS after markup or style changes.
   - signed out (or cookie restoration that fails) opens the identity panel, holds
     the link, and follows it on the next `signedIn`;
   - unresolvable ⇒ the village and one quiet `.slip`.
+
+## Stripe host onboarding (2026-09-06)
+
+The desk opens `ui/host/payouts.js` when `payments.onboarding` is enabled, independently of
+`payments.enabled`. The legacy mock flow remains under the latter flag in Development.
+`api.js` owns GET state, POST onboarding/dashboard, and PUT opt-in; correspondence supplies
+session credentials. `core/router.js` consumes `paymentVenue` and `paymentReturn` from the
+web callback, preserving unrelated queries and hosting prefix. The host flow restores identity
+and selects the GUID-matched managed venue before acting. A return reads status; refresh
+requests a replacement link once. Async results cannot cross venue/auth generations.
+
+The existing modal shows incomplete/review/restricted/ready states, refresh/resume, a future
+payment preference, and on-demand dashboard access. Readiness loss blocks opt-in but permits
+opt-out. Provider reason tokens are not rendered as product prose. Stripe destinations must be
+HTTPS `connect.stripe.com`, with no credentials/non-default port. State and ready copy make no
+claim that live bookings or cross-border payouts are enabled. Web never loads the secret key.
+Test invocation and disposable-stack requirements: `tools/HARNESS.md`, `test:host-onboarding`.

@@ -10,6 +10,20 @@ import 'wire_tokens.dart';
 part 'booking.freezed.dart';
 part 'booking.g.dart';
 
+/// Frozen per-session price, independent of whether Steeple collects payment.
+@freezed
+abstract class BookingPayment with _$BookingPayment {
+  const factory BookingPayment({
+    required String mode,
+    double? perOccurrenceAmount,
+    String? currency,
+    DateTime? nextChargeAtUtc,
+  }) = _BookingPayment;
+
+  factory BookingPayment.fromJson(Map<String, dynamic> json) =>
+      _$BookingPaymentFromJson(json);
+}
+
 /// A submitted star rating visible to the current caller.
 @freezed
 abstract class SubmittedRating with _$SubmittedRating {
@@ -103,6 +117,7 @@ abstract class Booking with _$Booking {
     Occurrence? nextOccurrence,
     @Default(<Occurrence>[]) List<Occurrence> occurrences,
     BookingRatings? ratings,
+    BookingPayment? payment,
   }) = _Booking;
 
   factory Booking.fromJson(Map<String, dynamic> json) =>

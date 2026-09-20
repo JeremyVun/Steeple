@@ -69,7 +69,7 @@ import {
   AMENITY_LABELS,
   toLabels,
 } from '../../data/vocabulary.js';
-import { VERIFIED_LABEL } from '../copy.js';
+import { SIGNED_IN_LABEL as VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 import * as manage from './manage.js';
 import {

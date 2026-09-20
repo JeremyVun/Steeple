@@ -62,6 +62,7 @@ export const WIRE_TOKEN_SETS = Object.freeze({
   ]),
   occurrenceStatuses: frozen(['scheduled', 'occurred', 'noShow', 'cancelled']),
   paymentStatuses: frozen(['pending', 'requiresAction', 'succeeded', 'failed', 'refunded', 'disputed']),
+  paymentAccountStatuses: frozen(['notStarted', 'incomplete', 'pending', 'restricted', 'ready']),
   ratingRateeTypes: frozen(['organizer', 'venue']),
   roomStatuses: frozen(['draft', 'published', 'unlisted']),
   scheduleFrequencies: frozen(['oneOff', 'recurringWeekly']),
@@ -76,6 +77,7 @@ export const FEATURE_FLAG_KEYS = Object.freeze({
   manageOpenHoursRequired: 'manage.open_hours_required',
   bookingCounterOffers: 'booking.counter_offers',
   paymentsEnabled: 'payments.enabled',
+  paymentsOnboarding: 'payments.onboarding',
   mobileApplyEnabled: 'mobile.apply_enabled',
   mobileManageEnabled: 'mobile.manage_enabled',
   mobileForceUpgrade: 'mobile.force_upgrade',
@@ -84,6 +86,7 @@ export const FEATURE_FLAG_KEYS = Object.freeze({
 export const ALL_FEATURE_FLAG_KEYS = frozen(Object.values(FEATURE_FLAG_KEYS));
 export const PUBLIC_FEATURE_FLAG_KEYS = frozen([
   FEATURE_FLAG_KEYS.paymentsEnabled,
+  FEATURE_FLAG_KEYS.paymentsOnboarding,
   FEATURE_FLAG_KEYS.mobileApplyEnabled,
   FEATURE_FLAG_KEYS.mobileManageEnabled,
   FEATURE_FLAG_KEYS.mobileForceUpgrade,

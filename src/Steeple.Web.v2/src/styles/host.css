@@ -789,6 +789,22 @@
   margin: 0;
 }
 
+.payout__body {
+  display: grid;
+  gap: 6px;
+}
+
+.payout__body > .prose,
+.payout__body > .eyebrow,
+.payout__note {
+  margin: 0;
+}
+
+.payout__note {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
 .payout--done {
   display: flex;
   align-items: center;
@@ -919,11 +935,94 @@
   color: var(--ink-soft);
 }
 
+.payoutscreen__status,
+.payoutscreen__test {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: var(--radius-card);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  background: var(--paper-deep);
+}
+
+.payoutscreen__status--ready {
+  color: var(--sage-deep);
+  background: var(--sage-tint);
+}
+
+.payoutscreen__status--restricted {
+  color: var(--terracotta-deep);
+  background: var(--terracotta-tint);
+}
+
+.payoutscreen__test {
+  color: var(--terracotta-deep);
+  background: var(--terracotta-tint);
+}
+
+.payoutscreen__requirements {
+  display: grid;
+  gap: 5px;
+}
+
+.payoutscreen__requirements > .prose {
+  margin: 0;
+}
+
+.payoutscreen__preference {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 44px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--card);
+  cursor: pointer;
+}
+
+.payoutscreen__preference.is-disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.payoutscreen__check {
+  appearance: auto;
+  width: 17px;
+  height: 17px;
+  margin: 2px 0 0;
+  accent-color: var(--sage-deep);
+}
+
+.payoutscreen__preference-title,
+.payoutscreen__preference-note {
+  display: block;
+}
+
+.payoutscreen__preference-title {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.payoutscreen__preference-note {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
 .payoutscreen__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   margin-top: 4px;
+}
+
+.payoutscreen__actions > button {
+  min-height: 44px;
 }
 
 .payoutscreen__fineprint {
@@ -1558,6 +1657,82 @@
    own, or the last line of it sits on the edge of the sheet. */
 .letterpage__invite:not(:empty) {
   padding-bottom: 20px;
+}
+
+.attendance {
+  margin: 4px 0 0;
+  padding-top: 15px;
+  border-top: 1px solid var(--line);
+}
+
+.attendance__list {
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.attendance__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+
+.attendance__item:first-child {
+  border-top: 0;
+}
+
+.attendance__item.is-past {
+  color: var(--ink-faint);
+}
+
+.attendance__date {
+  color: var(--ink);
+}
+
+.attendance__time {
+  color: var(--ink-soft);
+}
+
+.attendance__status,
+.attendance__no-show {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.attendance__no-show {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.attendance__confirm {
+  grid-column: 1 / -1;
+  margin-top: 5px;
+  padding: 11px 13px 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+}
+
+.attendance__confirm .prose {
+  margin: 0;
+}
+
+.attendance__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 9px;
+}
+
+.attendance__actions > button {
+  min-height: 44px;
 }
 
 .ratemark {

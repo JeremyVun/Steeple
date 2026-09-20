@@ -76,12 +76,12 @@ export const chargeWord = (status, side = 'guest') => CHARGE_WORD[side]?.[status
 export function paymentLine(booking, side = 'guest') {
   const payment = booking?.payment;
   if (!payment) return null;
+  const each = money(payment.perOccurrenceAmount, payment.currency);
   if (payment.mode !== 'inApp') {
     return side === 'host'
-      ? 'Arranged with the group directly — Steeple takes no payment for this booking.'
-      : 'Paid directly to the venue — Steeple takes no payment for this booking.';
+      ? `${each ? `${each} a session. ` : ''}Arrange payment directly with the group. Steeple does not collect it.`
+      : `${each ? `${each} a session. ` : ''}Arrange payment directly with the venue. Steeple does not collect it.`;
   }
-  const each = money(payment.perOccurrenceAmount, payment.currency);
   if (!each) return null;
   return side === 'host' ? `${each} a session` : `${each} a session`;
 }
@@ -114,4 +114,16 @@ export const FAILURE_LADDER_HOST =
 
 /** The whole of the refund rule a host's cancel triggers, in one sentence. */
 export const RESCIND_WARNING =
-  'Cancelling frees every remaining date on this booking and refunds everything already charged, in full. The group is told straight away, and the time goes back on offer.';
+  'Cancelling frees every remaining date and starts refunds for payments collected through Steeple. The group is notified.';
+
+export function rescindWarning(booking) {
+  return booking?.payment?.mode === 'inApp'
+    ? RESCIND_WARNING
+    : 'Cancelling frees every remaining date. Arrange any refund directly with the group; Steeple does not hold the payment.';
+}
+
+export function cancellationLine(booking) {
+  return booking?.payment?.mode === 'inApp'
+    ? 'Cancelled. Check the session and payment statuses for released dates and refunds.'
+    : 'Cancelled. Check the session statuses for released dates. Arrange any refund directly with the group.';
+}

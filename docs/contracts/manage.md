@@ -154,6 +154,9 @@ rows and clears applications' older column-based keys without touching the creat
 All times are venue-local wall-clock `HH:mm` (24h) strings; weekday tokens per
 `conventions.md` §2.1 (`sunday`…`saturday`). Windows are `[start, end)` — end after start,
 never crossing midnight.
+Each weekday field accepts one named weekday; numeric or comma-separated combinations
+are invalid. Calendar and availability date ranges handle the maximum ISO date
+(`9999-12-31`) without overflowing their inclusive date iteration or UTC query bound.
 
 - `GET /api/v1/manage/rooms/{id}/availability` ✅ (manager-scoped) → `RoomAvailabilityRulesDto`:
   `{roomId, timezone, days: [{dayOfWeek, windows: [{startTime, endTime}]}], blackouts:

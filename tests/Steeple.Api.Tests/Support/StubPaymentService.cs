@@ -39,15 +39,6 @@ public sealed class StubPaymentService : IPaymentService
     public Task<bool> HasPaymentMethodAsync(Guid userId, CancellationToken ct = default) =>
         Task.FromResult(HasMethod);
 
-    public Task<PaymentResult<OnboardingLinkDto>> StartOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default) =>
-        Task.FromResult(PaymentResult<OnboardingLinkDto>.Ok(new OnboardingLinkDto("mock-onboarding:stub", true)));
-
-    public Task<PaymentResult<VenuePaymentStateDto>> CompleteMockOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default) =>
-        Task.FromResult(PaymentResult<VenuePaymentStateDto>.Ok(new VenuePaymentStateDto(true, true, true, true, true, null, true)));
-
-    public Task<PaymentResult<VenuePaymentStateDto>> GetVenuePaymentsAsync(Guid callerId, Guid venueId, CancellationToken ct = default) =>
-        Task.FromResult(PaymentResult<VenuePaymentStateDto>.Ok(new VenuePaymentStateDto(false, false, false, false, false, null, true)));
-
     public Task ChargeAtConfirmationAsync(Guid bookingId, CancellationToken ct = default)
     {
         ChargeKicks.Add(bookingId);

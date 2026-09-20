@@ -24,7 +24,7 @@ import {
   todayIso,
 } from '../../data/store.js';
 import { el, replaceChildren } from '../dom.js';
-import { RESCIND_WARNING } from '../money.js';
+import { rescindWarning, cancellationLine } from '../money.js';
 import {
   DAY_INITIAL,
   STATUS_WORD,
@@ -41,7 +41,7 @@ import {
 } from './model.js';
 import { createRibbon, ribbonSpoken } from './ribbon.js';
 
-const VERIFIED_LABEL = 'Identity verified';
+const VERIFIED_LABEL = 'Signed in';
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 function declineDraft(room, organizer) {
@@ -85,6 +85,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
   let counter = null;
   let sealTimer = 0;
   let working = false;
+  let confirmingNoShow = null;
 
   // The rating being written, held out of the redraw. The two-step confirm
   // rebuilds this column, and a redraw that takes the stars and the words with
@@ -113,11 +114,13 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
    */
   async function move(work, { onRefusal = null } = {}) {
     if (working) return null;
+    const movingApplicationId = application?.id ?? null;
     working = true;
     setBusy(true);
     const answer = await work();
     working = false;
     setBusy(false);
+    if (application?.id !== movingApplicationId) return null;
     if (!answer.ok) {
       if (onRefusal?.(answer)) return null;
       announce?.(answer.problem);
@@ -600,7 +603,10 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
    * column is where a host looks for what this letter asks of them.
    */
   function renderInvitation() {
-    replaceChildren(invitation, UNDECIDED.has(application.status) ? [] : [ratingBlock()].filter(Boolean));
+    replaceChildren(
+      invitation,
+      UNDECIDED.has(application.status) ? [] : [attendanceBlock(), ratingBlock()].filter(Boolean)
+    );
   }
 
   /**
@@ -621,7 +627,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
 
     replaceChildren(drawer, [
       el('h3', { class: 'eyebrow eyebrow--alert', text: 'Cancel this booking' }),
-      el('p', { class: 'prose prose--sm', text: RESCIND_WARNING }),
+      el('p', { class: 'prose prose--sm', text: rescindWarning(booking) }),
       labelled('Why, in your words', reason),
       el('div', { class: 'drawer__foot' }, [
         el(
@@ -634,7 +640,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
               const cancelled = await move(() => wire.cancelBooking(booking.id, reason.value));
               if (!cancelled) return;
               announce?.(
-                'Cancelled. Every remaining date is free again and the group has been refunded in full.'
+                cancellationLine(booking)
               );
               // The letter is the record of a booking that no longer stands:
               // redraw it as that before saying anything else about it.
@@ -708,6 +714,133 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
     const organizer = organizerOf(application);
     return organizer.org ?? organizer.name;
   };
+
+  function attendanceBlock() {
+    const booking = heldBooking();
+    if (!booking) return null;
+    const dates = occurrencesFor(booking.id);
+    if (!dates.length) return null;
+    const venue = venueOf(application.venueId);
+    const venueName = venue?.shortName ?? application.venueName ?? 'the venue';
+    const group = theirName();
+
+    return el('section', { class: 'attendance' }, [
+      el('h2', { class: 'eyebrow', text: 'Booked dates' }),
+      el(
+        'ul',
+        { class: 'attendance__list' },
+        dates.map((occurrence) => {
+          const occurrenceName = `${fmtDate(occurrence.date, true)}, ${fmtTimeRange(
+            occurrence.start,
+            occurrence.end
+          )}`;
+          const markedByOrganizer = occurrence.noShowMarkedBy === booking.organizerId;
+          const noShowLine =
+            occurrence.status === 'noShow'
+              ? !occurrence.noShowMarkedBy
+                ? 'Recorded.'
+                : markedByOrganizer
+                  ? `${group} marked ${venueName} as absent.`
+                  : `${venueName} marked ${group} as absent.`
+              : null;
+          const asked = confirmingNoShow === occurrence.id;
+
+          return el(
+            'li',
+            {
+              class: `attendance__item${occurrence.date < todayIso() ? ' is-past' : ''}`,
+              dataset: { occurrence: occurrence.id, status: occurrence.status },
+            },
+            [
+              el('span', { class: 'attendance__date', text: fmtDate(occurrence.date, true) }),
+              el('span', {
+                class: 'attendance__time',
+                text: fmtTimeRange(occurrence.start, occurrence.end),
+              }),
+              noShowLine
+                ? el('p', {
+                    class: 'attendance__status',
+                    dataset: { result: 'no-show', occurrence: occurrence.id },
+                    role: 'status',
+                    tabindex: '-1',
+                    text: `No-show · ${noShowLine}`,
+                  })
+                : occurrence.status === 'cancelled'
+                  ? el('p', { class: 'attendance__status', text: 'Cancelled' })
+                  : occurrence.status === 'occurred'
+                    ? asked
+                      ? el('div', { class: 'attendance__confirm' }, [
+                          el('p', {
+                            class: 'prose prose--sm',
+                            text: `Mark ${group} as absent for ${occurrenceName}? This is final and becomes part of ${group}'s trust history.`,
+                          }),
+                          el('div', { class: 'attendance__actions' }, [
+                            el(
+                              'button',
+                              {
+                                type: 'button',
+                                class: 'pill pill--primary',
+                                'aria-label': `Confirm no-show for ${group} on ${occurrenceName}`,
+                                dataset: { action: 'no-show-confirm', occurrence: occurrence.id },
+                                onclick: async () => {
+                                  const letterId = application.id;
+                                  const marked = await move(() =>
+                                    wire.markOccurrenceNoShow(occurrence.id)
+                                  );
+                                  if (!marked || application?.id !== letterId) return;
+                                  confirmingNoShow = null;
+                                  show(letterId);
+                                  announce?.(`No-show recorded for ${group} on ${occurrenceName}.`);
+                                  [...invitation.querySelectorAll('[data-result="no-show"]')]
+                                    .find((node) => node.dataset.occurrence === occurrence.id)
+                                    ?.focus();
+                                },
+                              },
+                              'Yes, mark no-show'
+                            ),
+                            el(
+                              'button',
+                              {
+                                type: 'button',
+                                class: 'linkish',
+                                dataset: { action: 'no-show-cancel', occurrence: occurrence.id },
+                                onclick: () => {
+                                  confirmingNoShow = null;
+                                  renderInvitation();
+                                  [...invitation.querySelectorAll('[data-action="no-show-open"]')]
+                                    .find((node) => node.dataset.occurrence === occurrence.id)
+                                    ?.focus();
+                                },
+                              },
+                              'Not now'
+                            ),
+                          ]),
+                        ])
+                      : el(
+                          'button',
+                          {
+                            type: 'button',
+                            class: 'linkish attendance__no-show',
+                            'aria-label': `Report a no-show for ${group} on ${occurrenceName}`,
+                            dataset: { action: 'no-show-open', occurrence: occurrence.id },
+                            onclick: () => {
+                              confirmingNoShow = occurrence.id;
+                              confirmingRate = false;
+                              renderInvitation();
+                              [...invitation.querySelectorAll('[data-action="no-show-confirm"]')]
+                                .find((node) => node.dataset.occurrence === occurrence.id)
+                                ?.focus();
+                            },
+                          },
+                          'Report a no-show'
+                        )
+                    : el('p', { class: 'attendance__status', text: 'Scheduled' }),
+            ]
+          );
+        })
+      ),
+    ]);
+  }
 
   const starGlyphs = (n) => '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n));
 
@@ -906,6 +1039,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
                     return;
                   }
                   confirmingRate = true;
+                  confirmingNoShow = null;
                   renderInvitation();
                   // That redraw drops keyboard focus on the floor, and the step
                   // that just appeared is what was asked for.
@@ -1146,7 +1280,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
           el('h2', { class: 'eyebrow', text: 'Cancelled' }),
           el('p', {
             class: 'prose prose--sm',
-            text: 'This booking was cancelled. Every remaining date is free again and the group has been refunded in full.',
+            text: cancellationLine(booking),
           }),
         ]);
       }
@@ -1204,24 +1338,14 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       stars = 0;
       rateNote.value = '';
       confirmingRate = false;
+      confirmingNoShow = null;
     }
-    // The desk's list read carries no thread — only the detail read does. Asked
-    // once when the letter is opened, never on the redraws a decision causes.
+    // This one read brings both the thread and the booking detail behind it.
     if (refresh) {
       wire.openApplication(applicationId).then((answer) => {
         if (!answer.ok || application?.id !== applicationId) return;
         show(applicationId);
       });
-      // A booked letter is a booking's record, and the dates and their charge
-      // states live on the booking's own detail read alone — the inbox's
-      // hosting pass is a list pass with none of that in it, so a letter opened
-      // from there would otherwise report a booking with no dates left.
-      const bookingId = application.bookingId ?? bookingFor(applicationId)?.id ?? null;
-      if (application.status === APP_STATUS.approved && bookingId) {
-        wire.openBooking(bookingId).then(() => {
-          if (application?.id === applicationId) show(applicationId);
-        });
-      }
     }
     clearTimeout(sealTimer);
     element.classList.remove('is-sealed');
@@ -1284,6 +1408,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
     refreshWeek();
     renderInvitation();
     renderActions();
+    setBusy(working);
     return true;
   }
 

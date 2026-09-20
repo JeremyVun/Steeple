@@ -1786,6 +1786,45 @@
   color: var(--ink-faint);
 }
 
+.held__attendance,
+.held__no-show {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.held__no-show {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.held__no-show-confirm {
+  grid-column: 1 / -1;
+  margin-top: 5px;
+  padding: 11px 13px 12px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--paper-deep) 70%, transparent);
+}
+
+.held__no-show-confirm .prose {
+  margin: 0;
+}
+
+.held__no-show-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 9px;
+}
+
+.held__no-show-actions > button {
+  min-height: 44px;
+}
+
 /* A failed charge is the one thing on this page that has to be acted on, so it
    leaves the sage block's calm and says what happens next, with the fix on it. */
 .held__failed {

@@ -75,18 +75,6 @@ public sealed class PaymentsControllerTests
         public Task<bool> HasPaymentMethodAsync(Guid userId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 
-        public Task<PaymentResult<OnboardingLinkDto>> StartOnboardingAsync(
-            Guid callerId, Guid venueId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<PaymentResult<VenuePaymentStateDto>> CompleteMockOnboardingAsync(
-            Guid callerId, Guid venueId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
-        public Task<PaymentResult<VenuePaymentStateDto>> GetVenuePaymentsAsync(
-            Guid callerId, Guid venueId, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-
         public Task ChargeAtConfirmationAsync(Guid bookingId, CancellationToken ct = default) =>
             throw new NotSupportedException();
 

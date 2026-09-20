@@ -16,6 +16,7 @@
     <!-- FCM push delivery behind IPushGateway (Apache-2.0, $0; SYSTEM_DESIGN §17 decision log). -->
     <PackageReference Include="FirebaseAdmin" Version="3.4.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="Stripe.net" Version="52.4.1" />
   </ItemGroup>
 
   <ItemGroup>

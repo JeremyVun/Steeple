@@ -126,13 +126,14 @@ public sealed class AvailabilityService : IAvailabilityService
         // Confirmed busy time across the whole window, grouped to venue-local date (per-occurrence
         // conversion — DST-safe, occurrences never cross midnight).
         var fromUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(from.ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
-        var toUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(to.AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+        var toUtc = EndOfLocalDateUtc(to, tz);
         var occurrences = await _repository.GetConfirmedOccurrencesAsync(roomId, fromUtc, toUtc, ct).ConfigureAwait(false);
         var busyByDate = BusyByDate(occurrences, tz);
 
         var days = new List<AvailabilityDayDto>(to.DayNumber - from.DayNumber + 1);
-        for (var date = from; date <= to; date = date.AddDays(1))
+        for (var dayNumber = from.DayNumber; dayNumber <= to.DayNumber; dayNumber++)
         {
+            var date = DateOnly.FromDayNumber(dayNumber);
             if (blackoutDates.Contains(date))
             {
                 days.Add(new AvailabilityDayDto(date, IsBlackout: true, FreeWindows: []));
@@ -267,7 +268,7 @@ public sealed class AvailabilityService : IAvailabilityService
         if (roomIds.Count > 0)
         {
             var fromUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(fromDate.ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
-            var toUtc = new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(toDate.AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+            var toUtc = EndOfLocalDateUtc(toDate, tz);
 
             var occ = await _repository.GetCalendarOccurrencesAsync(roomIds, fromUtc, toUtc, ct).ConfigureAwait(false);
             occurrences = occ
@@ -398,8 +399,7 @@ public sealed class AvailabilityService : IAvailabilityService
 
             var fromUtc = new DateTimeOffset(
                 TimeZoneInfo.ConvertTimeToUtc(dates.Min().ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
-            var toUtc = new DateTimeOffset(
-                TimeZoneInfo.ConvertTimeToUtc(dates.Max().AddDays(1).ToDateTime(TimeOnly.MinValue), tz), TimeSpan.Zero);
+            var toUtc = EndOfLocalDateUtc(dates.Max(), tz);
             minFromUtc = minFromUtc is null || fromUtc < minFromUtc ? fromUtc : minFromUtc;
             maxToUtc = maxToUtc is null || toUtc > maxToUtc ? toUtc : maxToUtc;
         }
@@ -793,7 +793,16 @@ public sealed class AvailabilityService : IAvailabilityService
     }
 
     private static bool TryParseWeekday(string? token, out DayOfWeek weekday) =>
-        Enum.TryParse(token, ignoreCase: true, out weekday) && token is { Length: > 0 } && char.IsLetter(token[0]);
+        Enum.TryParse(token, ignoreCase: true, out weekday)
+        && Enum.IsDefined(weekday)
+        && string.Equals(token?.Trim(), weekday.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    // A valid ISO date may be 9999-12-31, whose following midnight is unrepresentable.
+    private static DateTimeOffset EndOfLocalDateUtc(DateOnly date, TimeZoneInfo timezone) =>
+        date == DateOnly.MaxValue
+            ? DateTimeOffset.MaxValue
+            : new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(
+                date.AddDays(1).ToDateTime(TimeOnly.MinValue), timezone), TimeSpan.Zero);
 
     private static bool TryParseTime(string? value, out TimeOnly time) =>
         TimeOnly.TryParseExact(value, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);

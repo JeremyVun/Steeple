@@ -1,0 +1,15 @@
+{
+  "onboardingStarted": true,
+  "detailsSubmitted": true,
+  "chargesEnabled": true,
+  "payoutsEnabled": true,
+  "optedIn": false,
+  "dashboardUrl": null,
+  "mock": false,
+  "status": "ready",
+  "requirementsDue": [],
+  "disabledReason": null,
+  "testMode": true,
+  "canOpenDashboard": true,
+  "onlinePaymentsAvailable": false
+}

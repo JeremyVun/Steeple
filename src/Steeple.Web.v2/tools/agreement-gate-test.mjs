@@ -34,7 +34,9 @@ try {
     await page.waitForFunction('__steeple.state.roll === 1', { timeout: 20000 });
     await page.waitForSelector('.account', { timeout: 30000 });
   };
-  await page.goto(URL, { waitUntil: 'networkidle2' });
+  // External photos and map tiles do not determine whether the consent flow is ready.
+  await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForFunction('window.__steepleReady === true', { timeout: 60000 });
   await boot();
 
   const visible = (sel) =>
@@ -44,15 +46,21 @@ try {
     }, sel);
   const text = (sel) => page.evaluate((s) => document.querySelector(s)?.textContent ?? '', sel);
   const signedIn = () => page.evaluate(() => Boolean(window.__steeple.session.currentUser()));
-  const clickLinkish = (pattern) =>
-    page.evaluate((p) => {
+  const clickLinkish = async (pattern) => {
+    // The agreement links render while the sign-in read is still finishing.
+    // A programmatic click on its disabled button is ignored; wait as a user must.
+    await page.waitForFunction((p) => [...document.querySelectorAll('.signin .linkish, .signin .pill')]
+      .some((n) => !n.disabled && n.checkVisibility() && new RegExp(p, 'i').test(n.textContent)),
+    { timeout: 20000 }, String(pattern));
+    return page.evaluate((p) => {
       const button = [...document.querySelectorAll('.signin .linkish, .signin .pill')].find((n) =>
-        new RegExp(p, 'i').test(n.textContent)
+        !n.disabled && n.checkVisibility() && new RegExp(p, 'i').test(n.textContent)
       );
       if (!button) return false;
       button.click();
       return true;
     }, String(pattern));
+  };
 
   // ── 1. a fresh sign-in through the shelf panel sees the ask, plainly ──────
   console.log('1. the ask, in plain words');

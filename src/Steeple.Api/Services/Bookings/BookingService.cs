@@ -88,14 +88,11 @@ public sealed class BookingService : IBookingService
             spec.Frequency, spec.StartDate, endDate,
             spec.DaysOfWeek, spec.StartTime, spec.EndTime, venueZone);
 
-        // Price snapshot (docs/contracts/payments.md): column writes only — the actual charge is
-        // a post-commit kick by the caller, never a gateway call inside this transaction. Only
-        // written while payments are enabled, so bookings confirmed before the rails switched on
-        // stay offline forever (mode is frozen for the booking's life, payments.md §4).
+        // Freeze both price and collection mode. Enabling payments later must never charge an
+        // offline commitment; editing a room's advertised rate must never change its agreed price.
         var paid = _flags.IsEnabled(PaymentService.PaymentsFlag);
-        var pricePerOccurrence = paid
-            ? decimal.Round(room.PricePerHour * (decimal)(spec.EndTime - spec.StartTime).TotalHours, 2)
-            : (decimal?)null;
+        var pricePerOccurrence = decimal.Round(
+            room.PricePerHour * (decimal)(spec.EndTime - spec.StartTime).TotalHours, 2);
 
         var booking = new Booking
         {
@@ -111,7 +108,8 @@ public sealed class BookingService : IBookingService
             EndTime = spec.EndTime,
             Status = BookingStatus.Confirmed,
             PricePerOccurrence = pricePerOccurrence,
-            Currency = paid ? room.Currency : null,
+            Currency = room.Currency,
+            InAppPayment = paid,
             CreatedAtUtc = now,
         };
 
@@ -155,7 +153,7 @@ public sealed class BookingService : IBookingService
                 viaCounterOffer,
                 // Additive dimensions (payments rails): instant vs approved, and whether money moves.
                 instant,
-                isPaid = pricePerOccurrence is not null,
+                isPaid = paid,
             },
             ct).ConfigureAwait(false);
 
@@ -176,7 +174,7 @@ public sealed class BookingService : IBookingService
                 BookingErrorCodes.InvalidBooking, $"Unknown status '{status}'.");
         }
 
-        (page, pageSize) = ClampPaging(page, pageSize);
+        (page, pageSize) = Paging.Normalize(page, pageSize);
         var (items, total) = await _repository
             .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
@@ -197,14 +195,14 @@ public sealed class BookingService : IBookingService
                 BookingErrorCodes.InvalidBooking, $"Unknown status '{status}'.");
         }
 
+        (page, pageSize) = Paging.Normalize(page, pageSize);
         var venueIds = await _venueManagers.GetManagedVenueIdsAsync(managerId, ct).ConfigureAwait(false);
         if (venueIds.Count == 0)
         {
             // Not a provider (yet): an empty list, not an error — same stance as applications.
-            return BookingResult<BookingListResult>.Ok(new BookingListResult([], 0, 1, pageSize));
+            return BookingResult<BookingListResult>.Ok(new BookingListResult([], 0, page, pageSize));
         }
 
-        (page, pageSize) = ClampPaging(page, pageSize);
         var (items, total) = await _repository
             .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
             .ConfigureAwait(false);
@@ -578,9 +576,6 @@ public sealed class BookingService : IBookingService
 
         return false;
     }
-
-    private static (int Page, int PageSize) ClampPaging(int page, int pageSize) =>
-        (Math.Max(1, page), Math.Clamp(pageSize is 0 ? 24 : pageSize, 1, 100));
 
     // ----- Notification fan-out -----------------------------------------------------------------
 

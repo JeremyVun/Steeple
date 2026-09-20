@@ -2,15 +2,27 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/models/models.dart';
+import '../../core/utils/payment_link_launcher.dart';
 import 'data/manage_repository.dart';
+import 'data/payment_repository.dart';
 
 export 'data/fake/fake_manage_repository.dart';
+export 'data/fake/fake_payment_repository.dart';
 export 'data/manage_repository.dart';
+export 'data/payment_repository.dart';
 
 /// Public surface of the manage feature (MOBILE_CONTRACTS §8; provider
 /// self-service, Phase 5).
 final manageRepositoryProvider = Provider<ManageRepository>(
   (ref) => ApiManageRepository(ref.watch(apiClientProvider)),
+);
+
+final paymentRepositoryProvider = Provider<PaymentRepository>(
+  (ref) => ApiPaymentRepository(ref.watch(apiClientProvider)),
+);
+
+final paymentLinkLauncherProvider = Provider<PaymentLinkLauncher>(
+  (ref) => PaymentLinkLauncher(),
 );
 
 /// The caller's managed venues (empty for non-providers, never an error state

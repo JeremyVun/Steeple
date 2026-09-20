@@ -172,10 +172,16 @@ public class EfBookingRepository : IBookingRepository
         }
 
         var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var offset = ((long)page - 1) * pageSize;
+        if (offset >= total)
+        {
+            return ([], total);
+        }
+
         var items = await query
             .OrderByDescending(b => b.CreatedAtUtc)
             .ThenByDescending(b => b.Id)
-            .Skip((page - 1) * pageSize)
+            .Skip((int)offset)
             .Take(pageSize)
             .ToListAsync(ct)
             .ConfigureAwait(false);

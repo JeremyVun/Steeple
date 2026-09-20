@@ -1,9 +1,11 @@
 # Contracts — persistence: domain model & invariants
 
+SSE additions verified against source on 2026-09-06.
+
 > **Scope:** the shape of the data and the rules the **database itself** enforces — entity
 > graph, invariants, the geofence, and the Liquibase-owns-schema / database-first EF working
 > rule. Wire shapes are in the endpoint seam files; conventions: see `conventions.md`.
-> Verified against `db/changelog/001–021` and `src/Steeple.Persistence/` (2026-08-09).
+> Verified against `db/changelog/001–022` and `src/Steeple.Persistence/` (2026-08-09).
 
 ## Ownership rule (non-negotiable)
 
@@ -74,7 +76,10 @@ users + PaymentCustomerId?, PaymentMethodBrand?, PaymentMethodLast4?, PaymentMet
 bookings + PricePerOccurrence?, Currency? (014 — price snapshot at confirmation; both null =
   legacy/offline booking, nothing ever charges)
 venues 1─0..1 venue_payment_accounts (014: ProviderAccountId unique, DetailsSubmitted,
-  ChargesEnabled, PayoutsEnabled, OptedInAtUtc? — payout onboarding state, mock era)
+  ChargesEnabled, PayoutsEnabled, OptedInAtUtc?; 023 adds ProvisioningKey unique,
+  nullable ProviderAccountId during provisioning, Provider (mock|stripe), RequirementsDue text[], DisabledReason?)
+payment_webhook_events (023: PK Source + ProviderEventId; provider account/object id, type,
+  received/processed timestamps, attempts, safe last error; no raw event payload)
 booking_occurrences 1─* payments (014: Amount, Currency, ApplicationFee, ProviderPaymentId
   unique-when-set, Status int (0 Pending|1 RequiresAction|2 Succeeded|3 Failed|4 Refunded|
   5 Disputed), FailureCode?, RefundedAtUtc?; BookingId denormalized;
@@ -156,3 +161,24 @@ single-metro scale.
 
 > Dev hazard: without production geocoding credentials, `StubGeocodingGateway` resolves
 > **every** address to the beachhead centre.
+
+## Committed inbox signals (022, 2026-09-06)
+
+An AFTER INSERT row trigger on `notifications` calls
+`pg_notify('steeple_notifications', NEW."UserId"::text)`. Signals arrive after commit;
+rollback emits none, and repeated recipients in a transaction may coalesce. No content
+crosses the channel and no EF entity/column changes. Both API and Admin writes are covered;
+read-state updates are not. Liquibase installs it before API rollout; the API checks
+installation before stream admission and never repairs schema.
+
+NOTIFY queue exhaustion can fail the originating commit, including at commit time.
+Listener absence loses signals, not inbox rows; reconnect snapshots repair missed state.
+A dedicated listener must never remain in a long transaction. Queue diagnostics and
+migration/proxy checks: [notification stream runbook](../runbooks/notification-stream.md).
+
+## Booking price and mode (024)
+
+`bookings.InAppPayment` is a non-null boolean (default false). Migration 024 backfills true
+only for bookings that already had a price snapshot. The check constraint requires a price and
+currency for in-app collection. New offline bookings also store a price and currency; old
+unpriced bookings stay unpriced. Price presence is never a charge authorization.

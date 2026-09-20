@@ -54,12 +54,15 @@ public class Booking
 
     /// <summary>
     /// Price snapshot per occurrence, frozen at confirmation (room pricePerHour × schedule
-    /// duration). Null together with <see cref="Currency"/> = legacy/offline booking — nothing charges.
+    /// duration), including offline bookings. Null only for legacy bookings whose price was not saved.
     /// </summary>
     public decimal? PricePerOccurrence { get; set; }
 
-    /// <summary>ISO currency code of the snapshot; null on legacy/offline bookings.</summary>
+    /// <summary>ISO currency code of the snapshot; null when a legacy price is unknown.</summary>
     public string? Currency { get; set; }
+
+    /// <summary>Payment collection mode frozen at confirmation; a price alone never authorizes charging.</summary>
+    public bool InAppPayment { get; set; }
 
     /// <summary>Creation (= approval) timestamp (UTC).</summary>
     public DateTimeOffset CreatedAtUtc { get; set; }

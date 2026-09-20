@@ -15,7 +15,7 @@ Each doc owns one concern; **update the owning doc in the same PR as the change*
 | `docs/SYSTEM_DESIGN.md` | **Target** architecture + decision log (§17); where anything new goes |
 | `docs/ARCHITECTURE.md` | **As-built** state: modules, domain invariants, ports, deployment |
 | `docs/contracts/` | Every wire contract, port, and client seam — **START HERE for any interface question**; `docs/CONTRACTS.md` resolves "CONTRACTS §n" citations + change rules |
-| `docs/backlog/` | What's next (README = index + open decisions). **`reputation-and-launch.md` is next** |
+| `docs/backlog/` | What's next (README = index + open decisions). Current release gates: **`docs/runbooks/mvp-release.md`** |
 | `docs/MOBILE_DESIGN.md` + `docs/MOBILE_CONTRACTS.md` | Anything under `/mobile`; `mobile/README.md` has the run loop |
 | `docs/DESIGN_SYSTEM.md` | Design tokens + component/UX specs — never hardcode values |
 | `docs/runbooks/` | Third-party services in production (Resend, SSO, Turnstile) |

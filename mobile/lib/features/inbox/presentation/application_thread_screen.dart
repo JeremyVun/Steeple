@@ -8,6 +8,7 @@ import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../profile/providers.dart' show ensureCurrentAgreements;
 import '../application/application_thread_providers.dart';
 import 'widgets/counter_offer_card.dart';
 
@@ -24,7 +25,8 @@ class ApplicationThreadScreen extends ConsumerStatefulWidget {
       _ApplicationThreadScreenState();
 }
 
-class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScreen> {
+class _ApplicationThreadScreenState
+    extends ConsumerState<ApplicationThreadScreen> {
   final _messageController = TextEditingController();
   bool _sending = false;
   bool _respondingToCounter = false;
@@ -44,8 +46,9 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
       body: AsyncValueView(
         value: state,
         skeleton: () => const Skeleton(child: _ThreadSkeleton()),
-        onRetry: () =>
-            ref.read(applicationThreadProvider(widget.applicationId).notifier).refresh(),
+        onRetry: () => ref
+            .read(applicationThreadProvider(widget.applicationId).notifier)
+            .refresh(),
         data: _buildThread,
       ),
     );
@@ -53,12 +56,14 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
 
   Widget _buildThread(Application application) {
     final colors = context.steepleColors;
-    final canWithdraw = application.statusValue == ApplicationStatus.pending ||
+    final canWithdraw =
+        application.statusValue == ApplicationStatus.pending ||
         application.statusValue == ApplicationStatus.needsInfo ||
         application.statusValue == ApplicationStatus.counterOffered;
     final bookingId = application.bookingId;
     final counter = application.counterOffer;
-    final counterOpen = application.statusValue == ApplicationStatus.counterOffered &&
+    final counterOpen =
+        application.statusValue == ApplicationStatus.counterOffered &&
         counter != null &&
         counter.isOpen;
 
@@ -90,7 +95,9 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
               const SizedBox(height: SteepleTokens.space6),
               Text(
                 'Messages',
-                style: SteepleTypography.title.copyWith(color: colors.textPrimary),
+                style: SteepleTypography.title.copyWith(
+                  color: colors.textPrimary,
+                ),
               ),
               const SizedBox(height: SteepleTokens.space3),
               for (final message in application.messages) ...[
@@ -105,7 +112,9 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
                 Center(
                   child: TextButton(
                     onPressed: _confirmWithdraw,
-                    style: TextButton.styleFrom(foregroundColor: colors.danger.fg),
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.danger.fg,
+                    ),
                     child: const Text('Withdraw application'),
                   ),
                 ),
@@ -127,7 +136,9 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
                     controller: _messageController,
                     minLines: 1,
                     maxLines: 4,
-                    decoration: const InputDecoration(hintText: 'Write a reply'),
+                    decoration: const InputDecoration(
+                      hintText: 'Write a reply',
+                    ),
                   ),
                 ),
                 const SizedBox(width: SteepleTokens.space2),
@@ -155,13 +166,17 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
     if (body.isEmpty) return;
     setState(() => _sending = true);
     try {
-      await ref.read(applicationThreadProvider(widget.applicationId).notifier).sendMessage(body);
+      await ref
+          .read(applicationThreadProvider(widget.applicationId).notifier)
+          .sendMessage(body);
       _messageController.clear();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Couldn't send your message. Check your connection and try again."),
+            content: Text(
+              "Couldn't send your message. Check your connection and try again.",
+            ),
           ),
         );
       }
@@ -171,7 +186,9 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
   }
 
   Future<void> _confirmAcceptCounter() async {
-    final application = ref.read(applicationThreadProvider(widget.applicationId)).value;
+    final application = ref
+        .read(applicationThreadProvider(widget.applicationId))
+        .value;
     final offer = application?.counterOffer;
     if (offer == null) return;
     final offered = scheduleSummary(offer.schedule);
@@ -199,6 +216,8 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
   Future<void> _declineCounter() => _respondToCounter(accept: false);
 
   Future<void> _respondToCounter({required bool accept}) async {
+    if (accept && !await ensureCurrentAgreements(context, ref)) return;
+    if (!mounted) return;
     setState(() => _respondingToCounter = true);
     try {
       final updated = await ref
@@ -207,10 +226,12 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
       if (!mounted) return;
       final message = accept
           ? updated.statusValue == ApplicationStatus.approved
-              ? "You're booked — see you then."
-              : 'That time was just booked elsewhere, so this went back to the church.'
+                ? "You're booked — see you then."
+                : 'That time was just booked elsewhere, so this went back to the church.'
           : 'Declined — your original request is back with the church.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (!mounted) return;
       final code = e is AppError ? e.code : null;
@@ -254,12 +275,16 @@ class _ApplicationThreadScreenState extends ConsumerState<ApplicationThreadScree
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ref.read(applicationThreadProvider(widget.applicationId).notifier).withdraw();
+      await ref
+          .read(applicationThreadProvider(widget.applicationId).notifier)
+          .withdraw();
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Couldn't withdraw your application. Try again in a moment."),
+            content: Text(
+              "Couldn't withdraw your application. Try again in a moment.",
+            ),
           ),
         );
       }
@@ -283,24 +308,35 @@ class _HeaderCard extends StatelessWidget {
           children: [
             Text(
               application.roomName,
-              style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+              style: SteepleTypography.headlineSerif.copyWith(
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space1),
             Text(
               application.venueName,
-              style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space3),
-            StatusChip(statusRaw: application.status, domain: StatusDomain.application),
+            StatusChip(
+              statusRaw: application.status,
+              domain: StatusDomain.application,
+            ),
             const SizedBox(height: SteepleTokens.space3),
             Text(
               scheduleSummary(application.schedule),
-              style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space1),
             Text(
               'Group of ${application.groupSize} · ${wireTokenLabel(application.activityType)}',
-              style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -344,7 +380,9 @@ class _CounterNote extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.caption.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
           ),
         ],
@@ -374,12 +412,16 @@ class _ApprovedBanner extends StatelessWidget {
           Expanded(
             child: Text(
               'This application was approved.',
-              style: SteepleTypography.bodySm.copyWith(color: colors.success.fg),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.success.fg,
+              ),
             ),
           ),
           TextButton(
-            onPressed: () =>
-                context.goNamed(RouteNames.bookingDetail, pathParameters: {'id': bookingId}),
+            onPressed: () => context.goNamed(
+              RouteNames.bookingDetail,
+              pathParameters: {'id': bookingId},
+            ),
             child: const Text('View booking'),
           ),
         ],
@@ -397,32 +439,43 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.steepleColors;
-    final bubbleColor = fromOrganizer ? colors.selectedBg : colors.surfaceRaised;
+    final bubbleColor = fromOrganizer
+        ? colors.selectedBg
+        : colors.surfaceRaised;
 
     return Row(
-      mainAxisAlignment: fromOrganizer ? MainAxisAlignment.end : MainAxisAlignment.start,
+      mainAxisAlignment: fromOrganizer
+          ? MainAxisAlignment.end
+          : MainAxisAlignment.start,
       children: [
         Flexible(
           child: Column(
-            crossAxisAlignment:
-                fromOrganizer ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: fromOrganizer
+                ? CrossAxisAlignment.end
+                : CrossAxisAlignment.start,
             children: [
               Container(
                 padding: const EdgeInsets.all(SteepleTokens.space3),
                 decoration: BoxDecoration(
                   color: bubbleColor,
                   borderRadius: BorderRadius.circular(SteepleTokens.radiusMd),
-                  border: fromOrganizer ? null : Border.all(color: colors.border),
+                  border: fromOrganizer
+                      ? null
+                      : Border.all(color: colors.border),
                 ),
                 child: Text(
                   message.body,
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textPrimary,
+                  ),
                 ),
               ),
               const SizedBox(height: SteepleTokens.space1),
               Text(
                 relativeStamp(message.sentAtUtc),
-                style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+                style: SteepleTypography.caption.copyWith(
+                  color: colors.textTertiary,
+                ),
               ),
             ],
           ),

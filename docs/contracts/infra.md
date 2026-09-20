@@ -15,7 +15,7 @@
   *(built 2026-07-04 — ROADMAP Phase 4)* returns the **public** flags evaluated for the caller's
   context as `{key: bool}` — clients never talk to the flags service directly, and private/ops
   flags never leave the backend. The public set is an explicit hardcoded allowlist in
-  `PublicFlagsService`: `payments.enabled`, `mobile.apply_enabled`, `mobile.manage_enabled`,
+  `PublicFlagsService`: `payments.enabled`, `payments.onboarding`, `mobile.apply_enabled`, `mobile.manage_enabled`,
   `mobile.force_upgrade`. Web uses `payments.enabled` to omit the account's payment-method
   block, including **Add a card**, when the payments rails are off; a missing flag snapshot
   fails closed.
@@ -30,7 +30,7 @@
 
 Flags read by the API today (as-built, `Flags:` config section): server-side gates
 `listing.availability`, `manage.first_listing_review_required`, `manage.open_hours_required`, `booking.counter_offers`,
-`payments.enabled` plus the three
+`payments.enabled`, `payments.onboarding` plus the three
 public `mobile.*` rows. `manage.first_listing_review_required` defaults **on** as the safe
 operating mode and can be disabled in Compose with `FIRST_LISTING_REVIEW_REQUIRED=false`; the
 other server-side rollout flags default **off** in `appsettings.json`. Development enables all
@@ -100,3 +100,33 @@ it depends on the provider configuration outside this repository.
   it — rather than trusting EF's statement order within a `SaveChanges`.
   Changelog 019 preserves formerly shared content-hash images as URL-only legacy
   rows (`StorageKey = null`), so deleting either row cannot delete bytes another row renders.
+
+## Inbox SSE delivery (2026-09-06)
+
+`GET /api/v1/me/notifications/stream` flushes event-stream bytes with
+`X-Accel-Buffering: no` and `Cache-Control: no-store, no-transform`; keep its responses
+out of compression/buffering transforms. Preserve nginx IP/global request limiting,
+forwarded-prefix behavior and document-relative web URLs. Verify bytes while the response
+remains open at `/` and a stripped prefix; header visibility alone is not evidence.
+Deploy migration 022 before API, then the web bundle. Mobile stays on FCM plus snapshots.
+Local proxy evidence and the separate deployed-Caddy smoke gate live in
+[the stream runbook](../runbooks/notification-stream.md).
+
+## Stripe host setup (2026-09-06)
+
+`payments.onboarding` controls host setup independently from guest payment intake. Compose
+forwards the sandbox secret through `Payments:Connect:SecretKey`; it is never a web build arg.
+Callback URLs use `Payments:Connect:WebBaseUrl`, including any stripped hosting prefix.
+Live keys are rejected in this slice. The signature-verified account webhook remains enabled
+with configured Stripe credentials even when the onboarding UI flag is off. Full variable map,
+Stripe Dashboard requirements, and AU platform limitation: [Stripe runbook](../runbooks/stripe.md).
+
+## Release readiness (2026-09-20)
+
+`GET /health` is process liveness. `GET /health/ready` checks database access and the booking
+schema (including migration 024), with a three-second database deadline. It returns 503 on
+failure without exposing connection details. Local and deployment API health checks use it.
+The API still never migrates. Deploy schema, API and web as a coordinated release; migration
+024 requires its matching API because older code inferred collection mode from price presence.
+The infra migration bundle includes 022–024 and omits only local fixture migrations 002/012/018.
+`python3 tools/check-deploy-migrations.py` verifies SQL and changeset parity without reading env files; historical comment differences and the intentionally omitted 010 seed repricing are preserved.

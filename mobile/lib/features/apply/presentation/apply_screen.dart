@@ -17,6 +17,7 @@ import '../../../core/push/push_service.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
 import '../../listing/providers.dart';
+import '../../profile/providers.dart' show ensureCurrentAgreements;
 import '../providers.dart';
 import 'availability_calendar.dart';
 
@@ -47,7 +48,13 @@ class ApplyScreen extends ConsumerStatefulWidget {
 /// Weekday wire tokens, Sunday-first — the order CONTRACTS §5 requires
 /// `schedule.daysOfWeek` emitted in.
 const _weekdayOrder = [
-  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday', //
 ];
 
 /// Seeds a fresh [ProposedSchedule] from a search's When filter: weekly when
@@ -61,8 +68,10 @@ ProposedSchedule _scheduleFromWhen(WhenFilter when) {
     frequency: recurring ? 'recurringWeekly' : 'oneOff',
     startDate: recurring ? '' : (when.date ?? ''),
     daysOfWeek: recurring
-        ? (when.daysOfWeek.toList()..sort((a, b) =>
-            _weekdayOrder.indexOf(a).compareTo(_weekdayOrder.indexOf(b))))
+        ? (when.daysOfWeek.toList()..sort(
+            (a, b) =>
+                _weekdayOrder.indexOf(a).compareTo(_weekdayOrder.indexOf(b)),
+          ))
         : null,
     startTime: startTime ?? '',
     endTime: endTime ?? '',
@@ -99,7 +108,10 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   }
 
   bool _scheduleCheckable(ProposedSchedule? s) {
-    if (s == null || s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) {
+    if (s == null ||
+        s.startDate.isEmpty ||
+        s.startTime.isEmpty ||
+        s.endTime.isEmpty) {
       return false;
     }
     if (s.frequency == 'recurringWeekly' &&
@@ -125,8 +137,9 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       if (!mounted) return;
       setState(() => _checking = true);
       try {
-        final result =
-            await ref.read(listingRepositoryProvider).checkSchedule(room.roomId, schedule!);
+        final result = await ref
+            .read(listingRepositoryProvider)
+            .checkSchedule(room.roomId, schedule!);
         // Drop a stale verdict if the schedule changed while in flight.
         final current = ref.read(applyDraftProvider(room.roomId)).schedule;
         if (!mounted || current != schedule) return;
@@ -137,7 +150,9 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
         });
       } on AppError {
         if (!mounted) return;
-        setState(() => _checking = false); // advisory only — never blocks on error
+        setState(
+          () => _checking = false,
+        ); // advisory only — never blocks on error
       }
     });
   }
@@ -162,7 +177,10 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   @override
   Widget build(BuildContext context) {
     final detail = ref.watch(
-      listingDetailProvider((venueSlug: widget.venueSlug, roomSlug: widget.roomSlug)),
+      listingDetailProvider((
+        venueSlug: widget.venueSlug,
+        roomSlug: widget.roomSlug,
+      )),
     );
 
     return Scaffold(
@@ -170,7 +188,10 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       body: AsyncValueView<RoomDetail>(
         value: detail,
         onRetry: () => ref.invalidate(
-          listingDetailProvider((venueSlug: widget.venueSlug, roomSlug: widget.roomSlug)),
+          listingDetailProvider((
+            venueSlug: widget.venueSlug,
+            roomSlug: widget.roomSlug,
+          )),
         ),
         data: (room) {
           if (!_tracked) {
@@ -210,15 +231,15 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     }
 
     Widget legend(String text) => Padding(
-          padding: const EdgeInsets.only(
-            top: SteepleTokens.space6,
-            bottom: SteepleTokens.space3,
-          ),
-          child: Text(
-            text.toUpperCase(),
-            style: SteepleTypography.label.copyWith(color: colors.textTertiary),
-          ),
-        );
+      padding: const EdgeInsets.only(
+        top: SteepleTokens.space6,
+        bottom: SteepleTokens.space3,
+      ),
+      child: Text(
+        text.toUpperCase(),
+        style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+      ),
+    );
 
     return Column(
       children: [
@@ -228,12 +249,16 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
             children: [
               Text(
                 'Ask ${room.venue.name}',
-                style: SteepleTypography.displaySerif.copyWith(color: colors.textPrimary),
+                style: SteepleTypography.displaySerif.copyWith(
+                  color: colors.textPrimary,
+                ),
               ),
               const SizedBox(height: SteepleTokens.space1),
               Text(
                 '${room.roomName} · they usually reply within a few days',
-                style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                style: SteepleTypography.bodySm.copyWith(
+                  color: colors.textSecondary,
+                ),
               ),
 
               legend('What will you do here'),
@@ -245,7 +270,8 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                     FilterChipPill(
                       label: wireTokenLabel(token),
                       selected: draft.activityType == token,
-                      onTap: () => notifier.update(draft.copyWith(activityType: token)),
+                      onTap: () =>
+                          notifier.update(draft.copyWith(activityType: token)),
                     ),
                 ],
               ),
@@ -259,8 +285,9 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                   hintText: 'e.g. 15',
                   helperText: 'This space fits up to ${room.capacity}',
                 ),
-                onChanged: (value) =>
-                    notifier.update(draft.copyWith(groupSize: int.tryParse(value) ?? 0)),
+                onChanged: (value) => notifier.update(
+                  draft.copyWith(groupSize: int.tryParse(value) ?? 0),
+                ),
               ),
 
               legend('When'),
@@ -283,13 +310,18 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                     const SizedBox(width: SteepleTokens.space2),
                     Text(
                       'Checking these dates…',
-                      style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+                      style: SteepleTypography.caption.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ] else if (_checkResult != null) ...[
                 const SizedBox(height: SteepleTokens.space3),
-                AvailabilityVerdictCard(result: _checkResult!, hardBlock: _hardBlock),
+                AvailabilityVerdictCard(
+                  result: _checkResult!,
+                  hardBlock: _hardBlock,
+                ),
               ],
 
               legend('Tell them about your group'),
@@ -303,13 +335,16 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                       'Toddler playgroup, about 15 of us, Tuesday mornings. '
                       'We bring our own mats and always leave the room as we found it.',
                 ),
-                onChanged: (value) => notifier.update(draft.copyWith(intentText: value)),
+                onChanged: (value) =>
+                    notifier.update(draft.copyWith(intentText: value)),
               ),
               const SizedBox(height: SteepleTokens.space2),
               Text(
                 'A sentence or two about who you are goes a long way — '
                 'a real person reads this.',
-                style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
+                style: SteepleTypography.caption.copyWith(
+                  color: colors.textTertiary,
+                ),
               ),
               const SizedBox(height: SteepleTokens.space8),
             ],
@@ -330,7 +365,10 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : Text('Send to ${room.venue.name}'),
             ),
@@ -354,7 +392,10 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     final s = draft.schedule;
     if (draft.activityType.isEmpty || draft.groupSize <= 0) return false;
     if (draft.intentText.trim().length < 10) return false;
-    if (s == null || s.startDate.isEmpty || s.startTime.isEmpty || s.endTime.isEmpty) {
+    if (s == null ||
+        s.startDate.isEmpty ||
+        s.startTime.isEmpty ||
+        s.endTime.isEmpty) {
       return false;
     }
     if (s.frequency == 'recurringWeekly' &&
@@ -375,10 +416,13 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       if (result is! SignInSuccess || !mounted) return; // draft survives
     }
 
+    if (!await ensureCurrentAgreements(context, ref) || !mounted) return;
     setState(() => _submitting = true);
     final draft = ref.read(applyDraftProvider(room.roomId));
     try {
-      final application = await ref.read(applicationsRepositoryProvider).submit(
+      final application = await ref
+          .read(applicationsRepositoryProvider)
+          .submit(
             room.roomId,
             draft,
             idempotencyKey: _idempotencyKey,
@@ -410,9 +454,12 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
           'Something in the form needs fixing — check the dates and try again.',
         AppErrorKind.notFound => 'This space is no longer taking requests.',
         AppErrorKind.rateLimited => 'A moment, please — try again shortly.',
-        _ => "Couldn't send your application. Check your connection and try again.",
+        _ =>
+          "Couldn't send your application. Check your connection and try again.",
       };
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     }
   }
 
@@ -424,7 +471,11 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        icon: Icon(Icons.mark_email_read_rounded, color: colors.selectedFg, size: 40),
+        icon: Icon(
+          Icons.mark_email_read_rounded,
+          color: colors.selectedFg,
+          size: 40,
+        ),
         title: Text('Sent to ${room.venue.name}'),
         content: const Text(
           'They usually reply within a few days. '
@@ -480,14 +531,25 @@ class _ScheduleFields extends StatelessWidget {
 
   /// Weekday wire tokens in the Sunday-first order the API expects on the wire.
   static const _days = [
-    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', //
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday', //
   ];
 
   static const _dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   ProposedSchedule get _current =>
       schedule ??
-      const ProposedSchedule(frequency: 'oneOff', startDate: '', startTime: '', endTime: '');
+      const ProposedSchedule(
+        frequency: 'oneOff',
+        startDate: '',
+        startTime: '',
+        endTime: '',
+      );
 
   String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -510,11 +572,14 @@ class _ScheduleFields extends StatelessWidget {
     final s = _current;
     if (recurring) {
       final days = s.daysOfWeek;
-      onChanged(s.copyWith(
-        startDate: date,
-        daysOfWeek:
-            (days == null || days.isEmpty) ? [_days[weekdayOf(date)]] : days,
-      ));
+      onChanged(
+        s.copyWith(
+          startDate: date,
+          daysOfWeek: (days == null || days.isEmpty)
+              ? [_days[weekdayOf(date)]]
+              : days,
+        ),
+      );
     } else {
       onChanged(s.copyWith(startDate: date));
     }
@@ -559,7 +624,9 @@ class _ScheduleFields extends StatelessWidget {
     var hhmm = _fmtTime(picked);
     if (w != null) hhmm = _clamp(hhmm, w.startTime, w.endTime);
     onChanged(
-      isEnd ? _current.copyWith(endTime: hhmm) : _current.copyWith(startTime: hhmm),
+      isEnd
+          ? _current.copyWith(endTime: hhmm)
+          : _current.copyWith(startTime: hhmm),
     );
   }
 
@@ -600,7 +667,8 @@ class _ScheduleFields extends StatelessWidget {
         ? (data.dayFor(s.startDate)?.freeWindows ?? const <OpenWindow>[])
         : const <OpenWindow>[];
 
-    Widget pickerTile(String label, String value, VoidCallback onTap) => Expanded(
+    Widget pickerTile(String label, String value, VoidCallback onTap) =>
+        Expanded(
           child: OutlinedButton(
             onPressed: onTap,
             style: OutlinedButton.styleFrom(
@@ -627,7 +695,8 @@ class _ScheduleFields extends StatelessWidget {
             FilterChipPill(
               label: 'One time',
               selected: !recurring,
-              onTap: () => onChanged(s.copyWith(frequency: 'oneOff', endDate: null)),
+              onTap: () =>
+                  onChanged(s.copyWith(frequency: 'oneOff', endDate: null)),
             ),
             FilterChipPill(
               label: 'Weekly',
@@ -641,20 +710,20 @@ class _ScheduleFields extends StatelessWidget {
         // Calendar (or graceful fallback while loading / on feed error).
         switch (availability) {
           AsyncData(:final value) => AvailabilityCalendar(
-              availability: value,
-              openHours: openHours,
-              selectedDate: s.startDate.isEmpty ? null : s.startDate,
-              onSelectDay: _selectDay,
-            ),
+            availability: value,
+            openHours: openHours,
+            selectedDate: s.startDate.isEmpty ? null : s.startDate,
+            onSelectDay: _selectDay,
+          ),
           AsyncError() => Row(
-              children: [
-                pickerTile(
-                  recurring ? 'First date' : 'Date',
-                  s.startDate,
-                  () => _pickStartDate(context),
-                ),
-              ],
-            ),
+            children: [
+              pickerTile(
+                recurring ? 'First date' : 'Date',
+                s.startDate,
+                () => _pickStartDate(context),
+              ),
+            ],
+          ),
           _ => const SkeletonBlock(height: 300, radius: SteepleTokens.radiusMd),
         },
 
@@ -670,7 +739,9 @@ class _ScheduleFields extends StatelessWidget {
             selectedWindows.isEmpty
                 ? 'No free windows on ${weekdayMonthDay(s.startDate)} — pick another day.'
                 : 'Free on ${weekdayMonthDay(s.startDate)}',
-            style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+            style: SteepleTypography.caption.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
           if (selectedWindows.isNotEmpty) ...[
             const SizedBox(height: SteepleTokens.space2),
@@ -681,7 +752,8 @@ class _ScheduleFields extends StatelessWidget {
                 for (final w in selectedWindows)
                   FilterChipPill(
                     label: timeRange12(w.startTime, w.endTime),
-                    selected: s.startTime == w.startTime && s.endTime == w.endTime,
+                    selected:
+                        s.startTime == w.startTime && s.endTime == w.endTime,
                     onTap: () => onChanged(
                       s.copyWith(startTime: w.startTime, endTime: w.endTime),
                     ),
@@ -718,7 +790,9 @@ class _ScheduleFields extends StatelessWidget {
           const SizedBox(height: SteepleTokens.space3),
           Text(
             'Which days',
-            style: SteepleTypography.caption.copyWith(color: colors.textSecondary),
+            style: SteepleTypography.caption.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
           const SizedBox(height: SteepleTokens.space2),
           Wrap(
@@ -731,7 +805,10 @@ class _ScheduleFields extends StatelessWidget {
                   selected: (s.daysOfWeek ?? const []).contains(_days[i]),
                   onTap: () => onChanged(
                     s.copyWith(
-                      daysOfWeek: _toggleDay(s.daysOfWeek ?? const [], _days[i]),
+                      daysOfWeek: _toggleDay(
+                        s.daysOfWeek ?? const [],
+                        _days[i],
+                      ),
                     ),
                   ),
                 ),
@@ -740,7 +817,9 @@ class _ScheduleFields extends StatelessWidget {
         ],
 
         // Plain-language readout of the chosen slot (DESIGN_SYSTEM §8.11).
-        if (s.startDate.isNotEmpty && s.startTime.isNotEmpty && s.endTime.isNotEmpty) ...[
+        if (s.startDate.isNotEmpty &&
+            s.startTime.isNotEmpty &&
+            s.endTime.isNotEmpty) ...[
           const SizedBox(height: SteepleTokens.space3),
           Text(
             scheduleSummary(s),

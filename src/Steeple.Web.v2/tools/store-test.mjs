@@ -461,7 +461,7 @@ const booking = store.mirrorBooking({
   nextOccurrence: null,
   occurrences: [
     { id: 'o1', startUtc: '2026-08-10T22:00:00Z', endUtc: '2026-08-11T00:00:00Z', localDate: monday, status: 'scheduled', noShowMarkedBy: null, paymentStatus: 'succeeded' },
-    { id: 'o2', startUtc: '2026-08-17T22:00:00Z', endUtc: '2026-08-18T00:00:00Z', localDate: addDays(monday, 7), status: 'scheduled', noShowMarkedBy: null },
+    { id: 'o2', startUtc: '2026-08-17T22:00:00Z', endUtc: '2026-08-18T00:00:00Z', localDate: addDays(monday, 7), status: 'noShow', noShowMarkedBy: NADIA.id },
   ],
   ratings: null,
   payment: { mode: 'inApp', perOccurrenceAmount: 40, currency: 'USD', nextChargeAtUtc: '2026-08-15T22:00:00Z' },
@@ -470,6 +470,9 @@ expect('booking: it is the application’s', store.bookingFor(APPLICATION_ID)?.i
 expect('booking: occurrences are held', store.occurrencesFor(booking.id).length, 2);
 expect('booking: dated venue-locally', store.occurrencesFor(booking.id)[0].date, monday);
 expect('booking: with the schedule’s hours', store.occurrencesFor(booking.id)[0].start, '18:00');
+expect('booking: an unmarked occurrence has no marker', store.occurrencesFor(booking.id)[0].noShowMarkedBy, null);
+expect('booking: the server’s no-show status survives mirroring', store.occurrencesFor(booking.id)[1].status, 'noShow');
+expect('booking: the marker’s identity survives mirroring', store.occurrencesFor(booking.id)[1].noShowMarkedBy, NADIA.id);
 expect(
   'booking: a charge status passes through untouched',
   store.occurrencesFor(booking.id)[0].paymentStatus,

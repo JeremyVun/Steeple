@@ -11,6 +11,23 @@ public class BookingServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 7, 4, 12, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(7, 0, 7, 24)]
+    [InlineData(-1, -1, 1, 1)]
+    [InlineData(2, int.MaxValue, 2, 100)]
+    public async Task GetForManagerAsync_NoVenues_NormalizesPaging(int page, int size, int expectedPage, int expectedSize)
+    {
+        var (repo, managers, _, _, _, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _);
+
+        var result = await service.GetForManagerAsync(Guid.NewGuid(), null, page, size);
+
+        Assert.Null(result.Error);
+        Assert.Empty(result.Value!.Items);
+        Assert.Equal(expectedPage, result.Value.Page);
+        Assert.Equal(expectedSize, result.Value.PageSize);
+    }
+
     // ----- Cancel ------------------------------------------------------------------------------
 
     [Fact]
@@ -387,7 +404,7 @@ public class BookingServiceTests
     }
 
     [Fact]
-    public async Task ConfirmFromApplicationAsync_PaymentsDisabled_NoSnapshot_BookingIsOffline()
+    public async Task ConfirmFromApplicationAsync_PaymentsDisabled_SnapshotIsFrozen_BookingIsOffline()
     {
         var (repo, managers, _, room, organizer, _) = NewScenario();
         room.PricePerHour = 40m;
@@ -397,7 +414,12 @@ public class BookingServiceTests
         var confirmation = await service.ConfirmFromApplicationAsync(application);
 
         Assert.False(confirmation.SlotTaken);
-        Assert.Null(Assert.Single(repo.Bookings).PricePerOccurrence);
+        var booking = Assert.Single(repo.Bookings);
+        room.PricePerHour = 999m;
+        Assert.Equal(100m, booking.PricePerOccurrence);
+        Assert.False(booking.InAppPayment);
+        Assert.Equal(100m, confirmation.Booking!.Payment!.PerOccurrenceAmount);
+        Assert.Null(confirmation.Booking.Payment.NextChargeAtUtc);
         Assert.Equal("offline", confirmation.Booking!.Payment!.Mode);
     }
 

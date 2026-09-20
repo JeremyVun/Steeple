@@ -51,10 +51,11 @@ accepted — everything else, plus batches over 50 events, names over 64 chars, 
 | `payment_succeeded` ✅ / `payment_failed` ✅ | server | bookingId, occurrenceId, amount, currency / bookingId, occurrenceId, failureCode |
 | `refund_issued` ✅ | server | bookingId, occurrenceId, amount, currency |
 | `payout_onboarding_started` ✅ / `payout_onboarding_completed` ✅ | server | venueId |
+| `payout_preference_changed` ✅ | server | venueId, optedIn |
 | `inbox_opened` ✅ *(2026-08-07)* | client | surface (`guest` \| `host`) |
 | `decision_pressed` ✅ *(2026-08-07)* | client | decision (`approve`\|`decline`\|`ask`\|`counter`\|`message`\|`withdraw`\|`counterAccept`\|`counterDecline`), surface |
 | `card_step_opened` ✅ *(2026-08-07)* | client | reason (`apply` \| `account` \| `failure`) |
-| `payout_step_opened` ✅ *(2026-08-07)* | client | state (`prompt` \| `onboarding` \| `connected`) |
+| `payout_step_opened` ✅ *(2026-08-07)* | client | state (`prompt` \| `onboarding` \| `connected`), optional surface/returnAction |
 | `arrival_settled` ✅ *(2026-08-07)* | client | destination (`village` \| `desk`), entry (`cinematic` \| `direct`) — one per press the boot actually answered (`src/core/intent.js`, production migration P3.5) |
 | `address_suggestion_picked` 🔲 | client | — (the UI calls `track`, but the current web batcher and API allowlist both drop this name) |
 

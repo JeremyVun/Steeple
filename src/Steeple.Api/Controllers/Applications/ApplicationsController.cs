@@ -22,6 +22,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Submits an application for a room. Replays with the same Idempotency-Key return the original.</summary>
     [HttpPost("listings/{roomId:guid}/applications")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> Submit(
         Guid roomId, [FromBody] SubmitApplicationRequest request, CancellationToken ct)
@@ -79,6 +80,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Approves or declines (venue managers only).</summary>
     [HttpPost("applications/{id:guid}/decision")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> Decide(
         Guid id, [FromBody] ApplicationDecisionRequest request, CancellationToken ct)
@@ -98,6 +100,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Proposes a counter-offer schedule (venue managers only; behind <c>booking.counter_offers</c>).</summary>
     [HttpPost("applications/{id:guid}/counter-offer")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> CounterOffer(
         Guid id, [FromBody] CounterOfferRequest request, CancellationToken ct)
@@ -108,6 +111,7 @@ public sealed class ApplicationsController : ControllerBase
 
     /// <summary>Accepts or declines the open counter-offer (organizer only; behind <c>booking.counter_offers</c>).</summary>
     [HttpPost("applications/{id:guid}/counter-offer/respond")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Apply)]
     public async Task<ActionResult<ApplicationDto>> RespondToCounterOffer(
         Guid id, [FromBody] CounterOfferResponseRequest request, CancellationToken ct)

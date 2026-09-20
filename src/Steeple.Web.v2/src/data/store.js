@@ -619,6 +619,7 @@ export function mirrorBooking(dto) {
         start: schedule.startTime,
         end: schedule.endTime,
         status: occurrence.status,
+        noShowMarkedBy: occurrence.noShowMarkedBy ?? null,
         paymentStatus: occurrence.paymentStatus ?? null,
       });
     }

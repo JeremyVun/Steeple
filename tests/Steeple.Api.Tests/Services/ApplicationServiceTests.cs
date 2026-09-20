@@ -11,6 +11,23 @@ public class ApplicationServiceTests
 {
     private static readonly DateTimeOffset FixedNow = new(2026, 7, 4, 12, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(7, 0, 7, 24)]
+    [InlineData(-1, -1, 1, 1)]
+    [InlineData(2, int.MaxValue, 2, 100)]
+    public async Task GetForManagerAsync_NoVenues_NormalizesPaging(int page, int size, int expectedPage, int expectedSize)
+    {
+        var (repo, managers, _, _, _, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.GetForManagerAsync(Guid.NewGuid(), null, page, size);
+
+        Assert.Null(result.Error);
+        Assert.Empty(result.Value!.Items);
+        Assert.Equal(expectedPage, result.Value.Page);
+        Assert.Equal(expectedSize, result.Value.PageSize);
+    }
+
     // ----- Submit ---------------------------------------------------------------------------
 
     [Fact]

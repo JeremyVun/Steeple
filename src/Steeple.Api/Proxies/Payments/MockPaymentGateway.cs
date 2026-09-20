@@ -9,10 +9,13 @@ namespace Steeple.Api.Proxies.Payments;
 /// 4000…0002, so the convention survives the Stripe swap). Setup never fails — dead cards die
 /// between apply and week 12, which is exactly the ladder the sweeper exists for.
 /// </summary>
-public sealed class MockPaymentGateway : IPaymentGateway
+public sealed class MockPaymentGateway : IPaymentGateway, IConnectOnboardingGateway
 {
     /// <summary>The last4 that makes every charge decline (the mock's magic failing token).</summary>
     public const string DecliningLast4 = "0002";
+
+    public bool IsMock => true;
+    public string Provider => "mock";
 
     /// <inheritdoc />
     public Task<string> EnsureCustomerAsync(Guid userId, string? email, string? existingCustomerId, CancellationToken ct = default) =>
@@ -44,4 +47,23 @@ public sealed class MockPaymentGateway : IPaymentGateway
     /// <inheritdoc />
     public Task<string> CreateAccountLinkAsync(string providerAccountId, CancellationToken ct = default) =>
         Task.FromResult($"mock-onboarding:{providerAccountId}");
+
+    public Task<ProviderAccountSnapshot> FindOrCreateAccountAsync(
+        Guid venueId, Guid provisioningKey, CancellationToken ct = default) =>
+        Task.FromResult(new ProviderAccountSnapshot(
+            $"acct_mock_{provisioningKey:N}", false, false, false, [], null));
+
+    public Task<ProviderAccountSnapshot> RetrieveAccountAsync(
+        string providerAccountId, CancellationToken ct = default) =>
+        Task.FromResult(new ProviderAccountSnapshot(providerAccountId, false, false, false, [], null));
+
+    public Task<string> CreateAccountLinkAsync(
+        string providerAccountId, string returnUrl, string refreshUrl, CancellationToken ct = default) =>
+        Task.FromResult($"mock-onboarding:{providerAccountId}");
+
+    public Task<string> CreateDashboardLinkAsync(string providerAccountId, CancellationToken ct = default) =>
+        throw new ConnectProviderException("The mock provider has no dashboard.");
+
+    public VerifiedConnectEvent VerifyWebhook(string payload, string signature, string secret) =>
+        throw new ConnectProviderException("The mock provider has no webhook endpoint.");
 }

@@ -113,12 +113,30 @@ module boot and sign-out.
 either a bearer token or the refresh cookie, expires that cookie, and answers `401` only when
 neither credential is present.
 ### `POST /api/v1/me/agreements` ✅ — `{docType: "tos"|"privacy", version}` acceptance record;
-`version` is required and at most 50 characters. Idempotent per (user, doc, version); only a
-duplicate on that exact unique key is suppressed. `400 unknown_doc_type` or automatic validation
-`400` for an invalid version; other persistence failures surface.
+Only the current versions in `CurrentAgreements` are accepted (both **2026-09-20**).
+Unknown types, old versions and invented future versions return `400 invalid_agreement`.
+Acceptance remains explicit and idempotent per (user, document, version).
+
+Booking submission, approval, counter-offer creation/acceptance, venue/room creation and room
+updates require both current acceptances at the HTTP boundary. Missing acceptance returns
+`403 agreements_required` with `requiredAgreements: [{docType, version}]`. Reads, agreement
+acceptance, declines, withdrawal, unlisting, cancellation and account deletion remain available.
+Web holds the agreement prompt open when the acceptance read fails. Mobile checks before
+submitting and offers review from Profile, with working hosted legal links. SSO establishes
+account access; it does not prove a person's identity or authority over a venue.
+
 ### `POST /api/v1/me/devices` ✅ *(built 2026-07-04 — Phase 4)* — `{fcmToken, platform}` push registration (upsert by `fcmToken`; re-registering under a different account moves it); `DELETE /api/v1/me/devices/{token}` on logout, deletes only if owned by the caller (204 either way). `400 invalid_device` (platform not `ios`/`android`/`web`, or `fcmToken` empty/over 512 chars). Account deletion removes the caller's device rows.
 
 > Deviation note: `Idempotency-Key` (`conventions.md` §2) is not yet honored on
 > `auth/sessions` — a replayed sign-in just issues another session, which is harmless. It is
 > real on `applications` and on the two manage creates (`manage.md`), where replays would
 > create duplicate rows.
+
+### Notification stream authorization (2026-09-06)
+
+`GET /me/notifications/stream` uses the ordinary bearer middleware and caller `sub`.
+It additionally requires a valid strictly future `exp` and closes at that instant,
+even when middleware clock skew would admit an expired token. Five minutes is the
+maximum response lifetime. Reconnect uses the existing one-refresh `withAccess` seam;
+stream bodies are consumed after its callback returns, and cancelled when identity changes.
+The refresh cookie alone never authorizes this endpoint.

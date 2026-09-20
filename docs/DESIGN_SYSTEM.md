@@ -534,6 +534,19 @@ surfaces cannot share class names: guest-side is `.rate__*` (guest.css), host-si
 `.ratemark__*` (host.css). Shared primitives (`.chip`, `.pill`, `.prose`, `.eyebrow`) are
 borrowed, never redefined.
 
+**8.14.10 Public reviews.** Room sheets place a ruled `section.block` below house rules.
+Each review uses the fact stars (§8.14.3), reviewer name, a date and the comment in small
+prose. The section is absent when no comments are returned. “More reviews” is an explicit
+button, with loading feedback and retry that preserves existing rows. Comment counts are
+separate from the headline's rating count. Pagination preserves the sheet's scroll position
+and hands focus to the newly loaded content when its button is removed.
+
+**8.14.11 No-show marking.** A past occurrence's attendance action is a quiet text button.
+Its second step names the other party and date/time, explains finality and trust history,
+and offers a primary confirmation plus “Not now”. It borrows the letters' existing ruled
+sections and confirmation treatment, without alert colouring. Cancelling restores focus;
+success replaces the action with a readable fact identifying which side recorded the mark.
+
 ## 9. Accessibility contract (hard rules, all surfaces)
 
 1. WCAG 2.2 AA minimum; text pairs only from §2.4 or newly validated.

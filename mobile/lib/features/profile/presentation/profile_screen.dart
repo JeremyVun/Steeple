@@ -6,6 +6,7 @@ import '../../../app/theme/theme.dart';
 import '../../../core/auth/session_manager.dart';
 import '../../../core/auth/session_state.dart';
 import '../../../core/flags/flags_service.dart';
+import '../../../core/models/legal_documents.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/widgets/widgets.dart';
@@ -28,29 +29,33 @@ class ProfileScreen extends ConsumerWidget {
       body: switch (session) {
         SignedIn() => const _SignedInView(),
         _ => ListView(
-            padding: const EdgeInsets.all(SteepleTokens.gutter),
-            children: [
-              const SizedBox(height: SteepleTokens.space8),
-              Text(
-                'Your corner of Steeple',
-                textAlign: TextAlign.center,
-                style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+          padding: const EdgeInsets.all(SteepleTokens.gutter),
+          children: [
+            const SizedBox(height: SteepleTokens.space8),
+            Text(
+              'Your corner of Steeple',
+              textAlign: TextAlign.center,
+              style: SteepleTypography.headlineSerif.copyWith(
+                color: colors.textPrimary,
               ),
-              const SizedBox(height: SteepleTokens.space2),
-              Text(
-                'Sign in to see your applications, bookings, and messages from churches.',
-                textAlign: TextAlign.center,
-                style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: SteepleTokens.space2),
+            Text(
+              'Sign in to see your applications, bookings, and messages from churches.',
+              textAlign: TextAlign.center,
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
               ),
-              const SizedBox(height: SteepleTokens.space6),
-              FilledButton(
-                onPressed: () => showSsoSheet(context, trigger: 'profile'),
-                child: const Text('Sign in'),
-              ),
-              const SizedBox(height: SteepleTokens.space10),
-              const _LegalLinks(),
-            ],
-          ),
+            ),
+            const SizedBox(height: SteepleTokens.space6),
+            FilledButton(
+              onPressed: () => showSsoSheet(context, trigger: 'profile'),
+              child: const Text('Sign in'),
+            ),
+            const SizedBox(height: SteepleTokens.space10),
+            const _LegalLinks(),
+          ],
+        ),
       },
     );
   }
@@ -72,12 +77,16 @@ class _SignedInView extends ConsumerWidget {
         children: [
           Text(
             profile.displayName,
-            style: SteepleTypography.displaySerif.copyWith(color: colors.textPrimary),
+            style: SteepleTypography.displaySerif.copyWith(
+              color: colors.textPrimary,
+            ),
           ),
           if (profile.email != null)
             Text(
               profile.email!,
-              style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
           const SizedBox(height: SteepleTokens.space3),
           Row(
@@ -86,7 +95,9 @@ class _SignedInView extends ConsumerWidget {
               const SizedBox(width: SteepleTokens.space1),
               Text(
                 'Identity verified (SSO)',
-                style: SteepleTypography.caption.copyWith(color: colors.selectedFg),
+                style: SteepleTypography.caption.copyWith(
+                  color: colors.selectedFg,
+                ),
               ),
             ],
           ),
@@ -94,17 +105,23 @@ class _SignedInView extends ConsumerWidget {
           if (profile.agreements.isNotEmpty) ...[
             Text(
               'AGREEMENTS',
-              style: SteepleTypography.label.copyWith(color: colors.textTertiary),
+              style: SteepleTypography.label.copyWith(
+                color: colors.textTertiary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space2),
             for (final agreement in profile.agreements)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: SteepleTokens.space1),
+                padding: const EdgeInsets.symmetric(
+                  vertical: SteepleTokens.space1,
+                ),
                 child: Text(
                   '${agreement.docType == 'tos' ? 'Terms of service' : 'Privacy policy'} '
                   '${agreement.version} — accepted '
                   '${agreement.acceptedAtUtc.year}-${agreement.acceptedAtUtc.month.toString().padLeft(2, '0')}-${agreement.acceptedAtUtc.day.toString().padLeft(2, '0')}',
-                  style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+                  style: SteepleTypography.bodySm.copyWith(
+                    color: colors.textSecondary,
+                  ),
                 ),
               ),
             const SizedBox(height: SteepleTokens.space6),
@@ -187,10 +204,14 @@ class _ManageEntryPoint extends ConsumerWidget {
           const SizedBox(height: SteepleTokens.space2),
           for (final venue in list)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: SteepleTokens.space1),
+              padding: const EdgeInsets.symmetric(
+                vertical: SteepleTokens.space1,
+              ),
               child: Text(
                 venue.name,
-                style: SteepleTypography.bodySm.copyWith(color: colors.textPrimary),
+                style: SteepleTypography.bodySm.copyWith(
+                  color: colors.textPrimary,
+                ),
               ),
             ),
           const SizedBox(height: SteepleTokens.space2),
@@ -204,11 +225,11 @@ class _ManageEntryPoint extends ConsumerWidget {
   }
 }
 
-class _LegalLinks extends StatelessWidget {
+class _LegalLinks extends ConsumerWidget {
   const _LegalLinks();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.steepleColors;
     return Column(
       children: [
@@ -218,13 +239,27 @@ class _LegalLinks extends StatelessWidget {
           style: SteepleTypography.caption.copyWith(color: colors.textTertiary),
         ),
         const SizedBox(height: SteepleTokens.space2),
-        // TODO(release): link to the hosted terms/privacy pages once the
-        // canonical web host is configured for this build.
-        Text(
-          'Terms of service · Privacy policy',
-          textAlign: TextAlign.center,
-          style: SteepleTypography.caption.copyWith(color: colors.link),
-        ),
+        for (final doc in legalDocuments)
+          TextButton(
+            onPressed: () => openLegalDocument(context, ref, doc.path),
+            child: Text(doc.label),
+          ),
+        if (ref.watch(sessionProvider) is SignedIn)
+          TextButton(
+            onPressed: () async {
+              final accepted = await ensureCurrentAgreements(context, ref);
+              if (accepted && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Your current terms and privacy acceptance is saved.',
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Review agreement status'),
+          ),
       ],
     );
   }

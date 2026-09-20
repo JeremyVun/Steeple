@@ -81,6 +81,7 @@ final fakeRepositoryOverrides = <Override>[
   bookingsRepositoryProvider.overrideWith((ref) => FakeBookingsRepository()),
   profileRepositoryProvider.overrideWith((ref) => FakeProfileRepository()),
   manageRepositoryProvider.overrideWith((ref) => FakeManageRepository()),
+  paymentRepositoryProvider.overrideWith((ref) => FakePaymentRepository()),
 ];
 
 Future<void> _deferredInit(

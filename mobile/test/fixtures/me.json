@@ -6,12 +6,12 @@
   "agreements": [
     {
       "docType": "tos",
-      "version": "2026-05-01",
+      "version": "2026-09-20",
       "acceptedAtUtc": "2026-06-15T14:32:05Z"
     },
     {
       "docType": "privacy",
-      "version": "2026-05-01",
+      "version": "2026-09-20",
       "acceptedAtUtc": "2026-06-15T14:32:05Z"
     }
   ]

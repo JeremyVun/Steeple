@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/theme.dart';
+import '../../../core/flags/flags_service.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/widgets/widgets.dart';
@@ -233,6 +234,10 @@ class _VenueSection extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: SteepleTokens.space3),
+          if (ref.watch(flagsProvider).isEnabled(FlagKeys.paymentsOnboarding)) ...[
+            _PaymentsRow(venueId: venue.id),
+            const SizedBox(height: SteepleTokens.space3),
+          ],
           AsyncValueView(
             value: state,
             skeleton: () =>
@@ -257,6 +262,34 @@ class _VenueSection extends ConsumerWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PaymentsRow extends StatelessWidget {
+  const _PaymentsRow({required this.venueId});
+
+  final String venueId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.steepleColors;
+    return Semantics(
+      button: true,
+      label: 'Manage payments',
+      child: Card(
+        child: ListTile(
+          leading: const Icon(Icons.account_balance_rounded),
+          title: const Text('Payments'),
+          subtitle: const Text('Set up Stripe and choose your preference'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          iconColor: colors.link,
+          onTap: () => context.pushNamed(
+            RouteNames.managePayments,
+            pathParameters: {'id': venueId},
+          ),
+        ),
       ),
     );
   }

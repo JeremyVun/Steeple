@@ -31,7 +31,7 @@ import {
 } from '../../data/providers.js';
 import * as session from '../../data/session.js';
 import * as turnstile from '../../data/turnstile.js';
-import { VERIFIED_LABEL } from '../copy.js';
+import { SIGNED_IN_LABEL as VERIFIED_LABEL } from '../copy.js';
 import { el, replaceChildren } from '../dom.js';
 
 const MONTHS = [

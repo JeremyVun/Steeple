@@ -278,8 +278,10 @@ public sealed class IdentityService : IIdentityService
     {
         var version = request.Version?.Trim();
         if (!Enum.TryParse<AgreementDocType>(request.DocType, ignoreCase: true, out var docType)
+            || !Enum.IsDefined(docType)
+            || !string.Equals(request.DocType?.Trim(), docType.ToString(), StringComparison.OrdinalIgnoreCase)
             || string.IsNullOrWhiteSpace(version)
-            || version.Length > 50)
+            || !CurrentAgreements.IsCurrent(docType, version))
         {
             return false;
         }

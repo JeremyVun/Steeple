@@ -61,6 +61,16 @@ public class SingleGateModerationIntegrationTests
     {
         var host = await NewHostAsync();
         var (venueId, firstRoomId) = await CreateVenueWithPublishRequestAsync(host.Id, "Trinity Fellowship Hall", "Fellowship Hall");
+        await using var socket = await NotificationStreamHttpTests.SocketHost.Start(
+            _fixture.ConnectionString,
+            listen: true);
+        using var streamResponse = await socket.Get("stream", socket.Token(userId: host.Id));
+        Assert.Equal(System.Net.HttpStatusCode.OK, streamResponse.StatusCode);
+        using var streamReader = new StreamReader(await streamResponse.Content.ReadAsStreamAsync());
+        using var streamTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        Assert.Equal(
+            "event: invalidate\ndata: {}\n\n",
+            await NotificationStreamHttpTests.Frame(streamReader, streamTimeout.Token));
 
         // 1. The first listing does not publish itself — it waits in the queue.
         await using (var db = CreateContext())
@@ -77,6 +87,9 @@ public class SingleGateModerationIntegrationTests
 
         // 2. One decision: publish + verify + notify.
         Assert.Null(workspace.DecidePublishRequest(firstRoomId, approve: true, "Lovely space — welcome.", "operator@steeple"));
+        Assert.Equal(
+            "event: invalidate\ndata: {}\n\n",
+            await NotificationStreamHttpTests.Frame(streamReader, streamTimeout.Token));
 
         await using (var db = CreateContext())
         {

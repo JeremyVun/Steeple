@@ -12,6 +12,25 @@ public class ScheduleMaterializerTests
     private static readonly TimeZoneInfo NewYork = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
 
     [Fact]
+    public void Weekly_MaximumEndDate_DoesNotOverflow()
+    {
+        var date = DateOnly.MaxValue;
+        var instants = ScheduleMaterializer.Materialize(
+            ScheduleFrequency.RecurringWeekly, date, date, ScheduleMaterializer.WeekdayBit(date),
+            new TimeOnly(9, 0), new TimeOnly(10, 0), NewYork);
+
+        Assert.Equal(date, Assert.Single(instants).LocalDate);
+    }
+
+    [Fact]
+    public void WeekdaysOccurBetween_NoMatchOnMaximumDate_ReturnsFalse()
+    {
+        var date = DateOnly.MaxValue;
+        var otherDay = ScheduleMaterializer.WeekdayBit(date.AddDays(-1));
+        Assert.False(ScheduleMaterializer.WeekdaysOccurBetween(otherDay, date, date));
+    }
+
+    [Fact]
     public void OneOff_YieldsSingleOccurrence_AtVenueLocalTime()
     {
         var instants = ScheduleMaterializer.Materialize(

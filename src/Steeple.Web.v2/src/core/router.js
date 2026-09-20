@@ -108,6 +108,36 @@ export function basePath() {
   return base ?? freezeBase();
 }
 
+const PAYMENT_RETURN = new Set(['return', 'refresh']);
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Stripe's return marker, accepted only on the desk and only in its exact wire shape. */
+export function readPaymentReturn(href = currentHref()) {
+  let url;
+  try {
+    url = new URL(href, originOf());
+  } catch {
+    return null;
+  }
+  if (url.origin !== originOf()) return null;
+  const segments = segmentsOf(url.pathname);
+  if (!segments || place(segments)?.view !== 'desk') return null;
+  const venueId = url.searchParams.get('paymentVenue');
+  const action = url.searchParams.get('paymentReturn');
+  return GUID.test(venueId ?? '') && PAYMENT_RETURN.has(action) ? { venueId, action } : null;
+}
+
+/** Remove Stripe's one-use marker while preserving the deployment prefix and other query flags. */
+export function clearPaymentReturn() {
+  const location = loc();
+  const history = globalThis.history;
+  if (!location || !history) return;
+  const url = new URL(location.href);
+  url.searchParams.delete('paymentVenue');
+  url.searchParams.delete('paymentReturn');
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
 /**
  * Test-only: put the module back to its pre-boot state so a suite can drive the
  * root deployment and a stripped-prefix one in the same process.

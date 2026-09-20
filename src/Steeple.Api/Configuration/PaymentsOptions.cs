@@ -19,6 +19,9 @@ public sealed class PaymentsOptions
     /// <summary>The client-side key for the payment form (mock placeholder until Stripe).</summary>
     public string PublishableKey { get; set; } = "pk_mock_steeple";
 
+    /// <summary>Connected-account onboarding configuration.</summary>
+    public ConnectOptions Connect { get; set; } = new();
+
     /// <summary>How often the <see cref="Services.Payments.PaymentSweeper"/> wakes (payments.md §5).</summary>
     public double SweepIntervalSeconds { get; set; } = 300;
 
@@ -30,4 +33,16 @@ public sealed class PaymentsOptions
 
     /// <summary>Still unpaid this many hours before start → the occurrence auto-cancels.</summary>
     public double CancelDeadlineHours { get; set; } = 24;
+}
+
+public sealed class ConnectOptions
+{
+    public const string DisabledMode = "disabled";
+    public const string StripeMode = "stripe";
+
+    public string Mode { get; set; } = DisabledMode;
+    public string SecretKey { get; set; } = "";
+    public string WebBaseUrl { get; set; } = "";
+    public string WebhookSecret { get; set; } = "";
+    public bool TestMode { get; set; } = true;
 }

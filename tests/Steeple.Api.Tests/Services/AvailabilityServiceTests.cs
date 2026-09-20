@@ -151,11 +151,14 @@ public class AvailabilityServiceTests
         await AssertInvalid(Days(new DayOpenHoursDto("funday", [new OpenWindowDto("09:00", "10:00")])));
     }
 
-    [Fact]
-    public async Task SaveRulesAsync_NumericWeekdayToken_ReturnsInvalidAvailability()
+    [Theory]
+    [InlineData("0")]
+    [InlineData("monday, tuesday")]
+    [InlineData("friday, saturday")]
+    public async Task SaveRulesAsync_InvalidWeekdayToken_ReturnsInvalidAvailability(string token)
     {
         // "0" would parse as Sunday via Enum numeric parsing — must be rejected as a token.
-        await AssertInvalid(Days(new DayOpenHoursDto("0", [new OpenWindowDto("09:00", "10:00")])));
+        await AssertInvalid(Days(new DayOpenHoursDto(token, [new OpenWindowDto("09:00", "10:00")])));
     }
 
     [Fact]
@@ -277,6 +280,17 @@ public class AvailabilityServiceTests
     }
 
     // ----- Public availability feed ------------------------------------------------------------
+
+    [Fact]
+    public async Task GetPublicAvailabilityAsync_MaximumDate_DoesNotOverflow()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        var result = await CreateService(repo, managers, out _).GetPublicAvailabilityAsync(
+            room.Id, DateOnly.MaxValue, DateOnly.MaxValue);
+
+        Assert.Null(result.ErrorCode);
+        Assert.Equal(DateOnly.MaxValue, Assert.Single(result.Value!.Days).Date);
+    }
 
     [Theory]
     [InlineData(-1, 5)]   // from before venue-local today
@@ -495,6 +509,17 @@ public class AvailabilityServiceTests
     }
 
     // ----- Venue calendar (CONTRACTS §6) --------------------------------------------------------
+
+    [Fact]
+    public async Task GetVenueCalendarAsync_MaximumDate_DoesNotOverflow()
+    {
+        var (repo, managers, venue, _, manager) = NewCalendarScenario();
+        var result = await CreateService(repo, managers, out _).GetVenueCalendarAsync(
+            manager.Id, venue.Id, DateOnly.MaxValue, DateOnly.MaxValue);
+
+        Assert.Null(result.ErrorCode);
+        Assert.NotNull(result.Value);
+    }
 
     [Theory]
     [InlineData(5, 0)]   // to before from

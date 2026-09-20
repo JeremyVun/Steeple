@@ -27,7 +27,7 @@
 // `import('/src/data/catalog.js')` from this page is not reliably the instance
 // the app is running once vite has hot-reloaded.
 
-import { at, closeBrowsers, launch, routes } from './fixtures.mjs';
+import { API, at, closeBrowsers, launch, routes } from './fixtures.mjs';
 
 // A top-level-await script has no `finally` around it, so this is the finally:
 // whatever kills the run, the browsers it opened go with it. (The pipe transport
@@ -41,7 +41,6 @@ for (const fatal of ['uncaughtException', 'unhandledRejection']) {
 }
 
 const url = process.argv[2] ?? 'http://localhost:5180/?q=low&world=off';
-const API = 'http://localhost:5200/api/v1';
 const SEED_VENUE = 'vienna-presbyterian';
 const SEED_ROOM = 'music-room';
 

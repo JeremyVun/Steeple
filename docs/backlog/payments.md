@@ -1,6 +1,6 @@
 # Payments — production Stripe integration
 
-> **Status (audited 2026-08-09):** the provider-independent booking and payment rails are
+> **Baseline audit (2026-08-09; host onboarding update below):** the provider-independent booking and payment rails are
 > built and tested against `MockPaymentGateway`. Production cannot enable them: there is no
 > Stripe SDK or adapter, the payment controller and mock completion routes are Development-only,
 > and the web/mobile clients cannot complete a real Stripe setup flow. The remaining work is a
@@ -9,6 +9,19 @@
 >
 > `docs/contracts/payments.md` is the current wire contract. The code, changesets 014/017,
 > and payment tests are the as-built truth summarized below.
+
+## Host onboarding delivered separately (2026-09-06)
+
+Owner selected Stripe Connect and confirmed an Australian platform account. The sandbox host
+slice now implements Express hosted setup/resume, current account readiness, opt-in/out
+preference, on-demand dashboard links, signed `account.updated` handling, durable provisioning,
+and web/mobile flows behind `payments.onboarding`. See [current contract](../contracts/payments.md)
+and [runbook](../runbooks/stripe.md). Stripe.net is installed for this adapter.
+The older audit below describes the pre-onboarding baseline; guest setup/charging/refunds are
+still mock. Host `onlinePaymentsAvailable` remains false and Stripe mode rejects guest mock
+charging. The slice does not decide live charge/MoR configuration or AU-to-US payout eligibility.
+The ledger processes account events inline with Stripe retry; general payment workers,
+reconciliation, guest clients, and live policy work below remain unbuilt.
 
 ## 1. Product behavior to preserve
 

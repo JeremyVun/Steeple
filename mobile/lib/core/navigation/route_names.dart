@@ -21,6 +21,7 @@ abstract final class RouteNames {
   static const manageRoom = 'manageRoom';
   static const manageRoomHours = 'manageRoomHours';
   static const manageCalendar = 'manageCalendar';
+  static const managePayments = 'managePayments';
 }
 
 /// The deep-link registry (§7): the only path shapes push taps, universal

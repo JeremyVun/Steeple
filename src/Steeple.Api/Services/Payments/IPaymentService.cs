@@ -27,19 +27,6 @@ public interface IPaymentService
     /// <summary>Whether the user has a payment method on file (the apply gate's question).</summary>
     Task<bool> HasPaymentMethodAsync(Guid userId, CancellationToken ct = default);
 
-    /// <summary>Creates/reuses the venue's payout account and returns a fresh onboarding link (manager-scoped).</summary>
-    Task<PaymentResult<OnboardingLinkDto>> StartOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Mock-completes onboarding in one step: flips DetailsSubmitted/ChargesEnabled/PayoutsEnabled
-    /// and records the opt-in (manager-scoped). At Stripe-time this endpoint retires in favor of
-    /// <c>account.updated</c> webhooks + a separate opt-in switch.
-    /// </summary>
-    Task<PaymentResult<VenuePaymentStateDto>> CompleteMockOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default);
-
-    /// <summary>The venue's payout state (manager-scoped).</summary>
-    Task<PaymentResult<VenuePaymentStateDto>> GetVenuePaymentsAsync(Guid callerId, Guid venueId, CancellationToken ct = default);
-
     /// <summary>
     /// The post-commit charge kick after a booking confirms (instant submit or approval): charges
     /// the booking's first upcoming occurrence immediately — never called inside the booking
@@ -98,4 +85,8 @@ public static class PaymentErrorCodes
 
     /// <summary>A payments request field failed validation (bad last4, unknown client secret…).</summary>
     public const string InvalidPayment = "invalid_payment";
+
+    public const string ProviderUnavailable = "payment_provider_unavailable";
+    public const string AccountNotReady = "payment_account_not_ready";
+    public const string InvalidWebhookSignature = "invalid_webhook_signature";
 }

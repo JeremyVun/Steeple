@@ -56,36 +56,6 @@ public sealed class PaymentsController : ControllerBase
         return Ok(await _payments.GetMyPaymentsAsync(User.GetUserId(), ct));
     }
 
-    /// <summary>Starts (or resumes) payout onboarding for a managed venue; returns the onboarding link.</summary>
-    [HttpPost("manage/venues/{id:guid}/payments/onboarding")]
-    [EnableRateLimiting(RateLimitPolicies.Manage)]
-    public async Task<ActionResult<OnboardingLinkDto>> StartOnboarding(Guid id, CancellationToken ct)
-    {
-        if (!Enabled) return NotFound();
-        var result = await _payments.StartOnboardingAsync(User.GetUserId(), id, ct);
-        return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
-    }
-
-    /// <summary>Mock-completes onboarding in one step (stands in for hosted KYC + webhooks + opt-in).</summary>
-    [HttpPost("manage/venues/{id:guid}/payments/onboarding/mock-complete")]
-    [DevelopmentOnly]
-    [EnableRateLimiting(RateLimitPolicies.Manage)]
-    public async Task<ActionResult<VenuePaymentStateDto>> MockCompleteOnboarding(Guid id, CancellationToken ct)
-    {
-        if (!Enabled) return NotFound();
-        var result = await _payments.CompleteMockOnboardingAsync(User.GetUserId(), id, ct);
-        return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
-    }
-
-    /// <summary>The venue's payout onboarding/opt-in state.</summary>
-    [HttpGet("manage/venues/{id:guid}/payments")]
-    public async Task<ActionResult<VenuePaymentStateDto>> GetVenuePayments(Guid id, CancellationToken ct)
-    {
-        if (!Enabled) return NotFound();
-        var result = await _payments.GetVenuePaymentsAsync(User.GetUserId(), id, ct);
-        return result.Error is null ? Ok(result.Value) : ToProblem(result.Error);
-    }
-
     /// <summary>Maps a stable payments error code onto the RFC 9457 envelope (CONTRACTS §2).</summary>
     private ObjectResult ToProblem(PaymentError error)
     {

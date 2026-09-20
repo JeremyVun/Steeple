@@ -262,8 +262,14 @@ public sealed class RatingService : IRatingService
             .OrderByDescending(r => r.CreatedAtUtc)
             .ToList();
 
+        var offset = ((long)safePage - 1) * safePageSize;
+        if (offset >= revealed.Count)
+        {
+            return new VenueReviewPageDto([], revealed.Count, safePage, safePageSize);
+        }
+
         var items = revealed
-            .Skip((safePage - 1) * safePageSize)
+            .Skip((int)offset)
             .Take(safePageSize)
             .Select(r => new VenueReviewDto(
                 Stars: r.Stars,

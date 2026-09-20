@@ -19,6 +19,7 @@
     <!-- Pinned to match src/Steeple.Api exactly (CLAUDE.md gotcha) — used only to synthesize a
          small EXIF-bearing test JPEG for ImageSharpImageProcessorTests. -->
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="Stripe.net" Version="52.4.1" />
   </ItemGroup>
 
   <ItemGroup>

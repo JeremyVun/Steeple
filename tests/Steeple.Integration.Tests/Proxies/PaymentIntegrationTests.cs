@@ -108,10 +108,16 @@ public class PaymentIntegrationTests
         Assert.Null(result.Error);
         Assert.Equal("approved", result.Value!.Application.Status);
         var booking = await db.Bookings.SingleAsync(b => b.OrganizerId == organizerId);
-        Assert.Null(booking.PricePerOccurrence);
-        Assert.Null(booking.Currency);
+        Assert.Equal(120m, booking.PricePerOccurrence);
+        Assert.Equal("USD", booking.Currency);
+        Assert.False(booking.InAppPayment);
         Assert.Empty(await db.Payments.Where(p => p.BookingId == booking.Id).ToListAsync());
         Assert.Equal(SweepOutcome.Empty, await payments.SweepAsync(FixedNow));
+        // Turning collection on later must not charge this offline booking, even with a snapshot.
+        var (_, _, enabledPayments) = CreateStack(db, paymentsEnabled: true);
+        await enabledPayments.ChargeAtConfirmationAsync(booking.Id);
+        await enabledPayments.SweepAsync(new DateTimeOffset(2027, 8, 14, 0, 0, 0, TimeSpan.Zero));
+        Assert.Empty(await db.Payments.Where(p => p.BookingId == booking.Id).ToListAsync());
     }
 
     [Fact]
@@ -298,7 +304,7 @@ public class PaymentIntegrationTests
         var options = PaymentTestOptions.Payments(retryIntervalSeconds: 0);
 
         var payments = new PaymentService(
-            new EfPaymentRepository(db), new MockPaymentGateway(), venueManagers,
+            new EfPaymentRepository(db), new MockPaymentGateway(),
             new NullNotifications(), new NullAnalytics(), flags, clock, options);
 
         var bookings = new BookingService(

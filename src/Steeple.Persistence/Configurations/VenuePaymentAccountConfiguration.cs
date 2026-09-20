@@ -12,12 +12,17 @@ public class VenuePaymentAccountConfiguration : IEntityTypeConfiguration<VenuePa
 
         builder.HasKey(a => a.VenueId);
 
-        builder.Property(a => a.ProviderAccountId).IsRequired().HasMaxLength(255);
+        builder.Property(a => a.ProviderAccountId).HasMaxLength(255);
+        builder.Property(a => a.ProvisioningKey).IsRequired();
+        builder.Property(a => a.Provider).IsRequired().HasMaxLength(20);
         builder.Property(a => a.DetailsSubmitted).HasDefaultValue(false);
         builder.Property(a => a.ChargesEnabled).HasDefaultValue(false);
         builder.Property(a => a.PayoutsEnabled).HasDefaultValue(false);
+        builder.Property(a => a.RequirementsDue).HasColumnType("text[]");
+        builder.Property(a => a.DisabledReason).HasMaxLength(255);
 
         builder.HasIndex(a => a.ProviderAccountId).IsUnique();
+        builder.HasIndex(a => a.ProvisioningKey).IsUnique();
 
         builder
             .HasOne(a => a.Venue)

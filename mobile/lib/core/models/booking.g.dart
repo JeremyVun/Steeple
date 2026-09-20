@@ -6,6 +6,24 @@ part of 'booking.dart';
 // JsonSerializableGenerator
 // **************************************************************************
 
+_BookingPayment _$BookingPaymentFromJson(Map<String, dynamic> json) =>
+    _BookingPayment(
+      mode: json['mode'] as String,
+      perOccurrenceAmount: (json['perOccurrenceAmount'] as num?)?.toDouble(),
+      currency: json['currency'] as String?,
+      nextChargeAtUtc: json['nextChargeAtUtc'] == null
+          ? null
+          : DateTime.parse(json['nextChargeAtUtc'] as String),
+    );
+
+Map<String, dynamic> _$BookingPaymentToJson(_BookingPayment instance) =>
+    <String, dynamic>{
+      'mode': instance.mode,
+      'perOccurrenceAmount': instance.perOccurrenceAmount,
+      'currency': instance.currency,
+      'nextChargeAtUtc': instance.nextChargeAtUtc?.toIso8601String(),
+    };
+
 _SubmittedRating _$SubmittedRatingFromJson(Map<String, dynamic> json) =>
     _SubmittedRating(
       stars: (json['stars'] as num).toInt(),
@@ -96,6 +114,9 @@ _Booking _$BookingFromJson(Map<String, dynamic> json) => _Booking(
   ratings: json['ratings'] == null
       ? null
       : BookingRatings.fromJson(json['ratings'] as Map<String, dynamic>),
+  payment: json['payment'] == null
+      ? null
+      : BookingPayment.fromJson(json['payment'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
@@ -121,4 +142,5 @@ Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
   'nextOccurrence': instance.nextOccurrence,
   'occurrences': instance.occurrences,
   'ratings': instance.ratings,
+  'payment': instance.payment,
 };

@@ -21,6 +21,7 @@
 // docs/backlog/v2_migration D2). `mintVenue` does what Admin would.
 
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import puppeteer from 'puppeteer';
 import { writeRoomPhoto } from './host-photo.mjs';
@@ -38,6 +39,16 @@ export const DAY_TOKENS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday
 
 export const sql = (statement) =>
   execFileSync(PSQL, [DB, '-tAc', statement], { encoding: 'utf8' }).trim();
+
+export function mintNotification({ userId, type, payload = {} }) {
+  const id = randomUUID();
+  const payloadBase64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
+  sql(
+    `insert into notifications ("Id", "UserId", "Type", "PayloadJson", "CreatedAtUtc") `
+      + `values ('${id}', '${userId}', ${type}, convert_from(decode('${payloadBase64}', 'base64'), 'UTF8'), now());`
+  );
+  return id;
+}
 
 /** Is the API answering at all? Every suite that needs it should say so and exit 2 if not. */
 export const apiIsUp = () => fetch(`${API}/geofence`).then((r) => r.ok).catch(() => false);
@@ -242,6 +253,7 @@ export async function mintVenue({
 }) {
   const host = await signIn(email, name);
   const token = host.accessToken;
+  await agreeCurrent(token);
 
   const venue = await call('POST', '/manage/venues', {
     token,
@@ -346,6 +358,7 @@ export async function mintVenue({
 export async function mintGuest({ email, name, last4 = '4242' }) {
   const person = await signIn(email, name);
   const token = person.accessToken;
+  await agreeCurrent(token);
   const setup = await call('POST', '/me/payments/setup', { token, body: null });
   if (setup.status !== 200) throw new Error(`setup answered ${setup.status}`);
   const saved = await call('POST', '/me/payments/setup/mock-confirm', {

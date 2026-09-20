@@ -1,5 +1,6 @@
 {
   "mobile.apply_enabled": true,
   "mobile.manage_enabled": false,
+  "payments.onboarding": true,
   "mobile.force_upgrade": false
 }

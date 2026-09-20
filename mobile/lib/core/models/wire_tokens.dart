@@ -122,6 +122,13 @@ const knownWireTokenSets = <String, List<String>>{
     'bookingReminder',
   ],
   'occurrenceStatuses': ['scheduled', 'occurred', 'noShow', 'cancelled'],
+  'paymentAccountStatuses': [
+    'notStarted',
+    'incomplete',
+    'pending',
+    'restricted',
+    'ready',
+  ],
   'paymentStatuses': [
     'pending',
     'requiresAction',
@@ -157,6 +164,7 @@ const knownFeatureFlagKeys = <String>[
   'manage.open_hours_required',
   'booking.counter_offers',
   'payments.enabled',
+  'payments.onboarding',
   'mobile.apply_enabled',
   'mobile.manage_enabled',
   'mobile.force_upgrade',
@@ -164,6 +172,7 @@ const knownFeatureFlagKeys = <String>[
 
 const knownPublicFeatureFlagKeys = <String>[
   'payments.enabled',
+  'payments.onboarding',
   'mobile.apply_enabled',
   'mobile.manage_enabled',
   'mobile.force_upgrade',

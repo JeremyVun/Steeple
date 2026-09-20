@@ -21,6 +21,8 @@ import {
   isProductEntry,
   parse,
   pathFor,
+  clearPaymentReturn,
+  readPaymentReturn,
   resetBaseForTests,
   write,
 } from '../src/core/router.js';
@@ -364,6 +366,27 @@ for (const [href, product] of ENTRIES) {
   open(href);
   expect(`${href} ${product ? 'opens the product' : 'opens the title'}`, isProductEntry(), product);
 }
+
+// ── §8 Stripe returns are one-use desk state ───────────────────────────────
+console.log('\n── §8 Stripe return state ──────────────────────────────────');
+
+{
+  const id = '3c3d47f4-a7f5-4b65-8479-9dc64facad67';
+  const page = open(`http://example.com/steeple/desk?world=off&paymentVenue=${id}&paymentReturn=return`, {
+    prefix: '/steeple/',
+  });
+  expect('a prefixed desk accepts an exact return marker', readPaymentReturn(), { venueId: id, action: 'return' });
+  clearPaymentReturn();
+  expect('consuming it preserves the prefix and unrelated query', page.writes.at(-1), {
+    mode: 'replace',
+    url: '/steeple/desk?world=off',
+  });
+}
+
+open('http://localhost:5173/desk?paymentVenue=not-a-guid&paymentReturn=refresh');
+expect('a malformed venue id is ignored', readPaymentReturn(), null);
+open('http://localhost:5173/browse?paymentVenue=3c3d47f4-a7f5-4b65-8479-9dc64facad67&paymentReturn=return');
+expect('a marker outside the desk is ignored', readPaymentReturn(), null);
 
 console.log(`\n${failures === 0 ? 'all checks passed' : `${failures} FAILING`}\n`);
 process.exit(failures === 0 ? 0 : 1);

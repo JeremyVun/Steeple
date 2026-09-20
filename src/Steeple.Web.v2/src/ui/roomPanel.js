@@ -9,11 +9,17 @@
 // the page, and a paragraph that has not arrived is absent rather than empty.
 
 import { setView } from '../core/bus.js';
-import { getListing } from '../data/catalog.js';
+import { getListing, getVenueReviews } from '../data/catalog.js';
 import { priceParts, seatsText } from './copy.js';
 import { chipList, el, replaceChildren } from './dom.js';
 import { createBanner } from './map/banner.js';
 import { createPutDown, sheetScroller } from './rail.js';
+import {
+  appendReviewPage,
+  emptyReviewFeed,
+  hasMoreReviews,
+  reviewSection,
+} from './roomReviews.js';
 
 /** The fields a source actually answered for — the rest are somebody else's. */
 const said = (values) =>
@@ -40,7 +46,19 @@ export function createRoomPanel({ onRequest }) {
   const hero = createBanner('dm-banner dm-banner--hero');
   const head = el('header', { class: 'sheet__head' });
   let showing = 0;
-  const body = el('div', { class: 'sheet__body' });
+  let currentVenue = null;
+  let currentRoom = null;
+  let reviewVenueId = null;
+  let reviewFeed = emptyReviewFeed();
+  let reviewLoading = false;
+  let reviewFailed = false;
+  let reviewController = null;
+  const body = el('div', {
+    class: 'sheet__body',
+    role: 'region',
+    tabindex: '0',
+    'aria-label': 'Space details',
+  });
   const cta = el(
     'button',
     { type: 'button', class: 'pill pill--primary pill--wide', onclick: () => onRequest() },
@@ -49,6 +67,29 @@ export function createRoomPanel({ onRequest }) {
   const foot = el('footer', { class: 'sheet__foot' }, [cta]);
 
   const element = el('article', { class: 'sheet sheet--room' }, [head, body, foot]);
+
+  body.addEventListener('keydown', (event) => {
+    if (event.target !== body || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.shiftKey && event.key !== ' ') return;
+    const scroller = sheetScroller(element, body);
+    const maximum = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const page = Math.max(40, Math.round(scroller.clientHeight * 0.9));
+    let next = scroller.scrollTop;
+
+    if (event.key === 'ArrowDown') next += 40;
+    else if (event.key === 'ArrowUp') next -= 40;
+    else if (event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)) next += page;
+    else if (event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)) next -= page;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = maximum;
+    else return;
+
+    next = Math.max(0, Math.min(maximum, next));
+    if (next === scroller.scrollTop) return;
+    // Chrome does not consistently apply native key scrolling inside this transformed flex sheet.
+    event.preventDefault();
+    scroller.scrollTop = next;
+  });
 
   // One level up from a room is its church — never the map, and never the
   // title page. The sheet's own step says the same thing in words; on a phone
@@ -61,12 +102,59 @@ export function createRoomPanel({ onRequest }) {
   });
   element.prepend(handle);
 
+  const paintCurrent = () => {
+    if (currentVenue && currentRoom) paint(currentVenue, currentRoom);
+  };
+
+  async function loadReviewPage(token, venueId) {
+    if (reviewLoading || token !== showing || venueId !== reviewVenueId) return;
+    reviewLoading = true;
+    reviewFailed = false;
+    if (reviewFeed.items.length > 0) paintCurrent();
+
+    const controller = new AbortController();
+    reviewController = controller;
+    try {
+      const page = await getVenueReviews(venueId, {
+        page: reviewFeed.nextPage,
+        pageSize: reviewFeed.pageSize,
+        signal: controller.signal,
+      });
+      if (token !== showing || venueId !== reviewVenueId || controller.signal.aborted) return;
+      reviewFeed = appendReviewPage(reviewFeed, page ?? {});
+    } catch (error) {
+      if (token !== showing || venueId !== reviewVenueId || error?.aborted) return;
+      reviewFailed = reviewFeed.items.length > 0;
+    } finally {
+      if (token === showing && venueId === reviewVenueId && !controller.signal.aborted) {
+        reviewLoading = false;
+        reviewController = null;
+        if (reviewFeed.items.length > 0) paintCurrent();
+      }
+    }
+  }
+
+  function startReviews(token, venueId) {
+    if (!venueId || reviewVenueId) return;
+    reviewVenueId = venueId;
+    void loadReviewPage(token, venueId);
+  }
+
   function show(venue, room) {
+    reviewController?.abort();
+    reviewController = null;
+    reviewVenueId = null;
+    reviewFeed = emptyReviewFeed();
+    reviewLoading = false;
+    reviewFailed = false;
+    currentVenue = venue;
+    currentRoom = room;
     up = () => setView('venue', { venueId: venue.id });
     handle.setAttribute('aria-label', `Put this down — back to ${venue.shortName}`);
     const token = (showing += 1);
     hero.show({ url: room.primaryPhotoUrl ?? null, name: room.name });
     paint(venue, room);
+    startReviews(token, venue.venueId ?? room.venueId);
 
     // The listing is the whole of the space, and the search summary that opened
     // this sheet is a part of it. A refused read leaves the part standing —
@@ -79,7 +167,9 @@ export function createRoomPanel({ onRequest }) {
         // The listing fills the gaps and settles nothing that was already
         // known: a host's own unpublished edit is what this browser is holding
         // about the space, and steeple has not been told about it yet.
-        paint(venue, { ...listing, ...said(room), id: room.id });
+        currentRoom = { ...listing, ...said(room), id: room.id };
+        paint(venue, currentRoom);
+        startReviews(token, listing.venueId ?? listing.venue?.venueId);
       });
   }
 
@@ -87,6 +177,10 @@ export function createRoomPanel({ onRequest }) {
     const { amount, unit, free } = priceParts(room);
     const scroller = sheetScroller(element, body);
     const held = scroller.scrollTop;
+    body.setAttribute('aria-label', `Details for ${room.name}`);
+    const reviewFocus =
+      body.contains(document.activeElement) &&
+      document.activeElement?.hasAttribute?.('data-review-action');
 
     replaceChildren(head, [
       hero.element,
@@ -148,9 +242,22 @@ export function createRoomPanel({ onRequest }) {
           el('h2', { class: 'eyebrow', text: 'House rules' }),
           el('p', { class: 'prose prose--sm', text: room.houseRules }),
         ]),
+
+      reviewSection(reviewFeed, {
+        failed: reviewFailed,
+        loading: reviewLoading,
+        more: hasMoreReviews(reviewFeed),
+        onMore: () => void loadReviewPage(showing, reviewVenueId),
+      }),
     ]);
 
     scroller.scrollTop = held;
+    if (reviewFocus) {
+      const target =
+        body.querySelector('[data-review-action]') ?? body.querySelector('[data-review-end]');
+      target?.focus({ preventScroll: true });
+      scroller.scrollTop = held;
+    }
   }
 
   let wasOpen = false;

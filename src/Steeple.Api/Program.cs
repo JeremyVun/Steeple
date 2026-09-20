@@ -16,6 +16,7 @@ builder.Services.AddControllers(options =>
     options.Conventions.Add(new Steeple.Api.Extensions.DevelopmentOnlyActionConvention(
         builder.Environment.IsDevelopment())));
 builder.Services.AddSteepleApi(builder.Configuration, builder.Environment);
+builder.Services.AddHealthChecks().AddCheck<DatabaseReadinessCheck>("database");
 // RFC 9457 ProblemDetails for error responses, including bare status-code results (e.g. NotFound()).
 builder.Services.AddProblemDetails();
 
@@ -66,8 +67,9 @@ app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
 
-// Liveness/readiness probe for the container healthcheck.
+// Liveness stays cheap. Readiness fails with 503 when the required database is unavailable.
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapHealthChecks("/health/ready");
 
 // Dev mailbox: local sends are otherwise only a log line, and a log line's CTA can't be clicked.
 // The routes exist only where Email:DevMailboxEnabled is set (appsettings.Development.json).

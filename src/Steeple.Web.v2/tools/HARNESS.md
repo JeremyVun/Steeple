@@ -18,6 +18,42 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   mints its own rows and never collides.
 - Console-noise discipline: dead-port media 404s and GL narration are environmental —
   `fixtures.isEnvironmentNoise` is the shared filter; judge the check lines.
+- `npm run test:host-onboarding -- "http://localhost:5173/?q=low&world=off"` drives
+  Stripe return, resume, opt-in, dashboard, readiness loss, provider errors, venue selection,
+  and mock completion through real browser input. It needs a Development API and disposable,
+  migrated database for its two host venues. Payment responses are controlled at the browser
+  boundary, so the suite never needs a Stripe key or reads `.env`. Give it a prefixed app URL
+  such as `http://localhost:8080/steeple/?q=low&world=off` to exercise subpath routing. Set
+  `STEEPLE_SHOT` to save the ready onboarding screen for visual review.
+- `npm run test:ratings -- "http://localhost:5173/?q=low&world=off"` checks public review
+  pagination and both parties' no-show actions. It needs a Development API and disposable,
+  migrated PostgreSQL database (`STEEPLE_API`, `STEEPLE_DB`, optional `STEEPLE_PSQL`). It
+  seeds hidden and unrevealed referee ratings directly in that database, drives real browser
+  inputs, and writes disposable screenshots under the system temp directory. The existing
+  `correspondence-test.mjs` remains the full two-way rating and booking journey gate.
+- `notification-stream-proxy-test.mjs` proves live bytes across the direct API and every
+  comma-separated `name=origin` in `STEEPLE_PROXY_ORIGINS`. It needs a Development API and
+  disposable migrated database through the usual `STEEPLE_API`/`STEEPLE_DB` variables.
+  `STEEPLE_JWT_SIGNING_KEY` enables signed missing-expiry and expiry-at-socket checks; use only
+  the disposable API's key. Include Vite, isolated nginx root, and a fixture that strips a
+  prefix before nginx. The test inserts one non-printable notification directly to exercise
+  the PostgreSQL trigger, then checks user-cap isolation and permit release. It sends tokens
+  only in authorization headers and never prints them.
+- `inbox-messages-test.mjs` also keeps a real guest inbox open while the host writes on their
+  booked thread. It waits for the authenticated stream response before writing, then requires
+  the row, unread header, and porch badge to update without navigation. Its real press must
+  follow the deep link and persist the receipt on the wire.
+- `notification-recovery-test.mjs` is an operator-coordinated API/listener fault gate. Start it
+  against the disposable stack, wait for `READY_FOR_API_STOP`, stop only that API, and restart
+  the same API after `ARRIVAL_COMMITTED_WHILE_API_DOWN`. It then terminates only the connection
+  whose PostgreSQL application name is `Steeple notification listener`. It must observe the
+  missed rows and replacement streams without a second arrival or browser navigation.
+- `notification-lifecycle-test.mjs` drives delayed snapshots, identity replacement, native
+  hide/show with a blank foreground tab, dispatched pagehide/pageshow, cooldown, the real
+  75-second idle watchdog, and a real notification press against a disposable Development
+  API/database and debug Vite. Use the standard `STEEPLE_WEB`/`STEEPLE_API`/`STEEPLE_DB`
+  variables and run it alone: CDP holds snapshot response headers, the harness injects one 503
+  and one byte-stalled response, and no timer is accelerated.
 
 ## Defects only one suite can see
 

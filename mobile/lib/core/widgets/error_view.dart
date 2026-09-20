@@ -16,7 +16,12 @@ class ErrorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.steepleColors;
-    final (title, body) = _copy(error.kind);
+    final (title, body) = error.code == 'agreements_required'
+        ? (
+            'Review terms and privacy',
+            'Open Profile to accept the current terms and privacy policy, then try again.',
+          )
+        : _copy(error.kind);
 
     return Center(
       child: Padding(
@@ -29,17 +34,24 @@ class ErrorView extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: SteepleTypography.headlineSerif.copyWith(color: colors.textPrimary),
+              style: SteepleTypography.headlineSerif.copyWith(
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(height: SteepleTokens.space2),
             Text(
               body,
               textAlign: TextAlign.center,
-              style: SteepleTypography.bodySm.copyWith(color: colors.textSecondary),
+              style: SteepleTypography.bodySm.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
             if (error.retryable && onRetry != null) ...[
               const SizedBox(height: SteepleTokens.space5),
-              OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+              OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Try again'),
+              ),
             ],
           ],
         ),
@@ -48,45 +60,45 @@ class ErrorView extends StatelessWidget {
   }
 
   static (String, String) _copy(AppErrorKind kind) => switch (kind) {
-        AppErrorKind.network => (
-            "Can't reach Steeple",
-            'Check your connection and try again.',
-          ),
-        AppErrorKind.timeout => (
-            'That took too long',
-            'The connection timed out. Try again in a moment.',
-          ),
-        AppErrorKind.notFound => (
-            'No longer available',
-            "This space isn't listed anymore.",
-          ),
-        AppErrorKind.auth => (
-            'Sign in to continue',
-            'Your session ended. Sign in again to pick up where you left off.',
-          ),
-        AppErrorKind.validation => (
-            "That didn't go through",
-            'Something in the request needs fixing. Review and try again.',
-          ),
-        AppErrorKind.conflict => (
-            "That's changed",
-            'Someone got there first. Refresh to see the latest.',
-          ),
-        AppErrorKind.rateLimited => (
-            'A moment, please',
-            "You're moving fast — wait a little and try again.",
-          ),
-        AppErrorKind.server || AppErrorKind.cancelled => (
-            'Something went wrong',
-            "It's not you, it's us. Try again in a moment.",
-          ),
-      };
+    AppErrorKind.network => (
+      "Can't reach Steeple",
+      'Check your connection and try again.',
+    ),
+    AppErrorKind.timeout => (
+      'That took too long',
+      'The connection timed out. Try again in a moment.',
+    ),
+    AppErrorKind.notFound => (
+      'No longer available',
+      "This space isn't listed anymore.",
+    ),
+    AppErrorKind.auth => (
+      'Sign in to continue',
+      'Your session ended. Sign in again to pick up where you left off.',
+    ),
+    AppErrorKind.validation => (
+      "That didn't go through",
+      'Something in the request needs fixing. Review and try again.',
+    ),
+    AppErrorKind.conflict => (
+      "That's changed",
+      'Someone got there first. Refresh to see the latest.',
+    ),
+    AppErrorKind.rateLimited => (
+      'A moment, please',
+      "You're moving fast — wait a little and try again.",
+    ),
+    AppErrorKind.server || AppErrorKind.cancelled => (
+      'Something went wrong',
+      "It's not you, it's us. Try again in a moment.",
+    ),
+  };
 
   static IconData _icon(AppErrorKind kind) => switch (kind) {
-        AppErrorKind.network || AppErrorKind.timeout => Icons.wifi_off_rounded,
-        AppErrorKind.notFound => Icons.search_off_rounded,
-        AppErrorKind.auth => Icons.lock_outline_rounded,
-        AppErrorKind.rateLimited => Icons.hourglass_empty_rounded,
-        _ => Icons.error_outline_rounded,
-      };
+    AppErrorKind.network || AppErrorKind.timeout => Icons.wifi_off_rounded,
+    AppErrorKind.notFound => Icons.search_off_rounded,
+    AppErrorKind.auth => Icons.lock_outline_rounded,
+    AppErrorKind.rateLimited => Icons.hourglass_empty_rounded,
+    _ => Icons.error_outline_rounded,
+  };
 }

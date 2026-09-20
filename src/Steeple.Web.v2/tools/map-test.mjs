@@ -172,7 +172,7 @@ check('the pill is one bar of four segments', (await count('.dm-bar > .dm-seg'))
 check('the head is the answer and nothing else', await gone('.dm-area'));
 check(
   'the Where segment names the area it is searching',
-  /Vienna/.test(await page.evaluate('document.querySelector("#dm-where").placeholder')),
+  (await page.evaluate('document.querySelector("#dm-where").placeholder')) === 'Washington metropolitan area',
   await page.evaluate('document.querySelector("#dm-where").placeholder')
 );
 check('the head counts what the search found', (await text('.dm-count')) === '9 spaces across 5 venues', await text('.dm-count'));
@@ -394,6 +394,7 @@ const reader = await signIn(`map-reader-${stamp}@example.org`, 'Quiet Reader');
 await agreeCurrent(reader.accessToken);
 await signInPage(page, `map-reader-${stamp}@example.org`, 'Quiet Reader');
 await wait(600);
+await page.waitForFunction('window.__steepleReady === true && Boolean(window.__steeple)', { timeout: 25000 });
 await page.evaluate('__steeple.setView("journal")');
 await wait(900);
 check('the surface withdraws from a correspondence view', await page.evaluate('document.querySelector(".discovery").hasAttribute("inert")'));

@@ -24,6 +24,10 @@
 //      it — and pressing it drains all three. This section is the guard on the
 //      mark-on-sight the slips used to do: restore that one line in
 //      `ui/notifications.js` and every claim in here goes red.
+//   §8 a guest's inbox stays open while a host writes. The live stream updates
+//      the row, unread header and porch badge without navigation; a real press
+//      follows the deep link and clears the unread state on the wire. A known
+//      unprinted kind still triggers the snapshot without becoming a row.
 //
 // Screenshots are taken LAST: a headless page stops advancing CSS transitions
 // after its first `screenshot()`, so anything asserted after one is a lie.
@@ -37,6 +41,7 @@ import {
   isEnvironmentNoise,
   launch,
   mintGuest,
+  mintNotification,
   mintVenue,
   signInPage,
   stamp,
@@ -113,6 +118,7 @@ let hostPage = null;
 let guestPage = null;
 let newcomerPage = null;
 let switcherPage = null;
+let livePage = null;
 
 try {
   // ── the world ─────────────────────────────────────────────────────────────
@@ -390,6 +396,111 @@ try {
     `${drained.badge} after ${inTheSameTab.badge}`
   );
 
+  // ── §8 a message arrives while the inbox stands open ─────────────────────
+  livePage = await openPage('live guest');
+  const streamOpened = livePage.waitForResponse(
+    (response) => response.url().includes('/api/v1/me/notifications/stream') && response.status() === 200,
+    { timeout: 30000 }
+  );
+  await signInPage(livePage, guest.email, guest.name);
+  await streamOpened;
+  await openInbox(livePage);
+
+  const beforeLive = await livePage.evaluate(() => {
+    const badge = document.querySelector('.letters__count');
+    return {
+      path: location.pathname,
+      unread: Number(document.querySelector('.journal__unread')?.textContent?.split(' ')[0] ?? 0),
+      badge: Number(badge && !badge.hidden ? badge.textContent : 0),
+    };
+  });
+  const beforeLiveIds = new Set(
+    (await call('GET', '/me/notifications?pageSize=24', { token: guest.token })).body?.items?.map((row) => row.id) ?? []
+  );
+  const unprintedSnapshot = livePage.waitForResponse(
+    (response) => response.url().includes('/api/v1/me/notifications?pageSize=24') && response.status() === 200,
+    { timeout: 30000 }
+  );
+  const unprintedId = mintNotification({
+    userId: guest.user.id,
+    type: 8,
+    payload: { roomName, venueName, deepLink: '/journal' },
+  });
+  await unprintedSnapshot;
+  const afterUnprinted = await livePage.evaluate((id) => {
+    const badge = document.querySelector('.letters__count');
+    return {
+      row: Boolean(document.querySelector(`.jmsg[data-id="${id}"]`)),
+      unread: Number(document.querySelector('.journal__unread')?.textContent?.split(' ')[0] ?? 0),
+      badge: Number(badge && !badge.hidden ? badge.textContent : 0),
+    };
+  }, unprintedId);
+  check('an unprinted notification still triggers a live snapshot', true);
+  check('the unprinted kind remains absent from the inbox', !afterUnprinted.row);
+  eq('the unprinted kind does not change the unread header', afterUnprinted.unread, beforeLive.unread);
+  eq('the unprinted kind does not change the porch badge', afterUnprinted.badge, beforeLive.badge);
+
+  const liveBody = `The side entrance will be open for you — ${stamp}.`;
+  const liveWrite = await call('POST', `/applications/${booked.id}/messages`, {
+    token: host.token,
+    body: { body: liveBody },
+  });
+  check('the host writes while the guest inbox stands open', liveWrite.status === 200, String(liveWrite.status));
+
+  const liveFeed = await call('GET', '/me/notifications?pageSize=24', { token: guest.token });
+  const liveMessage = (liveFeed.body?.items ?? []).find(
+    (row) => row.type === 'applicationMessage' && !beforeLiveIds.has(row.id)
+  );
+  check('the live message exists on the wire', Boolean(liveMessage), JSON.stringify(liveFeed.status));
+
+  await livePage.waitForFunction(
+    (id) => document.querySelector(`.jmsg[data-id="${id}"]`)?.dataset.unread === 'yes',
+    { timeout: 30000 },
+    liveMessage.id
+  );
+  const liveArrival = await livePage.evaluate((id) => {
+    const row = document.querySelector(`.jmsg[data-id="${id}"]`);
+    const badge = document.querySelector('.letters__count');
+    return {
+      path: location.pathname,
+      line: row?.querySelector('.jmsg__line')?.textContent ?? null,
+      unread: row?.dataset.unread ?? null,
+      head: Number(document.querySelector('.journal__unread')?.textContent?.split(' ')[0] ?? 0),
+      badge: Number(badge && !badge.hidden ? badge.textContent : 0),
+      localStorage: Object.values(localStorage),
+      sessionStorage: Object.values(sessionStorage),
+    };
+  }, liveMessage.id);
+  eq('the inbox did not navigate to learn about it', liveArrival.path, beforeLive.path);
+  eq('the arriving row is unread', liveArrival.unread, 'yes');
+  check(
+    'the arriving row names its venue and space',
+    liveArrival.line?.includes(venueName) && liveArrival.line.includes(roomName),
+    String(liveArrival.line)
+  );
+  eq('the unread header updates live', liveArrival.head, beforeLive.unread + 1);
+  eq('the porch badge updates live', liveArrival.badge, beforeLive.badge + 1);
+  check(
+    'browser storage contains no bearer token',
+    [...liveArrival.localStorage, ...liveArrival.sessionStorage].every((value) => !value.includes(guest.token)),
+    JSON.stringify({ local: liveArrival.localStorage.length, session: liveArrival.sessionStorage.length })
+  );
+
+  await press(livePage, `.jmsg[data-id="${liveMessage.id}"]`);
+  await livePage.waitForFunction(
+    (id) => window.__steeple.state.view === 'letter' && window.__steeple.state.applicationId === id,
+    { timeout: 30000 },
+    booked.id
+  );
+  let liveReadAt = null;
+  for (let attempt = 0; attempt < 20 && !liveReadAt; attempt += 1) {
+    const answer = await call('GET', '/me/notifications?pageSize=24', { token: guest.token });
+    liveReadAt = (answer.body?.items ?? []).find((row) => row.id === liveMessage.id)?.readAt ?? null;
+    if (!liveReadAt) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  check('a real press follows the live row deep link', true);
+  check('the real press marks the live row read on the wire', Boolean(liveReadAt), String(liveReadAt));
+
   check('the browsers stayed free of app errors', problems.length === 0, problems.join(' | '));
 
   // ── shots, last ───────────────────────────────────────────────────────────
@@ -399,6 +510,7 @@ try {
   await shot(guestPage, 'inbox-guest');
   await shot(newcomerPage, 'inbox-newcomer');
   await shot(switcherPage, 'inbox-same-tab');
+  await shot(livePage, 'inbox-live-arrival');
 } finally {
   await closeBrowsers();
 }

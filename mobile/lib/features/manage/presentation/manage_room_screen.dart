@@ -8,6 +8,7 @@ import '../../../core/api/app_error.dart';
 import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../profile/providers.dart' show ensureCurrentAgreements;
 import '../application/manage_room_providers.dart';
 import 'widgets/in_review_badge.dart';
 
@@ -273,6 +274,12 @@ class _ManageRoomScreenState extends ConsumerState<ManageRoomScreen> {
     ManagedRoomPatch patch, {
     required String successMessage,
   }) async {
+    if (patch.status != 'unlisted' &&
+        patch.status != 'draft' &&
+        !await ensureCurrentAgreements(context, ref)) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => _saving = true);
     try {
       await ref.read(manageRoomProvider(widget.roomId).notifier).save(patch);

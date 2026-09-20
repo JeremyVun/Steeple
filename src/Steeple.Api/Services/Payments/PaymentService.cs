@@ -1,7 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
 using Steeple.Api.Contracts.Payments;
-using Steeple.Api.Services.Manage;
 using Steeple.Api.Services.Notifications;
 
 namespace Steeple.Api.Services.Payments;
@@ -19,7 +18,6 @@ public sealed class PaymentService : IPaymentService
 
     private readonly IPaymentRepository _repository;
     private readonly IPaymentGateway _gateway;
-    private readonly IVenueManagerRepository _venueManagers;
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
     private readonly IFeatureFlags _flags;
@@ -30,7 +28,6 @@ public sealed class PaymentService : IPaymentService
     public PaymentService(
         IPaymentRepository repository,
         IPaymentGateway gateway,
-        IVenueManagerRepository venueManagers,
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
         IFeatureFlags flags,
@@ -39,7 +36,6 @@ public sealed class PaymentService : IPaymentService
     {
         _repository = repository;
         _gateway = gateway;
-        _venueManagers = venueManagers;
         _notifications = notifications;
         _analytics = analytics;
         _flags = flags;
@@ -132,89 +128,6 @@ public sealed class PaymentService : IPaymentService
         user.PaymentMethodSetAtUtc is { } setAt
             ? new MyPaymentsDto(true, new SavedPaymentMethodDto(user.PaymentMethodBrand ?? "card", user.PaymentMethodLast4 ?? "", setAt), Mock: true)
             : new MyPaymentsDto(false, null, Mock: true);
-
-    // ----- Venue payout onboarding ---------------------------------------------------------------
-
-    /// <inheritdoc />
-    public async Task<PaymentResult<OnboardingLinkDto>> StartOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default)
-    {
-        if (!await _venueManagers.IsManagerAsync(callerId, venueId, ct).ConfigureAwait(false))
-        {
-            return PaymentResult<OnboardingLinkDto>.Fail(PaymentErrorCodes.NotFound, "No such venue.");
-        }
-
-        var now = _clock.GetUtcNow();
-        var account = await _repository.GetVenueAccountAsync(venueId, ct).ConfigureAwait(false);
-        if (account is null)
-        {
-            account = new VenuePaymentAccount
-            {
-                VenueId = venueId,
-                ProviderAccountId = await _gateway.CreateConnectedAccountAsync(venueId, null, ct).ConfigureAwait(false),
-                CreatedAtUtc = now,
-                UpdatedAtUtc = now,
-            };
-            await _repository.AddVenueAccountAsync(account, ct).ConfigureAwait(false);
-            await TrackSafelyAsync("payout_onboarding_started", new { venueId }, ct).ConfigureAwait(false);
-        }
-
-        var url = await _gateway.CreateAccountLinkAsync(account.ProviderAccountId, ct).ConfigureAwait(false);
-        return PaymentResult<OnboardingLinkDto>.Ok(new OnboardingLinkDto(url, Mock: true));
-    }
-
-    /// <inheritdoc />
-    public async Task<PaymentResult<VenuePaymentStateDto>> CompleteMockOnboardingAsync(Guid callerId, Guid venueId, CancellationToken ct = default)
-    {
-        if (!await _venueManagers.IsManagerAsync(callerId, venueId, ct).ConfigureAwait(false))
-        {
-            return PaymentResult<VenuePaymentStateDto>.Fail(PaymentErrorCodes.NotFound, "No such venue.");
-        }
-
-        var account = await _repository.GetVenueAccountAsync(venueId, ct).ConfigureAwait(false);
-        if (account is null)
-        {
-            return PaymentResult<VenuePaymentStateDto>.Fail(
-                PaymentErrorCodes.InvalidPayment, "Start onboarding first — POST …/payments/onboarding.");
-        }
-
-        // Mock collapse: one call stands in for the provider's hosted KYC + the account.updated
-        // webhooks + the explicit opt-in switch. The wire state keeps the payments.md §9 fields so
-        // the Stripe machinery slots in without a shape change.
-        var now = _clock.GetUtcNow();
-        account.DetailsSubmitted = true;
-        account.ChargesEnabled = true;
-        account.PayoutsEnabled = true;
-        account.OptedInAtUtc ??= now;
-        account.UpdatedAtUtc = now;
-        await _repository.SaveAsync(ct).ConfigureAwait(false);
-
-        await TrackSafelyAsync("payout_onboarding_completed", new { venueId }, ct).ConfigureAwait(false);
-        return PaymentResult<VenuePaymentStateDto>.Ok(ToState(account));
-    }
-
-    /// <inheritdoc />
-    public async Task<PaymentResult<VenuePaymentStateDto>> GetVenuePaymentsAsync(Guid callerId, Guid venueId, CancellationToken ct = default)
-    {
-        if (!await _venueManagers.IsManagerAsync(callerId, venueId, ct).ConfigureAwait(false))
-        {
-            return PaymentResult<VenuePaymentStateDto>.Fail(PaymentErrorCodes.NotFound, "No such venue.");
-        }
-
-        var account = await _repository.GetVenueAccountAsync(venueId, ct).ConfigureAwait(false);
-        return PaymentResult<VenuePaymentStateDto>.Ok(ToState(account));
-    }
-
-    private static VenuePaymentStateDto ToState(VenuePaymentAccount? account) =>
-        account is null
-            ? new VenuePaymentStateDto(false, false, false, false, false, null, Mock: true)
-            : new VenuePaymentStateDto(
-                OnboardingStarted: true,
-                DetailsSubmitted: account.DetailsSubmitted,
-                ChargesEnabled: account.ChargesEnabled,
-                PayoutsEnabled: account.PayoutsEnabled,
-                OptedIn: account.OptedInAtUtc is not null,
-                DashboardUrl: null, // Stripe-time: the Express dashboard deep link
-                Mock: true);
 
     // ----- Charge machinery ----------------------------------------------------------------------
 
@@ -319,7 +232,7 @@ public sealed class PaymentService : IPaymentService
     {
         var occurrence = candidate.Occurrence;
         var booking = occurrence.Booking ?? throw new InvalidOperationException("Charge candidate loaded without its booking.");
-        if (booking.PricePerOccurrence is not { } amount)
+        if (!booking.InAppPayment || booking.PricePerOccurrence is not { } amount)
         {
             return null; // offline/legacy booking — nothing to charge
         }

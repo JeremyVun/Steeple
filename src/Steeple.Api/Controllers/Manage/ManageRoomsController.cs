@@ -40,6 +40,7 @@ public sealed class ManageRoomsController : ControllerBase
     /// bookings — CONTRACTS §6).
     /// </summary>
     [HttpPatch("rooms/{id:guid}")]
+    [RequireCurrentAgreements]
     [EnableRateLimiting(RateLimitPolicies.Manage)]
     public async Task<ActionResult<ManagedRoomDto>> UpdateRoom(Guid id, [FromBody] SaveRoomRequest request, CancellationToken ct)
     {

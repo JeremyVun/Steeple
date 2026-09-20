@@ -10,6 +10,7 @@ import 'package:steeple_mobile/core/models/models.dart';
 import 'package:steeple_mobile/core/widgets/widgets.dart';
 import 'package:steeple_mobile/features/manage/presentation/manage_request_screen.dart';
 import 'package:steeple_mobile/features/manage/providers.dart';
+import 'package:steeple_mobile/features/profile/providers.dart';
 
 /// From `test/fixtures/manage_applications_page.json` — the pending
 /// (actionable) application.
@@ -21,7 +22,8 @@ class _PendingManageRepository implements ManageRepository {
   Future<List<ManagedVenue>> venues() => Completer<List<ManagedVenue>>().future;
 
   @override
-  Future<ManagedVenueDetail> venue(String id) => Completer<ManagedVenueDetail>().future;
+  Future<ManagedVenueDetail> venue(String id) =>
+      Completer<ManagedVenueDetail>().future;
 
   @override
   Future<ManagedRoom> room(String id) => Completer<ManagedRoom>().future;
@@ -35,33 +37,49 @@ class _PendingManageRepository implements ManageRepository {
       Completer<RoomAvailabilityRules>().future;
 
   @override
-  Future<RoomAvailabilityRules> saveOpenHours(String roomId, RoomAvailabilityRules rules) =>
-      Completer<RoomAvailabilityRules>().future;
+  Future<RoomAvailabilityRules> saveOpenHours(
+    String roomId,
+    RoomAvailabilityRules rules,
+  ) => Completer<RoomAvailabilityRules>().future;
 
   @override
   Future<Paged<Application>> applications({String? status, int page = 1}) =>
       Completer<Paged<Application>>().future;
 
   @override
-  Future<VenueCalendar> calendar(String venueId, {required String from, required String to}) =>
-      Completer<VenueCalendar>().future;
+  Future<VenueCalendar> calendar(
+    String venueId, {
+    required String from,
+    required String to,
+  }) => Completer<VenueCalendar>().future;
 
   @override
-  Future<Application> decide(String id, {required bool approve, String? message}) =>
-      Completer<Application>().future;
+  Future<Application> decide(
+    String id, {
+    required bool approve,
+    String? message,
+  }) => Completer<Application>().future;
 
   @override
-  Future<Application> counterOffer(String id, ProposedSchedule schedule, {String? message}) =>
-      Completer<Application>().future;
+  Future<Application> counterOffer(
+    String id,
+    ProposedSchedule schedule, {
+    String? message,
+  }) => Completer<Application>().future;
 }
 
 Widget _wrap(ManageRepository repository) => ProviderScope(
-      overrides: [manageRepositoryProvider.overrideWithValue(repository)],
-      child: MaterialApp(
-        theme: SteepleTheme.light(),
-        home: const ManageRequestScreen(applicationId: _pendingId),
-      ),
-    );
+  overrides: [
+    manageRepositoryProvider.overrideWithValue(repository),
+    profileRepositoryProvider.overrideWithValue(
+      FakeProfileRepository(fixtures: FixtureLoader(latency: Duration.zero)),
+    ),
+  ],
+  child: MaterialApp(
+    theme: SteepleTheme.light(),
+    home: const ManageRequestScreen(applicationId: _pendingId),
+  ),
+);
 
 /// `Skeleton`'s shimmer repeats forever (DESIGN_SYSTEM §8.7), so
 /// `pumpAndSettle()` never converges while it's on screen. A couple of
@@ -81,8 +99,13 @@ void main() {
   });
 
   testWidgets('error shows ErrorView with a retry action', (tester) async {
-    final repo = FakeManageRepository(fixtures: FixtureLoader(latency: Duration.zero));
-    repo.fixtures.nextError = const AppError(kind: AppErrorKind.server, retryable: true);
+    final repo = FakeManageRepository(
+      fixtures: FixtureLoader(latency: Duration.zero),
+    );
+    repo.fixtures.nextError = const AppError(
+      kind: AppErrorKind.server,
+      retryable: true,
+    );
 
     await tester.pumpWidget(_wrap(repo));
     await _settle(tester);
@@ -97,8 +120,12 @@ void main() {
   // `rootBundle` asset channel only serves one real load per test file
   // reliably, so every other state above uses a hand-rolled/never-resolving
   // repository instead of a second real fixture read.
-  testWidgets('a pending request shows its detail and the approve flow works', (tester) async {
-    final repo = FakeManageRepository(fixtures: FixtureLoader(latency: Duration.zero));
+  testWidgets('a pending request shows its detail and the approve flow works', (
+    tester,
+  ) async {
+    final repo = FakeManageRepository(
+      fixtures: FixtureLoader(latency: Duration.zero),
+    );
 
     await tester.pumpWidget(_wrap(repo));
     await _settle(tester);
@@ -131,7 +158,10 @@ void main() {
     // Confirm — the dialog's own Approve button (the form's Approve button
     // is still on screen behind the dialog, so scope to the dialog).
     await tester.tap(
-      find.descendant(of: find.byType(AlertDialog), matching: find.text('Approve')),
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Approve'),
+      ),
     );
     await _settle(tester);
     await tester.pumpAndSettle();

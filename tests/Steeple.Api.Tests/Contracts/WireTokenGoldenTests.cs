@@ -31,6 +31,7 @@ public class WireTokenGoldenTests
             ["counterOfferStatuses"] = SerializedTokens<CounterOfferStatus>(),
             ["notificationTypes"] = SerializedTokens<NotificationType>(),
             ["occurrenceStatuses"] = SerializedTokens<OccurrenceStatus>(),
+            ["paymentAccountStatuses"] = SerializedTokens<PaymentAccountStatus>(),
             ["paymentStatuses"] = SerializedTokens<PaymentStatus>(),
             ["ratingRateeTypes"] = SerializedTokens<RatingRateeType>(),
             ["roomStatuses"] = SerializedTokens<RoomStatus>(),

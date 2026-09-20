@@ -87,6 +87,9 @@ public class SteepleDbContext : DbContext
     /// <summary>Payout-side onboarding state per venue (Payments module).</summary>
     public DbSet<VenuePaymentAccount> VenuePaymentAccounts => Set<VenuePaymentAccount>();
 
+    /// <summary>Verified payment-provider event replay ledger.</summary>
+    public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
+
     /// <summary>Charge/refund attempts on booking occurrences (Payments module).</summary>
     public DbSet<Payment> Payments => Set<Payment>();
 

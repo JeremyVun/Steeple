@@ -96,37 +96,28 @@ public sealed class ListingService : IListingService
             matched = EmptyMatched;
         }
 
+        var ordered = searchCenter is { } c
+            ? rooms.Select(room => (Room: room, Distance: room.Venue is { } venue
+                    ? (double?)GeoMath.DistanceMeters(c.Latitude, c.Longitude, venue.Latitude, venue.Longitude)
+                    : null))
+                .OrderBy(item => item.Distance ?? double.MaxValue)
+            : rooms.Select(room => (Room: room, Distance: (double?)null))
+                .OrderBy(item => item.Room.Venue?.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(item => item.Room.Name, StringComparer.OrdinalIgnoreCase);
+
+        // Refine and order every survivor, but load ratings and build DTOs only for the page.
+        // Plain search already paged in SQL.
+        var pageRooms = (when is not null ? ordered.Skip(skip).Take(pageSize) : ordered).ToList();
         var ratingSummaries = await _ratings
             .GetVenueSummariesAsync(
-                rooms.Select(r => r.VenueId).Distinct().ToList(),
+                pageRooms.Select(item => item.Room.VenueId).Distinct().ToList(),
                 _clock.GetUtcNow(),
                 ct)
             .ConfigureAwait(false);
-
-        IEnumerable<RoomSummaryDto> items;
-        if (searchCenter is { } c)
-        {
-            items = rooms
-                .Select(room =>
-                {
-                    var venue = room.Venue;
-                    var distance = venue is null
-                        ? (double?)null
-                        : GeoMath.DistanceMeters(c.Latitude, c.Longitude, venue.Latitude, venue.Longitude);
-                    return room.ToSummaryDto(distance, ratingSummaries.GetValueOrDefault(room.VenueId), matched.GetValueOrDefault(room.Id));
-                })
-                .OrderBy(dto => dto.DistanceMeters ?? double.MaxValue);
-        }
-        else
-        {
-            items = rooms
-                .Select(room => room.ToSummaryDto(rating: ratingSummaries.GetValueOrDefault(room.VenueId), matchedWindow: matched.GetValueOrDefault(room.Id)))
-                .OrderBy(dto => dto.VenueName, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(dto => dto.RoomName, StringComparer.OrdinalIgnoreCase);
-        }
-
-        // Plain search already paged in SQL; the When path holds every survivor, so cut the page here.
-        var itemList = (when is not null ? items.Skip(skip).Take(pageSize) : items).ToList();
+        var itemList = pageRooms.Select(item => item.Room.ToSummaryDto(
+            item.Distance,
+            ratingSummaries.GetValueOrDefault(item.Room.VenueId),
+            matched.GetValueOrDefault(item.Room.Id))).ToList();
 
         var center = searchCenter ?? _geofence.Center;
 

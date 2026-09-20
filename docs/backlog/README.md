@@ -16,15 +16,14 @@ Use these status markers consistently:
 
 | Document | Remaining work |
 |---|---|
-| `ratings/build_plan.md` | Public review comments on room sheets and web no-show marking. |
-| `reputation-and-launch.md` | Response-rate signals, renewal, expiry tuning, area SEO, and launch operations. Ratings and clean-route SEO are already complete. |
-| `phase-7-growth-seams.md` | Trigger-gated expansion: verification, vouching, area two, trust step-ups, insurance, and safeguarding. |
-| `payments.md` | Stripe adapter, webhooks, and launch-time legal/policy work; the mock-gateway rails are built. |
-| `sse/design.md` | Unscheduled live-inbox refresh over SSE. |
-| `booking-modes.md` | Adopted rationale plus the still-deferred chronic-rescinder signal. |
+| [MVP release](../runbooks/mvp-release.md) | Current release gates, local fixes and verification. The previously indexed `reputation-and-launch.md` is absent from this checkout. |
+| Growth (no current plan file) | Trigger-gated expansion remains deferred; `phase-7-growth-seams.md` is absent from this checkout. |
+| `payments.md` | Real guest payment setup, charging/refunds, payment webhooks, and live legal/policy work; sandbox host Connect onboarding is built. |
+| Booking modes | Current behavior is owned by `../contracts/applications.md` and `../contracts/payments.md`; the previously indexed plan is absent. |
 
 ## Historical rationale and completion records
 
 | Area | Record |
 |---|---|
-| Ratings on web v2 core (completed 2026-08-08) | `ratings/design.md` |
+| Ratings on web v2 (core completed 2026-08-08; follow-ups completed 2026-09-05) | `ratings/design.md`, `ratings/build_plan.md` |
+| Host Stripe sandbox onboarding (completed 2026-09-06) | `host-onboarding/design.md`, `host-onboarding/build_plan.md`; operator setup in `../runbooks/stripe.md` |

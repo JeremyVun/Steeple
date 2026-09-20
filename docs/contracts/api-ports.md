@@ -1,5 +1,7 @@
 # Contracts — Steeple.Api internal architecture (ports & modules)
 
+SSE additions verified against source on 2026-09-06.
+
 > **Scope:** the API's *internal* contract — which module owns what, every port interface and
 > the adapter that implements it, and the rules a new module must follow. Wire shapes are in
 > `discovery.md` / `identity.md` / `applications.md` / `manage.md`;
@@ -37,8 +39,8 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `ApplicationService` orchestrates `ApplicationTransitionRules`, `ApplicationSchedulePolicy`, `ApplicationExpiryPolicy`, `ApplicationNotifications`, and `ApplicationPresentation`; ports: `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
 | Bookings | confirmation transaction (instant submit/manual approval/counter acceptance), occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
 | Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
-| Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `ChargePlanner` (pure) |
-| Notifications | inbox rows (= truth), cursor paging, transactional email/push outbox + delivery worker (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `NotificationOutboxWorker`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
+| Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `IHostPaymentOnboardingService`, `IConnectOnboardingGateway`, `ChargePlanner` (pure) |
+| Notifications | inbox rows (= truth), cursor paging, transactional email/push outbox + delivery worker (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `NotificationOutboxWorker`, `INotificationStream`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
 | Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller; its worker is enabled by `ReminderOptions.Enabled`) | `IBookingReminderService`, `IBookingReminderRepository` |
 | Retention | daily bounded deletion/redaction of terminal tokens, notifications, replay keys, private correspondence, and terminal outbox rows (no controller) | `IDataRetentionService`, `DataRetentionService`, `DataRetentionWorker` |
 | Manage | venue/room CRUD, verification requests, publish/moderation stamps (`Controllers/Manage/`) | `IManageService`, `IManageRepository`, `IVenueManagerRepository`, `IGeocodingGateway` |
@@ -69,7 +71,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IAvailabilityRepository` | `EfAvailabilityRepository` |
 | `IBookingRepository` | `EfBookingRepository` (same-room creates queue on a transaction-scoped room-row lock before the GiST exclusion check; atomic save translates SQLSTATE 23P01) |
 | `IRatingRepository` | `EfRatingRepository` |
-| `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — `StripePaymentGateway` is the drop-in at Stripe-time |
+| `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — real guest charging remains deferred |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |
 | `INotificationRepository` | `EfNotificationRepository` (atomic inbox/outbox insert, lease-based bounded outbox claims with `SKIP LOCKED`, delivery/failure stamps, cursor paging, caller-scoped mark-read) |
 | `INotificationDispatcher` | `NotificationDispatcher` (inbox + email/push outbox rows in one transaction; no provider calls on request paths) |
@@ -121,3 +123,21 @@ somebody's single journey, or is it the journey's repetition that needs limiting
 4. **New folders keep the `Namespace = Project.Folder` convention** so the project-wide global
    usings keep working.
 5. **The API never migrates the database** — Liquibase owns the schema (`persistence.md`).
+
+## Notification stream ports (2026-09-06)
+
+`INotificationStream` owns atomic readiness/admission, non-blocking recipient publication,
+and disposable subscriptions. `InMemoryNotificationStream` is singleton: four/user,
+256/process, one drop-oldest signal slot/subscriber; disposal releases capacity once and
+removes empty users. Listener loss atomically closes subscriptions and admission.
+`PostgresNotificationListener` is a hosted adapter with one dedicated non-pooled,
+non-enlisted SteepleDb connection. It validates the installed trigger shape, commits LISTEN, then admits.
+Sequential idle waits and 30-second SELECT 1 probes share that connection (five-second
+connection/probe deadlines), including under sustained traffic. Recovery uses bounded
+jitter, with reset after 60 healthy seconds. No request owns a DbContext or DB connection
+for stream duration. The HTTP writer serializes signals/heartbeats and bounds each write.
+
+Host onboarding is separate from `IPaymentGateway`: `IHostPaymentOnboardingService` maps to
+`HostPaymentOnboardingService`; `IConnectOnboardingGateway` maps to
+`StripeConnectOnboardingGateway` in sandbox Stripe mode or `MockPaymentGateway` for Development.
+Account provisioning/readiness and minimal webhook persistence stay in `IPaymentRepository`.

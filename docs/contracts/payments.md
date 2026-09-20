@@ -9,23 +9,28 @@
 
 ## The mock era, honestly
 
-Everything below is **live machinery over a mock gateway** (`MockPaymentGateway`): no money
-exists anywhere, ids are synthetic (`cus_mock_… / seti_mock_… / pi_mock_… / acct_mock_…`), and
-one lever makes failure paths testable — **a saved card ending `0002` declines every charge**
-(Stripe's decline test card, so the convention survives the swap). Swapping in
-`StripePaymentGateway` behind the same `IPaymentGateway` port is the entire Stripe cost; every
-non-`mock-*` wire shape below is final. While mock is the only registered gateway, the entire
-Payments controller is mapped only in Development; Production exposes no synthetic provider
-surface. Startup also fails when `payments.enabled=true` while
-`Payments:Gateway=mock`, and migration 017 removes synthetic provider state before rollout.
+Guest payment setup, charging, and refunds remain **machinery over a mock gateway**
+(`MockPaymentGateway`); no real guest payments are implemented. Guest endpoints remain
+Development-only and `payments.enabled` cannot be enabled with mock in Production.
+**Host onboarding now supports Stripe sandbox**, through a separate service/controller and
+`payments.onboarding` flag (see below). Host setup never activates guest charging.
+The remaining Stripe payment-state/port changes are in `docs/backlog/payments.md`; this is
+not just an adapter swap. Changeset 017 removes earlier synthetic state before rollout.
 
 **Behavioral switch:** config flag **`payments.enabled`** (off in base config, on in
-Development). Off = no 402 gate, no price snapshot, sweeper idle. Since 2026-08-08 the flag
+Development). Off = no 402 gate, offline collection, sweeper idle. Since 2026-08-08 the flag
 no longer touches booking modes: instant book confirms either way (offline, uncharged) and
 `RoomDetail.bookingMode` emits the host's stored choice — the uncarded spam caps in
 `applications.md` are the guest-side guard the card was standing in for.
-Bookings confirmed while the flag was off have no price snapshot and **stay offline forever**.
-Turning the flag off also hides the payment endpoints and pauses charge/refund kicks and the
+Every new booking snapshots its per-session price and currency, including offline bookings.
+`Booking.InAppPayment` freezes the collection mode independently. A booking confirmed while
+the flag was off **stays offline forever**, including after payments are enabled. The charge
+repository and charge service both require in-app mode. Migration 024 backfills the old mode;
+legacy offline prices remain unknown rather than being guessed from today's listing rate.
+`BookingPaymentDto` keeps its existing shape: offline bookings now carry nullable
+`perOccurrenceAmount` and `currency`; `nextChargeAtUtc` stays null. Web and mobile show the
+snapshot and say to arrange payment directly. An edited listing rate never replaces it.
+Turning the flag off also hides the guest payment endpoints and pauses charge/refund kicks and the
 sweeper; historical payment state remains readable, and paid-mode work resumes only when the
 flag returns.
 
@@ -36,6 +41,11 @@ post-commit); the DB's one-live-payment-per-occurrence index + idempotency key =
 make double-charging impossible by construction.
 
 ## Guest method-on-file ✅
+
+Compose forwards `STRIPE_PUBLISHABLE_KEY` from the root `.env` to
+`Payments:PublishableKey`, defaulting to `pk_mock_steeple` when unset. For direct
+`dotnet run`, export `Payments__PublishableKey` in the process environment. A real
+publishable key alone does not select a Stripe gateway or enable payments.
 
 All endpoints below return 404 while `payments.enabled=false`; the web also omits the account
 payment block, so an unavailable setup flow has no visible entrance.
@@ -99,34 +109,81 @@ the occurrence's `paymentStatus` becomes `refunded`. Not yet built (Stripe-time 
 policy page): venue-no-show auto-refund, goodwill refund endpoint
 (`POST /manage/occurrences/{id}/refund`), partial refunds.
 
-## Venue payout onboarding ✅ (stub — display-only in the mock era)
+## Venue payout onboarding ✅ (Stripe sandbox, 2026-09-06)
 
-- `POST /api/v1/manage/venues/{id}/payments/onboarding` ✅ (manager-scoped, `manage` limit) →
-  `{url, mock: true}`. Creates/reuses the connected account. The mock `url`
-  (`mock-onboarding:acct_mock_…`) is **not navigable** — mock-era clients render their own
-  screen and complete via the endpoint below; at Stripe-time `url` is the Stripe-hosted
-  account-link URL, consumed unchanged.
-- `POST /api/v1/manage/venues/{id}/payments/onboarding/mock-complete` ✅ *(Development-only)* —
-  one call collapses hosted KYC
-  + `account.updated` webhooks + the opt-in switch: flips `detailsSubmitted/chargesEnabled/
-  payoutsEnabled` and stamps the opt-in. `400 invalid_payment` before onboarding starts.
-- `GET /api/v1/manage/venues/{id}/payments` ✅ → `{onboardingStarted, detailsSubmitted,
-  chargesEnabled, payoutsEnabled,
-  optedIn, dashboardUrl: null, mock: true}` (payments.md §9 fields, so Stripe slots in).
+`payments.onboarding` independently exposes host setup while `payments.enabled=false`.
+Development retains the legacy mock host flow when only `payments.enabled` is on. Production
+requires `Payments:Connect:Mode=stripe` for onboarding. Only sandbox `sk_test_` keys are
+accepted; an opted-in sandbox account does not activate live booking payments.
 
-⚠ **Mock-era simplification (deliberate, documented):** payout state **gates nothing** —
-priced bookings charge regardless of venue onboarding, so the whole loop is drivable against
-seed data. At Stripe-time this becomes the payments.md §4 gate (charges+payouts enabled and
-opted in ⇒ snapshot at confirmation; otherwise offline), decided at confirmation time.
+Every host endpoint is authenticated and manager-scoped; inaccessible venues return 404.
+Writes use the `manage` rate limit. State reads refresh the connected account from Stripe;
+provider failures return `503 payment_provider_unavailable`, never raw Stripe error details.
+
+| Method/path under `/api/v1/manage/venues/{id}/payments` | Result |
+|---|---|
+| `GET` | Current `VenuePaymentState` below |
+| `POST /onboarding` | `{url, mock}`; create/recover one Express account, mint a fresh hosted link |
+| `PUT /opt-in` with `{optedIn: bool}` | Updated state; true requires readiness, else `409 payment_account_not_ready`; false works despite lost readiness/provider outage |
+| `POST /dashboard` | `{url, mock:false}`; on-demand Express login link after details submitted; unavailable state → 409 |
+| `POST /onboarding/mock-complete` | Development/mock-only legacy completion; real Stripe never trusts client completion |
+
+`VenuePaymentState` retains `onboardingStarted`, `detailsSubmitted`, `chargesEnabled`,
+`payoutsEnabled`, `optedIn`, `dashboardUrl:null`, and `mock`. Additive fields:
+
+- `status`: `notStarted | incomplete | pending | restricted | ready` (shared wire registry).
+- `requirementsDue`: provider requirement names, no submitted values; `disabledReason`: nullable provider token.
+- `testMode:true`; `canOpenDashboard`: true for a real account with submitted details.
+- `onlinePaymentsAvailable:false`: explicit onboarding-only scope, even when opted in.
+
+Ready requires submitted details, enabled charges/payouts, no currently due requirements,
+and no disabled reason. Provider updates preserve the manager's separate opt-in timestamp.
+Completing Stripe setup never opts a venue in. Mock completion retains its old collapse for
+Development harnesses only. Offline bookings remain offline.
+
+The configured public web base owns callbacks (HTTPS, or loopback HTTP for testing):
+`desk?paymentVenue={id}&paymentReturn=return|refresh`. It includes any deployment prefix.
+Web restores auth and matches the venue against managed venues before reading or requesting
+a new link. Return refreshes state; refresh consumes the one-use marker before generating a
+replacement link. Both clients accept only HTTPS `connect.stripe.com` destinations without
+credentials or non-default ports. Mobile uses the external browser and refreshes on foreground.
+Never persist client secrets, account/login-link URLs, bank details, identity documents, or
+raw webhook bodies. The existing `dashboardUrl` field stays null; links are minted only by POST.
+
+### Account identity and webhooks
+
+Changeset 023 adds a provider discriminator (`mock` or `stripe`), a durable unique
+`ProvisioningKey`, nullable provider account id while
+creation is unresolved, and readiness requirements to `venue_payment_accounts`. Stripe
+metadata plus a stable create idempotency key recover ambiguous creation responses; metadata
+lookup also covers retries after Stripe evicts an idempotency key. First Stripe setup can
+replace synthetic mock onboarding state with a new provisioning identity and cleared opt-in;
+mock mode never claims or completes a Stripe account. Database account-state
+locks serialize provider retrieval and persistence, preventing stale concurrent updates.
+
+`POST /api/v1/payments/webhook` is anonymous with Stripe signature verification, a 64 KiB
+body limit, and 120/min/IP limiter. It remains available when the onboarding flag is off.
+Only sandbox `account.updated` is processed; other verified sandbox event types are acknowledged.
+Missing signing configuration returns 503; bad signatures/live events return 400
+`invalid_webhook_signature`. The minimal `payment_webhook_events` ledger deduplicates event
+id/source and records account/object ids, type, timestamps, attempts, and safe failure code.
+Retrieve current Stripe state before applying; duplicates/order never establish readiness.
+Processing is inline and non-2xx invites Stripe retry; no background replay worker ships here.
+
+The platform is Australian. Country/capability choices come from Stripe-hosted onboarding and
+platform Dashboard configuration; no AU/US country is forced. Sandbox readiness is not evidence
+of live AU-to-US payout eligibility. Configuration, callback recovery, and operator setup:
+[`runbooks/stripe.md`](../runbooks/stripe.md).
 
 ## Ports & module
 
 `Services/Payments` owns: `IPaymentGateway` (EnsureCustomer, CreateSetupIntent,
-ChargeOccurrence, Refund, CreateConnectedAccount, CreateAccountLink — webhook
-verification joins the port at Stripe-time), `IPaymentRepository`, `IPaymentService`
+ChargeOccurrence, Refund), `IPaymentRepository`, `IPaymentService`
 (includes the reads other modules project: `GetOccurrenceStatusesAsync`,
 `HasPaymentMethodAsync`), `ChargePlanner` (pure window/ladder policy), `PaymentSweeper`.
-Adapters in `Proxies/Payments`: `MockPaymentGateway`, `EfPaymentRepository`. Module rules:
+Host onboarding uses `IHostPaymentOnboardingService` and `IConnectOnboardingGateway`;
+adapters in `Proxies/Payments` are `StripeConnectOnboardingGateway`, `MockPaymentGateway`,
+and `EfPaymentRepository`. Stripe.net 52.4.1 supplies Connect API and signature verification. Module rules:
 Payments reads occurrences, never mutates them (auto-cancels go through
 `IBookingService.CancelOccurrencesForPaymentFailureAsync`); Bookings triggers refunds through
 `IPaymentService.RefundCancelledForBookingAsync`; Manage venue payment state is read through
@@ -134,8 +191,7 @@ the Payments service.
 
 ## Stripe-time additions (decided in payments.md, deliberately not built)
 
-`webhook_events` table + `POST /api/v1/payments/webhook` (signature-verified, allowlist,
-dedup); `paymentActionRequired` (3DS) notification; `ApplicationFee` becomes the real
+Extend the existing account-only webhook ledger/edge with durable payment-event recovery; `paymentActionRequired` (3DS) notification; `ApplicationFee` becomes the real
 commission (column exists, 0 today); Stripe email receipts; disputes; reconciliation report;
 ToS/refund-policy pages. `payments` rows keep `ProviderPaymentId` only on success — a failed
 attempt's provider id is not retained (the failure code is the history).

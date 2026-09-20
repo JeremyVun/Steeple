@@ -247,6 +247,33 @@ Every email ends with one CTA line the **dispatcher** composes from the payload'
 — `{Email:WebBaseUrl}/?goto=<url-encoded deepLink>` (`web.md`), or nothing at all where no web
 origin is configured. Composition sites never build URLs; gateways never edit bodies.
 
+### `GET /api/v1/me/notifications/stream` (2026-09-06)
+
+Authorized bearer SSE, scoped only by `sub`; no recipient parameter, replay cursor or
+query token. `exp` must be present, valid and strictly future regardless of JWT clock skew.
+Success is `200`, `Content-Type: text/event-stream; charset=utf-8`,
+`Cache-Control: no-store, no-transform`, `X-Accel-Buffering: no`. Admission registers the
+subscription before its initial invalidation; every committed inbox insert (API or Admin)
+can coalesce into another invalidation. Each event is exactly:
+
+```text
+event: invalidate
+data: {}
+
+```
+
+The blank line terminates it; no `id`/`retry` fields. Flush promptly, emit
+`: heartbeat\n\n` after 30 idle seconds, and close at JWT expiry or five minutes,
+whichever comes first. Every write/flush has a five-second deadline; request abort,
+listener loss and host shutdown close the response. Failures after headers never append JSON.
+
+Before headers, unready listener → `503 notification_stream_unavailable` +
+`Retry-After: 5`; four streams/user or 256/process → `429 rate_limited` +
+`Retry-After: 60`. Existing global API and nginx rate limits still apply. Admission has
+no queue; each subscriber holds at most one pending content-free signal. Read-state
+updates do not signal. Mobile mirrors the `{}` payload but uses FCM and snapshots.
+The snapshot remains authoritative; no event guarantees retained/replayed delivery.
+
 **Adding a new inbox event type (the extension recipe — additive, no migration):**
 1. Add a `NotificationType` value (`Persistence/Constants/NotificationType.cs`); the wire
    token is its camelCase name. The `notifications` table stores type as int + payload as

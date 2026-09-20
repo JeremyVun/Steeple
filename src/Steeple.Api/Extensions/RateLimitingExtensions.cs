@@ -32,6 +32,9 @@ public static class RateLimitPolicies
     /// <summary>Per-IP limiter for the anonymous-friendly analytics ingest endpoint (CONTRACTS §7).</summary>
     public const string Events = "events";
 
+    /// <summary>Per-IP limiter for signed payment provider webhooks.</summary>
+    public const string PaymentWebhooks = "payment-webhooks";
+
     /// <summary>
     /// Per-account limiter for putting a card on file. Deliberately not <see cref="Apply"/>:
     /// the card step is the middle of an ordinary first request (submit → 402 → setup →
@@ -68,6 +71,7 @@ public static class RateLimitingExtensions
     private const int ApplyPermitLimit = 5;
     private const int PaymentsPermitLimit = 10;
     private const int EventsPermitLimit = 60;
+    private const int PaymentWebhookPermitLimit = 120;
     private const int ManagePermitLimit = 30;
     private const int MediaPermitLimit = 12;
     private const int AvailabilityPermitLimit = 30;
@@ -160,6 +164,16 @@ public static class RateLimitingExtensions
                     _ => new FixedWindowRateLimiterOptions
                     {
                         PermitLimit = EventsPermitLimit,
+                        Window = Window,
+                        QueueLimit = 0,
+                    }));
+
+            options.AddPolicy(RateLimitPolicies.PaymentWebhooks, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ClientIp(context),
+                    _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = PaymentWebhookPermitLimit,
                         Window = Window,
                         QueueLimit = 0,
                     }));

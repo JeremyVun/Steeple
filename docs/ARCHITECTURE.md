@@ -5,6 +5,14 @@
 > over `docs/contracts/` (one file per seam — load only the seam you need). What's next:
 > `docs/backlog/`. Flutter app design: `MOBILE_DESIGN.md`.
 
+## MVP release hardening (2026-09-20)
+
+Local code now fails closed on catalogue outages and missing legal acceptance, stores offline
+booking prices separately from collection mode, and probes database readiness. Mobile displays
+booking prices and offers explicit agreement review. Infra migration parity and backup failure
+handling are repaired locally. This is **not a production release**; see
+[the release gate and validation record](runbooks/mvp-release.md).
+
 ## Current state — ROADMAP Phases 0–5 complete (code); ratings + availability landed 2026-07-05; web v2 became the active web surface 2026-08-05 and finished its real-API migration 2026-08-07
 
 The API, web v2, and mobile app implement the full two-sided loop: geo-fenced discovery →
@@ -81,7 +89,7 @@ JwtBearer auth (`MapInboundClaims=false`) → rate limiting → ProblemDetails e
 | `IPushGateway` | Explicit `Push:Mode`: `fcm` selects `FcmPushGateway` (FirebaseAdmin, data messages, dead-token cleanup); `disabled` selects `LoggingPushGateway` |
 | `IDeviceRegistry` | `EfDeviceRegistry` (token upsert, ownership-scoped unregister) |
 | `IBookingRepository` | `EfBookingRepository` (exclusion-violation-aware atomic save) |
-| `IPaymentGateway` | `MockPaymentGateway` (mock era — instant success, synthetic ids, card ending 0002 declines; the Stripe adapter is the drop-in at Stripe-time) |
+| `IPaymentGateway` | `MockPaymentGateway` (Development guest payments: synthetic ids, card ending 0002 declines; real guest adapter deferred) |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first payment rows under the one-live-payment partial unique index; SQLSTATE 23505 → lost claim; session advisory lock for the sweep) |
 | `IVenueManagerRepository` / `IManageRepository` | `EfVenueManagerRepository` (read-only — Admin writes the venue↔manager links) / `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IImageProcessor` | `ImageSharpImageProcessor` (metadata-first 12,000px/30 MP/single-frame gate, two-slot processing cap, auto-orient, metadata strip, JPEG variants; ImageSharp 3.1.x) |
@@ -94,6 +102,8 @@ detail by id/slug, suburbs, sitemap (lastmod = later of room/venue `UpdatedAtUtc
 geofence endpoint. Only Published rooms are publicly visible: search filters status in
 SQL *and* the service gates direct id/slug lookups (Draft/Unlisted → 404). Wire enums are
 stable camelCase tokens; clients humanize.
+Availability-filtered search refines and orders its bounded candidates before pagination;
+rating summaries and presentation DTOs are loaded only for the requested page.
 
 **Identity** — `POST /auth/sessions` verifies Google/Apple ID tokens server-side, finds-
 or-creates by `(Provider, Subject)`, and issues the API's **own tokens**: ~15-min HS256
@@ -135,6 +145,18 @@ cursor-paginated (opaque `(CreatedAtUtc, Id)` cursor); `POST /me/notifications/r
 caller-scoped. In Development (`Email:DevMailboxEnabled`, omitted from base appsettings) a
 decorator captures every send to a file-backed **dev mailbox** browsable at `/dev/mailbox`
 (`.json` for harnesses) so local CTAs are actually clickable.
+Live web arrivals use `GET /api/v1/me/notifications/stream` (2026-09-06). Migration 022
+adds an insert trigger publishing recipient IDs through PostgreSQL NOTIFY, covering API
+and Admin commits. `PostgresNotificationListener` owns one dedicated connection;
+`InMemoryNotificationStream` admits four subscriptions/user and 256/process with one
+pending signal each. Listener loss closes streams and admission; every reconnect starts
+with invalidation. The serialized HTTP writer emits content-free events and idle
+heartbeats, bounded by write deadline, JWT expiry and a five-minute lifetime. Ordinary
+global request limits remain. The web feed streams only while signed in, visible and on
+the product surface; snapshots, dirty-read recovery and receipt overlays own content.
+Mobile uses its existing FCM/snapshot path. Queue coupling and proxy/rollout verification
+are documented in [the runbook](runbooks/notification-stream.md).
+
 Email is reserved for direct correspondence, actions, commitment changes and financial events.
 Ratings are inbox/push-only. Booking reminders remain T−7d/T−1d in inbox/push, but email fires
 only at T−1d for the booking's first occurrence; recurring sessions do not produce recurring mail.
@@ -195,11 +217,19 @@ constraint as approval; a lost race answers `409 slot_taken` with nothing persis
 listing detail emits the host's stored mode verbatim (2026-08-08 — instant no longer rides
 on `payments.enabled`; an uncarded guest over the spam caps falls back to request→approve
 at submit, `docs/contracts/applications.md`).
-The Payments controller is removed from endpoint discovery outside Development while mock is
+The guest Payments controller is removed from endpoint discovery outside Development while mock is
 the only gateway, and every action returns 404 when the flag is off. The service and worker also
 short-circuit, and the worker is not registered at startup while off. Production rejects
 `payments.enabled=true` with `Payments:Gateway=mock`; changeset 017 clears synthetic provider
 state before a real gateway can use the tables.
+
+**Host Stripe onboarding** (2026-09-06) runs independently behind `payments.onboarding`.
+`HostPaymentsController` → `HostPaymentOnboardingService` → `IConnectOnboardingGateway`
+uses Stripe.net for sandbox Express accounts, hosted setup/login links, state retrieval and
+signed account events. Migration 023 stores durable provisioning identity, readiness fields,
+and a minimal webhook ledger. Per-account locks protect state reconciliation; host opt-in
+is separate and does not activate guest payments. Web and mobile expose setup/resume/status
+and dashboard controls; mobile opens Stripe externally. See `docs/runbooks/stripe.md`.
 
 **Ratings** — Phase 6 Slice 1. `POST /bookings/{id}/ratings` writes one immutable
 rating per booking direction (`RateeType = Venue` for organizer→venue,
@@ -211,6 +241,9 @@ aggregates, and organizer summaries only once both directions exist or the windo
 Optional comments (≤1000 chars) are immutable with the rating; public venue review pages show
 revealed, non-hidden venue-directed comments newest-first. Admin can hide/unhide rating rows via
 `HiddenAtUtc`; hidden rows drop out of aggregates and public/booking displays.
+Web room sheets paginate the public comments beneath house rules, without fallback reviews.
+Guest and host booking letters also expose confirmed no-show marking for past `Occurred`
+occurrences, retaining the server-returned marker identity in the in-memory mirror.
 
 **Manage** (provider self-service, Phase 5) — venue-manager-scoped venue/room CRUD plus host
 ownership/lease-authority verification; wire shapes and endpoint list are `CONTRACTS.md` §6.

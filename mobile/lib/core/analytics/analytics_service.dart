@@ -23,6 +23,7 @@ abstract final class AnalyticsEvents {
   static const applicationStarted = 'application_started'; // props: roomId
   static const ssoStarted = 'sso_started'; // props: provider, surface:'mobile'
   static const notificationOpened = 'notification_opened'; // props: type, channel:'push'
+  static const payoutStepOpened = 'payout_step_opened';
 }
 
 /// In-memory queue → `POST /api/v1/events` batcher: flushes every 15 s, at 20

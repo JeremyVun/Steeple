@@ -5,8 +5,9 @@
 > and Admin sides shipped 2026-07-05 and were re-verified against the current tree
 > 2026-08-08. **The backend needs zero changes for this MVP** — every field and endpoint
 > below already exists and is already served on reads web v2 makes today.
-> `build_plan.md` beside this file now contains only the remaining web work; current wire
-> truth lives in `docs/contracts/applications.md` and `docs/contracts/discovery.md`.
+> `build_plan.md` beside this file tracks the subsequent public-review and no-show work.
+> Current behavior lives in `docs/contracts/web.md`, `docs/contracts/applications.md` and
+> `docs/contracts/discovery.md`; the original MVP decisions below are dated rationale.
 >
 > File:line references were verified against the 2026-08-08 working tree (which includes
 > the uncommitted host-letter/unified-inbox work). Treat them as strong hints, not
@@ -21,6 +22,23 @@ short note, immutable, double-blind (you see theirs when you've rated back, or w
 14-day window closes), and steeple alone decides who may rate and until when. Earned
 averages then appear wherever a space is being judged: the search cards and the room
 sheet. No new pages, no desk changes, no bell.
+
+## Follow-up implementation (2026-09-05)
+
+Public comments now appear beneath house rules on room sheets, paginated by venue GUID.
+Empty or unavailable first reads render nothing; later failures retain comments and offer
+retry. Comment counts remain separate from rating totals. Pagination preserves scroll and
+focus, and changing rooms invalidates pending responses.
+
+Both booking letters now offer a confirmed no-show action for server-marked `occurred`
+dates. The confirmation names the other party and date/time and explains finality and trust
+history. The returned booking supplies the new state and marker identity; server refusals
+use the existing letter feedback. See `build_plan.md` for verification status and
+`docs/DESIGN_SYSTEM.md` §8.14 for the current components.
+
+These additions supersede the public-comments and no-show deferrals in the original MVP
+scope and D6 below. Instant-book organizer trust and the other explicit MVP cuts remain
+outside this item's follow-up scope.
 
 ## As-built wire truth (build against this, verbatim)
 
@@ -273,23 +291,13 @@ journal's "Lately" block picks it up automatically from the same cache.
   `h2.rate__ask`. Guest block state machine: `.rate[data-state]` ∈
   `open · invited · mine · both · theirs`.
 
-## Deferred, with the map back
+## Follow-up scope and deliberate cuts
 
-- **Public reviews block** (the cut): `GET /api/v1/venues/{id}/ratings?page&pageSize`
-  exists (public, 120/min, pageSize ≤50, returns only ratings **with comments** — its
-  `totalCount` legitimately differs from `rating.count`, so never render them as the same
-  number). It is GUID-addressed and **web v2 holds no venue GUID** — thread `venueId`
-  through `catalog.js` `profileFrom`/`summaryFrom`/`noteListing` exactly the way `roomId`
-  already is (catalog.js:269-272 states the precedent). Fetch lives in `catalog.js`
-  without the `live()` seed fallback (follow `getRoomAvailability` — an invented review
-  is worse than none). Render as a `section.block` after House rules in `roomPanel.js`,
-  reusing the held-scrollTop idiom for "more".
-- **No-show marking on web** (`POST /occurrences/{id}/no-show` exists); note
-  `noShowCount` only counts host-marked no-shows and only surfaces once the organizer has
-  a revealed rating.
+- Public reviews and web no-show marking are implemented; their current contracts are in
+  `docs/contracts/web.md`. Organizer `noShowCount` still counts only host-marked no-shows
+  and surfaces only once the organizer has a revealed rating.
 - **Instant-path organizer trust** — an additive organizer summary on `BookingDto`
   manager reads, decided against for MVP (no decision moment), recorded here so the gap
   stays deliberate.
-- **DESIGN_SYSTEM.md** gains the rating component spec (stars, chip, form) in the same PR
-  that ships the UI — there is currently **no** star/rating spec or token; nearest tonal
-  precedents are `.verified--quiet` (a footnote, not a badge) and the trust `.chip`.
+- `docs/DESIGN_SYSTEM.md` §8.14 owns the shipped stars, chips, forms, public reviews and
+  no-show confirmation treatment.

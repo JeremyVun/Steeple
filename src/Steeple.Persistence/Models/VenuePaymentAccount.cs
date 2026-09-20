@@ -11,7 +11,13 @@ public class VenuePaymentAccount
     public Guid VenueId { get; set; }
 
     /// <summary>The provider's connected-account id (mock: <c>acct_mock_…</c>; Stripe: <c>acct_…</c>).</summary>
-    public string ProviderAccountId { get; set; } = "";
+    public string? ProviderAccountId { get; set; }
+
+    /// <summary>Stable identity used to recover an ambiguous provider-side create.</summary>
+    public Guid ProvisioningKey { get; set; }
+
+    /// <summary>Provider that owns this row's account identity.</summary>
+    public string Provider { get; set; } = "mock";
 
     /// <summary>Whether the host completed the provider's onboarding form.</summary>
     public bool DetailsSubmitted { get; set; }
@@ -21,6 +27,12 @@ public class VenuePaymentAccount
 
     /// <summary>Whether the provider will pay out to the venue's bank.</summary>
     public bool PayoutsEnabled { get; set; }
+
+    /// <summary>Provider requirements currently blocking or awaiting completion.</summary>
+    public string[] RequirementsDue { get; set; } = [];
+
+    /// <summary>Provider reason that account capabilities are disabled, when present.</summary>
+    public string? DisabledReason { get; set; }
 
     /// <summary>When the host explicitly opted the venue into in-app payments; null = not opted in.</summary>
     public DateTimeOffset? OptedInAtUtc { get; set; }

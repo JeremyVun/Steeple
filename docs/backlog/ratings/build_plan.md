@@ -1,11 +1,15 @@
-# Ratings on web v2 — remaining build plan
+# Ratings on web v2 — follow-up build plan
 
-> **Status: active backlog.** The core two-way ratings loop shipped on 2026-08-08;
-> `design.md` preserves that rationale. This plan contains only the web work that has not
-> shipped. The API, schema, Admin, and mobile implementations already exist. Current wire
-> truth lives in `docs/contracts/discovery.md` and `docs/contracts/applications.md`.
+> **Status: historical rationale, completed 2026-09-05. Ready for closeout.**
+> The core two-way ratings loop shipped on 2026-08-08; `design.md` preserves that rationale.
+> Both web follow-ups below are implemented and verified. The API, schema, Admin, and mobile implementations
+> already exist. Current behavior lives in `docs/contracts/web.md`,
+> `docs/contracts/discovery.md` and `docs/contracts/applications.md`.
 
 ## 1. Public reviews on the room sheet
+
+**Done and verified.** Includes abort/stale-response guards, pagination retry and focus
+preservation, and a named, focusable details scroller for keyboard access.
 
 Show revealed review comments beneath a room's house rules once real comments exist. Reviews
 are venue-level, so every room at a venue shows the same feed.
@@ -43,6 +47,10 @@ are venue-level, so every room at a venue shows the same feed.
 - Re-run the room-sheet and map journeys because the catalog model and room panel are shared.
 
 ## 2. No-show marking from booking letters
+
+**Done and verified.** Both roles pass the 30-check focused live gate, including server
+refusal, marker fidelity, focus and the revealed organizer trust summary. The host letter
+also reuses `openApplication`'s booking read instead of issuing a duplicate detail read.
 
 Let either party mark the other as absent for a past, non-cancelled occurrence. This is an
 irreversible booking action, not a rating.
@@ -88,3 +96,22 @@ irreversible booking action, not a rating.
 - `docs/contracts/web.md` moves both endpoints from “Not present” to the wired table, and the
   relevant design-system and as-built docs describe the shipped surfaces.
 - The live journeys above pass against the Development API, and `dotnet test` is green.
+
+## Verification (2026-09-05)
+
+- Combined live ratings follow-ups: 61/61, followed by focused verification of the keyboard
+  fix; both roles, review privacy, pagination/refusals,
+  stale responses, marker fidelity, trust summary and targeted axe checks.
+- Discovery: 58/58. Listing/room sheet: 34/34. Accessibility: 4/4. Surface scoping: 3/3.
+- Web unit checks, ESLint, typecheck and production build pass; production audit reports
+  zero vulnerabilities. Store tests also pass in UTC, New York and Sydney.
+- .NET: 573 unit and 149 PostgreSQL integration tests pass, including `BookingIntegrityTests`.
+- Correspondence: 108/108, including the full double-blind/reveal loop. Desktop/mobile
+  screenshots are readable; measured mobile letter and legend bounds show no overflow.
+- Trusted-key checks verify PageDown, End and unconsumed boundary keys on the final room
+  scroller implementation; child controls keep their own keyboard behavior.
+- Clean-seed map: 70/70, with no console errors against the refreshed Development API.
+
+The repeatable live follow-up gate is `npm run test:ratings`; prerequisites are documented
+in `src/Steeple.Web.v2/tools/HARNESS.md`. The existing correspondence suite still owns the
+full two-way rating journey.

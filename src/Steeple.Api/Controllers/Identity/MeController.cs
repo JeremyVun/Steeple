@@ -49,9 +49,9 @@ public sealed class MeController : ControllerBase
         return recorded
             ? NoContent()
             : Problem(
-                detail: $"Unknown document type '{request.DocType}'.",
+                detail: "This document or version is no longer current. Reload Steeple and review the latest terms and privacy policy.",
                 statusCode: StatusCodes.Status400BadRequest,
-                extensions: new Dictionary<string, object?> { ["code"] = "unknown_doc_type" });
+                extensions: new Dictionary<string, object?> { ["code"] = "invalid_agreement" });
     }
 
     /// <summary>

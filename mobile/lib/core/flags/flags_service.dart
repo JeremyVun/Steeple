@@ -22,6 +22,7 @@ abstract class FlagsService {
 /// Registry — add here when a flag ships; clean up when it stabilizes.
 abstract final class FlagKeys {
   static const paymentsEnabled = 'payments.enabled';
+  static const paymentsOnboarding = 'payments.onboarding';
   static const applyEnabled = 'mobile.apply_enabled';
   static const manageEnabled = 'mobile.manage_enabled';
 
@@ -31,6 +32,7 @@ abstract final class FlagKeys {
 
   static const all = [
     paymentsEnabled,
+    paymentsOnboarding,
     applyEnabled,
     manageEnabled,
     forceUpgrade,

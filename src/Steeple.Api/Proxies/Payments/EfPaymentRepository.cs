@@ -14,6 +14,7 @@ public class EfPaymentRepository : IPaymentRepository
 {
     /// <summary>Advisory-lock key for the payment sweep (arbitrary, unique within the database).</summary>
     private const long SweepLockKey = 0x5745_4550_5041_59; // "WEEPPAY"
+    private const long AccountStateLockSalt = 0x5354_5041_5941_43; // "STPAYAC"
 
     private readonly SteepleDbContext _db;
 
@@ -29,10 +30,146 @@ public class EfPaymentRepository : IPaymentRepository
         _db.VenuePaymentAccounts.FirstOrDefaultAsync(a => a.VenueId == venueId, ct);
 
     /// <inheritdoc />
-    public async Task AddVenueAccountAsync(VenuePaymentAccount account, CancellationToken ct = default)
+    public async Task<VenuePaymentAccount> GetOrCreateVenueProvisioningAsync(
+        Guid venueId, string provider, DateTimeOffset nowUtc, CancellationToken ct = default)
     {
+        var existing = await GetVenueAccountAsync(venueId, ct).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            return await PrepareProviderAsync(existing, provider, nowUtc, ct).ConfigureAwait(false);
+        }
+
+        var account = new VenuePaymentAccount
+        {
+            VenueId = venueId,
+            ProvisioningKey = Guid.NewGuid(),
+            Provider = provider,
+            CreatedAtUtc = nowUtc,
+            UpdatedAtUtc = nowUtc,
+        };
         _db.VenuePaymentAccounts.Add(account);
-        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return account;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            _db.Entry(account).State = EntityState.Detached;
+            var winner = await GetVenueAccountAsync(venueId, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("Concurrent venue payment provisioning disappeared.");
+            return await PrepareProviderAsync(winner, provider, nowUtc, ct).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<VenuePaymentAccount> PrepareProviderAsync(
+        VenuePaymentAccount account, string provider, DateTimeOffset nowUtc, CancellationToken ct)
+    {
+        if (account.Provider.Equals(provider, StringComparison.Ordinal))
+        {
+            return account;
+        }
+        if (!provider.Equals("stripe", StringComparison.Ordinal)
+            || !account.Provider.Equals("mock", StringComparison.Ordinal))
+        {
+            return account;
+        }
+
+        var provisioningKey = Guid.NewGuid();
+        await _db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE venue_payment_accounts
+            SET "Provider" = 'stripe',
+                "ProviderAccountId" = NULL,
+                "ProvisioningKey" = {provisioningKey},
+                "DetailsSubmitted" = false,
+                "ChargesEnabled" = false,
+                "PayoutsEnabled" = false,
+                "RequirementsDue" = ARRAY[]::text[],
+                "DisabledReason" = NULL,
+                "OptedInAtUtc" = NULL,
+                "UpdatedAtUtc" = {nowUtc}
+            WHERE "VenueId" = {account.VenueId} AND "Provider" = 'mock'
+            """, ct).ConfigureAwait(false);
+        await _db.Entry(account).ReloadAsync(ct).ConfigureAwait(false);
+        return account;
+    }
+
+    /// <inheritdoc />
+    public Task<VenuePaymentAccount?> GetVenueAccountByProviderIdAsync(string providerAccountId, CancellationToken ct = default) =>
+        _db.VenuePaymentAccounts.FirstOrDefaultAsync(a => a.ProviderAccountId == providerAccountId, ct);
+
+    /// <inheritdoc />
+    public Task ReloadVenueAccountAsync(VenuePaymentAccount account, CancellationToken ct = default) =>
+        _db.Entry(account).ReloadAsync(ct);
+
+    /// <inheritdoc />
+    public async Task<(PaymentWebhookEvent Event, bool Added)> GetOrAddWebhookEventAsync(
+        PaymentWebhookEvent webhookEvent, CancellationToken ct = default)
+    {
+        var existing = await _db.PaymentWebhookEvents.FindAsync(
+            [webhookEvent.Source, webhookEvent.ProviderEventId], ct).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            return (existing, false);
+        }
+
+        _db.PaymentWebhookEvents.Add(webhookEvent);
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+            return (webhookEvent, true);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            _db.Entry(webhookEvent).State = EntityState.Detached;
+            var winner = await _db.PaymentWebhookEvents.FindAsync(
+                [webhookEvent.Source, webhookEvent.ProviderEventId], ct).ConfigureAwait(false);
+            return (winner ?? throw new InvalidOperationException("Concurrent webhook event disappeared."), false);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task AcquireAccountStateLockAsync(string providerAccountId, CancellationToken ct = default)
+    {
+        await _db.Database.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var connection = _db.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT pg_advisory_lock(hashtextextended(@account, @salt))";
+        var account = command.CreateParameter();
+        account.ParameterName = "account";
+        account.Value = providerAccountId;
+        command.Parameters.Add(account);
+        var salt = command.CreateParameter();
+        salt.ParameterName = "salt";
+        salt.Value = AccountStateLockSalt;
+        command.Parameters.Add(salt);
+        await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ReleaseAccountStateLockAsync(string providerAccountId, CancellationToken ct = default)
+    {
+        var connection = _db.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+        {
+            return;
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT pg_advisory_unlock(hashtextextended(@account, @salt))";
+            var account = command.CreateParameter();
+            account.ParameterName = "account";
+            account.Value = providerAccountId;
+            command.Parameters.Add(account);
+            var salt = command.CreateParameter();
+            salt.ParameterName = "salt";
+            salt.Value = AccountStateLockSalt;
+            command.Parameters.Add(salt);
+            await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+        }
+
+        await _db.Database.CloseConnectionAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -185,6 +322,7 @@ public class EfPaymentRepository : IPaymentRepository
             .Include(o => o.Booking!).ThenInclude(b => b.Organizer)
             .Where(o => o.Status == OccurrenceStatus.Scheduled
                 && o.Booking!.Status == BookingStatus.Confirmed
+                && o.Booking.InAppPayment
                 && o.Booking.PricePerOccurrence != null
                 && !_db.Payments.Any(p => p.OccurrenceId == o.Id && p.Status != PaymentStatus.Failed));
 

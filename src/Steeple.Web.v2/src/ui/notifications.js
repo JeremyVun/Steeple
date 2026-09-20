@@ -24,7 +24,9 @@
 
 import { bus, rollTo, state } from '../core/bus.js';
 import { track } from '../data/analytics.js';
-import { markNotificationsRead, notifications } from '../data/correspondence.js';
+import { markNotificationsRead, notifications, openNotificationStream } from '../data/correspondence.js';
+import { consumeNotificationStream } from '../data/notificationStream.js';
+import { createNotificationFeed } from '../data/notificationFeed.js';
 import * as session from '../data/session.js';
 import { followDeepLink } from './deepLink.js';
 
@@ -132,119 +134,46 @@ export function actionLabelFor(row) {
 }
 
 export function createNotifications({ announce } = {}) {
-  // Everything steeple last answered with, printable rows only, newest first.
-  let held = [];
-  // One read in flight at a time, and never a poll: this is asked when somebody
-  // arrives, when the person changes, and when the inbox is opened.
-  let reading = null;
-  let asked = false;
-  // Rows this page has already spoken aloud. The screen reader is the one
-  // channel that cannot re-read a row later, so it must not repeat itself
-  // either — and unlike the old slip, saying it here marks nothing read.
-  const announced = new Set();
+  const feed = createNotificationFeed({
+    snapshot: () => notifications({ pageSize: 24 }),
+    markRead: markNotificationsRead,
+    openStream: openNotificationStream,
+    consumeStream: consumeNotificationStream,
+    printable: isAmbient,
+    changed: (rows) => bus.emit('notifications:change', { rows }),
+    announce: (rows) => announce?.(rows.length === 1
+      ? `${lineFor(rows[0])} It is in your inbox.`
+      : `${rows.length} new messages in your inbox.`),
+  });
+  let pagePresent = true;
+  const sync = () => feed.reconcile(session.currentUser()?.id ?? null,
+    pagePresent && globalThis.document?.visibilityState !== 'hidden' && state.roll >= 1);
+  const offSession = session.onSessionChange(sync);
+  const pagehide = () => { pagePresent = false; sync(); };
+  const pageshow = () => { pagePresent = true; sync(); };
+  const online = () => { sync(); feed.wake(); };
+  globalThis.document?.addEventListener('visibilitychange', sync);
+  globalThis.window?.addEventListener('pagehide', pagehide);
+  globalThis.window?.addEventListener('pageshow', pageshow);
+  globalThis.window?.addEventListener('online', online);
+  sync();
 
-  async function pull() {
-    if (!session.isSignedIn()) {
-      held = [];
-      return held;
-    }
-    const answer = await notifications({ pageSize: 24 });
-    if (!answer.ok) return held;
-    held = (answer.value.items ?? []).filter(isAmbient);
-    bus.emit('notifications:change', { rows: held });
-    return held;
-  }
-
-  function read({ again = false } = {}) {
-    if (asked && !again && !reading) return Promise.resolve(held);
-    asked = true;
-    reading ??= pull().finally(() => {
-      reading = null;
-    });
-    return reading;
-  }
-
-  /** Everything printable this browser holds — the inbox prints from this. */
-  const rows = () => held;
-
-  /**
-   * A message, opened.
-   *
-   * Three things happen, in this order and for this reason: steeple is told the
-   * row was read (a receipt this browser also applies locally, so the row stops
-   * being bold before the round trip lands); the inbox is told to redraw; and
-   * the deep link the row carries is followed to the surface that owns the fact
-   * — the same follower an email CTA for the same event uses, so the two can
-   * never land in different places (`ui/deepLink.js`).
-   *
-   * A row with no link is still a message and is still read when it is pressed;
-   * it simply has nowhere further to go.
-   */
   async function open(row) {
     if (!row) return false;
     track('notification_opened', { type: row.type, channel: 'web' });
-    if (!row.readAt) {
-      row.readAt = new Date().toISOString();
-      announced.add(row.id);
-      bus.emit('notifications:change', { rows: held });
-      markNotificationsRead([row.id]);
-    }
+    void feed.receipt(row);
     const link = row.payload?.deepLink;
     if (!link) return false;
     if (state.roll < 1) rollTo(1);
     return followDeepLink(link);
   }
-
-  /**
-   * Say what has just arrived — to the screen reader alone.
-   *
-   * Nothing is drawn and nothing is marked read: this is the one channel that
-   * cannot go back and look, so it is told once and the message stays unread in
-   * the inbox for the press that opens it.
-   */
-  function announceNew() {
-    // Under the title page nothing is said: somebody who has not arrived yet is
-    // not being kept from anything.
-    if (state.roll < 1) return;
-    const fresh = held.filter((row) => !row.readAt && !announced.has(row.id));
-    if (!fresh.length) return;
-    for (const row of fresh) announced.add(row.id);
-    announce?.(
-      fresh.length === 1
-        ? `${lineFor(fresh[0])} It is in your inbox.`
-        : `${fresh.length} new messages in your inbox.`
-    );
+  function dispose() {
+    offSession();
+    globalThis.document?.removeEventListener('visibilitychange', sync);
+    globalThis.window?.removeEventListener('pagehide', pagehide);
+    globalThis.window?.removeEventListener('pageshow', pageshow);
+    globalThis.window?.removeEventListener('online', online);
+    feed.dispose();
   }
-
-  function wake() {
-    return read({ again: true }).then(announceNew);
-  }
-
-  // Arriving at the product surface is the moment: the roll landing is what
-  // "visiting" means in this app, and it is when the page has room for a word.
-  let wasRolled = state.roll >= 1;
-  const onRoll = () => {
-    const rolled = state.roll >= 1;
-    if (rolled && !wasRolled) wake();
-    wasRolled = rolled;
-  };
-
-  session.onSessionChange((signedIn) => {
-    held = [];
-    announced.clear();
-    asked = false;
-    // Whoever is reading now has a different inbox — an empty one until this
-    // answers, and the surfaces printing from it must not keep the last
-    // person's messages on the page in the meantime.
-    bus.emit('notifications:change', { rows: held });
-    if (signedIn) wake();
-  });
-
-  // A remembered session means there may already be something to say; a visitor
-  // who lands straight on the product surface (?world=off, a deep link) never
-  // crosses the roll, so the first read cannot wait on it.
-  if (session.isSignedIn() && state.roll >= 1) wake();
-  else if (session.isSignedIn()) read();
-
-  return { read, rows, wake, onRoll, open, lineFor };
+  return { read: feed.read, rows: feed.rows, wake: feed.wake, onRoll: sync, open, lineFor, dispose };
 }

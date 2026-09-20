@@ -21,8 +21,9 @@
 const BASE = 'api/v1';
 
 // Long enough for a local API to answer, short enough that a dead one does not
-// hold the surface waiting: the catalog falls back to the bundled seed instead.
+// hold the surface waiting: production shows the catalogue retry state.
 const READ_TIMEOUT_MS = 4000;
+const STREAM_OPEN_TIMEOUT_MS = 10000;
 
 // A write is not a read and must not be given up on as quickly. A read that
 // takes too long costs a stale map; a write that takes too long may already
@@ -45,7 +46,7 @@ const WRITE_TIMEOUT_MS = 15000;
  * codes are the contract, the prose in `detail` is for people.
  */
 export class ApiError extends Error {
-  constructor(message, status = 0, problem = null, { timedOut = false } = {}) {
+  constructor(message, status = 0, problem = null, { timedOut = false, retryAfterMs = null } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -53,8 +54,24 @@ export class ApiError extends Error {
     this.code = problem?.code ?? null;
     this.detail = problem?.detail ?? null;
     this.timedOut = timedOut;
+    this.retryAfterMs = retryAfterMs;
     this.aborted = false;
   }
+}
+
+function retryAfterMs(response, now = Date.now()) {
+  const value = response.headers.get('retry-after')?.trim();
+  if (!value) return null;
+  if (/^\d+$/.test(value)) {
+    const delay = Number(value) * 1000;
+    return Number.isFinite(delay) ? delay : null;
+  }
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - now) : null;
+}
+
+function cancelBody(response) {
+  void response.body?.cancel().catch(() => {});
 }
 
 /**
@@ -125,7 +142,9 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
   if (response.status === 404 && notFoundAsNull) return null;
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new ApiError(`${path} answered ${response.status}`, response.status, text ? safeJson(text) : null);
+    throw new ApiError(`${path} answered ${response.status}`, response.status, text ? safeJson(text) : null, {
+      retryAfterMs: retryAfterMs(response),
+    });
   }
   return response.json();
 }
@@ -355,6 +374,11 @@ export function getRoomAvailability(roomId, { from, to } = /** @type {any} */ ({
   return get(`/listings/${encodeURIComponent(roomId)}/availability`, { from, to }, { notFoundAsNull: true });
 }
 
+/** Public, revealed venue comments; their count is separate from the rating aggregate. */
+export function getVenueReviews(venueId, { page = 1, pageSize = 10, signal = null } = {}) {
+  return get(`/venues/${encodeURIComponent(venueId)}/ratings`, { page, pageSize }, { signal });
+}
+
 // ─── identity, and the one thing a signed-in person does here ────────────────
 
 /**
@@ -449,8 +473,8 @@ export function getMe(accessToken) {
 
 /**
  * `POST /me/agreements` — record acceptance of one legal document at one
- * version. Idempotent per (user, docType, version); `400 unknown_doc_type` for
- * anything but `tos` and `privacy`.
+ * version. Idempotent per (user, docType, version); `400 invalid_agreement` for
+ * unknown document types or non-current versions.
  */
 export function acceptAgreement(docType, version, { accessToken } = /** @type {any} */ ({})) {
   return send('POST', '/me/agreements', { docType, version }, { accessToken });
@@ -606,6 +630,11 @@ export function cancelBooking(bookingId, { reason = null } = /** @type {any} */ 
   return send('POST', `/bookings/${encodeURIComponent(bookingId)}/cancel`, { reason }, { accessToken });
 }
 
+/** Marks the other party absent and returns the server's updated booking. */
+export function markOccurrenceNoShow(occurrenceId, { accessToken } = /** @type {any} */ ({})) {
+  return send('POST', `/occurrences/${encodeURIComponent(occurrenceId)}/no-show`, undefined, { accessToken });
+}
+
 /**
  * `POST /bookings/{id}/ratings` — how one party says it went. `204 No Content`,
  * which `send()` already answers as null: the rating that comes back is read
@@ -692,6 +721,23 @@ export function completeMockVenuePayoutOnboarding(venueId, { accessToken } = /**
   );
 }
 
+/** `PUT /manage/venues/{id}/payments/opt-in` → the updated payout state. */
+export function setVenuePaymentOptIn(venueId, optedIn, { accessToken } = /** @type {any} */ ({})) {
+  return send(
+    'PUT',
+    `/manage/venues/${encodeURIComponent(venueId)}/payments/opt-in`,
+    { optedIn },
+    { accessToken }
+  );
+}
+
+/** `POST /manage/venues/{id}/payments/dashboard` → a short-lived Stripe URL. */
+export function createVenuePaymentDashboard(venueId, { accessToken } = /** @type {any} */ ({})) {
+  return send('POST', `/manage/venues/${encodeURIComponent(venueId)}/payments/dashboard`, null, {
+    accessToken,
+  });
+}
+
 // ─── the inbox steeple writes: notifications ─────────────────────────────────
 
 /**
@@ -703,6 +749,71 @@ export function completeMockVenuePayoutOnboarding(venueId, { accessToken } = /**
  */
 export function getMyNotifications(accessToken, { after = null, pageSize = null } = {}) {
   return get('/me/notifications', { after, pageSize }, { accessToken });
+}
+
+/** `GET /me/notifications/stream` — opens the authenticated event stream. */
+export async function openNotificationStream(accessToken, { signal = null } = {}) {
+  if (signal?.aborted) {
+    const error = new ApiError('/me/notifications/stream was withdrawn');
+    error.aborted = true;
+    throw error;
+  }
+
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), STREAM_OPEN_TIMEOUT_MS);
+  const combined = signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal;
+  let response;
+  try {
+    response = await fetch(`${BASE}/me/notifications/stream`, {
+      signal: combined,
+      cache: 'no-store',
+      headers: {
+        accept: 'text/event-stream',
+        authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch (cause) {
+    if (signal?.aborted) {
+      const error = new ApiError('/me/notifications/stream was withdrawn');
+      error.aborted = true;
+      throw error;
+    }
+    const timedOut = deadline.signal.aborted || cause?.name === 'AbortError';
+    throw new ApiError(
+      timedOut
+        ? `/me/notifications/stream timed out after ${STREAM_OPEN_TIMEOUT_MS}ms`
+        : '/me/notifications/stream did not answer',
+      0,
+      null,
+      { timedOut }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    cancelBody(response);
+    throw new ApiError(
+      `/me/notifications/stream answered ${response.status}`,
+      response.status,
+      null,
+      { retryAfterMs: retryAfterMs(response) }
+    );
+  }
+
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  if (contentType !== 'text/event-stream' || typeof response.body?.getReader !== 'function') {
+    cancelBody(response);
+    throw new ApiError('/me/notifications/stream answered with an invalid event stream', response.status);
+  }
+
+  if (signal?.aborted) {
+    cancelBody(response);
+    const error = new ApiError('/me/notifications/stream was withdrawn');
+    error.aborted = true;
+    throw error;
+  }
+  return response;
 }
 
 /**

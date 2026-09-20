@@ -12,6 +12,7 @@ public static class FeatureFlagKeys
     public const string ManageOpenHoursRequired = "manage.open_hours_required";
     public const string BookingCounterOffers = "booking.counter_offers";
     public const string PaymentsEnabled = "payments.enabled";
+    public const string PaymentsOnboarding = "payments.onboarding";
     public const string MobileApplyEnabled = "mobile.apply_enabled";
     public const string MobileManageEnabled = "mobile.manage_enabled";
     public const string MobileForceUpgrade = "mobile.force_upgrade";
@@ -23,6 +24,7 @@ public static class FeatureFlagKeys
         ManageOpenHoursRequired,
         BookingCounterOffers,
         PaymentsEnabled,
+        PaymentsOnboarding,
         MobileApplyEnabled,
         MobileManageEnabled,
         MobileForceUpgrade,
@@ -31,6 +33,7 @@ public static class FeatureFlagKeys
     public static readonly IReadOnlyList<string> Public =
     [
         PaymentsEnabled,
+        PaymentsOnboarding,
         MobileApplyEnabled,
         MobileManageEnabled,
         MobileForceUpgrade,

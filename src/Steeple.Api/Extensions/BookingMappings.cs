@@ -73,7 +73,7 @@ public static class BookingMappings
             : null);
 
     /// <summary>
-    /// The additive payment block: mode from the price snapshot's presence; next charge time =
+    /// The payment block: mode from the frozen collection choice; next charge time =
     /// the earliest scheduled occurrence not yet successfully charged, clamped to now
     /// (the first occurrence charges at confirmation — booking-modes.md charge timing).
     /// </summary>
@@ -84,9 +84,9 @@ public static class BookingMappings
         DateTimeOffset nowUtc,
         TimeSpan? chargeWindow)
     {
-        if (booking.PricePerOccurrence is not { } amount)
+        if (!booking.InAppPayment)
         {
-            return new BookingPaymentDto("offline", null, null, null);
+            return new BookingPaymentDto("offline", booking.PricePerOccurrence, booking.Currency, null);
         }
 
         DateTimeOffset? nextChargeAtUtc = null;
@@ -104,7 +104,7 @@ public static class BookingMappings
             }
         }
 
-        return new BookingPaymentDto("inApp", amount, booking.Currency, nextChargeAtUtc);
+        return new BookingPaymentDto("inApp", booking.PricePerOccurrence, booking.Currency, nextChargeAtUtc);
     }
 
     /// <summary>

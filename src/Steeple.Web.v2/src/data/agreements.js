@@ -6,22 +6,16 @@
 // next sign-in ask again, which is the whole mechanism — there is no "accepted
 // everything forever" flag.
 //
-// The documents live beside this app as plain pages (`public/terms.html`,
-// `public/privacy.html`). They began as the deprecated v1 web's text at v1's own
-// version (`Steeple.Web.v1/Configuration/LegalDocuments.cs`, 2026-07-04) and were
-// corrected where v1's words described a product v2 no longer is — payments taken
-// through Steeple, a correspondence rather than an email to the venue, one cookie
-// instead of two — so both moved to 2026-08-07 together. **Bump a version here in
-// the same change as the page it belongs to**, or people will be asked to accept
-// words that did not move.
+// Bump the page, API policy and both clients together whenever document text changes.
+// The production API is the authority; this client prompt cannot bypass its gate.
 
 import * as api from './api.js';
 import * as session from './session.js';
 
 /** The documents, in the order they are shown. */
 export const DOCUMENTS = [
-  { docType: 'tos', version: '2026-08-07', label: 'Terms & safety', href: 'terms.html' },
-  { docType: 'privacy', version: '2026-08-07', label: 'Privacy policy', href: 'privacy.html' },
+  { docType: 'tos', version: '2026-09-20', label: 'Terms & safety', href: 'terms.html' },
+  { docType: 'privacy', version: '2026-09-20', label: 'Privacy policy', href: 'privacy.html' },
 ];
 
 const isCurrent = (accepted, doc) =>
@@ -30,9 +24,7 @@ const isCurrent = (accepted, doc) =>
 /**
  * Which of the current documents this person has not accepted yet.
  *
- * An unanswerable question — no session, or steeple away — answers "none
- * outstanding": an acceptance nobody can record is not a gate anybody should be
- * held at, and the next sign-in asks again anyway.
+ * If the record cannot be read, keep the gate open. Acceptance writes are idempotent.
  *
  * @returns {Promise<Array<typeof DOCUMENTS[number]>>}
  */
@@ -42,7 +34,9 @@ export async function outstanding() {
     const me = await session.withAccess((token) => api.getMe(token));
     return DOCUMENTS.filter((doc) => !isCurrent(me?.agreements, doc));
   } catch {
-    return [];
+    // An unreadable acceptance record cannot grant access. The idempotent write
+    // will either record the user's explicit acceptance or leave this gate open.
+    return DOCUMENTS;
   }
 }
 

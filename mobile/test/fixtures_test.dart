@@ -188,6 +188,10 @@ void main() {
     test('round-trips Booking', () {
       final booking = Booking.fromJson(_loadJson('booking.json'));
 
+      expect(booking.payment?.mode, 'offline');
+      expect(booking.payment?.perOccurrenceAmount, 112.5);
+      expect(booking.payment?.currency, 'USD');
+      expect(booking.payment?.nextChargeAtUtc, isNull);
       expect(booking.statusValue, BookingStatus.confirmed);
       expect(booking.typeValue, BookingType.recurring);
       expect(booking.occurrences, hasLength(3));
@@ -241,6 +245,16 @@ void main() {
 
       expect(notification.typeValue, NotificationType.unknown);
       expect(wireTokenLabel(notification.type), 'Something brand new');
+    });
+  });
+
+  group('notification_invalidation.json', () {
+    test('round-trips NotificationInvalidation', () {
+      final invalidation = NotificationInvalidation.fromJson(
+        _loadJson('notification_invalidation.json'),
+      );
+
+      expect(invalidation.toJson(), isEmpty);
     });
   });
 
@@ -436,7 +450,61 @@ void main() {
 
       expect(flags['mobile.apply_enabled'], isTrue);
       expect(flags['mobile.manage_enabled'], isFalse);
+      expect(flags['payments.onboarding'], isTrue);
       expect(flags['mobile.force_upgrade'], isFalse);
+    });
+  });
+
+  group('venue_payment_state.json', () {
+    test('round-trips the complete payout onboarding state', () {
+      final state = VenuePaymentState.fromJson(
+        _loadJson('venue_payment_state.json'),
+      );
+
+      expect(state.statusValue, PaymentOnboardingStatus.ready);
+      expect(state.canChoosePreference, isTrue);
+      expect(state.testMode, isTrue);
+      expect(state.canOpenDashboard, isTrue);
+      expect(state.onlinePaymentsAvailable, isFalse);
+      expect(state.optedIn, isFalse);
+    });
+
+    test('tolerates an unknown status and omitted requirements', () {
+      final json = _loadJson('venue_payment_state.json');
+      json['status'] = 'futureStatus';
+      json.remove('requirementsDue');
+
+      final state = VenuePaymentState.fromJson(json);
+
+      expect(state.statusValue, PaymentOnboardingStatus.unknown);
+      expect(state.requirementsDue, isEmpty);
+      expect(state.canChoosePreference, isFalse);
+    });
+
+    test('maps every onboarding status token', () {
+      expect(PaymentOnboardingStatus.tokens.keys, [
+        'notStarted',
+        'incomplete',
+        'pending',
+        'restricted',
+        'ready',
+      ]);
+    });
+  });
+
+  group('payment links', () {
+    test('round-trips onboarding and dashboard responses', () {
+      final onboarding = PaymentExternalLink.fromJson(
+        _loadJson('payment_onboarding_link.json'),
+      );
+      final dashboard = PaymentExternalLink.fromJson(
+        _loadJson('payment_dashboard_link.json'),
+      );
+
+      expect(onboarding.url, contains('connect.stripe.com/setup'));
+      expect(onboarding.mock, isFalse);
+      expect(dashboard.url, contains('connect.stripe.com/express'));
+      expect(dashboard.mock, isFalse);
     });
   });
 }

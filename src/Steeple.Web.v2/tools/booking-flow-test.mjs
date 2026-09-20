@@ -262,7 +262,7 @@ await page.waitForFunction('!!document.querySelector(".identity .verified")', { 
 await wait(600);
 check('a real memory-only session now exists', await page.evaluate('!!__steeple.session.currentUser()'));
 check('its profile was not persisted', !(await page.evaluate("localStorage.getItem('steeple-village-session')")));
-is('the trust wording is exact', await text('.identity .verified'), 'Identity verified (SSO)');
+is('the trust wording is exact', await text('.identity .verified'), 'Signed in');
 is('the person card names them', await text('.identity__card .identity__name'), PERSON.name);
 await page.screenshot({ path: '/tmp/w6c-flow-signedin.png' });
 

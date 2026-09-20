@@ -101,6 +101,18 @@ class _BookingDetailBody extends ConsumerWidget {
                     color: colors.textTertiary,
                   ),
                 ),
+                if (booking.payment case final payment?) ...[
+                  const SizedBox(height: SteepleTokens.space3),
+                  if (payment.perOccurrenceAmount != null &&
+                      payment.currency != null)
+                    Text(
+                      '${payment.perOccurrenceAmount!.toStringAsFixed(2)} ${payment.currency} per session',
+                    ),
+                  if (payment.mode == 'offline')
+                    const Text(
+                      'Arrange payment directly with the venue. Steeple does not collect it.',
+                    ),
+                ],
               ],
             ),
           ),

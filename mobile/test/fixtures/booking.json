@@ -16,7 +16,9 @@
     "frequency": "recurringWeekly",
     "startDate": "2026-09-01",
     "endDate": "2026-12-15",
-    "daysOfWeek": ["tuesday"],
+    "daysOfWeek": [
+      "tuesday"
+    ],
     "startTime": "09:00",
     "endTime": "11:30"
   },
@@ -68,5 +70,11 @@
     },
     "canRate": true,
     "rateByUtc": "2026-12-29T15:30:00Z"
+  },
+  "payment": {
+    "mode": "offline",
+    "perOccurrenceAmount": 112.5,
+    "currency": "USD",
+    "nextChargeAtUtc": null
   }
 }

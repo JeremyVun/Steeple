@@ -45,7 +45,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSteepleIdentity(configuration, environment);
         services.AddSteepleApplications(configuration, environment);
-        services.AddSteeplePayments(configuration);
+        services.AddSteeplePayments(configuration, environment);
         services.AddSteepleManage(configuration);
         services.AddSteepleAvailability();
         services.AddSteepleMedia(configuration);
@@ -82,8 +82,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     private static IServiceCollection AddSteeplePayments(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IHostEnvironment environment)
     {
+        PaymentsConfigurationValidator.Validate(configuration, environment);
         services.Configure<PaymentsOptions>(configuration.GetSection(PaymentsOptions.SectionName));
 
         var payments = configuration.GetSection(PaymentsOptions.SectionName).Get<PaymentsOptions>() ?? new PaymentsOptions();
@@ -94,11 +96,21 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IHostPaymentOnboardingService, HostPaymentOnboardingService>();
         services.AddScoped<IPaymentRepository, EfPaymentRepository>();
 
-        // Stateless and synchronous -> singleton; the Stripe adapter later becomes a typed
-        // HttpClient registration behind the same port.
-        services.AddSingleton<IPaymentGateway, MockPaymentGateway>();
+        services.AddSingleton<MockPaymentGateway>();
+        services.AddSingleton<IPaymentGateway>(provider => provider.GetRequiredService<MockPaymentGateway>());
+
+        if (payments.Connect.Mode.Equals(ConnectOptions.StripeMode, StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddSingleton<Stripe.IStripeClient>(_ => new Stripe.StripeClient(payments.Connect.SecretKey));
+            services.AddSingleton<IConnectOnboardingGateway, StripeConnectOnboardingGateway>();
+        }
+        else
+        {
+            services.AddSingleton<IConnectOnboardingGateway>(provider => provider.GetRequiredService<MockPaymentGateway>());
+        }
 
         if (paymentsEnabled)
         {
@@ -254,6 +266,10 @@ public static class ServiceCollectionExtensions
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<NotificationOutboxOptions>(
             configuration.GetSection(NotificationOutboxOptions.SectionName));
+        services.AddOptions<NotificationStreamOptions>()
+            .Bind(configuration.GetSection(NotificationStreamOptions.SectionName))
+            .Validate(options => options.IsValid(), "NotificationStream settings are outside their supported bounds.")
+            .ValidateOnStart();
 
         services.AddScoped<IApplicationService, ApplicationService>();
         services.AddScoped<IApplicationRepository, EfApplicationRepository>();
@@ -271,6 +287,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.AddSingleton<InMemoryNotificationStream>();
+        services.AddSingleton<INotificationStream>(provider =>
+            provider.GetRequiredService<InMemoryNotificationStream>());
+        services.AddSingleton<INotificationSseWriter, NotificationSseWriter>();
+        services.AddHostedService<PostgresNotificationListener>();
 
         // Stateless over HttpClient + options. The outbox worker resolves this inside the fresh
         // scope it owns for each bounded batch.
