@@ -238,8 +238,9 @@ for (const delayed of ['profile', 'refresh', 'retried-profile']) {
       : session.fetchCurrentUser();
     await settled(() => release);
     user = 'new';
-    await session.signIn({ email: 'new@example.com' });
+    const replacement = session.signIn({ email: 'new@example.com' });
     release();
+    await replacement;
     await pending;
     assert.equal(session.currentUser()?.id, 'new');
     assert.equal(session.accessToken(), 'access-new');
@@ -334,10 +335,12 @@ for (const supersededBy of ['sign-out', 'new-sign-in', 'sibling-sign-out']) {
     try {
       const pending = assert.rejects(session.signIn({ email: 'old@example.com' }), (error) => error.status === 401);
       await settled(() => release);
-      if (supersededBy === 'new-sign-in') await session.signIn({ email: 'new@example.com' });
+      let replacement;
+      if (supersededBy === 'new-sign-in') replacement = session.signIn({ email: 'new@example.com' });
       else if (supersededBy === 'sibling-sign-out') receive({ data: { type: 'session', state: 'out' } });
-      else await session.signOut();
+      else replacement = session.signOut();
       release();
+      await replacement;
       await pending;
       assert.equal(session.currentUser()?.id ?? null, supersededBy === 'new-sign-in' ? 'new' : null);
     } finally {

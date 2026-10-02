@@ -33,6 +33,7 @@ class FakeSessionManager implements SessionManager {
     final generation = ++_identityGeneration;
     final user = startSignedIn ? await _fixtureUser() : null;
     if (generation != _identityGeneration) return;
+    _identityGeneration++;
     _state.value = user == null ? const SignedOut() : SignedIn(user);
   }
 
@@ -48,6 +49,7 @@ class FakeSessionManager implements SessionManager {
     }
     final user = await _fixtureUser();
     if (generation != _identityGeneration) return const SignInCancelled();
+    _identityGeneration++;
     _state.value = SignedIn(user);
     return SignInSuccess(user, isNewUser: false);
   }
@@ -60,7 +62,10 @@ class FakeSessionManager implements SessionManager {
         await handler();
       } catch (_) {}
     }
-    if (generation == _identityGeneration) _state.value = const SignedOut();
+    if (generation == _identityGeneration) {
+      _identityGeneration++;
+      _state.value = const SignedOut();
+    }
   }
 
   @override

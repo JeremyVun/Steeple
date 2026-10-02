@@ -199,6 +199,10 @@ public class EfPaymentRepository : IPaymentRepository
             .ConfigureAwait(false);
 
     /// <inheritdoc />
+    public Task<Payment?> GetPaymentAsync(Guid id, CancellationToken ct = default) =>
+        PaymentGraph().SingleOrDefaultAsync(p => p.Id == id, ct);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ChargeCandidate>> GetChargeCandidatesAsync(
         DateTimeOffset nowUtc, DateTimeOffset windowEndUtc, CancellationToken ct = default)
     {

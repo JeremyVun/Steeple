@@ -107,6 +107,14 @@ cookie and fetches its own profile; a tab hearing session-out drops memory witho
 refresh request. Retired `steeple-village-session` and `steeple-village-store:*` keys are purged at
 module boot and sign-out.
 
+The web serializes all cookie-changing requests within a tab and, where available, across tabs
+with the origin-wide `steeple-village-session-cookie` Web Lock. Memory generation guards alone
+cannot discard a `Set-Cookie` header. The lock covers response handling and opaque announcements;
+logout uses the resulting cookie to revoke the current family. A rejected/superseded sign-in
+revokes its cookie before releasing the lock, including when the following sign-in fails. Without Web Locks, cross-tab
+mutation ordering is not guaranteed. Server rotation grace remains necessary for raw concurrent
+refresh clients and clients without the coordinator.
+
 ### `GET /api/v1/me` ✅ — profile + `agreements: [{docType, version, acceptedAtUtc}]`.
 ### `DELETE /api/v1/me` ✅ — account deletion (anonymize + revoke all sessions; Apple 5.1.1(v) requirement).
 ### `DELETE /api/v1/me/sessions` ✅ — revoke every session ("sign out everywhere"). Accepts

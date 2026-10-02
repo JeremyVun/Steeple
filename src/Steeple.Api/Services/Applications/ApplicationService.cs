@@ -304,7 +304,7 @@ public sealed class ApplicationService : IApplicationService
             payload,
             ApplicationNotifications.InstantOrganizerEmail(
                 application,
-                _flags.IsEnabled(PaymentService.PaymentsFlag)),
+                booking.Payment?.Mode == "inApp"),
             ct).ConfigureAwait(false);
 
         // Host-side notice: a booking landed without a decision from them (the rescind lever is
@@ -318,7 +318,7 @@ public sealed class ApplicationService : IApplicationService
                 payload,
                 ApplicationNotifications.InstantManagerEmail(
                     application,
-                    _flags.IsEnabled(PaymentService.PaymentsFlag)),
+                    booking.Payment?.Mode == "inApp"),
                 ct).ConfigureAwait(false);
         }
 
@@ -624,6 +624,7 @@ public sealed class ApplicationService : IApplicationService
         // every materialized occurrence. When the exclusion constraint aborts that save, the slot
         // is already held — the application auto-declines with notice, and the provider gets
         // slot_taken instead of a half-approved state.
+        var inAppPayment = false;
         if (approve)
         {
             var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct: ct).ConfigureAwait(false);
@@ -642,6 +643,7 @@ public sealed class ApplicationService : IApplicationService
             // Post-commit charge kick (booking-modes.md): the first occurrence charges at
             // confirmation — approval and instant book share the same machinery. No-op for
             // bookings without a price snapshot (payments disabled at confirmation).
+            inAppPayment = confirmation.Booking!.Payment?.Mode == "inApp";
             await _transactions.AfterCommitAsync(() => _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, CancellationToken.None)).ConfigureAwait(false);
         }
 
@@ -665,7 +667,7 @@ public sealed class ApplicationService : IApplicationService
             await _repository.SaveAsync(ct).ConfigureAwait(false);
         }
 
-        var email = ApplicationNotifications.DecisionEmail(application, approve, request.Message);
+        var email = ApplicationNotifications.DecisionEmail(application, approve, request.Message, inAppPayment);
 
         await _applicationNotifications.NotifyOrganizerAsync(
             application,
@@ -925,7 +927,8 @@ public sealed class ApplicationService : IApplicationService
             await _applicationNotifications.NotifyManagersAsync(
                 application,
                 NotificationType.CounterOfferAccepted,
-                ApplicationNotifications.CounterResponseEmail(application, open, accepted: true),
+                ApplicationNotifications.CounterResponseEmail(application, open, accepted: true,
+                    paymentsOn: confirmation.Booking!.Payment?.Mode == "inApp"),
                 ct).ConfigureAwait(false);
 
             await TrackSafelyAsync(

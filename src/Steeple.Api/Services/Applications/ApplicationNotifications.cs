@@ -97,6 +97,7 @@ internal sealed class ApplicationNotifications(
             $"{application.Organizer!.DisplayName} asked to use {application.Room.Name} at {application.Room.Venue!.Name}.\n\n" +
             $"What: {Humanize(application.ActivityType.ToString())}, about {application.GroupSize} people\n" +
             $"When: {DescribeSchedule(application)}\n\n" +
+            DescribeTerms(application, application.StartTime, application.EndTime) +
             $"\"{application.IntentText}\"\n\n" +
             "Approve, ask a question, or decline from your Steeple inbox.");
 
@@ -105,10 +106,9 @@ internal sealed class ApplicationNotifications(
         TextBody:
             $"Your booking of {application.Room.Name} at {application.Room.Venue.Name} is confirmed.\n\n" +
             $"When: {DescribeSchedule(application)}\n\n" +
-            ("This venue books instantly — no approval needed."
-                + (paymentsOn
-                    ? " Your card covers each session as it comes up; the first payment is being taken now."
-                    : "")));
+            DescribeTerms(application, application.StartTime, application.EndTime) +
+            "This venue books instantly. No approval is needed.\n\n" +
+            PaymentArrangement(paymentsOn) + Support(application));
 
     internal static EmailContent InstantManagerEmail(Application application, bool paymentsOn) => new(
         Subject: $"New booking: {application.Room!.Name}",
@@ -116,10 +116,10 @@ internal sealed class ApplicationNotifications(
             $"{application.Organizer!.DisplayName} booked {application.Room.Name} at {application.Room.Venue!.Name}.\n\n" +
             $"What: {Humanize(application.ActivityType.ToString())}, about {application.GroupSize} people\n" +
             $"When: {DescribeSchedule(application)}\n\n" +
+            DescribeTerms(application, application.StartTime, application.EndTime) +
             $"\"{application.IntentText}\"\n\n" +
-            "Your venue books instantly, so this is confirmed. If it doesn't fit, you can " +
-            "cancel it any time from your Steeple inbox" +
-            (paymentsOn ? " — the organizer is refunded in full." : "."));
+            "Your venue books instantly, so this is confirmed. You can cancel upcoming sessions from your Steeple inbox.\n\n" +
+            PaymentArrangement(paymentsOn) + Support(application));
 
     internal static EmailContent MessageEmail(Application application, string senderName, string body) => new(
         Subject: $"New message about {application.Room!.Name}",
@@ -132,14 +132,17 @@ internal sealed class ApplicationNotifications(
     internal static EmailContent DecisionEmail(
         Application application,
         bool approved,
-        string? message) => approved
+        string? message,
+        bool paymentsOn = false) => approved
         ? new EmailContent(
             Subject: $"{application.Room!.Venue!.Name} said yes",
             TextBody:
-                $"Good news — {application.Room.Venue.Name} approved your request to use {application.Room.Name}.\n\n" +
+                $"{application.Room.Venue.Name} approved your request to use {application.Room.Name}.\n\n" +
                 $"When: {DescribeSchedule(application)}\n\n" +
                 (message is { Length: > 0 } m ? $"They added: \"{m}\"\n\n" : "") +
-                "Your booking is confirmed — the details are in your Steeple inbox.")
+                DescribeTerms(application, application.StartTime, application.EndTime) +
+                "Your booking is confirmed. The details are in your Steeple inbox.\n\n" +
+                PaymentArrangement(paymentsOn) + Support(application))
         : new EmailContent(
             Subject: $"About your request for {application.Room!.Name}",
             TextBody:
@@ -157,13 +160,15 @@ internal sealed class ApplicationNotifications(
             $"{application.Room.Venue.Name} proposed an alternative time for your request to use {application.Room.Name}.\n\n" +
             $"You asked for: {DescribeSchedule(application)}\n" +
             $"They suggested: {DescribeSchedule(counter)}\n\n" +
+            DescribeTerms(application, counter.StartTime, counter.EndTime) +
             (counter.Message is { Length: > 0 } note ? $"They added: \"{note}\"\n\n" : "") +
             "Accept or decline the new time from your Steeple inbox.");
 
     internal static EmailContent CounterResponseEmail(
         Application application,
         ApplicationCounterOffer counter,
-        bool accepted) => new(
+        bool accepted,
+        bool paymentsOn = false) => new(
         Subject:
             $"{application.Organizer!.DisplayName} {(accepted ? "accepted" : "declined")} your counter-offer " +
             $"for {application.Room!.Name}",
@@ -171,7 +176,9 @@ internal sealed class ApplicationNotifications(
             ? $"{application.Organizer.DisplayName} accepted your suggested time for {application.Room.Name} " +
                 $"at {application.Room.Venue!.Name}.\n\n" +
                 $"When: {DescribeSchedule(counter)}\n\n" +
-                "The booking is confirmed — the details are in your Steeple inbox."
+                DescribeTerms(application, counter.StartTime, counter.EndTime) +
+                "The booking is confirmed. The details are in your Steeple inbox.\n\n" +
+                PaymentArrangement(paymentsOn) + Support(application)
             : $"{application.Organizer.DisplayName} declined your suggested time for {application.Room.Name} " +
                 $"at {application.Room.Venue!.Name}.\n\n" +
                 $"Their original request still stands: {DescribeSchedule(application)}\n\n" +
@@ -183,6 +190,27 @@ internal sealed class ApplicationNotifications(
             $"The time you asked for at {application.Room.Name} ({application.Room.Venue!.Name}) " +
             "was booked by another group before your request could be approved.\n\n" +
             "There are more spaces nearby on Steeple — your request details are in your inbox.");
+
+    private static string DescribeTerms(Application application, TimeOnly start, TimeOnly end)
+    {
+        if (application.QuotedPricePerHour is not { } rate || application.QuotedCurrency is not { } currency ||
+            application.QuotedHouseRules is not { } rules)
+            return "The original price and house rules were not saved. Ask the guest to review and resubmit before confirming.\n\n";
+
+        var amount = decimal.Round(rate * (decimal)(end - start).TotalHours, 2);
+        return $"Saved price: {currency} {amount.ToString("0.00", CultureInfo.InvariantCulture)} per session " +
+            $"({currency} {rate.ToString("0.00", CultureInfo.InvariantCulture)} per hour).\n" +
+            $"House rules: {(rules.Length == 0 ? "No house rules were listed." : rules)}\n\n";
+    }
+
+    private static string PaymentArrangement(bool paymentsOn) => paymentsOn
+        ? "Payment is collected through Steeple. The first payment is due on confirmation, with later sessions charged 48 hours before they start. Check the booking for payment status.\n\n" +
+            "Guest cancellations need at least 48 hours' notice. Sessions starting sooner still stand and remain payable.\n\n"
+        : "Arrange payment directly between guest and host. Steeple does not collect or refund payment for this booking.\n\n" +
+            "Guest cancellations need at least 48 hours' notice. Sessions starting sooner still stand.\n\n";
+
+    private static string Support(Application application) =>
+        $"For help, email jvun@steepleapp.co and include request {application.Id}.";
 
     private static string DescribeSchedule(
         ScheduleFrequency frequency,

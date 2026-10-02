@@ -20,6 +20,7 @@ import {
   mintGuest,
   mintVenue,
   nextWeekday,
+  reviewedQuote,
   routes,
   signInPage,
   sql,
@@ -178,6 +179,7 @@ async function oneOff(guest, room, dow, key) {
     token: guest.token,
     key: `${key}-${stamp}`,
     body: {
+      quote: reviewedQuote(room.listing),
       activityType: 'community',
       groupSize: 10,
       intentText: 'A neighbourhood gathering used by the live ratings follow-up gate.',

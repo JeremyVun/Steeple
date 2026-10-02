@@ -301,6 +301,7 @@ public sealed class HostPaymentOnboardingServiceTests
         }
 
         public Task<bool> TryAddPaymentAsync(Payment payment, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<Payment?> GetPaymentAsync(Guid id, CancellationToken ct = default) => Task.FromResult<Payment?>(null);
         public Task<IReadOnlyList<Payment>> GetForBookingsAsync(IReadOnlyList<Guid> bookingIds, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Payment>>([]);
         public Task<IReadOnlyList<ChargeCandidate>> GetChargeCandidatesAsync(DateTimeOffset nowUtc, DateTimeOffset windowEndUtc, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<ChargeCandidate>>([]);
         public Task<ChargeCandidate?> GetFirstChargeCandidateForBookingAsync(Guid bookingId, CancellationToken ct = default) => Task.FromResult<ChargeCandidate?>(null);

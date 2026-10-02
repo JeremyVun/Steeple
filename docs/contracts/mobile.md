@@ -149,12 +149,22 @@ abstract class SessionManager {
 }
 ```
 
-Rules: tokens only in `flutter_secure_storage`; refresh is single-flight (concurrent 401s
+Rules: tokens and profile share one atomic `steeple.session` record in
+`flutter_secure_storage`. Legacy keys migrate only when the access-token subject matches the
+stored user, then are removed; incoherent legacy identities require sign-in again. A nonsecret
+`steeple.signedOut` preference prevents restoring credentials after keychain cleanup fails.
+Sign-out clears memory immediately; storage cleanup retries on restore. No credentials or
+profile are placed in preferences. Refresh is single-flight (concurrent 401s
 await one refresh); restore, sign-in, sign-out, and refresh capture an identity generation before
 awaiting I/O, so stale completion cannot write credentials, publish a prior user, or force-sign-out
 a newer identity. Secure-storage mutations are serialized in that generation order. The auth
-interceptor records that generation when it sends a request and never retries a 401 under a newer
-identity. A restored refresh token can recover a missing or expired access token; only a definitive
+interceptor records that generation before token lookup and rejects both success and error
+responses after identity changes. Auth and GET-network retries check before and after the retry.
+Publishing a completed sign-in/restore/sign-out also advances the generation, invalidating work
+started during the transition. An old refresh completion cannot clear the new identity's
+single-flight refresh. Credential persistence and identity publication share the serialized
+queue. A superseded or failed write repairs storage to the last published identity before the
+next mutation; restore waits for that queue to settle. A restored refresh token can recover a missing or expired access token; only a definitive
 refresh `401` forces local sign-out. `forceSignOut` emits `SignedOut(wasForced: true)` → router redirects
 + one snackbar ("You've been signed out"). The apply draft **survives** sign-in (§8 —
 draft lives in a provider keyed outside the auth state).

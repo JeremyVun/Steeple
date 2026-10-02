@@ -1,6 +1,6 @@
 # Steeple app review 2 October 2026
 
-Review complete against `ef2650993745fad74bed092c3f8995797c3c65c6`. Product code is unchanged. The core booking journeys pass their existing checks, but targeted probes found failures in notification durability, availability, session recovery, and catalogue refresh. These deserve attention before expanding the pilot. Jeremy authorized Astra's separate visual review, incorporated below.
+Initial review completed against `ef2650993745fad74bed092c3f8995797c3c65c6`; remediation and repeated review are in progress in `codex/app-review-fixes`. The findings below preserve the original evidence. Remediation checkpoints at the end record subsequent code changes and verification. No deployment is included.
 
 ## Jeremy's brief verbatim
 
@@ -219,7 +219,7 @@ Full [Astra report](/private/tmp/steeple-app-review-web-YfVNHH/visual-review.md)
 - API probe sources and the behavioral harness were isolated in `/private/tmp/steeple-app-review-web-YfVNHH` at the reviewed commit. Behavior results: `/private/tmp/steeple-review-behavior-web-bqlGFp/checks.json`.
 - Mobile received a targeted code/contract review; Flutter analysis, native device interaction, real SSO, live email/payment delivery, production recovery and load testing were not performed.
 
-Only review documentation and reproduction tooling were added to the shared checkout. No product code, database, production setting or deployment was changed.
+At the initial review checkpoint only review documentation and reproduction tooling had changed. The authorized remediation below changes product code in an isolated worktree; production settings and deployment remain untouched.
 
 Owner clarification: "Require review and resubmission" for pending requests with no saved quote; "Start with contextual support email" using jvun@steepleapp.co.
 
@@ -245,3 +245,96 @@ for saved price/rules display, legacy request resubmission guidance, contextual 
 and web/mobile visual verification. Dispatch once a build-agent slot is free and wire contracts
 are concrete. Flutter runtime ready at /private/tmp/steeple-review-flutter-sdk-a5lIke/flutter,
 official3.41.5/Dart3.11.3. Mobile recovery and rating scalability parcels are currently independent.
+
+Remediation checkpoint3: mobile recovery and paging completed with122 Flutter tests and clean
+analysis. Rating reveal filtering, summaries and review pagination now execute in SQL;14 unit
+and2 PostgreSQL rating tests passed. Astra's approved remaining UI assignment is dispatched,
+alongside Terra's quote contract implementation. Both consume `quote:{pricePerHour,currency,
+houseRules}` on submissions, applications and bookings. Old unquoted requests remain unquoted
+and must be withdrawn and reviewed again; no inferred historical prices or rules.
+
+### Follow-up failure and concurrency review
+
+New `BookingPaymentRecoveryTests` reproduce five unresolved failures against real PostgreSQL:
+
+- A stale host cancellation overwrites the guest's already committed cancellation attribution.
+- Concurrent stale booking reads both send the supposedly once-only renewal nudge.
+- The recovery query includes a missed first charge, but `ChargePlanner` still skips it outside
+  the normal48-hour window; an actual service sweep creates no charge.
+- A failed-charge notification persistence error leaves the payment Failed, so its first-failure
+  notice is permanently lost rather than retried from the Pending claim.
+- A refund notification persistence error leaves Refunded committed, so the notice is lost.
+
+The next fix parcel must serialize booking/occurrence transitions, recover cleanly on stale
+reads, and commit payment outcomes with their notices after the external gateway returns.
+Provider calls must remain outside database transactions. Reminder claim and recipient fan-out
+also need an atomic-failure check because the current exception path can leave partial notices.
+
+All eight new PostgreSQL recovery tests failed as expected at the isolated7ea20ed snapshot in
+/private/tmp/steeple-review-races-api-7l5e6q. The additional confirmed cases are stale no-show
+reports reversing who was reported, late guest cancellation skipping collection for a session
+that still stands, and reminder failures leaving partial inbox notices.
+
+Independent Sol review found three further identity races: a native write acquired its identity
+generation after asynchronous token lookup and could replay an old draft as a new account;
+automatic web refresh recovery retained a definitively refused profile; delayed web sign-in
+could overwrite sign-out or a newer sign-in. Lead fixed the generation/refusal boundaries and
+expanded the web recovery suite to16 passing checks. Native targeted verification is pending.
+No additional actionable findings were returned for the reviewed availability/time, paging,
+or SQL rating projection/reveal changes.
+
+Companion deployment migration worktree: /private/tmp/steeple-review-infra-web-Pxttwv,
+branch codex/steeple-review-migrations, base ec180b3. Only the Steeple migration bundle is in
+scope; no deployment or production connection. Migration025 prepared;026 will follow the
+completed contract parcel. Infrastructure main was clean at fork.
+
+### Final remediation verification
+
+All 17 original findings are implemented. The follow-up passes also fixed saved quote/rules
+commitments, legacy resubmission, contextual support, stale cancellation/no-show attribution,
+missed first-charge recovery, payment/refund notification rollback, reminder fan-out rollback,
+and browser/native identity races. Jeremy's product choices are preserved: instant booking is
+preselected, legacy unquoted requests require review/resubmission, and booking support uses
+jvun@steepleapp.co. No product clarification remains open.
+
+Astra completed approved web/mobile terms/support work in458d24b. The independent quote
+review's mobile null-quote and fixture omissions were resolved by that parcel. Final Astra
+checks:61 composer assertions,24 composer captures with zero axe/runtime errors;26 terms
+assertions and15 captures across320/390/1440 widths; iPhone integration with five reviewed
+captures. Evidence remains under /private/tmp/steeple-booking-terms-web-mszKaI,
+/private/tmp/steeple-composer-a-visual-web-cyo5fs and
+/private/tmp/steeple-quote-native-ios-66aWfJ. The lead did not inspect pixels.
+
+The second concurrency review found four further reproducible cases: a failed replacement
+sign-in could leave a superseded cookie; superseded native storage writes could survive a
+replacement failure; one payment concurrency rollback detached later batch rows; and a stale
+Pending retry repeated the first-failure notice. Fixes revoke rejected sign-in cookies while
+holding the mutation lock, publish native credentials/state in the storage queue, repair stale
+storage writes to the last published identity, reacquire each payment after tracker rollback,
+and account for prior failures during recovery. These are now regression cases.
+
+Backend gates: **634 API unit tests and 191 integration tests passed** after the final payment
+fixes, including booking integrity, migration readiness and the five-minute SSE test.
+Native storage was then moved to one atomic secure record, with a separate nonsecret logout
+marker; forced logout survives keychain failure and restart. Legacy token/profile identity
+checks, error-response fences and failed browser login fan-out now have regressions.
+Final native validation is in progress. Web npm tests,
+lint, typecheck and production build pass;17 data recovery,3 browser recovery and 34 real-cookie
+checks pass. Real Development API session tests passed39 checks, including concurrent two-tab
+and four-request refreshes. The exact-cookie suite exercises Web Locks and same-tab fallback;
+cross-tab ordering requires Web Locks. No identity is written to browser storage.
+
+Deployment migration parity passes for23 SQL files. Liquibase4.31 applied all26 production
+changesets to a fresh disposable PostgreSQL18 database; a second update applied zero changes.
+Required schema readiness now rejects missing025/026 columns. Companion infra commit1992f86
+contains025/026; no deployment or production connection occurred.
+
+Remaining release validation is external: actual Google/Apple/Turnstile, delivered email,
+live payment collection, Android device testing, production recovery/load and pilot operations.
+Contextual mail links and fallback addresses were verified; actual email-app delivery was not.
+Payments remain mock machinery until the separate release gates are met. Archived Playtest
+webv1 journeys were not treated as current regression coverage.
+
+Real API quote smoke passed: a new request sent its reviewed terms, the host edited the room,
+and approval still returned the original saved rate/rules and duration-adjusted amount.
+Infra migration commit1992f86 is fast-forwarded to its clean local main; nothing was deployed.

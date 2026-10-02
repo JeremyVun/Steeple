@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../api/app_error.dart';
@@ -45,6 +46,8 @@ class ApiSessionManager implements SessionManager {
        _storage = storage ?? const FlutterSecureStorage(),
        _credentialProvider = credentialProvider;
 
+  static const _sessionKey = 'steeple.session';
+  static const _signedOutKey = 'steeple.signedOut';
   static const _accessKey = 'steeple.access';
   static const _refreshKey = 'steeple.refresh';
   static const _userKey = 'steeple.user';
@@ -61,6 +64,7 @@ class ApiSessionManager implements SessionManager {
   Future<void> _storageTail = Future.value();
   var _identityGeneration = 0;
   int? _signInGeneration;
+  bool _pendingStorageClear = false;
 
   @override
   ValueListenable<SessionState> get state => _state;
@@ -72,28 +76,64 @@ class ApiSessionManager implements SessionManager {
   Future<void> restore() async {
     final generation = _advanceIdentity();
     try {
-      final stored = await Future.wait([
-        _storage.read(key: _accessKey),
-        _storage.read(key: _refreshKey),
-        _storage.read(key: _userKey),
-      ]);
+      await _storageTail;
       if (!_isCurrent(generation)) return;
-      final accessToken = stored[0];
-      final refreshToken = stored[1];
-      final userJson = stored[2];
-      if (refreshToken != null && userJson != null) {
-        // Optimistic: trust the cached profile; a stale access token heals
-        // itself through the interceptor's refresh on first use.
-        final user = UserProfile.fromJson(
-          jsonDecode(userJson) as Map<String, dynamic>,
+      final preferences = await SharedPreferences.getInstance();
+      if (!_isCurrent(generation)) return;
+      if (_pendingStorageClear || preferences.getBool(_signedOutKey) == true) {
+        await _wipe(generation, forced: true);
+        return;
+      }
+      final record = await _storage.read(key: _sessionKey);
+      if (!_isCurrent(generation)) return;
+      Map<String, dynamic>? stored;
+      if (record != null) {
+        stored = jsonDecode(record) as Map<String, dynamic>?;
+      } else {
+        final legacy = await Future.wait([
+          _storage.read(key: _accessKey),
+          _storage.read(key: _refreshKey),
+          _storage.read(key: _userKey),
+        ]);
+        if (!_isCurrent(generation)) return;
+        if (legacy.every((value) => value != null)) {
+          final user = jsonDecode(legacy[2]!) as Map<String, dynamic>;
+          final payload =
+              jsonDecode(
+                    utf8.decode(
+                      base64Url.decode(
+                        base64Url.normalize(legacy[0]!.split('.')[1]),
+                      ),
+                    ),
+                  )
+                  as Map<String, dynamic>;
+          if (payload['sub'] == user['id']) {
+            stored = {
+              'accessToken': legacy[0],
+              'refreshToken': legacy[1],
+              'user': user,
+            };
+          }
+        }
+        final migrated = stored;
+        await _mutateStorage(
+          generation,
+          () => _writeRecord(migrated),
+          publish: () {},
         );
-        _accessToken = accessToken;
-        _refreshToken = refreshToken;
+      }
+      if (!_isCurrent(generation)) return;
+      if (stored?['refreshToken'] is String &&
+          stored?['user'] is Map<String, dynamic>) {
+        final user = UserProfile.fromJson(
+          stored!['user'] as Map<String, dynamic>,
+        );
+        _accessToken = stored['accessToken'] as String?;
+        _refreshToken = stored['refreshToken'] as String;
+        _advanceIdentity();
         _state.value = SignedIn(user);
       } else {
-        _accessToken = null;
-        _refreshToken = null;
-        _state.value = const SignedOut();
+        await _wipe(generation);
       }
     } catch (_) {
       // Unreadable storage (OS keychain hiccough, migration) → signed out,
@@ -131,9 +171,8 @@ class ApiSessionManager implements SessionManager {
       );
       final session = AuthSession.fromJson(response.data!);
       if (!_isCurrentSignIn(generation)) return const SignInCancelled();
-      await _persistSession(session, generation);
-      if (!_isCurrentSignIn(generation)) return const SignInCancelled();
-      _state.value = SignedIn(session.user);
+      final published = await _persistSession(session, generation);
+      if (published != _identityGeneration) return const SignInCancelled();
       return SignInSuccess(session.user, isNewUser: session.isNewUser);
     } on _SsoCancelled {
       return const SignInCancelled();
@@ -165,14 +204,12 @@ class ApiSessionManager implements SessionManager {
       // Local sign-out must succeed even when the network doesn't.
     }
     await _wipe(generation);
-    if (_isCurrent(generation)) _state.value = const SignedOut();
   }
 
   @override
   Future<void> forceSignOut() async {
     final generation = _advanceIdentity();
-    await _wipe(generation);
-    if (_isCurrent(generation)) _state.value = const SignedOut(wasForced: true);
+    await _wipe(generation, forced: true);
   }
 
   @override
@@ -188,9 +225,12 @@ class ApiSessionManager implements SessionManager {
   Future<bool> refreshAfter401() {
     // Single-flight: concurrent 401s share one refresh round-trip.
     final generation = _identityGeneration;
-    return _inflightRefresh ??= _refresh(
-      generation,
-    ).whenComplete(() => _inflightRefresh = null);
+    if (_inflightRefresh case final inflight?) return inflight;
+    late final Future<bool> pending;
+    pending = _refresh(generation).whenComplete(() {
+      if (identical(_inflightRefresh, pending)) _inflightRefresh = null;
+    });
+    return _inflightRefresh = pending;
   }
 
   Future<bool> _refresh(int generation) async {
@@ -229,7 +269,10 @@ class ApiSessionManager implements SessionManager {
   void addSignOutHandler(Future<void> Function() handler) =>
       _signOutHandlers.add(handler);
 
-  int _advanceIdentity() => ++_identityGeneration;
+  int _advanceIdentity() {
+    _inflightRefresh = null;
+    return ++_identityGeneration;
+  }
 
   bool _isCurrent(int generation) => generation == _identityGeneration;
 
@@ -241,63 +284,124 @@ class ApiSessionManager implements SessionManager {
       _signInGeneration != generation &&
       (refreshToken == null || _refreshToken == refreshToken);
 
-  Future<void> _persistSession(AuthSession session, int generation) =>
-      _mutateStorage(generation, () async {
-        await _storage.write(key: _accessKey, value: session.accessToken);
-        await _storage.write(key: _refreshKey, value: session.refreshToken);
-        await _storage.write(
-          key: _userKey,
-          value: jsonEncode(session.user.toJson()),
-        );
-        if (_isCurrent(generation)) {
-          _accessToken = session.accessToken;
-          _refreshToken = session.refreshToken;
+  Future<int?> _persistSession(AuthSession session, int generation) async {
+    int? published;
+    await _mutateStorage(
+      generation,
+      () async {
+        await _writeRecord({
+          'accessToken': session.accessToken,
+          'refreshToken': session.refreshToken,
+          'user': session.user.toJson(),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        if (!await preferences.setBool(_signedOutKey, false)) {
+          throw StateError('Could not save sign-in state.');
         }
-      });
+      },
+      publish: () {
+        _accessToken = session.accessToken;
+        _refreshToken = session.refreshToken;
+        _pendingStorageClear = false;
+        published = _advanceIdentity();
+        _state.value = SignedIn(session.user);
+      },
+    );
+    return published;
+  }
 
   Future<void> _persistRefresh({
     required String accessToken,
     required String refreshToken,
     required int generation,
-  }) => _mutateStorage(generation, () async {
-    await _storage.write(key: _accessKey, value: accessToken);
-    await _storage.write(key: _refreshKey, value: refreshToken);
-    if (_isCurrent(generation)) {
+  }) => _mutateStorage(
+    generation,
+    () => _writeRecord({
+      'accessToken': accessToken,
+      'refreshToken': refreshToken,
+      'user': (_state.value as SignedIn).user.toJson(),
+    }),
+    publish: () {
       _accessToken = accessToken;
       _refreshToken = refreshToken;
-    }
-  });
+    },
+  );
 
   Future<void> _forceSignOutCurrent(int generation, String refreshToken) async {
     if (!_isCurrentRefresh(generation, refreshToken)) {
       return;
     }
     final forcedGeneration = _advanceIdentity();
-    await _wipe(forcedGeneration);
-    if (_isCurrent(forcedGeneration)) {
-      _state.value = const SignedOut(wasForced: true);
+    await _wipe(forcedGeneration, forced: true);
+  }
+
+  Future<void> _wipe(int generation, {bool forced = false}) async {
+    if (!_isCurrent(generation)) return;
+    _accessToken = null;
+    _refreshToken = null;
+    final cleared = _advanceIdentity();
+    _pendingStorageClear = true;
+    _state.value = SignedOut(wasForced: forced);
+    try {
+      await _mutateStorage(
+        cleared,
+        () async {
+          final preferences = await SharedPreferences.getInstance();
+          await preferences.setBool(_signedOutKey, true);
+          await _writeRecord(null);
+        },
+        publish: () {
+          _pendingStorageClear = false;
+        },
+      );
+    } catch (_) {
+      // Local sign-out cannot depend on the OS keychain being writable.
     }
   }
 
-  Future<void> _wipe(int generation) => _mutateStorage(generation, () async {
-    await _storage.delete(key: _accessKey);
-    await _storage.delete(key: _refreshKey);
-    await _storage.delete(key: _userKey);
-    if (_isCurrent(generation)) {
-      _accessToken = null;
-      _refreshToken = null;
-    }
-  });
-
   Future<void> _mutateStorage(
     int generation,
-    Future<void> Function() mutation,
-  ) {
+    Future<void> Function() mutation, {
+    required void Function() publish,
+  }) {
     final operation = _storageTail.then((_) async {
-      if (_isCurrent(generation)) await mutation();
+      if (!_isCurrent(generation)) return;
+      try {
+        await mutation();
+      } catch (_) {
+        await _restoreStoredIdentity();
+        rethrow;
+      }
+      if (_isCurrent(generation)) {
+        publish();
+      } else {
+        await _restoreStoredIdentity();
+      }
     });
     _storageTail = operation.catchError((_) {});
     return operation;
+  }
+
+  Future<void> _restoreStoredIdentity() {
+    final current = _state.value;
+    return _writeRecord(
+      current is SignedIn
+          ? {
+              'accessToken': _accessToken,
+              'refreshToken': _refreshToken,
+              'user': current.user.toJson(),
+            }
+          : null,
+    );
+  }
+
+  Future<void> _writeRecord(Map<String, dynamic>? record) async {
+    await _storage.write(key: _sessionKey, value: jsonEncode(record));
+    for (final key in [_accessKey, _refreshKey, _userKey]) {
+      try {
+        await _storage.delete(key: key);
+      } catch (_) {}
+    }
   }
 
   /// True when the JWT's `exp` is within 30s of now (or unparseable).

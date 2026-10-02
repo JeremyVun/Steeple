@@ -1,6 +1,6 @@
 # First MVP release
 
-Status: local hardening completed; not deployed. Updated 2026-09-20.
+Status: local hardening and app review remediation completed; not deployed. Updated 2026-10-02.
 
 The first release can be a small, supported web pilot with payment arranged directly with
 venues. Live Stripe collection and native app-store release are separate gates.
@@ -16,13 +16,21 @@ venues. Live Stripe collection and native app-store release are separate gates.
 | Product copy overstated payments and identity checks | Legal preview now describes direct payment and the cancellation window. SSO labels say “Signed in”; venue verification remains a separate claim. Document version is 2026-09-20 across API/web/mobile. |
 | Health stayed green with the database down | `/health/ready` checks the database and required booking schema, returning 503 on failure. API container health uses readiness; `/health` remains liveness. |
 | A failed database dump could be reported successful | Shared-infra backup checks dump, compression and configured upload separately. Rotation happens after success; private temporary files are removed. Cron environment matching includes the actual variable names. |
-| Deployment migrations lagged behind code | Infra now includes 022–024 and optional, disabled-by-default Stripe sandbox config. The parity tool preserves historical production differences and excludes local seed migrations. |
+| Deployment migrations lagged behind code | Infra now includes 022–026 and optional, disabled-by-default Stripe sandbox config. The parity tool preserves historical production differences and excludes local seed migrations. |
 | SSE tests failed under load | Initial frame, heartbeat and expiry tests advance a controlled clock. |
+| Requests could lose their quoted commitments | Migration 026 freezes the reviewed hourly rate, currency and rules at submission. Legacy unquoted requests must be reviewed and resubmitted. Web/mobile show saved terms and contextual support. |
+| Empty hours, late cancellations and stale updates disagreed | Migration 025 distinguishes closed from unconfigured availability. Standing occurrences remain reserved and payable. Concurrent cancellation/no-show updates cannot overwrite the winner. |
+| Notification faults and interrupted charges left partial state | Booking actions, payment outcomes and reminder claims commit with their durable notices. The sweep recovers missed first charges and refunds. |
+| Account switches could adopt delayed work | Web cookie mutations are serialized; native requests and retries reject results from an older identity. Discovery paging, cache invalidation and transient recovery are covered by regression tests. |
 
 NuGet reports no vulnerable packages across the solution after the test-only SSH.NET dependency was pinned to 2026.0.0, which contains fixes for the two
 reported SCP advisories. [Upstream release](https://github.com/sshnet/SSH.NET/releases/tag/2026.0.0).
 
 ## Verification record
+
+The 2 October review and current gate results are recorded in
+[`APP_REVIEW_2026-10-02.md`](../APP_REVIEW_2026-10-02.md). The earlier release-hardening
+record below is retained for the provider/backup work that was outside this app review.
 
 - Full .NET run: 610 API unit tests and 165 integration tests passed, including the five-minute
   SSE test. After adding the withdrawal exception, 15 targeted HTTP/payment/booking-integrity
@@ -49,8 +57,9 @@ reported SCP advisories. [Upstream release](https://github.com/sshnet/SSH.NET/re
 2. **Real supply.** Select and verify the first participating venues, obtain accurate prices,
    photos, hours and rules, and remove/unpublish sample inventory from the public database.
    Agree who responds to requests and handles cancellations or disputes.
-3. **Support and legal approval.** Supply a monitored booking-support/privacy address, publish
-   it in the UI/legal pages, and approve the final terms/privacy text. These pages still label
+3. **Support and legal approval.** Jeremy supplied `jvun@steepleapp.co` for contextual booking
+   support, now linked on web/mobile and in confirmation emails. Confirm the privacy contact
+   and approve the final terms/privacy text. These pages still label
    themselves as preview policies; the factual corrections are not legal approval. If text
    changes after anyone accepts it, bump the versions across all three clients and the API.
 4. **Real provider journey.** Verify Google and Apple sign-in, Turnstile, and delivered email
@@ -66,6 +75,11 @@ Native apply/manage remain disabled until native Turnstile, provider setup, push
 and store requirements have been verified. They do not need to delay a web-only pilot.
 
 ## Coordinated rollout
+
+Migrations 025 and 026 add availability configuration and saved application/booking quotes.
+Run them before admitting traffic to the matching API; readiness verifies the required columns.
+The matching web/mobile clients must send a reviewed quote with every new submission; old
+clients receive `409 quote_changed` rather than creating an unpriced request.
 
 Migration 024 changes how payment mode is interpreted. **Do not roll back to an older API
 against a database containing new offline price snapshots**: older code treats any saved

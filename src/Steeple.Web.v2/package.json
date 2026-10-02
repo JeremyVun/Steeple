@@ -24,6 +24,8 @@
     "test:composer-schedule": "node tools/composer-schedule-test.mjs",
     "test:composer": "node tools/composer-test.mjs",
     "test:review-recovery": "node tools/review-recovery-test.mjs",
+    "test:session-cookie-races": "node tools/session-cookie-race-test.mjs",
+    "test:booking-terms": "node tools/booking-terms-test.mjs",
     "test:review-recovery-browser": "node tools/review-recovery-browser-test.mjs"
   },
   "dependencies": {

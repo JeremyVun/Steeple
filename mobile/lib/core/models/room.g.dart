@@ -190,6 +190,7 @@ _RoomDetail _$RoomDetailFromJson(Map<String, dynamic> json) => _RoomDetail(
   pricePerHour: (json['pricePerHour'] as num).toDouble(),
   currency: json['currency'] as String,
   houseRules: json['houseRules'] as String,
+  bookingMode: json['bookingMode'] as String? ?? 'manual',
   amenities:
       (json['amenities'] as List<dynamic>?)?.map((e) => e as String).toList() ??
       const <String>[],
@@ -227,6 +228,7 @@ Map<String, dynamic> _$RoomDetailToJson(_RoomDetail instance) =>
       'pricePerHour': instance.pricePerHour,
       'currency': instance.currency,
       'houseRules': instance.houseRules,
+      'bookingMode': instance.bookingMode,
       'amenities': instance.amenities,
       'accessibility': instance.accessibility,
       'activities': instance.activities,

@@ -43,6 +43,9 @@ public interface IPaymentRepository
     /// <summary>All payment rows (any status) for the given bookings, newest attempt first.</summary>
     Task<IReadOnlyList<Payment>> GetForBookingsAsync(IReadOnlyList<Guid> bookingIds, CancellationToken ct = default);
 
+    /// <summary>Loads a tracked payment with its booking and occurrence display graph.</summary>
+    Task<Payment?> GetPaymentAsync(Guid id, CancellationToken ct = default);
+
     /// <summary>
     /// Occurrences due for charging: <c>Scheduled</c>, on a <c>Confirmed</c> booking with a price
     /// snapshot, starting before <paramref name="windowEndUtc"/> (and not yet started), with no

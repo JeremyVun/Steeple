@@ -90,7 +90,69 @@ class _TokenLookupSession extends _ChangingSessionManager {
   }
 }
 
+class _StableSession extends _ChangingSessionManager {
+  @override
+  Future<bool> refreshAfter401() async {
+    refreshCalls++;
+    return true;
+  }
+}
+
+class _DelayedAdapter extends _StatusAdapter {
+  _DelayedAdapter([super.statusCode = 200]);
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    started.complete();
+    await release.future;
+    return super.fetch(options, requestStream, cancelFuture);
+  }
+}
+
 void main() {
+  for (final (path, status) in [
+    ('response', 200),
+    ('auth retry', 200),
+    ('network retry', 200),
+    ('response', 503),
+    ('auth retry', 503),
+    ('network retry', 503),
+  ]) {
+    test('discards an old identity response from $path ($status)', () async {
+      final session = _StableSession();
+      final delayed = _DelayedAdapter(status);
+      final retryDio = Dio()..httpClientAdapter = delayed;
+      final dio = Dio()
+        ..httpClientAdapter = path == 'response'
+            ? delayed
+            : _StatusAdapter(path == 'auth retry' ? 401 : 503)
+        ..interceptors.addAll([
+          AuthInterceptor(() => session, retryDio),
+          RetryInterceptor(retryDio, () => session),
+        ]);
+      final pending = expectLater(
+        dio.get<void>('/private'),
+        throwsA(
+          isA<DioException>().having(
+            (e) => e.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      await delayed.started.future;
+      session._identityGeneration++;
+      delayed.release.complete();
+      await pending;
+    });
+  }
+
   test(
     'never sends an old account draft after identity changes during token lookup',
     () async {

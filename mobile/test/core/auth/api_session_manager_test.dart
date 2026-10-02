@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:steeple_mobile/core/auth/api_session_manager.dart';
 import 'package:steeple_mobile/core/auth/session_state.dart';
 
@@ -16,6 +17,7 @@ class _MemoryStorage extends FlutterSecureStorage {
   });
 
   final Map<String, String?> values;
+  bool unavailable = false;
   final Future<void>? readGate;
   final Future<void>? writeGate;
   final Completer<void>? writeStarted;
@@ -45,8 +47,9 @@ class _MemoryStorage extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) async {
-    if (key == 'steeple.access' && writeGate != null) {
-      writeStarted?.complete();
+    if (unavailable) throw StateError('Keychain unavailable');
+    if (key == 'steeple.session' && writeGate != null) {
+      if (writeStarted?.isCompleted == false) writeStarted!.complete();
       await writeGate;
     }
     if (value == null) {
@@ -66,20 +69,19 @@ class _MemoryStorage extends FlutterSecureStorage {
     AppleOptions? mOptions,
     WindowsOptions? wOptions,
   }) async {
+    if (unavailable) throw StateError('Keychain unavailable');
     values.remove(key);
   }
 }
 
 Map<String, String?> _storedSession(String id, String refreshToken) => {
-  'steeple.access': 'access-$id',
-  'steeple.refresh': refreshToken,
-  'steeple.user': jsonEncode({
-    'id': id,
-    'displayName': 'Person $id',
-    'email': '$id@example.test',
-    'createdAtUtc': '2026-01-01T00:00:00Z',
-  }),
+  'steeple.session': jsonEncode(_sessionResponse(id, refreshToken)),
 };
+
+String? _storedRefresh(_MemoryStorage storage) =>
+    (jsonDecode(storage.values['steeple.session'] ?? 'null')
+            as Map<String, dynamic>?)?['refreshToken']
+        as String?;
 
 Map<String, dynamic> _sessionResponse(String id, String refreshToken) => {
   'accessToken': 'access-$id',
@@ -94,7 +96,204 @@ Map<String, dynamic> _sessionResponse(String id, String refreshToken) => {
 };
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  test('forced sign-out survives unavailable keychain and restart', () async {
+    final storage = _MemoryStorage(_storedSession('a', 'refresh-a'));
+    final manager = ApiSessionManager(authDio: Dio(), storage: storage);
+    await manager.restore();
+    storage.unavailable = true;
+    await manager.forceSignOut();
+    expect(manager.state.value, isA<SignedOut>());
+    storage.unavailable = false;
+    final restarted = ApiSessionManager(authDio: Dio(), storage: storage);
+    await restarted.restore();
+    expect(restarted.state.value, isA<SignedOut>());
+    expect(_storedRefresh(storage), isNull);
+  });
+
+  test(
+    'failed atomic sign-in write cannot mix profile and credentials',
+    () async {
+      final storage = _MemoryStorage(_storedSession('a', 'refresh-a'));
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              handler.resolve(
+                Response(
+                  requestOptions: options,
+                  data: _sessionResponse('b', 'refresh-b'),
+                ),
+              );
+            },
+          ),
+        );
+      final manager = ApiSessionManager(
+        authDio: dio,
+        storage: storage,
+        credentialProvider: (_) async =>
+            const NativeSsoCredential(idToken: 'b'),
+      );
+      await manager.restore();
+      storage.unavailable = true;
+      expect(await manager.signIn(SsoProvider.google), isA<SignInFailed>());
+      storage.unavailable = false;
+      final restarted = ApiSessionManager(authDio: Dio(), storage: storage);
+      await restarted.restore();
+      expect((restarted.state.value as SignedIn).user.id, 'a');
+      expect(_storedRefresh(storage), 'refresh-a');
+    },
+  );
+
+  for (final matches in [true, false]) {
+    test(
+      'legacy identity migration requires a matching access subject: $matches',
+      () async {
+        final user = _sessionResponse('a', 'refresh-a')['user'];
+        final payload = base64Url.encode(
+          utf8.encode(jsonEncode({'sub': matches ? 'a' : 'b'})),
+        );
+        final storage = _MemoryStorage({
+          'steeple.access': 'header.$payload.signature',
+          'steeple.refresh': 'refresh-a',
+          'steeple.user': jsonEncode(user),
+        });
+        final manager = ApiSessionManager(authDio: Dio(), storage: storage);
+        await manager.restore();
+        expect(
+          manager.state.value,
+          matches ? isA<SignedIn>() : isA<SignedOut>(),
+        );
+        expect(storage.values.keys, ['steeple.session']);
+        expect(_storedRefresh(storage), matches ? 'refresh-a' : null);
+      },
+    );
+  }
+
   group('ApiSessionManager identity generation', () {
+    test('superseded persistence cannot survive replacement failure', () async {
+      final writeStarted = Completer<void>();
+      final releaseWrite = Completer<void>();
+      var credentials = 0;
+      final dio = Dio()
+        ..interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.data['idToken'] == 'cancelled') {
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: _sessionResponse('cancelled', 'refresh-cancelled'),
+                  ),
+                );
+              } else {
+                handler.reject(
+                  DioException(
+                    requestOptions: options,
+                    type: DioExceptionType.badResponse,
+                    response: Response<void>(
+                      requestOptions: options,
+                      statusCode: 401,
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+        );
+      final storage = _MemoryStorage(
+        _storedSession('original', 'refresh-original'),
+        writeGate: releaseWrite.future,
+        writeStarted: writeStarted,
+      );
+      final manager = ApiSessionManager(
+        authDio: dio,
+        storage: storage,
+        credentialProvider: (_) async => NativeSsoCredential(
+          idToken: ++credentials == 1 ? 'cancelled' : 'invalid',
+        ),
+      );
+      await manager.restore();
+      final first = manager.signIn(SsoProvider.google);
+      await writeStarted.future;
+      expect(await manager.signIn(SsoProvider.google), isA<SignInFailed>());
+      releaseWrite.complete();
+      expect(await first, isA<SignInCancelled>());
+      final current = (manager.state.value as SignedIn).user.id;
+      final restored = ApiSessionManager(authDio: Dio(), storage: storage);
+      await restored.restore();
+      expect((restored.state.value as SignedIn).user.id, current);
+    });
+
+    test(
+      'an old refresh cannot own or clear the new account refresh flight',
+      () async {
+        final startedA = Completer<void>();
+        final startedB = Completer<void>();
+        final releaseA = Completer<void>();
+        final releaseB = Completer<void>();
+        var callsB = 0;
+        final dio = Dio()
+          ..interceptors.add(
+            InterceptorsWrapper(
+              onRequest: (options, handler) async {
+                if (options.path == '/api/v1/auth/sessions') {
+                  handler.resolve(
+                    Response(
+                      requestOptions: options,
+                      data: _sessionResponse('b', 'refresh-b'),
+                    ),
+                  );
+                  return;
+                }
+                if (options.data['refreshToken'] == 'refresh-a') {
+                  startedA.complete();
+                  await releaseA.future;
+                } else {
+                  callsB++;
+                  if (!startedB.isCompleted) startedB.complete();
+                  await releaseB.future;
+                }
+                handler.resolve(
+                  Response(
+                    requestOptions: options,
+                    data: {
+                      'accessToken': 'new-access',
+                      'refreshToken': 'new-refresh',
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+        final manager = ApiSessionManager(
+          authDio: dio,
+          storage: _MemoryStorage(_storedSession('a', 'refresh-a')),
+          credentialProvider: (_) async =>
+              const NativeSsoCredential(idToken: 'b'),
+        );
+        await manager.restore();
+        final oldRefresh = manager.refreshAfter401();
+        await startedA.future;
+        final signingIn = manager.signIn(SsoProvider.google);
+        final pendingGeneration = manager.identityGeneration;
+        expect(await signingIn, isA<SignInSuccess>());
+        expect(manager.identityGeneration, greaterThan(pendingGeneration));
+        final newRefresh = manager.refreshAfter401();
+        await startedB.future.timeout(const Duration(seconds: 2));
+        releaseA.complete();
+        expect(await oldRefresh, isFalse);
+        final joined = manager.refreshAfter401();
+        expect(identical(newRefresh, joined), isTrue);
+        releaseB.complete();
+        expect(await newRefresh, isTrue);
+        expect(await joined, isTrue);
+        expect(callsB, 1);
+      },
+    );
+
     test(
       'a delayed refresh success cannot restore tokens after force sign-out',
       () async {
@@ -141,7 +340,7 @@ void main() {
 
         expect(await pendingRefresh, isFalse);
         expect(manager.state.value, isA<SignedOut>());
-        expect(storage.values, isEmpty);
+        expect(storage.values, {'steeple.session': 'null'});
       },
     );
 
@@ -199,7 +398,7 @@ void main() {
         expect(signIn, isA<SignInSuccess>());
         expect(await pendingRefresh, isFalse);
         expect((manager.state.value as SignedIn).user.id, 'b');
-        expect(storage.values['steeple.refresh'], 'refresh-b');
+        expect(_storedRefresh(storage), 'refresh-b');
       },
     );
 
@@ -229,7 +428,7 @@ void main() {
 
         expect(await manager.refreshAfter401(), isFalse);
         expect((manager.state.value as SignedIn).user.id, 'a');
-        expect(storage.values['steeple.refresh'], 'refresh-a');
+        expect(_storedRefresh(storage), 'refresh-a');
       },
     );
 
@@ -293,7 +492,7 @@ void main() {
       await signOut;
 
       expect((manager.state.value as SignedIn).user.id, 'b');
-      expect(storage.values['steeple.refresh'], 'refresh-b');
+      expect(_storedRefresh(storage), 'refresh-b');
     });
   });
 }

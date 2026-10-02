@@ -369,6 +369,11 @@ export async function mintGuest({ email, name, last4 = '4242' }) {
   return { token, user: person.user, email, name, last4 };
 }
 
+export function reviewedQuote(listing) {
+  const { pricePerHour, currency, houseRules } = listing;
+  return { pricePerHour, currency, houseRules };
+}
+
 /** One weekly ask, three dates out, on a room a `mintVenue` fixture describes. */
 export async function apply(guest, room, { dow = 3, weeks = 3, groupSize = 12, activityType = 'community' } = {}) {
   const start = nextWeekday(dow, 7);
@@ -377,6 +382,7 @@ export async function apply(guest, room, { dow = 3, weeks = 3, groupSize = 12, a
     token: guest.token,
     key: `apply-${stamp}-${guest.email}-${room.roomId}`,
     body: {
+      quote: reviewedQuote(room.listing),
       activityType,
       groupSize,
       intentText: 'A weekly evening for neighbours who would rather not meet in a kitchen.',

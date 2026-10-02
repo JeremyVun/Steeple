@@ -168,19 +168,26 @@ public sealed class PaymentService : IPaymentService
         // Crash recovery first: a Pending row claimed an occurrence but never got its outcome.
         // The occurrence-id idempotency key makes the re-drive safe (a charge that actually
         // landed is returned, not repeated).
-        foreach (var stale in await _repository.GetStalePendingAsync(nowUtc - RetryInterval, ct).ConfigureAwait(false))
+        foreach (var staleId in (await _repository.GetStalePendingAsync(nowUtc - RetryInterval, ct).ConfigureAwait(false)).Select(p => p.Id))
         {
-            var outcome = await DriveGatewayAsync(stale, nowUtc, notifyOnFirstFailure: true, priorFailures: 0, ct).ConfigureAwait(false);
-            if (outcome) charged++; else failed++;
+            // A prior concurrency rollback clears tracking for the entire batch.
+            var stale = await _repository.GetPaymentAsync(staleId, ct).ConfigureAwait(false);
+            if (stale is null || stale.Status != PaymentStatus.Pending) continue;
+            var history = await _repository.GetForBookingsAsync([stale.BookingId], ct).ConfigureAwait(false);
+            var failures = history.Count(p => p.OccurrenceId == stale.OccurrenceId && p.Status == PaymentStatus.Failed);
+            var outcome = await DriveGatewayAsync(stale, nowUtc, notifyOnFirstFailure: true, failures, ct).ConfigureAwait(false);
+            if (outcome is true) charged++; else if (outcome is false) failed++;
         }
 
         var toCancel = new List<PaymentFailureCancellation>();
         foreach (var candidate in await _repository.GetChargeCandidatesAsync(nowUtc, nowUtc + ChargeWindow, ct).ConfigureAwait(false))
         {
+            var retryNextSweep = false;
             switch (ChargePlanner.Plan(candidate, nowUtc, ChargeWindow, CancelDeadline, RetryInterval))
             {
                 case ChargePlanner.Action.Charge:
                     var ok = await AttemptChargeAsync(candidate, nowUtc, ct).ConfigureAwait(false);
+                    retryNextSweep = ok is null;
                     if (ok is true) charged++; else if (ok is false) failed++;
                     break;
 
@@ -192,6 +199,7 @@ public sealed class PaymentService : IPaymentService
                     toCancel.Add(new PaymentFailureCancellation(booking.Id, candidate.Occurrence.Id, consecutive));
                     break;
             }
+            if (retryNextSweep) break;
         }
 
         var refunded = await RefundCancelledAsync(bookingId: null, ct).ConfigureAwait(false);
@@ -264,7 +272,7 @@ public sealed class PaymentService : IPaymentService
     }
 
     /// <summary>Drives a claimed (Pending) row through the gateway and records the outcome.</summary>
-    private async Task<bool> DriveGatewayAsync(
+    private async Task<bool?> DriveGatewayAsync(
         Payment claim, DateTimeOffset nowUtc, bool notifyOnFirstFailure, int priorFailures, CancellationToken ct)
     {
         var booking = claim.Booking ?? throw new InvalidOperationException("Payment row loaded without its booking.");
@@ -334,6 +342,7 @@ public sealed class PaymentService : IPaymentService
         {
             // Another recovery worker committed the same idempotent gateway result. Its outcome
             // and inbox rows won together, so this worker has nothing left to persist.
+            return null;
         }
 
         return result.Succeeded;
@@ -347,8 +356,10 @@ public sealed class PaymentService : IPaymentService
     private async Task<int> RefundCancelledAsync(Guid? bookingId, CancellationToken ct)
     {
         var refunded = 0;
-        foreach (var payment in await _repository.GetRefundableAsync(bookingId, ct).ConfigureAwait(false))
+        foreach (var paymentId in (await _repository.GetRefundableAsync(bookingId, ct).ConfigureAwait(false)).Select(p => p.Id))
         {
+            var payment = await _repository.GetPaymentAsync(paymentId, ct).ConfigureAwait(false);
+            if (payment is null || payment.Status != PaymentStatus.Succeeded) continue;
             if (payment.ProviderPaymentId is not { } providerPaymentId)
             {
                 continue; // defensive: a succeeded row always carries its provider id

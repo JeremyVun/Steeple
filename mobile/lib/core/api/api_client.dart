@@ -21,7 +21,7 @@ Dio buildDio(EnvConfig env, SessionManager Function() sessionManager) {
   final dio = Dio(options);
   dio.interceptors.addAll([
     AuthInterceptor(sessionManager, retryDio),
-    RetryInterceptor(retryDio),
+    RetryInterceptor(retryDio, sessionManager),
     if (kDebugMode) RedactedLogInterceptor(),
   ]);
   return dio;
@@ -40,58 +40,55 @@ class ApiClient {
     Map<String, dynamic>? query,
     CancelToken? cancel,
     required T Function(dynamic data) decode,
-  }) =>
-      _run(
-        () => _dio.get<dynamic>(path, queryParameters: query, cancelToken: cancel),
-        decode,
-      );
+  }) => _run(
+    () => _dio.get<dynamic>(path, queryParameters: query, cancelToken: cancel),
+    decode,
+  );
 
   Future<T> post<T>(
     String path, {
     Object? body,
     Map<String, String>? headers,
     required T Function(dynamic data) decode,
-  }) =>
-      _run(
-        () => _dio.post<dynamic>(
-          path,
-          data: body,
-          options: headers == null ? null : Options(headers: headers),
-        ),
-        decode,
-      );
+  }) => _run(
+    () => _dio.post<dynamic>(
+      path,
+      data: body,
+      options: headers == null ? null : Options(headers: headers),
+    ),
+    decode,
+  );
 
   Future<T> patch<T>(
     String path, {
     Object? body,
     Map<String, String>? headers,
     required T Function(dynamic data) decode,
-  }) =>
-      _run(
-        () => _dio.patch<dynamic>(
-          path,
-          data: body,
-          options: headers == null ? null : Options(headers: headers),
-        ),
-        decode,
-      );
+  }) => _run(
+    () => _dio.patch<dynamic>(
+      path,
+      data: body,
+      options: headers == null ? null : Options(headers: headers),
+    ),
+    decode,
+  );
 
   Future<T> put<T>(
     String path, {
     Object? body,
     Map<String, String>? headers,
     required T Function(dynamic data) decode,
-  }) =>
-      _run(
-        () => _dio.put<dynamic>(
-          path,
-          data: body,
-          options: headers == null ? null : Options(headers: headers),
-        ),
-        decode,
-      );
+  }) => _run(
+    () => _dio.put<dynamic>(
+      path,
+      data: body,
+      options: headers == null ? null : Options(headers: headers),
+    ),
+    decode,
+  );
 
-  Future<void> delete(String path) => _run(() => _dio.delete<dynamic>(path), (_) {});
+  Future<void> delete(String path) =>
+      _run(() => _dio.delete<dynamic>(path), (_) {});
 
   Future<T> _run<T>(
     Future<Response<dynamic>> Function() send,
@@ -109,7 +106,10 @@ class ApiClient {
 /// `core` public surface (MOBILE_CONTRACTS §8). Both are overridden in
 /// bootstrap; fakes-mode builds never construct them.
 final dioProvider = Provider<Dio>(
-  (ref) => buildDio(ref.watch(envProvider), () => ref.read(sessionManagerProvider)),
+  (ref) =>
+      buildDio(ref.watch(envProvider), () => ref.read(sessionManagerProvider)),
 );
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient(ref.watch(dioProvider)));
+final apiClientProvider = Provider<ApiClient>(
+  (ref) => ApiClient(ref.watch(dioProvider)),
+);

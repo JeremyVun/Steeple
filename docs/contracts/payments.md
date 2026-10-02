@@ -203,3 +203,8 @@ ToS/refund-policy pages. `payments` rows keep `ProviderPaymentId` only on succes
 attempt's provider id is not retained (the failure code is the history).
 
 The sweep also recovers the first uncharged occurrence of a confirmed in-app booking before T−48h. The confirmation kick always targets the first occurrence, so repeating it cannot charge a later session early. Application/booking transactions enqueue charge/refund callbacks only after their notification records have committed.
+
+Recovery reacquires each Pending/refundable payment after an earlier concurrency rollback
+may have cleared tracking. A lost charge claim ends that candidate pass; the next sweep
+re-queries it. Stale-Pending recovery includes failed-attempt history, so it cannot repeat the
+first-failure notice.

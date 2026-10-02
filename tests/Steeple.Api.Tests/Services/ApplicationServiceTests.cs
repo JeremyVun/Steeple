@@ -43,6 +43,32 @@ public class ApplicationServiceTests
         Assert.Equal("No open flames.", Assert.Single(managerResult.Value!.Items).Quote!.HouseRules);
     }
 
+    [Fact]
+    public async Task ApprovalEmail_UsesSavedTermsAndExplainsDirectPayment()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        application.QuotedPricePerHour = 40.03m;
+        application.EndTime = new TimeOnly(10, 30);
+        room.PricePerHour = 90m;
+        room.HouseRules = "Changed rules.";
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out var notifications, out _, out _);
+
+        var result = await service.DecideAsync(application.Id, manager.Id,
+            new ApplicationDecisionRequest("approve", null));
+
+        Assert.Null(result.Error);
+        var body = Assert.Single(notifications.Calls).Email!.TextBody;
+        Assert.Contains("USD 60.04 per session (USD 40.03 per hour)", body);
+        Assert.Contains("No open flames.", body);
+        Assert.DoesNotContain("Changed rules.", body);
+        Assert.Contains("Arrange payment directly", body);
+        Assert.Contains("does not collect or refund", body);
+        Assert.Contains("jvun@steepleapp.co", body);
+        Assert.Contains(application.Id.ToString(), body);
+    }
+
     // ----- Submit ---------------------------------------------------------------------------
 
     [Fact]
@@ -1063,7 +1089,7 @@ public class ApplicationServiceTests
     {
         var (repo, managers, _, room, organizer, _) = NewScenario();
         var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
-        var counter = NewCounter(application, startTime: "14:00", endTime: "16:00"); // differs from the 09:00–11:00 ask
+        var counter = NewCounter(application, startTime: "14:00", endTime: "17:00");
         repo.Applications.Add(application);
         var bookings = new FakeBookingService();
         var service = CreateService(repo, managers, out var notifications, out _, out var analytics, bookings, flags: CounterFlag());
@@ -1082,6 +1108,7 @@ public class ApplicationServiceTests
         Assert.NotEqual(application.StartTime, bookings.LastSpec.StartTime);
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.CounterOfferAccepted, notification.Type);
+        Assert.Contains("USD 120.00 per session (USD 40.00 per hour)", notification.Email!.TextBody);
         Assert.Contains(analytics.Events, e => e.EventType == "counter_offer_responded");
     }
 

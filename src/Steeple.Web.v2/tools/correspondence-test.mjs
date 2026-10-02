@@ -66,6 +66,7 @@ import {
   mintGuest,
   mintVenue,
   nextWeekday,
+  reviewedQuote,
   signIn,
   signInPage as signInAs,
   sql,
@@ -808,6 +809,7 @@ const second = await call('POST', `/listings/${instant.roomId}/applications`, {
   token: instantToken,
   key: `second-${stamp}`,
   body: {
+    quote: reviewedQuote(instant.listing),
     activityType: 'community',
     groupSize: 8,
     schedule: {
@@ -1003,6 +1005,7 @@ const oneEvening = await call('POST', `/listings/${rateHost.roomId}/applications
   token: rateGuest.token,
   key: `rate-${stamp}`,
   body: {
+    quote: reviewedQuote(rateHost.listing),
     activityType: 'community',
     groupSize: 10,
     intentText: 'A single evening of carol practice, and then we will know how it went.',

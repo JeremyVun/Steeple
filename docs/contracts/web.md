@@ -198,16 +198,21 @@ expired, while an active tab still reports a refresh refusal as `expired`.
   it resolves to `null`, drops an active profile and tells watchers `expired`. Every other error
   preserves the profile and rejects the immediate work. A transient error retries profile recovery:
   a 429 waits through its `Retry-After` (or 60 seconds when absent); other transient failures wait
-  five seconds unless the server supplied a delay. Cross-tab collisions are safe by the server's
-  rotation grace (`identity.md`), not by this file.
+  five seconds unless the server supplied a delay. Cookie-changing requests run in one per-tab
+  queue and acquire the origin-wide Web Lock `steeple-village-session-cookie` when available.
+  Sign-in, refresh and sign-out publish their accepted state before releasing it, so a stale
+  `Set-Cookie` cannot overwrite a later operation. Without Web Locks only same-tab ordering is
+  guaranteed; the server rotation grace (`identity.md`) still handles concurrent refreshes.
 - `withAccess(work)` runs one bearer-needing piece of work. With no access token in memory — which
   is **every reload of a signed-in browser** — it refreshes first; on a 401 it refreshes once and
-  retries; a second 401 is an answer.
+  retries; a second 401 is an answer. Generation checks start before any asynchronous token
+  lookup and fence both initial and retried responses across an identity change.
 - `fetchCurrentUser()` starts at module boot and is single-flight across callers: cookie refresh,
   then `GET /me`. An unreachable API leaves the cookie untouched and a later call can retry.
 - `signOut()` drops memory and broadcasts **first**, purges all retired private keys, then calls
   `DELETE /auth/sessions` **best-effort** — and
   no longer needs a live access token, because the API accepts the refresh cookie for the call.
+  The queued request uses the cookie that exists after earlier mutations, without a stale bearer.
   The response expires the cookie.
 - **Migration:** the retired profile/tombstone key is deleted at module evaluation without being
   adopted. Cookie transport is now the only web restoration path.

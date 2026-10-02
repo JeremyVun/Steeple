@@ -646,3 +646,23 @@ Verified in the real container (an isolated compose project on :8180): headers a
 `Content-Encoding: gzip` by `curl`, then the app driven headless with village on and
 `?world=off` — map tiles and Unsplash photographs fetched 200, a space sheet opened by a
 real click, zero `securitypolicyviolation` events.
+
+### Atomic booking notifications
+
+`IServiceTransaction` / `EfServiceTransaction` binds application transitions, booking
+confirmation/cancellation/no-show mutations and renewal sweeps to their inbox/outbox writes.
+Repository saves flush within the outer transaction. Nested service calls participate; an
+exception rolls back all writes and clears the scoped change tracker. Domain outcomes such
+as an overlap auto-decline still commit their intended state and notification. Booking inserts
+retain the room lock and recover exclusion failures with a savepoint.
+
+Charges, refunds and analytics run after commit and transaction disposal. Callback failures
+are logged without reporting an already committed booking as failed. The payment sweep also
+selects an uncharged first occurrence outside the normal charge window, recovering a missed
+confirmation callback. Repeating the confirmation kick cannot advance to later occurrences.
+
+Booking, occurrence and payment updates use PostgreSQL `xmin` concurrency tokens. Stale writes
+return a conflict; read-triggered booking sweeps reload once. Payment outcomes and refund
+notices commit together after gateway calls, and reminder claims commit with all recipients.
+Database readiness verifies availability configuration and both application/booking quote columns
+so an incomplete migration cannot admit traffic.

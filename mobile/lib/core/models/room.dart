@@ -162,6 +162,7 @@ abstract class RoomDetail with _$RoomDetail {
     required double pricePerHour,
     required String currency,
     required String houseRules,
+    @Default('manual') String bookingMode,
     @Default(<String>[]) List<String> amenities,
     @Default(<String>[]) List<String> accessibility,
     @Default(<String>[]) List<String> activities,

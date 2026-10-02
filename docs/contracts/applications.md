@@ -310,3 +310,10 @@ Schedule validation checks every materialized session against the current instan
 counter proposal, and confirmation. Sessions already started, including earlier today, are rejected
 as `invalid_application`; a recurring approval cannot silently omit earlier sessions. A daylight-saving
 transition that produces a non-positive UTC duration is also rejected before persistence.
+
+Application transitions and booking actions commit their business records and inbox/outbox work atomically. A dispatcher failure rolls the action back, so a request key can be retried safely. Notification delivery providers remain asynchronous. Charges/refunds run after commit; a failed immediate payment callback is recovered by the payment sweep.
+
+Confirmation emails include the saved hourly rate, duration-adjusted session price, house rules,
+48-hour guest cancellation notice and contextual support at jvun@steepleapp.co. Payment copy
+uses the confirmed booking's collection mode, with explicit direct-payment instructions for
+offline bookings. Counter-offer emails calculate the proposed duration using the original quote.

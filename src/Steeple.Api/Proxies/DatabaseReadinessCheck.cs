@@ -13,11 +13,12 @@ public sealed class DatabaseReadinessCheck(SteepleDbContext db) : IHealthCheck
         deadline.CancelAfter(TimeSpan.FromSeconds(3));
         try
         {
-            // CanConnect/SELECT 1 alone would admit an unmigrated database. Materializing this
-            // projection checks the latest required booking column, even when there are no rows.
-            await db.Bookings.Select(b => new { b.Id, b.InAppPayment }).Take(1)
+            // SELECT 1 would admit an unmigrated database, including one with no rows yet.
+            await db.Bookings.Select(b => new { b.Id, b.InAppPayment, b.QuotedPricePerHour, b.QuotedHouseRules }).Take(1)
                 .ToListAsync(deadline.Token).ConfigureAwait(false);
             await db.Rooms.Select(r => new { r.Id, r.AvailabilityConfiguredAtUtc }).Take(1)
+                .ToListAsync(deadline.Token).ConfigureAwait(false);
+            await db.Applications.Select(a => new { a.Id, a.QuotedPricePerHour, a.QuotedCurrency, a.QuotedHouseRules }).Take(1)
                 .ToListAsync(deadline.Token).ConfigureAwait(false);
             return HealthCheckResult.Healthy();
         }

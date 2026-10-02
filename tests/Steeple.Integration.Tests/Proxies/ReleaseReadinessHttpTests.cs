@@ -82,4 +82,21 @@ public sealed class ReleaseReadinessHttpTests(PostgresDatabaseFixture database)
             Assert.DoesNotContain("Password", await notReady.Content.ReadAsStringAsync());
         }
     }
+
+    [Theory]
+    [InlineData("ALTER TABLE bookings DROP COLUMN \"QuotedPricePerHour\"")]
+    [InlineData("ALTER TABLE applications DROP COLUMN \"QuotedHouseRules\"")]
+    [InlineData("ALTER TABLE rooms DROP COLUMN \"AvailabilityConfiguredAtUtc\"")]
+    public async Task ReadinessRejectsMissingRequiredSchema(string migrationGap)
+    {
+        await using var db = new SteepleDbContext(new DbContextOptionsBuilder<SteepleDbContext>()
+            .UseNpgsql(database.ConnectionString).Options);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.Database.ExecuteSqlRawAsync(migrationGap);
+
+        var result = await new DatabaseReadinessCheck(db).CheckHealthAsync(new());
+
+        Assert.Equal(Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Unhealthy, result.Status);
+        await transaction.RollbackAsync();
+    }
 }

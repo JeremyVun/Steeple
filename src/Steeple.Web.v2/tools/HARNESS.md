@@ -139,8 +139,8 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   geofence-rejection paths are locally unreachable and locally-listed venues stack on one
   map point — drive pins by keyboard or assert "aimed === opened", never a pointer at a
   named pin.
-- Search reads one page of 100: a venue beyond it has no pin or row until a narrower
-  search reaches it (its sheet works by slug; paging the map is unbuilt).
+- Search loads pages of 100 up to 1,000 results; a capped search reports that more results exist
+  and asks for narrower filters. Paging and stale-cache checks live in `review-recovery-test.mjs`.
 - Behind a proxy, a dead API answers **502** (nginx may answer **504** on a stopped
   upstream); `neverArrived()` covers 0/502/503 and deliberately not 504 — a timeout may
   have committed.
@@ -148,3 +148,8 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   console noise.
 
 - `node tools/booking-terms-test.mjs` owns fixture-only Vite on :5488 and a unique Chrome profile. It checks saved quote/counter pricing, blocked legacy host decisions, guest withdrawal and fresh prefilled review, plus contextual email support at 320, 390 and 1440 pixels. No API, database or secrets are used. Captures go to `/private/tmp/steeple-booking-terms-web-*`; all owned processes close before exit.
+
+- `session-cookie-race-test.mjs` owns a real HTTP cookie fixture and Chrome. It verifies response
+  ordering, httpOnly cookie state, family revocation and reload identity with delayed sign-in,
+  refresh and logout responses, including sibling tabs and same-tab Web Locks fallback. It is
+  independent of the real-API rotation-grace gate in `session-tabs-test.mjs`; run both for auth changes.

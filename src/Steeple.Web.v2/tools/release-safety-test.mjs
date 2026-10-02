@@ -6,6 +6,7 @@ import { paymentLine, rescindWarning, cancellationLine } from '../src/ui/money.j
 // Exercise the compiled production catalogue, including its initial map roster.
 const result = await build({
   configFile: false,
+  envDir: false,
   mode: 'production',
   logLevel: 'error',
   build: {
@@ -17,7 +18,8 @@ const result = await build({
 const output = (Array.isArray(result) ? result[0] : result).output;
 const code = output.find((item) => item.type === 'chunk' && item.isEntry).code;
 for (const status of [0, 404, 502, 503, 500, 429]) {
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (url) => {
+    if (url.endsWith('/auth/refresh')) return new Response('{}', { status: 401 });
     if (status === 0) throw new TypeError('Synthetic network failure');
     return new Response('{}', { status, headers: { 'content-type': 'application/json' } });
   };

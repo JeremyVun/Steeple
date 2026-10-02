@@ -169,6 +169,93 @@ public sealed class BookingPaymentRecoveryTests(PostgresDatabaseFixture fixture)
         Assert.False(await verify.BookingReminders.AnyAsync(r => r.Occurrence!.BookingId == seed.Booking));
     }
 
+    [Fact]
+    public async Task ConcurrentRefundWinner_DoesNotDetachLaterRefund()
+    {
+        var seed = await SeedAsync();
+        Guid firstId;
+        await using (var seedDb = Context())
+        {
+            await Payments(seedDb).ChargeAtConfirmationAsync(seed.Booking);
+            var booking = await seedDb.Bookings.Include(b => b.Occurrences).SingleAsync(b => b.Id == seed.Booking);
+            var first = booking.Occurrences.Single();
+            first.Status = OccurrenceStatus.Cancelled;
+            var second = new BookingOccurrence {
+                Id = Guid.NewGuid(), BookingId = booking.Id, RoomId = booking.RoomId,
+                StartUtc = first.StartUtc.AddDays(7), EndUtc = first.EndUtc.AddDays(7),
+                LocalDate = first.LocalDate.AddDays(7), Status = OccurrenceStatus.Cancelled,
+            };
+            seedDb.BookingOccurrences.Add(second);
+            seedDb.Payments.Add(new Payment {
+                Id = Guid.NewGuid(), BookingId = booking.Id, OccurrenceId = second.Id,
+                Status = PaymentStatus.Succeeded, ProviderPaymentId = "second-refund", Amount = 80,
+                Currency = "USD", CreatedAtUtc = Now, UpdatedAtUtc = Now,
+            });
+            await seedDb.SaveChangesAsync();
+        }
+        await using (var loserDb = Context())
+        {
+            var repo = new EfPaymentRepository(loserDb);
+            firstId = (await repo.GetRefundableAsync(seed.Booking))[0].Id;
+            var gateway = new ConcurrentRefundGateway(async () => {
+                await using var winnerDb = Context();
+                var winner = await winnerDb.Payments.SingleAsync(p => p.Id == firstId);
+                winner.Status = PaymentStatus.Refunded;
+                winner.RefundedAtUtc = Now;
+                await winnerDb.SaveChangesAsync();
+            });
+            var service = new PaymentService(repo, gateway, Notifications(loserDb), new NullAnalytics(),
+                new TestFeatureFlags(PaymentService.PaymentsFlag), new FixedClock(), PaymentTestOptions.Payments(),
+                new EfServiceTransaction(loserDb, NullLogger<EfServiceTransaction>.Instance));
+            await service.RefundCancelledForBookingAsync(seed.Booking);
+        }
+        await using var verify = Context();
+        Assert.All(await verify.Payments.Where(p => p.BookingId == seed.Booking).ToListAsync(),
+            payment => Assert.Equal(PaymentStatus.Refunded, payment.Status));
+    }
+
+    [Fact]
+    public async Task StalePendingRetry_DoesNotRepeatFirstFailureNotice()
+    {
+        var seed = await SeedAsync(last4: "0002");
+        await using (var db = Context())
+        {
+            await Payments(db).ChargeAtConfirmationAsync(seed.Booking);
+            var occurrence = await db.BookingOccurrences.SingleAsync(o => o.BookingId == seed.Booking);
+            db.Payments.Add(new Payment {
+                Id = Guid.NewGuid(), BookingId = seed.Booking, OccurrenceId = occurrence.Id,
+                Status = PaymentStatus.Pending, Amount = 80, Currency = "USD",
+                CreatedAtUtc = Now.AddHours(-1), UpdatedAtUtc = Now.AddHours(-1),
+            });
+            await db.SaveChangesAsync();
+        }
+        await using (var retryDb = Context()) await Payments(retryDb).SweepAsync(Now);
+        await using var verify = Context();
+        Assert.Equal(1, await verify.Notifications.CountAsync(n =>
+            n.UserId == seed.Guest && n.Type == NotificationType.PaymentFailed));
+    }
+
+    private sealed class ConcurrentRefundGateway(Func<Task> firstRefund) : IPaymentGateway
+    {
+        private readonly MockPaymentGateway inner = new();
+        private bool first = true;
+        public Task<string> EnsureCustomerAsync(Guid id, string? email, string? existing, CancellationToken ct = default)
+            => inner.EnsureCustomerAsync(id, email, existing, ct);
+        public Task<string> CreateSetupIntentAsync(string customer, CancellationToken ct = default)
+            => inner.CreateSetupIntentAsync(customer, ct);
+        public Task<GatewayChargeResult> ChargeOccurrenceAsync(ChargeOccurrenceRequest request, CancellationToken ct = default)
+            => inner.ChargeOccurrenceAsync(request, ct);
+        public Task<string> CreateConnectedAccountAsync(Guid id, string? existing, CancellationToken ct = default)
+            => inner.CreateConnectedAccountAsync(id, existing, ct);
+        public Task<string> CreateAccountLinkAsync(string id, CancellationToken ct = default)
+            => inner.CreateAccountLinkAsync(id, ct);
+        public async Task<GatewayRefundResult> RefundAsync(string provider, CancellationToken ct = default)
+        {
+            if (first) { first = false; await firstRefund(); }
+            return new GatewayRefundResult(true, null);
+        }
+    }
+
     private BookingService Bookings(SteepleDbContext db) => new(
         new EfBookingRepository(db), new EfVenueManagerRepository(db), new NullRatings(),
         new NullPaymentService(), new TestFeatureFlags(), Notifications(db), new NullAnalytics(),

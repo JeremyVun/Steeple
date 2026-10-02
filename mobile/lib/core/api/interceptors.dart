@@ -22,6 +22,16 @@ class AuthInterceptor extends Interceptor {
   static const _retriedKey = 'steeple.authRetried';
   static const _identityGenerationKey = 'steeple.identityGeneration';
 
+  bool _isCurrent(RequestOptions options) =>
+      options.extra[_identityGenerationKey] ==
+      _sessionManager().identityGeneration;
+
+  static DioException _changed(RequestOptions options) => DioException(
+    requestOptions: options,
+    type: DioExceptionType.cancel,
+    message: 'The account changed while this request was in progress.',
+  );
+
   @override
   Future<void> onRequest(
     RequestOptions options,
@@ -47,11 +57,23 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
+    if (!_isCurrent(response.requestOptions)) {
+      return handler.reject(_changed(response.requestOptions));
+    }
+    handler.next(response);
+  }
+
+  @override
   Future<void> onError(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
     final options = err.requestOptions;
+    if (!_isCurrent(options)) return handler.next(_changed(options));
     if (err.response?.statusCode != 401 || options.extra[_retriedKey] == true) {
       return handler.next(err);
     }
@@ -73,8 +95,10 @@ class AuthInterceptor extends Interceptor {
       options.extra[_retriedKey] = true;
       options.headers['Authorization'] = 'Bearer $token';
       final response = await _retryDio.fetch<dynamic>(options);
+      if (!_isCurrent(options)) return handler.next(_changed(options));
       return handler.resolve(response);
     } on DioException catch (retryErr) {
+      if (!_isCurrent(options)) return handler.next(_changed(options));
       return handler.next(retryErr);
     }
   }
@@ -83,9 +107,10 @@ class AuthInterceptor extends Interceptor {
 /// Interceptor 3: idempotent GETs only, max 2 retries, exponential backoff
 /// with jitter — never on POST (a replayed apply is worse than a clear error).
 class RetryInterceptor extends Interceptor {
-  RetryInterceptor(this._retryDio, {this.maxRetries = 2});
+  RetryInterceptor(this._retryDio, this._sessionManager, {this.maxRetries = 2});
 
   final Dio _retryDio;
+  final SessionManager Function() _sessionManager;
   final int maxRetries;
   final _random = Random();
 
@@ -105,11 +130,23 @@ class RetryInterceptor extends Interceptor {
       milliseconds: (300 * pow(2, attempt)).round() + _random.nextInt(200),
     );
     await Future<void>.delayed(backoff);
+    if (options.extra[AuthInterceptor._identityGenerationKey] !=
+        _sessionManager().identityGeneration) {
+      return handler.next(AuthInterceptor._changed(options));
+    }
     try {
       options.extra[_attemptKey] = attempt + 1;
       final response = await _retryDio.fetch<dynamic>(options);
+      if (options.extra[AuthInterceptor._identityGenerationKey] !=
+          _sessionManager().identityGeneration) {
+        return handler.next(AuthInterceptor._changed(options));
+      }
       return handler.resolve(response);
     } on DioException catch (retryErr) {
+      if (options.extra[AuthInterceptor._identityGenerationKey] !=
+          _sessionManager().identityGeneration) {
+        return handler.next(AuthInterceptor._changed(options));
+      }
       return handler.next(retryErr);
     }
   }

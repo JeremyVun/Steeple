@@ -44,6 +44,8 @@ let refreshing = null;
 let restoring = null;
 let refreshBlocked = null;
 let refreshRetryTimer = 0;
+let cookieMutation = Promise.resolve();
+let signingInGeneration = null;
 const watchers = new Set();
 
 const RETRY_AFTER_RATE_LIMIT_MS = 60_000;
@@ -71,6 +73,22 @@ function broadcast(state, reason) {
   } catch {
     // Closing a document can close its channel before outstanding work settles.
   }
+}
+
+/**
+ * Set-Cookie is applied before JavaScript can reject a stale response.
+ * @template T
+ * @param {() => Promise<T>} work
+ * @returns {Promise<T>}
+ */
+function mutateCookie(work) {
+  const pending = cookieMutation.then(() =>
+    globalThis.navigator?.locks?.request
+      ? globalThis.navigator.locks.request(`${CHANNEL}-cookie`, { mode: 'exclusive' }, work)
+      : work()
+  );
+  cookieMutation = pending.then(() => {}, () => {});
+  return pending;
 }
 
 function personFrom(me) {
@@ -165,29 +183,57 @@ export async function signInWithProvider({
   turnstileToken = null,
 }) {
   const started = ++generation;
+  signingInGeneration = started;
   clearRefreshRetry();
   refreshing = null;
   restoring = null;
-  const answer = await api.createSession({
-    provider,
-    idToken,
-    nonce,
-    turnstileToken,
-    displayName: displayName?.trim() || null,
-    device: { platform: 'web', label: 'Steeple Village' },
-    refreshTransport: 'cookie',
-  });
+  try {
+    return await mutateCookie(async () => {
+      if (started !== generation) throw new api.ApiError('session changed during sign-in', 401);
+      let answer;
+      try {
+        answer = await api.createSession({
+          provider,
+          idToken,
+          nonce,
+          turnstileToken,
+          displayName: displayName?.trim() || null,
+          device: { platform: 'web', label: 'Steeple Village' },
+          refreshTransport: 'cookie',
+        });
+      } catch (error) {
+        await discardSignInCookie();
+        throw error;
+      }
 
-  if (started !== generation) throw new api.ApiError('session changed during sign-in', 401);
-  suppressed = false;
-  cookieRefused = false;
-  clearRefreshRetry();
-  refreshing = null;
-  restoring = null;
-  access = answer.accessToken;
-  hold(answer.user, REASON.signedIn);
-  broadcast('in', REASON.signedIn);
-  return answer.user;
+      if (started !== generation) {
+        // A rejected JavaScript result still installed its cookie. Revoke it before
+        // another queued sign-in can fail and leave that account behind.
+        await discardSignInCookie();
+        throw new api.ApiError('session changed during sign-in', 401);
+      }
+      generation += 1;
+      suppressed = false;
+      cookieRefused = false;
+      clearRefreshRetry();
+      refreshing = null;
+      restoring = null;
+      access = answer.accessToken;
+      hold(answer.user, REASON.signedIn);
+      broadcast('in', REASON.signedIn);
+      return answer.user;
+    });
+  } finally {
+    if (signingInGeneration === started) signingInGeneration = null;
+  }
+}
+
+async function discardSignInCookie() {
+  access = null;
+  suppressed = true;
+  hold(null, REASON.signedOut);
+  broadcast('out', REASON.signedOut);
+  try { await api.deleteSession(); } catch { /* Revocation remains best-effort. */ }
 }
 
 /** Development-only dev-provider helper. */
@@ -204,12 +250,11 @@ export function signIn({ email, displayName = null, turnstileToken = null }) {
 
 /** Clear this tab first, tell siblings, then revoke the shared cookie. */
 export async function signOut() {
-  const token = access;
   drop(REASON.signedOut);
   purgeLegacyProfile();
   broadcast('out', REASON.signedOut);
   try {
-    await api.deleteSession(token);
+    await mutateCookie(() => api.deleteSession());
   } catch {
     // Local privacy is unconditional; revocation remains best-effort.
   }
@@ -232,31 +277,23 @@ function refresh() {
   if (refreshBlocked) clearRefreshRetry();
 
   const started = generation;
-  // Scheduled rather than called, so that `refreshing` below is assigned before
-  // the request goes out. Called straight through, two callers in the same tick
-  // both found the single-flight slot still empty and both reached the wire —
-  // which is why a signed-out boot probed the cookie twice in the built bundle,
-  // where ui/index.js runs inside session.js's own evaluation tick. The dev
-  // graph orders those two apart and never showed it.
-  const request = Promise.resolve()
-    .then(() => api.refreshSession({}))
-    .then((pair) => {
-      if (started !== generation || suppressed) return null;
-      access = pair.accessToken;
-      return access;
-    })
-    .catch((error) => {
-      if (started !== generation || suppressed) return null;
-      // The refresh endpoint documents 401 as the proof that the refresh cookie
-      // is absent, expired or revoked. Every other result leaves that proof
-      // unknown: retaining the signed-in state is the only honest response.
-      if (error?.status !== 401) {
-        retryRefreshAfter(error, started);
-        throw error;
+  const request = mutateCookie(async () => {
+      if (started !== generation || suppressed || cookieRefused) return null;
+      try {
+        const pair = await api.refreshSession({});
+        if (started !== generation || suppressed) return null;
+        access = pair.accessToken;
+        return access;
+      } catch (error) {
+        if (started !== generation || suppressed) return null;
+        if (error?.status !== 401) {
+          retryRefreshAfter(error, started);
+          throw error;
+        }
+        cookieRefused = true;
+        access = null;
+        return null;
       }
-      cookieRefused = true;
-      access = null;
-      return null;
     })
     .finally(() => {
       if (refreshing === request) refreshing = null;
@@ -393,6 +430,7 @@ if (channel) {
       return;
     }
     if (message.state !== 'in') return;
+    if (signingInGeneration === generation) return;
 
     const replaced = Boolean(held);
     generation += 1;
