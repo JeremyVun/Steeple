@@ -376,7 +376,7 @@ export function getRoomAvailability(roomId, { from, to } = /** @type {any} */ ({
 
 /** Existing anonymous dry-run; the submitted schedule uses this same wire shape. */
 export function checkRoomAvailability(roomId, schedule) {
-  return send('POST', `/listings/${encodeURIComponent(roomId)}/availability/check`, { schedule });
+  return send('POST', `/listings/${encodeURIComponent(roomId)}/availability/check`, { schedule }, { timeoutMs: READ_TIMEOUT_MS });
 }
 
 /** Public, revealed venue comments; their count is separate from the rating aggregate. */

@@ -55,6 +55,17 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   variables and run it alone: CDP holds snapshot response headers, the harness injects one 503
   and one byte-stalled response, and no timer is accelerated.
 
+- `npm run test:composer` starts and owns a flat Vite server plus a unique Chrome profile;
+  it needs no API, database or secrets. Every `/api/v1` response is an intercepted fixture.
+  It verifies real native keyboard/pointer input, exact schedule/estimate counts, form errors,
+  advisory availability, sign-in, manual/instant outcomes, the mock 402 step and idempotent
+  retry. It also runs composer axe and live CSS ownership checks. DPR2 screenshots and
+  measurements are written under `/private/tmp/steeple-composer-a-visual-web-*`; all owned
+  processes stop in `finally`. `--quick` runs only the mobile entry/recurrence smoke. Native
+  date-entry ordering follows this macOS Chrome's day/month/year UI; time selects are driven
+  through native type-ahead because this headless build ignores arrow navigation on a closed
+  select. No script assigns form values or dispatches synthetic form-change events.
+
 ## Defects only one suite can see
 
 - **`surface-scope-test.mjs` is the only guard on CSS surface scoping.** `postcss.config.js`

@@ -29,4 +29,6 @@ assert.equal(timeChoices(weekly, windows).find(({ time }) => time === '08:30').a
 assert.equal(timeChoices(weekly, windows).find(({ time }) => time === '11:30').allowed, true);
 assert.equal(timeChoices(weekly, windows, true).find(({ time }) => time === '09:30').allowed, false);
 assert.equal(timeChoices(weekly, windows, true).find(({ time }) => time === '12:00').allowed, true);
+assert.equal(timeChoices({ ...weekly, endDate: weekly.startDate, daysOfWeekMask: 5 }, windows).find(({ time }) => time === '09:30').allowed, true);
+assert.ok(scheduleErrors({ ...weekly, frequency: 'oneOff', startDate: '2026-10-12', startTime: null, endTime: null }, { windows }).schedule);
 console.log('PASS composer schedule: exact 21-session total, single date, rounding, invalid/zero/366-day recurrence, timezone boundary, half-hour/open-hour options');

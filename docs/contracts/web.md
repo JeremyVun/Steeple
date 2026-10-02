@@ -115,7 +115,7 @@ and behind a stripped proxy prefix.
 |---|---|
 | `searchListings`, `getListingBySlug`, `getSuburbs`, `getGeofence`, `getSitemap`, `getRoomAvailability`, `getVenueReviews` | `catalog.js` (and `getListingBySlug` again in `ui/guest/send.js` when a draft has no room id yet; `getGeofence` in `ui/host/manage.js`) |
 | `createSession`, `refreshSession`, `getMe`, `deleteSession` | `session.js` only |
-| `submitApplication` | `ui/guest/send.js` |
+| `submitApplication`, `checkRoomAvailability` | `ui/guest/send.js` (submit), `ui/guest/composer.js` (advisory check) |
 | `getMyApplications`, `getManagedApplications`, `getApplication`, `postApplicationMessage`, `postDecision`, `postWithdraw`, `postCounterOffer`, `postCounterOfferResponse`, `getBooking`, `getMyBookings`, `getManagedBookings`, `cancelBooking`, `submitRating` (2026-08-08), `getManagedVenues`, `getManagedVenue`, `updateManagedVenue` (booking mode only), `createPaymentSetup`, `confirmMockPaymentSetup`, `getMyPayments`, `getVenuePayments`, `startVenuePayoutOnboarding`, `completeMockVenuePayoutOnboarding`, `getMyNotifications`, `markNotificationsRead`, `openNotificationStream` | `correspondence.js` only (the seam every letter, desk, decision and payment goes through) |
 | `suggestAddresses`, `createManagedVenue`, `updateManagedVenue`, `createManagedRoom`, `updateManagedRoom`, `getManagedRoom` (the edit-flow hydration read, 2026-08-07), `uploadRoomPhoto`, `saveRoomAvailabilityRules` | `ui/host/manage.js` (the hosting chain) |
 | `getRoomAvailabilityRules` | `correspondence.js` (the desk's hours read) |
@@ -493,6 +493,46 @@ surfaces re-read from whoever is here now.
 it is contained by construction: its letters are written under the seed's own ids
 (`maria-alvarez`…), a real account's id is a GUID, and the desk is scoped to
 `GET /manage/venues`, so no signed-in person ever inherits it and no desk ever shows it.
+
+## Guest composer (2026-10-02)
+
+`ui/guest/composer.js` owns the approved single-page, dates-first booking form. A private
+in-memory draft survives leaving and reopening its slug pair. The complete schedule can
+be set with native date inputs, half-hour time selects and Sunday-first weekday checkboxes;
+the optional `weekCard` edits those same fields. The event fields, auth/agreements gate,
+402 payment-method step, analytics events, submit DTO and idempotency behaviour retain
+their existing seams. Room and composer CTA wording both follow `bookingMode`.
+
+`ui/guest/composerSchedule.js` validates the composer's schedule and computes advisory
+estimates from the exact submitted dates, independent of display timezone/DST. It refuses
+malformed, backward, zero-occurrence and >366-day weekly terms. Past-date validation uses
+venue-local today from the availability response's IANA timezone. The store still owns
+activity, capacity and event-text validation. Estimates use the current listing's currency
+and hourly rate, rounded to currency cents per session, multiplied by every submitted
+date. They are not a locked quote; price is frozen by the API only at confirmation.
+Blackouts are never silently subtracted from estimates or submitted recurrence.
+
+The existing `POST /listings/{roomId}/availability/check` is now exposed by
+`api.checkRoomAvailability(roomId, schedule)`, with the normal four-second read deadline.
+The composer sends the same `toWireSchedule` result as submission, after 500ms without
+schedule changes. Its `{available,totalOccurrences,conflicts}` answer is authoritative for
+this advisory display; no free-window inference substitutes for it. Changed schedules
+immediately invalidate the old answer, and generation checks reject stale responses after
+edits or reopening. A failed or conflicting check blocks the UI send and offers correction
+or retry; the submit-time API check still owns the final result. No backend contract changed.
+
+The public `payments.enabled` snapshot controls explanation only. Off says online payments
+are unavailable and to arrange payment with the host. On labels the currently implemented
+mock payment capability as test payments, without claiming real charges. The actual 402
+response still opens the existing method step. Instant confirmation, pending fallback for
+uncarded caps, refusal and retry are determined by the returned application status.
+
+`npm run test:composer-schedule` is the pure arithmetic/validation gate.
+`npm run test:composer` owns an isolated Vite server and browser, intercepts all API traffic,
+and drives native keyboard/pointer input across blank, recurring, invalid, conflict,
+unavailable, auth, manual/instant, payment and retry states. It writes DPR2 screenshots,
+geometry, axe results and a check log to a unique system-temp directory. These are frontend
+fixture tests, not proof of database booking integrity or real payment processing.
 
 ## Current implementation, as of 2026-08-08
 

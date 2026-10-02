@@ -26,6 +26,9 @@ export function scheduleErrors(draft, { today = null, windows = null } = {}) {
     else if (validDate(draft.startDate) && draft.endDate > addDays(draft.startDate, 366)) errors.endDate = 'Keep your weekly booking within 366 days of the first date.';
     if (!Number.isInteger(draft.daysOfWeekMask) || draft.daysOfWeekMask < 1 || draft.daysOfWeekMask > 127) errors.daysOfWeekMask = 'Choose at least one weekday.';
   } else if (draft.frequency !== 'oneOff') errors.frequency = 'Choose one time or every week.';
+  if (windows?.length && !errors.startDate && !errors.daysOfWeekMask && !timeChoices(draft, windows).some(({ allowed }) => allowed)) {
+    errors.schedule = 'There are no shared opening hours for these days. Choose another date or weekday.';
+  }
   if (Object.keys(errors).length) return errors;
   const dates = materializeDates(draft);
   if (!dates.length) return { endDate: 'None of your weekdays fall between these dates. Change the dates or weekdays.' };
@@ -45,8 +48,12 @@ export function estimateSchedule(draft, rate) {
 }
 
 export function timeChoices(draft, windows, end = false) {
-  const days = draft.frequency === 'weekly' ? maskToDays(draft.daysOfWeekMask ?? 0) :
+  let days = draft.frequency === 'weekly' ? maskToDays(draft.daysOfWeekMask ?? 0) :
     validDate(draft.startDate) ? [weekdayOf(draft.startDate)] : [];
+  if (draft.frequency === 'weekly' && validDate(draft.startDate) && validDate(draft.endDate) &&
+      draft.endDate >= draft.startDate && draft.endDate <= addDays(draft.startDate, 366)) {
+    days = [...new Set(materializeDates(draft).map(weekdayOf))];
+  }
   return Array.from({ length: 48 }, (_, index) => {
     const time = `${String(Math.floor(index / 2)).padStart(2, '0')}:${index % 2 ? '30' : '00'}`;
     const next = `${String(Math.floor((index + 1) / 2)).padStart(2, '0')}:${(index + 1) % 2 ? '30' : '00'}`;

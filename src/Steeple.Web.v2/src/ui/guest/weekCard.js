@@ -44,6 +44,7 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 const weekStartOf = (isoDate) => addDays(isoDate, -weekdayOf(isoDate));
 
 export function createWeekCard({ announce, onChange, onWeek }) {
+  let calendarToday = todayIso();
   let venueId = null;
   let roomId = null;
   let schedule = null;
@@ -52,10 +53,10 @@ export function createWeekCard({ announce, onChange, onWeek }) {
   let openWindows = [];
   let byDate = new Map();
   let emptyLine = LOADING;
-  let weekStart = weekStartOf(todayIso());
+  let weekStart = weekStartOf(calendarToday);
   let origin = 8 * 60;
   let slots = 28;
-  let cursor = { day: weekdayOf(todayIso()), slot: 0 };
+  let cursor = { day: weekdayOf(calendarToday), slot: 0 };
   // Which real date each selected weekday was painted on — how a weekly pattern
   // knows where it starts even when the guest browses to another week.
   let dayDates = new Map();
@@ -143,7 +144,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
   }
 
   const blackoutOn = (day) => (dayOf(day)?.isBlackout ? { date: dateOf(day) } : null);
-  const isPast = (day) => dateOf(day) < todayIso();
+  const isPast = (day) => dateOf(day) < calendarToday;
   const usable = (day, slot) => !isPast(day) && isOpen(day, slot) && !heldAt(day, slot);
 
   const bandSlots = () => {
@@ -415,7 +416,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
 
   function drawMarks(previewBand = null) {
     const nodes = [];
-    const today = todayIso();
+    const today = calendarToday;
 
     for (let day = 0; day < 7; day += 1) {
       const date = dateOf(day);
@@ -505,7 +506,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
     jump.hidden = !strayDate;
     if (strayDate) jump.textContent = `Your date is ${formatDate(schedule.startDate)} — show that week`;
 
-    const today = todayIso();
+    const today = calendarToday;
     replaceChildren(heads, [
       el('span', { class: 'week__corner', 'aria-hidden': 'true' }),
       ...DAY_LABELS.map((name, day) => {
@@ -561,16 +562,17 @@ export function createWeekCard({ announce, onChange, onWeek }) {
 
   return {
     element,
-    setRoom(nextVenueId, nextRoomId) {
-      if (venueId === nextVenueId && roomId === nextRoomId) return;
+    setRoom(nextVenueId, nextRoomId, { reset = false } = {}) {
+      if (!reset && venueId === nextVenueId && roomId === nextRoomId) return;
+      calendarToday = todayIso();
       venueId = nextVenueId;
       roomId = nextRoomId;
       dayDates = new Map();
       openWindows = [];
       byDate = new Map();
       emptyLine = LOADING;
-      weekStart = weekStartOf(todayIso());
-      cursor = { day: weekdayOf(todayIso()), slot: 0 };
+      weekStart = weekStartOf(calendarToday);
+      cursor = { day: weekdayOf(calendarToday), slot: 0 };
       note.textContent = '';
     },
     /** The room's weekly open hours, as steeple publishes them. */
@@ -584,7 +586,13 @@ export function createWeekCard({ announce, onChange, onWeek }) {
     },
     /** The week currently on screen — what a caller should ask steeple about. */
     weekStart: () => weekStart,
-    setSchedule(next) {
+    setToday(next) {
+      if (!next) return;
+      if (weekStart === weekStartOf(calendarToday)) weekStart = weekStartOf(next);
+      calendarToday = next;
+    },
+    setSchedule(next, { resetDates = false } = {}) {
+      if (resetDates) dayDates = new Map();
       schedule = next;
       if (next?.startDate && !dayDates.size) {
         for (const day of next.frequency === 'weekly'

@@ -7,7 +7,7 @@ import { FEATURE_FLAG_KEYS } from '../../data/wireTokens.js';
 import { addDays, todayIso, validateApplication } from '../../data/store.js';
 import { weekdayOf } from '../../data/store/schedule.js';
 import { el, replaceChildren } from '../dom.js';
-import { formatDate, formatTime, plural, scheduleSentence } from './copy.js';
+import { formatDate, formatTime, scheduleSentence } from './copy.js';
 import { estimateSchedule, scheduleErrors, timeChoices, venueToday } from './composerSchedule.js';
 import { createCardStep } from './payment.js';
 import { isSignedIn } from '../../data/session.js';
@@ -16,6 +16,7 @@ import { createIdentityStep } from './sso.js';
 import { createWeekCard } from './weekCard.js';
 
 const drafts = new Map();
+const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const scheduleFields = ['schedule', 'frequency', 'startDate', 'endDate', 'startTime', 'endTime', 'daysOfWeekMask'];
 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const blankDraft = (venueId, roomId, room) => ({
@@ -99,7 +100,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       draft.frequency = value;
       draft.endDate = value === 'weekly' ? (draft.endDate ?? (draft.startDate ? addDays(draft.startDate, 56) : null)) : null;
       if (value === 'weekly' && !draft.daysOfWeekMask && draft.startDate) draft.daysOfWeekMask = 1 << weekdayOf(draft.startDate);
-      touched.add('schedule'); renderSchedule(); scheduleChanged();
+      touched.add('frequency'); renderSchedule(); scheduleChanged();
     });
     frequency.append(el('label', { class: 'choice choice--segment', for: radio.id }, [radio, el('span', { text: label })]));
   }
@@ -117,10 +118,13 @@ export function createComposer({ announce, onSent, onLeave }) {
   for (const [control, key] of [[startDate, 'startDate'], [endDate, 'endDate'], [startTime, 'startTime'], [endTime, 'endTime']]) {
     control.addEventListener('change', () => {
       draft[key] = control.value || null;
-      if (key === 'startDate' && draft.frequency === 'weekly' && !draft.daysOfWeekMask && draft.startDate) draft.daysOfWeekMask = 1 << weekdayOf(draft.startDate);
-      touched.add(key); renderSchedule(); scheduleChanged();
+      if (key === 'startDate' && control.validity.valid && draft.frequency === 'weekly' && !draft.daysOfWeekMask && draft.startDate) draft.daysOfWeekMask = 1 << weekdayOf(draft.startDate);
+      touched.add(key);
+      if (control.type !== 'date') renderSchedule();
+      scheduleChanged();
     });
   }
+  for (const control of [startDate, endDate]) control.addEventListener('blur', () => requestAnimationFrame(renderSchedule));
   const timeNote = el('p', { id: 'composer-timezone', class: 'composer__hint' });
   const scheduleNote = el('p', { id: 'composer-schedule-error', class: 'composer__error', role: 'status' });
   const availabilityBox = el('div', { class: 'composer__availability', role: 'status', tabindex: '-1' });
@@ -201,18 +205,29 @@ export function createComposer({ announce, onSent, onLeave }) {
     dateLabel.textContent = weekly ? 'First date' : 'Date';
     lastDateField.hidden = !weekly;
     dateRow.classList.toggle('is-weekly', weekly);
-    startDate.value = draft.startDate ?? '';
-    startDate.min = venueToday(timezone) ?? '';
-    endDate.value = draft.endDate ?? '';
-    endDate.min = draft.startDate ?? startDate.min;
-    endDate.max = draft.startDate ? addDays(draft.startDate, 366) : '';
+    if (document.activeElement !== startDate) {
+      startDate.value = draft.startDate ?? '';
+      startDate.min = venueToday(timezone) ?? '';
+    }
+    if (document.activeElement !== endDate) {
+      endDate.value = draft.endDate ?? '';
+      endDate.min = draft.startDate ?? startDate.min;
+      endDate.max = draft.startDate ? addDays(draft.startDate, 366) : '';
+    }
     for (const [control, key, isEnd] of [[startTime, 'startTime', false], [endTime, 'endTime', true]]) {
+      if (document.activeElement === control) continue;
       replaceChildren(control, [el('option', { value: '', text: 'Choose time' }), ...timeChoices(draft, roomHours, isEnd).map(({ time, allowed }) =>
         el('option', { value: time, disabled: !allowed, text: formatTime(time) }))]);
       control.value = draft[key] ?? '';
     }
     timeNote.textContent = timezone ? `Times are local to the venue · ${timezone.replaceAll('_', ' ')}` : 'Times are local to the venue. The timezone is being checked.';
-    week.setSchedule(draft); week.render();
+    week.setSchedule(draft, { resetDates: true }); refreshWeek();
+  }
+
+  function refreshWeek() {
+    const focused = week.element.querySelector('.week__grid')?.contains(document.activeElement);
+    week.render();
+    if (focused) week.element.querySelector('[tabindex="0"]')?.focus({ preventScroll: true });
   }
 
   function renderSummary() {
@@ -330,7 +345,8 @@ export function createComposer({ announce, onSent, onLeave }) {
     if (current !== generation) return;
     if (!answer) { asked.delete(from); return; }
     timezone = answer.timezone;
-    week.setAvailability(answer.days); week.render(); renderSchedule(); renderFoot();
+    week.setToday(venueToday(timezone));
+    week.setAvailability(answer.days); renderSchedule(); renderFoot();
   }
 
   function focusField(key) {
@@ -373,6 +389,7 @@ export function createComposer({ announce, onSent, onLeave }) {
   async function dispatch() {
     if (sending) return;
     sending = true;
+    columns.setAttribute('inert', '');
     send.disabled = true;
     send.textContent = 'Sending';
     identity.element.setAttribute('inert', '');
@@ -387,6 +404,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       send.disabled = false;
       send.textContent = sendLabel();
       identity.element.removeAttribute('inert');
+      if (identity.element.hidden && card.element.hidden) columns.removeAttribute('inert');
     }
 
     if (!result.ok) {
@@ -471,7 +489,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       organization.value = draft.organizationName ?? '';
       replaceChildren(activity, [el('option', { value: '', text: 'Choose activity' }), ...room.activities.map((name) => el('option', { value: name, text: name }))]);
       activity.value = draft.activityType ?? '';
-      week.setRoom(venueId, roomId); week.setHours(roomHours); calendar.open = false;
+      week.setRoom(venueId, roomId, { reset: true }); week.setHours(roomHours); calendar.open = false;
       replaceChildren(columns, [flow, foot]); renderSchedule(); scheduleChanged(); sheet.scrollTop = 0;
       loadWeek(addDays(todayIso(), 1));
     } catch (error) {

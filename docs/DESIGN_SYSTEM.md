@@ -320,6 +320,49 @@ calendar family below (§8.10–8.13); native pickers remain only as the no-JS f
 for group size. The underlying form inputs stay real `<input>`/`<select>` elements the
 picker writes into — never JS-only state.
 
+### 8.9a Web guest composer — approved direction A (2026-10-02)
+
+The active web v2 composer is one page: dates and times first, the full event form next,
+then a commitment summary. At desktop widths the summary sits beside the form; at 820px
+and below it follows the event fields in the same DOM order. This supersedes §8.9's
+calendar-only entry rule for web v2. Keep the existing warm paper, serif headings,
+sage selected weekdays and terracotta submit button. No step navigation or inline-edit
+summary model is introduced.
+
+Calibration: [new desktop](../assets/guest-composer/approved-a-new-desktop.png),
+[new mobile](../assets/guest-composer/approved-a-new-mobile.png),
+[recurring desktop](../assets/guest-composer/approved-a-recurring-desktop.png),
+[recurring mobile](../assets/guest-composer/approved-a-recurring-mobile.png),
+[mobile review](../assets/guest-composer/approved-a-review-mobile.png),
+[unavailable](../assets/guest-composer/approved-a-unavailable-mobile.png).
+These approved prototype frames use source fixtures and synthetic dates, manual approval
+and payments off. The implementation must also reflect instant booking and the current
+mock-only enabled payment capability truthfully.
+
+- Native date fields and start/end selects are the complete non-dragging schedule path.
+  Time choices use half-hour increments inside the room's supplied opening hours. Show
+  venue-local time with the IANA timezone returned by availability. Every weekday is a
+  labelled checkbox in Sunday-first order. Fields are at least 48px high; controls and
+  optional calendar cells have at least 44×44 targets.
+- The weekly calendar is an optional disclosure, within its own bounded scroller. Explicit
+  fields, selected weekdays and the calendar edit the same draft. Do not replace native
+  date segments or open time menus while a person is typing in them.
+- Show the current rate, duration, cost per session, all submitted sessions and estimated
+  total. Empty or invalid schedules have no total. Blackouts remain included in the
+  count and become conflicts; there is no excluded-dates field on the submit contract.
+  Explain that the final price is set when the booking is confirmed.
+- Full event text and supplied house rules remain visible and editable/readable in normal
+  document flow. Hide missing rules. Long rules must not trap the submit button in a
+  sticky panel. The summary explains manual approval or instant commitment, and the
+  available payment capability, before the submit action.
+- Errors name the correction, use text as well as colour, and are associated with their
+  fields. An incomplete submit focuses the first schedule error or event error. A failed
+  availability read preserves the draft and offers an explicit retry. A successful check
+  says the dates look available right now, with a second check at submission.
+
+The web binding adds `--radius-input: 9px` to the existing root tokens; cards retain
+`--radius-card: 14px`. Composer refinements remain scoped to `.composer` in `guest.css`.
+
 ### 8.10 Availability calendar (guest slot picker + previews)
 
 One month grid, Sunday-first columns (the wire's canonical order), weekday initials as
