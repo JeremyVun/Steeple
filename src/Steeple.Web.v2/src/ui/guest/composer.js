@@ -1,786 +1,375 @@
-// THE APPLY FLOW — asking a church for a space.
-//
-// One sheet laid over the village: a heading naming the space, a note in the
-// guest's own words, the two facts a church needs (what the group does, how
-// many are coming) and the week card where the hours are chosen. Every rule
-// shown here is the store's own (validateApplication); nothing is checked twice
-// in different words.
-//
-// The sheet is an overlay over the room it is about, and there is exactly one
-// way out of it — `onLeave`, which puts the guest back on that room. The back
-// arrow at the top left, a click on the paper around the sheet, and Escape all
-// take it. The identity step is one level deeper, so those three close that
-// first: you never lose a written request to a key you pressed to dismiss a
-// card.
-
 import { track } from '../../data/analytics.js';
-import { getRoomAvailability, getListing, heldVenue, readFailure } from '../../data/catalog.js';
-import { effectiveRoom, todayIso, addDays, validateApplication } from '../../data/store.js';
-import { priceParts } from '../copy.js';
+import { checkRoomAvailability } from '../../data/api.js';
+import { getRoomAvailability, getListing, readFailure } from '../../data/catalog.js';
+import { toWireSchedule } from '../../data/correspondence.js';
+import { isEnabled } from '../../data/flags.js';
+import { FEATURE_FLAG_KEYS } from '../../data/wireTokens.js';
+import { addDays, todayIso, validateApplication } from '../../data/store.js';
+import { weekdayOf } from '../../data/store/schedule.js';
 import { el, replaceChildren } from '../dom.js';
-import {
-  formatDate,
-  occurrenceCount,
-  plural,
-  scheduleSentence,
-} from './copy.js';
+import { formatDate, formatTime, plural, scheduleSentence } from './copy.js';
+import { estimateSchedule, scheduleErrors, timeChoices, venueToday } from './composerSchedule.js';
 import { createCardStep } from './payment.js';
 import { isSignedIn } from '../../data/session.js';
 import { sendRequest } from './send.js';
 import { createIdentityStep } from './sso.js';
 import { createWeekCard } from './weekCard.js';
 
-/** How far ahead one availability read reaches. The feed allows up to 92 days. */
-const WEEKS_AHEAD = 6;
-
-const INTENT_LIMIT = 2000;
-const COUNT_FROM = 1600;
-
-// Drafts survive leaving the request — a stray click on the village must never
-// cost a guest the paragraph they just wrote.
 const drafts = new Map();
-
+const scheduleFields = ['schedule', 'frequency', 'startDate', 'endDate', 'startTime', 'endTime', 'daysOfWeekMask'];
+const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const blankDraft = (venueId, roomId, room) => ({
-  venueId,
-  roomId,
-  activityType: room.activities.length === 1 ? room.activities[0] : null,
-  groupSize: '',
-  organizationName: '',
-  frequency: 'oneOff',
-  startDate: null,
-  endDate: null,
-  daysOfWeekMask: 0,
-  startTime: null,
-  endTime: null,
-  intentText: '',
+  venueId, roomId, activityType: room.activities.length === 1 ? room.activities[0] : null,
+  groupSize: '', organizationName: '', frequency: 'oneOff', startDate: null, endDate: null,
+  daysOfWeekMask: 0, startTime: null, endTime: null, intentText: '',
 });
 
 export function createComposer({ announce, onSent, onLeave }) {
   let venue = null;
   let room = null;
   let draft = null;
-  let attempted = false;
-  const touched = new Set();
-
-  // What steeple says about this room, once it has been asked: its weekly open
-  // hours, the dates it is closed, and whether a request here books the space
-  // outright or asks the host for it.
   let roomHours = null;
-  let closedDates = [];
   let bookingMode = null;
-  let asked = new Set();
+  let timezone = null;
+  let paymentsEnabled = null;
+  let opened = null;
+  let generation = 0;
+  let checkVersion = 0;
+  let checkTimer = null;
+  let availability = { state: 'empty', result: null };
+  let sending = false;
+  let attempted = false;
+  let refusal = '';
+  const touched = new Set();
+  const asked = new Set();
 
+  const identity = createIdentityStep({ announce, onVerify: () => dispatch(), onCancel: () => closeIdentity() });
+  identity.element.hidden = true;
+  const card = createCardStep({ announce, onSaved: () => { closeCard(); dispatch(); }, onCancel: () => closeCard() });
+  card.element.hidden = true;
   const week = createWeekCard({
     announce,
-    onChange: (schedule) => {
-      Object.assign(draft, schedule);
-      touched.add('schedule');
-      renderWhen();
-      renderFoot();
-    },
-    onWeek: (start) => loadAvailability(start),
+    onChange: (schedule) => { Object.assign(draft, schedule); touched.add('schedule'); renderSchedule(); scheduleChanged(); },
+    onWeek: (start) => loadWeek(start),
   });
 
-  const identity = createIdentityStep({
-    announce,
-    // The guest has already asked to send; naming themselves is the last beat.
-    onVerify: () => dispatch(),
-    onCancel: () => closeIdentity(),
-  });
-  identity.element.hidden = true;
-
-  // A card on file is the last thing steeple asks for, and only when it has to:
-  // the step opens on a 402 and gets out of the way again the moment it is done.
-  const card = createCardStep({
-    announce,
-    onSaved: () => {
-      closeCard();
-      dispatch();
-    },
-    onCancel: () => closeCard(),
-  });
-  card.element.hidden = true;
-
-  // The way back, where a way back belongs: an arrow at the top left, before
-  // anything the sheet asks for.
-  const back = el(
-    'button',
-    {
-      type: 'button',
-      class: 'letter__back',
-      'aria-label': 'Back to the space',
-      onclick: () => leaveSheet(),
-    },
-    [el('span', { class: 'letter__backglyph', 'aria-hidden': 'true', text: '←' })]
-  );
-
+  const back = el('button', { type: 'button', class: 'letter__back', onclick: () => leaveSheet() }, '← Back to the space');
   const head = el('header', { class: 'letter__head' });
-  const noteCol = el('div', { class: 'letter__col letter__col--note' });
-  const whenCol = el('div', { class: 'letter__col letter__col--when' });
-  const columns = el('div', { class: 'letter__columns' }, [noteCol, whenCol]);
-  const foot = el('footer', { class: 'letter__foot' });
-  const sheet = el('form', { class: 'letter__sheet', novalidate: true }, [
-    el('div', { class: 'letter__nav' }, [back]),
-    head,
-    columns,
-    foot,
-    identity.element,
-    card.element,
+  const whenCol = el('section', { class: 'composer__section', 'aria-labelledby': 'composer-when' });
+  const noteCol = el('section', { class: 'composer__section', 'aria-labelledby': 'composer-plans' });
+  const flow = el('div', { class: 'composer__flow' }, [whenCol, noteCol]);
+  const foot = el('aside', { class: 'letter__foot', 'aria-labelledby': 'composer-review' });
+  const columns = el('div', { class: 'letter__columns' }, [flow, foot]);
+  const sheet = el('form', { class: 'letter__sheet composer', novalidate: true, tabindex: '-1', 'aria-label': 'Booking details' }, [
+    el('div', { class: 'letter__nav' }, [back]), head, columns, identity.element, card.element,
   ]);
-  sheet.addEventListener('submit', (event) => {
-    event.preventDefault();
-    seal();
-  });
-
-  // The paper around the sheet, as a thing a mouse can land on. It stops below
-  // the top line so the breadcrumb and the porch stay reachable over an open
-  // request — they are ways out too, and a modal that swallows them is a trap.
+  sheet.addEventListener('submit', (event) => { event.preventDefault(); seal(); });
   const backdrop = el('div', { class: 'letter__backdrop', 'aria-hidden': 'true' });
-
   const element = el('div', { class: 'guest__surface guest__surface--letter' }, [backdrop, sheet]);
-
   const isOpen = () => element.classList.contains('is-open');
-  const signing = () => !identity.element.hidden;
-  const paying = () => !card.element.hidden;
-
-  /** The one exit. One step deeper closes first; otherwise the room returns. */
   function leaveSheet() {
-    if (paying()) return closeCard();
-    if (signing()) return closeIdentity();
+    if (!card.element.hidden) return closeCard();
+    if (!identity.element.hidden) return closeIdentity();
     onLeave?.();
   }
-
-  // Only a press that both starts and ends on the backdrop counts — a text
-  // selection dragged out of the note must not throw the request away.
   let pressedOutside = false;
-  backdrop.addEventListener('pointerdown', () => {
-    pressedOutside = true;
-  });
-  element.addEventListener('pointerdown', (event) => {
-    if (event.target !== backdrop) pressedOutside = false;
-  });
-  backdrop.addEventListener('click', () => {
-    if (!pressedOutside) return;
-    pressedOutside = false;
-    leaveSheet();
-  });
+  element.addEventListener('pointerdown', (event) => { pressedOutside = event.target === backdrop; });
+  backdrop.addEventListener('click', () => { if (pressedOutside) leaveSheet(); pressedOutside = false; });
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !isOpen() || event.metaKey || event.ctrlKey || event.altKey) return;
+    event.preventDefault(); event.stopPropagation(); leaveSheet();
+  }, { capture: true });
 
-  // Escape, wherever focus sits inside the request. Capture, and stop: the
-  // journey's own Escape would guess at where to go back to, and this sheet
-  // knows exactly.
-  window.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.key !== 'Escape' || !isOpen()) return;
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      event.preventDefault();
-      event.stopPropagation();
-      leaveSheet();
-    },
-    { capture: true }
-  );
+  const field = (label, input, note = null) => el('div', { class: 'field' }, [
+    el('label', { class: 'field__label', for: input.id, text: label }), input, note,
+  ]);
+  const input = (id, type, props = {}) => el('input', { id: `letter-${id}`, type, class: 'field__input', ...props });
+  const startDate = input('date', 'date', { required: true, 'aria-describedby': 'composer-schedule-error composer-timezone' });
+  const endDate = input('until', 'date', { required: true, 'aria-describedby': 'composer-schedule-error' });
+  const startTime = el('select', { id: 'letter-start', class: 'field__input', required: true, 'aria-describedby': 'composer-schedule-error composer-timezone' });
+  const endTime = el('select', { id: 'letter-end', class: 'field__input', required: true, 'aria-describedby': 'composer-schedule-error composer-timezone' });
+  const dateLabel = el('label', { class: 'field__label', for: startDate.id });
+  const lastDateField = field('Last date', endDate);
+  const dateRow = el('div', { class: 'composer__dates' }, [el('div', { class: 'field' }, [dateLabel, startDate]), lastDateField]);
+  const frequency = el('fieldset', { class: 'composer__frequency' }, [el('legend', { class: 'visually-hidden', text: 'How often' })]);
+  for (const [value, label] of [['oneOff', 'One time'], ['weekly', 'Every week']]) {
+    const radio = input(`freq-${value}`, 'radio', { name: 'letter-frequency', value, class: 'choice__input' });
+    radio.addEventListener('change', () => {
+      if (draft.frequency === value) return;
+      draft.frequency = value;
+      draft.endDate = value === 'weekly' ? (draft.endDate ?? (draft.startDate ? addDays(draft.startDate, 56) : null)) : null;
+      if (value === 'weekly' && !draft.daysOfWeekMask && draft.startDate) draft.daysOfWeekMask = 1 << weekdayOf(draft.startDate);
+      touched.add('schedule'); renderSchedule(); scheduleChanged();
+    });
+    frequency.append(el('label', { class: 'choice choice--segment', for: radio.id }, [radio, el('span', { text: label })]));
+  }
+  const weekdays = el('fieldset', { class: 'composer__weekdays' }, [el('legend', { class: 'field__label', text: 'Days of the week' })]);
+  const dayChoices = el('div', { class: 'composer__days' });
+  for (let day = 0; day < 7; day += 1) {
+    const checkbox = input(`day-${day}`, 'checkbox', { class: 'choice__input', 'aria-label': days[day], 'aria-describedby': 'composer-schedule-error' });
+    checkbox.addEventListener('change', () => {
+      draft.daysOfWeekMask ^= 1 << day;
+      touched.add('daysOfWeekMask'); renderSchedule(); scheduleChanged();
+    });
+    dayChoices.append(el('label', { class: 'choice composer__day', for: checkbox.id }, [checkbox, el('span', { text: days[day].slice(0, 3) })]));
+  }
+  weekdays.append(dayChoices);
+  for (const [control, key] of [[startDate, 'startDate'], [endDate, 'endDate'], [startTime, 'startTime'], [endTime, 'endTime']]) {
+    control.addEventListener('change', () => {
+      draft[key] = control.value || null;
+      if (key === 'startDate' && draft.frequency === 'weekly' && !draft.daysOfWeekMask && draft.startDate) draft.daysOfWeekMask = 1 << weekdayOf(draft.startDate);
+      touched.add(key); renderSchedule(); scheduleChanged();
+    });
+  }
+  const timeNote = el('p', { id: 'composer-timezone', class: 'composer__hint' });
+  const scheduleNote = el('p', { id: 'composer-schedule-error', class: 'composer__error', role: 'status' });
+  const availabilityBox = el('div', { class: 'composer__availability', role: 'status', tabindex: '-1' });
+  const calendar = el('details', { class: 'composer__calendar' }, [
+    el('summary', { text: 'View the weekly calendar' }),
+    el('div', { class: 'composer__calendar-scroll', role: 'region', tabindex: '0', 'aria-label': 'Weekly availability calendar' }, [week.element]),
+  ]);
+  calendar.addEventListener('toggle', () => { if (calendar.open) loadWeek(week.weekStart()); });
+  replaceChildren(whenCol, [
+    el('h2', { id: 'composer-when', text: 'When would you like to come?' }), frequency, weekdays, dateRow,
+    el('div', { class: 'composer__times' }, [field('Start time', startTime), field('End time', endTime)]),
+    timeNote, scheduleNote, availabilityBox, calendar,
+  ]);
 
-  // ── fields ────────────────────────────────────────────────────────────────
-
-  const intent = el('textarea', {
-    class: 'field__input field__input--note',
-    id: 'letter-intent',
-    rows: '7',
-    maxlength: String(INTENT_LIMIT + 200),
-    spellcheck: 'true',
+  const intent = el('textarea', { id: 'letter-intent', class: 'field__input field__input--note', rows: '6', maxlength: '2200', required: true,
+    spellcheck: 'true', 'aria-describedby': 'composer-intent-note composer-intent-count',
     placeholder: 'Who your group is, what you would do in the space, and anything the host would want to know.',
   });
-  intent.addEventListener('input', () => {
-    draft.intentText = intent.value;
-    touched.add('intentText');
-    renderCount();
-    renderFoot();
-  });
-
-  const count = el('p', { class: 'field__count' });
-  const intentNote = el('p', { class: 'field__note' });
-
-  // Group size: a stepper, because the number is small, bounded by the room's
-  // own capacity, and most often nudged rather than typed. The field stays a
-  // real spinbutton, so a screen reader hears the value, its floor and its
-  // ceiling, and the arrow keys work without anyone being told they do.
-  const size = el('input', {
-    class: 'stepper__value',
-    id: 'letter-size',
-    type: 'number',
-    min: '1',
-    step: '1',
-    inputmode: 'numeric',
-    placeholder: '—',
-  });
-
-  const fewer = el(
-    'button',
-    { type: 'button', class: 'stepper__step', 'aria-label': 'Fewer people', onclick: () => stepSize(-1) },
-    '−'
-  );
-  const more = el(
-    'button',
-    { type: 'button', class: 'stepper__step', 'aria-label': 'More people', onclick: () => stepSize(1) },
-    '+'
-  );
-  const stepper = el('div', { class: 'stepper' }, [
-    fewer,
-    size,
-    more,
-    el('span', { class: 'stepper__unit', 'aria-hidden': 'true', text: 'people' }),
+  const intentNote = el('p', { id: 'composer-intent-note', class: 'field__note' });
+  const count = el('p', { id: 'composer-intent-count', class: 'field__count' });
+  const activity = el('select', { id: 'letter-activity', class: 'field__input', required: true, 'aria-describedby': 'composer-activity-note' });
+  const activityNote = el('p', { id: 'composer-activity-note', class: 'field__note' });
+  const size = input('size', 'number', { min: '1', step: '1', inputmode: 'numeric', required: true, 'aria-describedby': 'composer-size-note' });
+  const sizeNote = el('p', { id: 'composer-size-note', class: 'field__note' });
+  const organization = input('organization', 'text', { maxlength: '200', autocomplete: 'organization', placeholder: 'Optional' });
+  for (const [control, key] of [[intent, 'intentText'], [size, 'groupSize'], [organization, 'organizationName'], [activity, 'activityType']]) {
+    control.addEventListener('input', () => { draft[key] = control.value; touched.add(key); renderFoot(); });
+  }
+  replaceChildren(noteCol, [
+    el('h2', { id: 'composer-plans', text: 'Tell the host about your event' }),
+    el('div', { class: 'composer__event-facts' }, [field('Activity', activity, activityNote), field('People', size, sizeNote)]),
+    field('Group or organisation', organization),
+    field('Your plans', intent, el('div', { class: 'field__underline' }, [intentNote, count])),
   ]);
 
-  /** The typed value as an integer, or null while the field is empty. */
-  const sizeValue = () => {
-    const raw = String(draft.groupSize ?? '').trim();
-    if (!raw) return null;
-    const n = Number(raw);
-    return Number.isInteger(n) ? n : null;
-  };
-
-  const clampSize = (n) => Math.min(Math.max(n, 1), room.capacity);
-
-  function setSize(next, spoken) {
-    draft.groupSize = String(next);
-    size.value = draft.groupSize;
-    touched.add('groupSize');
-    syncStepper();
-    renderNote();
-    renderFoot();
-    if (spoken) announce?.(spoken);
-  }
-
-  function stepSize(delta) {
-    const now = sizeValue();
-    const next = clampSize(now === null ? 1 : now + delta);
-    if (next === now) return;
-    setSize(next, `${plural(next, 'person', 'people')}.`);
-  }
-
-  /** The buttons stop where the room does; the value says so out loud. */
-  function syncStepper() {
-    const now = sizeValue();
-    fewer.disabled = now === null || now <= 1;
-    more.disabled = now !== null && now >= room.capacity;
-    size.max = String(room.capacity);
-    size.setAttribute('aria-valuemin', '1');
-    size.setAttribute('aria-valuemax', String(room.capacity));
-    if (now === null) size.removeAttribute('aria-valuetext');
-    else size.setAttribute('aria-valuetext', plural(now, 'person', 'people'));
-  }
-
-  // Focusing a number that is already there means replacing it, not editing a
-  // digit of it: a number field has no text selection to fall back on, so
-  // clearing one by hand is four backspaces at the wrong end of the caret.
-  size.addEventListener('focus', () => size.select?.());
-
-  size.addEventListener('input', () => {
-    draft.groupSize = size.value;
-    touched.add('groupSize');
-    syncStepper();
-    renderNote();
-    renderFoot();
-  });
-  // Typing past the room's capacity is a mistake worth catching gently, and
-  // when the guest has finished typing rather than in the middle of it.
-  size.addEventListener('change', () => {
-    const now = sizeValue();
-    if (now === null) return;
-    const held = clampSize(now);
-    if (held === now) return;
-    setSize(held, `${room.name} seats up to ${room.capacity}.`);
-  });
-
-  // Who is asking, in their own words. The host is shown this beside the name
-  // on the request; it is the request's fact, not the account's — the same
-  // person writes for the playgroup one week and the chess club the next
-  // (v2_migration D1, which is where the hardcoded email→organization table
-  // died). Optional, because plenty of people are only themselves.
-  const organization = el('input', {
-    class: 'field__input',
-    id: 'letter-organization',
-    type: 'text',
-    maxlength: '200',
-    autocomplete: 'organization',
-    placeholder: 'Little Sparrows Playgroup',
-  });
-  organization.addEventListener('input', () => {
-    draft.organizationName = organization.value;
-    touched.add('organizationName');
-  });
-
-  const sizeNote = el('p', { class: 'field__note' });
-  const activities = el('div', { class: 'choices' });
-  const activityNote = el('p', { class: 'field__note' });
-
-  const frequency = el('div', { class: 'choices choices--segment' });
-  const until = el('div', { class: 'field field--until' });
-  const summary = el('p', { class: 'letter__summary' });
-  const scheduleNote = el('p', { class: 'field__note' });
-
-  const errors = el('div', { class: 'letter__errors', role: 'status' });
-  // Why the send is not ready yet, said quietly: one thing at a time, in the
-  // store's own words. Nothing is wrong until a send is attempted, so this is
-  // never red — it is the button's caption, not a scolding.
-  const unready = el('p', { class: 'letter__unready' });
-  const send = el('button', { type: 'submit', class: 'pill pill--primary pill--wide' }, 'Send request');
-
-  // A venue that books instantly is not being asked a question, so the button
-  // does not pretend it is. Until steeple has said which kind this is, the
-  // neutral wording stands (docs/contracts/payments.md — RoomDetail.bookingMode).
-  const sendLabel = () => (bookingMode === 'instant' ? 'Book this space' : 'Send request');
-
-  // ── render ────────────────────────────────────────────────────────────────
-
-  function renderCount() {
-    const length = intent.value.length;
-    count.textContent =
-      length >= COUNT_FROM
-        ? `${plural(Math.max(INTENT_LIMIT - length, 0), 'character', 'characters')} left`
-        : '';
-    count.classList.toggle('is-over', length > INTENT_LIMIT);
-  }
-
-  function renderNote() {
-    const value = Number(draft.groupSize);
-    sizeNote.textContent =
-      Number.isInteger(value) && value > 0 && value <= room.capacity
-        ? `${room.name} seats up to ${room.capacity}.`
-        : `Seats up to ${room.capacity}.`;
-  }
-
-  function fieldError(field) {
-    if (!attempted && !touched.has(field)) return null;
-    return validate().errors[field] ?? null;
-  }
-
-  let cachedDraft = null;
-  let cachedResult = null;
+  const summary = el('div', { class: 'composer__estimate' });
+  const commitment = el('div', { class: 'composer__note' });
+  const payment = el('div', { class: 'composer__note' });
+  const rules = el('section', { class: 'composer__rules' });
+  const errors = el('div', { class: 'letter__errors', role: 'alert' });
+  const unready = el('p', { class: 'letter__unready', id: 'composer-unready' });
+  const send = el('button', { type: 'submit', class: 'pill pill--primary pill--wide', 'aria-describedby': 'composer-unready' });
+  const reviewTitle = el('h2', { id: 'composer-review', text: 'Your request' });
+  replaceChildren(foot, [reviewTitle, summary, commitment, payment, rules, errors, unready, send]);
+  const sendLabel = () => isSignedIn() ? (bookingMode === 'instant' ? 'Book this space' : 'Send request') :
+    (bookingMode === 'instant' ? 'Sign in to book' : 'Sign in to send request');
+  const money = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: room.currency ?? 'USD', currencyDisplay: 'code', maximumFractionDigits: 2 }).format(value);
+  const scheduleProblems = () => scheduleErrors(draft, { today: venueToday(timezone), windows: roomHours });
   function validate() {
-    const key = JSON.stringify(draft);
-    if (key !== cachedDraft) {
-      cachedDraft = key;
-      // The room is handed in, because it may be one only the catalog knows —
-      // and the hours check only runs once steeple has said what the hours are.
-      // A browser that has not been told them refuses nothing on its own account.
-      cachedResult = validateApplication(draft, { windows: roomHours, room });
-    }
-    return cachedResult;
+    const errors = { ...validateApplication(draft, { room }).errors };
+    for (const key of scheduleFields) delete errors[key];
+    if (errors.intentText && !draft.intentText.trim()) errors.intentText = 'Tell the host what your group would like to do.';
+    Object.assign(errors, scheduleProblems());
+    return { ok: Object.keys(errors).length === 0, errors };
   }
-
-  // ── what steeple says about this room ─────────────────────────────────────
-
-  /**
-   * The room's own truth: steeple's id for it, its open hours, and whether a
-   * request here is the booking. Fetched once per opening of the sheet; until
-   * it lands the week card says it is reading rather than showing an empty week.
-   */
-  async function loadRoom(venueId, roomId) {
-    let listing;
-    try {
-      listing = await getListing(venueId, roomId);
-    } catch (error) {
-      // steeple answered and refused. This sheet is the commitment point, and
-      // its open hours are the whole of what it knows about when this space is
-      // free — a browser that was refused them would take a date on nothing but
-      // the village's scenery. So the sheet says it cannot open rather than
-      // standing there ready to be filled in.
-      if (opened !== `${venueId}/${roomId}`) return;
-      unreachable(readFailure(error).message);
-      return;
-    }
-    if (opened !== `${venueId}/${roomId}`) return;
-    if (!listing) {
-      if (!room) unreachable();
-      return;
-    }
-    // A room the village has no scenery for is still a room: everything the
-    // sheet prints about it is on the listing, so the sheet is built from that.
-    if (!room) {
-      venue = venueFrom(listing);
-      room = roomFrom(listing);
-      mount(venueId, roomId);
-    }
-    draft.remoteRoomId = listing.roomId ?? draft.remoteRoomId ?? null;
-    bookingMode = listing.bookingMode ?? null;
-    roomHours = listing.openHours ?? null;
-    week.setHours(roomHours);
-    cachedDraft = null;
-    week.render();
-    renderFoot();
-    if (draft.remoteRoomId) loadAvailability(week.weekStart());
-  }
-
-  /** The listing's own words, in the shapes this sheet has always printed. */
-  const roomFrom = (listing) => ({
-    id: listing.roomSlug,
-    name: listing.name,
-    description: listing.description,
-    capacity: listing.capacity,
-    pricePerHour: listing.pricePerHour,
-    houseRules: listing.houseRules ?? '',
-    activities: listing.activities ?? [],
-    amenities: listing.amenities ?? [],
-    accessibility: listing.accessibility ?? [],
-    status: 'published',
-  });
-
-  const venueFrom = (listing) => ({
-    id: listing.venueSlug,
-    name: listing.venueName,
-    shortName: listing.venueShortName ?? listing.venueName,
-    suburb: listing.suburb,
-  });
-
-  function unreachable(said = 'Steeple could not open this space just now. Try again in a moment.') {
-    replaceChildren(head, []);
-    replaceChildren(columns, [el('p', { class: 'prose', text: said })]);
-    replaceChildren(foot, []);
-  }
-
-  /** One week of real availability, and the five after it, asked once each. */
-  async function loadAvailability(from) {
-    const roomId = draft?.remoteRoomId;
-    if (!roomId || asked.has(from)) return;
-    asked.add(from);
-    const to = addDays(from, WEEKS_AHEAD * 7 - 1);
-    const answer = await getRoomAvailability(roomId, { from: laterOf(from), to });
-    if (!answer || !draft || draft.remoteRoomId !== roomId) return;
-    for (const day of answer.days) if (day.isBlackout) closedDates.push({ date: day.date, reason: null });
-    week.setAvailability(answer.days);
-    week.render();
-    renderSummary();
-  }
-
-  // The feed refuses a `from` in the past — a week already begun is asked for
-  // from today, which is all of it that can still be booked anyway.
-  const laterOf = (from) => (from < todayIso() ? todayIso() : from);
+  const estimate = () => estimateSchedule(draft, room.pricePerHour);
 
   function renderHead() {
-    const { amount, unit, free } = priceParts(room);
+    const priced = estimate();
     replaceChildren(head, [
       el('div', { class: 'letter__heading' }, [
-        el('p', { class: 'eyebrow', text: 'Booking request' }),
+        el('p', { class: 'eyebrow', text: bookingMode === 'instant' ? 'Book a space' : 'Request a space' }),
         el('h1', { class: 'letter__title', text: room.name }),
-        el('p', { class: 'letter__from', text: `${venue.name} · ${venue.suburb}` }),
+        el('p', { class: 'letter__from', text: `${venue.name} · ${venue.suburb} · Seats ${room.capacity}` }),
       ]),
-      el('div', { class: 'letter__stamp' }, [
-        el('p', { class: 'letter__date', text: formatDate(todayIso()) }),
-        el('p', { class: `price price--sm${free ? ' price--free' : ''}` }, [
-          el('span', { class: 'price__amount', text: amount }),
-          unit && el('span', { class: 'price__unit', text: unit }),
-        ]),
+      el('p', { class: 'composer__headline-price' }, [
+        el('strong', { text: money(priced?.total ?? room.pricePerHour) }),
+        el('span', { text: priced ? ` estimate · ${plural(priced.sessions, 'session')}` : ' / hour' }),
       ]),
     ]);
   }
 
-  function renderNoteColumn() {
-    const accepted = room.activities;
-    replaceChildren(
-      activities,
-      accepted.map((activity) => {
-        const id = `activity-${activity.toLowerCase()}`;
-        const input = el('input', {
-          type: 'radio',
-          name: 'letter-activity',
-          id,
-          class: 'choice__input',
-          value: activity,
-          checked: draft.activityType === activity,
-        });
-        input.addEventListener('change', () => {
-          draft.activityType = activity;
-          touched.add('activityType');
-          renderFoot();
-          announce?.(`${activity} chosen.`);
-        });
-        return el('label', { class: 'choice', for: id }, [input, el('span', { text: activity })]);
-      })
-    );
-
-    replaceChildren(noteCol, [
-      el('div', { class: 'field' }, [
-        el('label', { class: 'field__label', for: 'letter-intent', text: 'Your plans' }),
-        intent,
-        el('div', { class: 'field__underline' }, [intentNote, count]),
-      ]),
-      el('fieldset', { class: 'field field--choices' }, [
-        el('legend', { class: 'field__label', text: 'The kind of activity' }),
-        activities,
-        activityNote,
-      ]),
-      el('div', { class: 'field field--inline' }, [
-        el('label', { class: 'field__label', for: 'letter-size', text: 'Group size' }),
-        stepper,
-        sizeNote,
-      ]),
-      el('div', { class: 'field' }, [
-        el('label', {
-          class: 'field__label',
-          for: 'letter-organization',
-          text: 'Your group or organisation',
-        }),
-        organization,
-        el('p', {
-          class: 'field__note',
-          text: 'Optional — shown to the host as who is asking.',
-        }),
-      ]),
-      // Not decoration: the terms the request is made under, printed where a
-      // form would print them — small, complete, before you send.
-      el('aside', { class: 'letter__rules' }, [
-        el('h2', { class: 'eyebrow', text: 'The house rules here' }),
-        el('p', { class: 'prose prose--sm', text: room.houseRules }),
-      ]),
-    ]);
-    renderNote();
-  }
-
-  function renderWhen() {
+  function renderSchedule() {
     const weekly = draft.frequency === 'weekly';
-    replaceChildren(
-      frequency,
-      [
-        ['oneOff', 'One time'],
-        ['weekly', 'Every week'],
-      ].map(([value, label]) => {
-        const id = `letter-freq-${value}`;
-        const input = el('input', {
-          type: 'radio',
-          name: 'letter-frequency',
-          id,
-          class: 'choice__input',
-          value,
-          checked: draft.frequency === value,
-        });
-        input.addEventListener('change', () => setFrequency(value));
-        return el('label', { class: 'choice choice--segment', for: id }, [
-          input,
-          el('span', { text: label }),
-        ]);
-      })
-    );
-
-    if (weekly) {
-      const end = el('input', {
-        class: 'field__input field__input--date',
-        id: 'letter-until',
-        type: 'date',
-        min: draft.startDate ? addDays(draft.startDate, 7) : addDays(todayIso(), 7),
-        max: draft.startDate ? addDays(draft.startDate, 366) : addDays(todayIso(), 366),
-        value: draft.endDate ?? '',
-      });
-      end.addEventListener('change', () => {
-        draft.endDate = end.value || null;
-        touched.add('endDate');
-        week.setSchedule(draft);
-        week.render();
-        renderFoot();
-        renderSummary();
-      });
-      replaceChildren(until, [
-        el('label', { class: 'field__label', for: 'letter-until', text: 'Weekly until' }),
-        end,
-      ]);
-      until.hidden = false;
-    } else {
-      until.hidden = true;
-      replaceChildren(until, []);
+    for (const radio of frequency.querySelectorAll('input')) radio.checked = radio.value === draft.frequency;
+    weekdays.hidden = !weekly;
+    for (const [day, checkbox] of [...dayChoices.querySelectorAll('input')].entries()) checkbox.checked = Boolean(draft.daysOfWeekMask & (1 << day));
+    dateLabel.textContent = weekly ? 'First date' : 'Date';
+    lastDateField.hidden = !weekly;
+    dateRow.classList.toggle('is-weekly', weekly);
+    startDate.value = draft.startDate ?? '';
+    startDate.min = venueToday(timezone) ?? '';
+    endDate.value = draft.endDate ?? '';
+    endDate.min = draft.startDate ?? startDate.min;
+    endDate.max = draft.startDate ? addDays(draft.startDate, 366) : '';
+    for (const [control, key, isEnd] of [[startTime, 'startTime', false], [endTime, 'endTime', true]]) {
+      replaceChildren(control, [el('option', { value: '', text: 'Choose time' }), ...timeChoices(draft, roomHours, isEnd).map(({ time, allowed }) =>
+        el('option', { value: time, disabled: !allowed, text: formatTime(time) }))]);
+      control.value = draft[key] ?? '';
     }
-
-    week.setSchedule(draft);
-    week.render();
-    renderSummary();
+    timeNote.textContent = timezone ? `Times are local to the venue · ${timezone.replaceAll('_', ' ')}` : 'Times are local to the venue. The timezone is being checked.';
+    week.setSchedule(draft); week.render();
   }
-
-  function setFrequency(value) {
-    if (draft.frequency === value) return;
-    draft.frequency = value;
-    touched.add('schedule');
-    if (value === 'weekly') {
-      draft.endDate = draft.endDate ?? (draft.startDate ? addDays(draft.startDate, 56) : null);
-      if (!draft.daysOfWeekMask && draft.startDate) {
-        draft.daysOfWeekMask = 1 << new Date(...dateArgs(draft.startDate)).getDay();
-      }
-    } else {
-      draft.endDate = null;
-    }
-    renderWhen();
-    renderFoot();
-    announce?.(value === 'weekly' ? 'Repeating every week.' : 'A single visit.');
-  }
-
-  const dateArgs = (iso) => {
-    const [y, m, d] = iso.split('-').map(Number);
-    return [y, m - 1, d];
-  };
 
   function renderSummary() {
-    if (!draft.startTime) {
-      summary.textContent = '';
-      summary.hidden = true;
-      week.setNote('');
-      scheduleNote.textContent = '';
-      return;
-    }
-    summary.hidden = false;
-    const blackouts = closedDates;
-    const dates = occurrenceCount(draft, blackouts);
-    const lines = [scheduleSentence(draft)];
-    if (draft.frequency === 'weekly' && draft.endDate && dates) {
-      lines.push(`${plural(dates, 'date', 'dates')} in all.`);
-    }
-    replaceChildren(summary, [
-      el('span', { class: 'letter__summaryline', text: lines[0] }),
-      lines[1] && el('span', { class: 'letter__summarycount', text: lines[1] }),
+    const priced = estimate();
+    const row = (label, value, className = '') => el('div', { class: `composer__receipt-row ${className}` }, [el('span', { text: label }), el('strong', { text: value })]);
+    replaceChildren(summary, priced ? [
+      el('p', { class: 'composer__schedule', text: scheduleSentence(draft) }),
+      row(`${plural(priced.hours, 'hour')} × ${money(room.pricePerHour)}`, `${money(priced.perSession)} / session`),
+      row('Sessions', String(priced.sessions)),
+      row('Estimated total', money(priced.total), 'composer__total'),
+      el('p', { class: 'composer__hint', text: 'Based on the current hourly rate and all selected dates. The final price is set when the booking is confirmed.' }),
+    ] : [
+      el('p', { class: 'composer__schedule', text: `${money(room.pricePerHour)} / hour` }),
+      el('p', { class: 'composer__hint', text: 'Choose valid dates and times to see the estimated cost.' }),
     ]);
-
-    const notes = [];
-    const skipped = blackouts.filter((b) => {
-      if (draft.frequency !== 'weekly') return b.date === draft.startDate;
-      return (
-        draft.endDate &&
-        b.date >= draft.startDate &&
-        b.date <= draft.endDate &&
-        draft.daysOfWeekMask & (1 << new Date(...dateArgs(b.date)).getDay())
-      );
-    });
-    for (const b of skipped) {
-      notes.push(
-        b.reason
-          ? `${formatDate(b.date)} is set aside for the ${b.reason.toLowerCase()}, so that week is skipped.`
-          : `${formatDate(b.date)} is a closed day here, so that week is skipped.`
-      );
-    }
-    // Dates another group already holds are not listed twice: the week card
-    // draws them as held and will not let one be painted.
-    scheduleNote.textContent = notes.join(' ');
+    reviewTitle.textContent = bookingMode === 'instant' ? 'Your booking' : 'Your request';
+    replaceChildren(commitment, [
+      el('h3', { text: bookingMode === 'instant' ? 'This space books instantly' : 'The host approves your request' }),
+      el('p', { text: bookingMode === 'instant'
+        ? 'Submitting can confirm your booking immediately. If you already have several upcoming bookings, the host may need to approve this one.'
+        : 'Nothing is booked until the host accepts your request.' }),
+    ]);
+    replaceChildren(payment, [
+      el('h3', { text: paymentsEnabled === true ? 'Test payments' : paymentsEnabled === false ? 'Payment arranged with the host' : 'Checking payment options' }),
+      el('p', { text: paymentsEnabled === true
+        ? 'A test payment method is required before sending. No real money is charged.'
+        : paymentsEnabled === false ? 'Online booking payments are not available on Steeple. Arrange payment directly with the host.'
+          : 'Payment details will appear here before you send.' }),
+    ]);
+    rules.hidden = !room.houseRules?.trim();
+    replaceChildren(rules, rules.hidden ? [] : [el('h3', { text: 'House rules' }), el('p', { text: room.houseRules })]);
+    renderHead();
   }
 
-  // What the service said when it refused the last send, if it did. It is the
-  // one message here that is not the store's own, so it is held separately and
-  // cleared the moment the guest tries again.
-  let refusal = '';
+  function renderAvailability() {
+    const { state, result } = availability;
+    availabilityBox.hidden = state === 'empty';
+    availabilityBox.classList.toggle('is-warning', state === 'failed' || state === 'conflict');
+    if (state === 'empty') return;
+    let children;
+    if (state === 'checking') children = [el('p', { text: 'Checking all selected dates…' })];
+    else if (state === 'ready') children = [el('p', { text: `${plural(result.totalOccurrences, 'session')} ${result.totalOccurrences === 1 ? 'looks' : 'look'} available right now. Availability is checked again when you submit.` })];
+    else if (state === 'conflict') children = [
+      el('strong', { text: `${result.conflicts.length} of ${result.totalOccurrences} dates are unavailable` }),
+      el('p', { text: 'Change the dates, weekdays or times. Closed dates are included in your request; they are not skipped.' }),
+      el('ul', {}, result.conflicts.map(({ date, reason }) => el('li', { text: `${formatDate(date)} · ${({ blackout: 'closed that day', booked: 'already booked', outsideOpenHours: 'outside opening hours' })[reason] ?? 'unavailable'}` }))),
+    ];
+    else children = [
+      el('strong', { text: 'Availability could not be checked' }),
+      el('p', { text: 'Try again before sending. Your dates and plans are still here.' }),
+      el('button', { type: 'button', class: 'composer__retry', text: 'Try again', onclick: () => scheduleChanged(0) }),
+    ];
+    replaceChildren(availabilityBox, children);
+  }
 
   function renderFoot(problem) {
+    if (!draft || !room) return;
     if (problem !== undefined) refusal = problem ?? '';
     const result = validate();
-    // A request that is not ready yet cannot be sent, and the button says so by
-    // being still — with the one thing it is waiting for printed beside it.
-    if (!sending) {
-      send.textContent = sendLabel();
-      send.disabled = !result.ok;
-    }
-    unready.textContent = result.ok ? '' : (Object.values(result.errors)[0] ?? '');
-    unready.hidden = result.ok;
-    intentNote.textContent = fieldError('intentText') ?? '';
-    activityNote.textContent = fieldError('activityType') ?? '';
-    sizeNote.classList.toggle('is-wrong', Boolean(fieldError('groupSize')));
-    if (fieldError('groupSize')) sizeNote.textContent = fieldError('groupSize');
-    else renderNote();
-
-    const scheduleProblem =
-      fieldError('schedule') ?? fieldError('startDate') ?? fieldError('startTime') ??
-      fieldError('endTime') ?? fieldError('endDate') ?? fieldError('daysOfWeekMask');
-    week.setNote(scheduleProblem ?? '');
-
-    const outstanding = attempted
-      ? Object.entries(result.errors)
-          .filter(([field]) => !SHOWN_INLINE.has(field))
-          .map(([, message]) => message)
-      : [];
-    replaceChildren(
-      errors,
-      [...(refusal ? [refusal] : []), ...outstanding].map((message) =>
-        el('p', { class: 'letter__error', text: message })
-      )
-    );
-
-    renderSummary();
+    const visibleError = (key) => (attempted || touched.has(key) || (scheduleFields.includes(key) && touched.has('schedule'))) ? result.errors[key] : null;
+    const mark = (control, key, note) => {
+      const message = visibleError(key);
+      control.setAttribute('aria-invalid', String(Boolean(message)));
+      note.textContent = message ? `⚠ ${message}` : '';
+      note.classList.toggle('is-wrong', Boolean(message));
+    };
+    mark(intent, 'intentText', intentNote); mark(activity, 'activityType', activityNote); mark(size, 'groupSize', sizeNote);
+    if (!sizeNote.textContent) sizeNote.textContent = `Up to ${room.capacity} people`;
+    const scheduleError = scheduleFields.map(visibleError).find(Boolean);
+    scheduleNote.textContent = scheduleError ? `⚠ ${scheduleError}` : '';
+    scheduleNote.hidden = !scheduleError;
+    for (const [control, key] of [[startDate, 'startDate'], [endDate, 'endDate'], [startTime, 'startTime'], [endTime, 'endTime']]) control.setAttribute('aria-invalid', String(Boolean(visibleError(key) || visibleError('schedule'))));
+    count.textContent = intent.value.length >= 1600 ? `${Math.max(2000 - intent.value.length, 0)} characters left` : '';
+    count.classList.toggle('is-over', intent.value.length > 2000);
+    const firstScheduleError = Object.values(scheduleProblems())[0];
+    unready.textContent = firstScheduleError ?? Object.values(result.errors)[0] ??
+      (availability.state !== 'ready' ? 'Check availability before sending.' : paymentsEnabled === null ? 'Checking payment options.' : '');
+    unready.hidden = !unready.textContent;
+    send.disabled = sending;
+    if (!sending) send.textContent = sendLabel();
+    replaceChildren(errors, refusal ? [el('p', { class: 'letter__error', text: refusal })] : []);
+    renderSummary(); renderAvailability();
   }
 
-  const SHOWN_INLINE = new Set([
-    'intentText', 'activityType', 'groupSize', 'schedule',
-    'startDate', 'startTime', 'endTime', 'endDate', 'daysOfWeekMask',
-  ]);
-
-  function renderFootShell() {
-    replaceChildren(foot, [
-      // What is about to be asked for, stated once, immediately above the act
-      // of asking for it — the only place a summary is worth the room.
-      summary,
-      errors,
-      unready,
-      send,
-    ]);
+  function scheduleChanged(delay = 500) {
+    clearTimeout(checkTimer);
+    const version = ++checkVersion;
+    refusal = '';
+    availability = { state: Object.keys(scheduleProblems()).length ? 'empty' : 'checking', result: null };
+    renderFoot();
+    if (availability.state === 'empty') return;
+    const current = generation;
+    const schedule = toWireSchedule(draft);
+    checkTimer = setTimeout(async () => {
+      try {
+        const result = await checkRoomAvailability(draft.remoteRoomId, schedule);
+        if (current !== generation || version !== checkVersion) return;
+        if (!result || !Number.isInteger(result.totalOccurrences) || result.totalOccurrences !== estimate()?.sessions || !Array.isArray(result.conflicts)) throw new Error('Incomplete availability answer');
+        availability = { state: result.available && !result.conflicts.length ? 'ready' : 'conflict', result };
+      } catch {
+        if (current !== generation || version !== checkVersion) return;
+        availability = { state: 'failed', result: null };
+      }
+      renderFoot();
+    }, delay);
   }
 
-  // ── the commitment point ──────────────────────────────────────────────────
+  async function loadWeek(from) {
+    if (!draft?.remoteRoomId || asked.has(from)) return;
+    asked.add(from);
+    const current = generation;
+    const today = venueToday(timezone) ?? addDays(todayIso(), 1);
+    const start = from < today ? today : from;
+    const answer = await getRoomAvailability(draft.remoteRoomId, { from: start, to: addDays(start, 41) });
+    if (current !== generation) return;
+    if (!answer) { asked.delete(from); return; }
+    timezone = answer.timezone;
+    week.setAvailability(answer.days); week.render(); renderSchedule(); renderFoot();
+  }
 
+  function focusField(key) {
+    const fields = { intentText: intent, activityType: activity, groupSize: size, startDate, endDate, startTime, endTime,
+      daysOfWeekMask: dayChoices.querySelector('input'), schedule: startTime };
+    const target = fields[key] ?? startDate;
+    target?.focus(); target?.scrollIntoView({ block: 'center' });
+  }
   function seal() {
+    if (sending || !draft || !room) return;
     attempted = true;
     const result = validate();
     if (!result.ok) {
       renderFoot(null);
-      const first = Object.keys(result.errors)[0];
-      announce?.(`Not quite ready. ${Object.values(result.errors)[0]}`);
-      focusField(first);
-      return;
+      const key = Object.keys(scheduleProblems())[0] ?? Object.keys(result.errors)[0];
+      focusField(key); announce?.(result.errors[key]); return;
     }
-    // Who is asking is settled last — but a guest already signed in has
-    // settled it: the request just goes. The step opens only for the sign-in.
-    if (isSignedIn()) dispatch();
-    else openIdentity();
+    if (availability.state !== 'ready' || paymentsEnabled === null) {
+      renderFoot(); availabilityBox.focus(); availabilityBox.scrollIntoView({ block: 'center' }); return;
+    }
+    if (isSignedIn()) dispatch(); else openIdentity();
   }
-
-  function focusField(field) {
-    if (field === 'intentText') intent.focus();
-    else if (field === 'groupSize') size.focus();
-    else if (field === 'activityType') activities.querySelector('input')?.focus();
-    else week.element.querySelector('[data-day][tabindex="0"]')?.focus();
-  }
-
   function openIdentity() {
-    // The provider has not been chosen yet at this gate, so the event carries
-    // what brought somebody here instead (`analytics.md` — `sso_started`).
     track('sso_started', { surface: 'apply', trigger: 'send' });
-    identity.reset();
-    identity.element.hidden = false;
-    sheet.classList.add('is-signing');
-    columns.setAttribute('inert', '');
-    identity.focus();
-    announce?.('Confirm who you are before the request is sent.');
+    identity.reset(); identity.element.hidden = false; sheet.classList.add('is-signing');
+    columns.setAttribute('inert', ''); identity.focus(); identity.element.scrollIntoView({ block: 'center' });
+    announce?.('Sign in to send these booking details.');
   }
-
   function closeIdentity() {
-    identity.element.hidden = true;
-    sheet.classList.remove('is-signing');
-    columns.removeAttribute('inert');
-    renderFoot();
-    intent.focus();
+    identity.element.hidden = true; sheet.classList.remove('is-signing'); columns.removeAttribute('inert'); renderFoot(); send.focus();
   }
-
   function openCard() {
     track('card_step_opened', { reason: 'apply' });
-    identity.element.hidden = true;
-    card.reset();
-    card.element.hidden = false;
-    sheet.classList.add('is-signing');
-    columns.setAttribute('inert', '');
-    card.open();
-    card.focus();
+    identity.element.hidden = true; card.reset(); card.element.hidden = false; sheet.classList.add('is-signing');
+    columns.setAttribute('inert', ''); card.open(); card.focus(); card.element.scrollIntoView({ block: 'center' });
   }
-
   function closeCard() {
-    card.element.hidden = true;
-    sheet.classList.remove('is-signing');
-    columns.removeAttribute('inert');
-    renderFoot();
+    card.element.hidden = true; sheet.classList.remove('is-signing'); columns.removeAttribute('inert'); renderFoot(); send.focus();
   }
-
-  let sending = false;
-
   async function dispatch() {
     if (sending) return;
     sending = true;
@@ -839,7 +428,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       );
       // Nothing was filed anywhere. The written request is still here, exactly
       // as it was, and the week card is the way to another time.
-      if (result.retake) week.element.querySelector('[data-day][tabindex="0"]')?.focus();
+      if (result.retake) focusField('startTime');
       return;
     }
     drafts.delete(`${draft.venueId}/${draft.roomId}`);
@@ -868,101 +457,46 @@ export function createComposer({ announce, onSent, onLeave }) {
     setTimeout(settle, document.documentElement.classList.contains('reduced-motion') ? 60 : 900);
   }
 
-  // ── opening ───────────────────────────────────────────────────────────────
-
-  /**
-   * Open the sheet on a space.
-   *
-   * The village's own scenery is a shortcut, not the source: a room it has never
-   * heard of — every room a host lists — is opened from the catalog a moment
-   * later, and the sheet says it is reading until then. Only ids it cannot use
-   * at all are refused (v2_migration D4).
-   */
+  async function loadRoom(venueId, roomId, current) {
+    try {
+      const listing = await getListing(venueId, roomId);
+      if (current !== generation) return;
+      if (!listing) throw new Error('Space unavailable');
+      venue = { name: listing.venueName, shortName: listing.venueShortName ?? listing.venueName, suburb: listing.suburb };
+      room = { ...listing, houseRules: listing.houseRules ?? '', activities: listing.activities ?? [] };
+      bookingMode = listing.bookingMode ?? 'manual'; roomHours = listing.openHours ?? null;
+      draft = drafts.get(opened) ?? blankDraft(venueId, roomId, room);
+      draft.remoteRoomId = listing.roomId; drafts.set(opened, draft);
+      intent.value = draft.intentText; size.value = draft.groupSize; size.max = String(room.capacity);
+      organization.value = draft.organizationName ?? '';
+      replaceChildren(activity, [el('option', { value: '', text: 'Choose activity' }), ...room.activities.map((name) => el('option', { value: name, text: name }))]);
+      activity.value = draft.activityType ?? '';
+      week.setRoom(venueId, roomId); week.setHours(roomHours); calendar.open = false;
+      replaceChildren(columns, [flow, foot]); renderSchedule(); scheduleChanged(); sheet.scrollTop = 0;
+      loadWeek(addDays(todayIso(), 1));
+    } catch (error) {
+      if (current !== generation) return;
+      replaceChildren(head, []);
+      replaceChildren(columns, [el('p', { class: 'prose', text: readFailure(error).message }),
+        el('button', { type: 'button', class: 'pill', text: 'Try again', onclick: () => open(venueId, roomId) })]);
+    }
+  }
   function open(venueId, roomId) {
     if (!venueId || !roomId) return false;
-    // The top of the apply funnel, and a moment no server ever sees: a sheet
-    // opened and left is still a person who wanted this room.
     track('application_started', { roomId: `${venueId}/${roomId}` });
-    opened = `${venueId}/${roomId}`;
-    venue = heldVenue(venueId) ?? null;
-    room = effectiveRoom(venueId, roomId) ?? null;
-
-    roomHours = null;
-    closedDates = [];
-    bookingMode = null;
-    asked = new Set();
-    identity.reset();
-    identity.element.hidden = true;
-    card.element.hidden = true;
-    sheet.classList.remove('is-signing', 'is-away');
-    columns.removeAttribute('inert');
-
-    if (room && venue) mount(venueId, roomId);
-    else waiting();
-    loadRoom(venueId, roomId);
-    return true;
+    opened = `${venueId}/${roomId}`; const current = ++generation;
+    clearTimeout(checkTimer); ++checkVersion;
+    venue = null; room = null; draft = null; roomHours = null; timezone = null; bookingMode = null; paymentsEnabled = null;
+    attempted = false; refusal = ''; touched.clear(); asked.clear();
+    identity.reset(); identity.element.hidden = true; card.element.hidden = true;
+    sheet.classList.remove('is-signing', 'is-away'); columns.removeAttribute('inert');
+    replaceChildren(head, []); replaceChildren(columns, [el('p', { class: 'prose', text: 'Opening this space…' })]);
+    isEnabled(FEATURE_FLAG_KEYS.paymentsEnabled).then((enabled) => { if (current === generation) { paymentsEnabled = enabled; renderFoot(); } });
+    loadRoom(venueId, roomId, current); return true;
   }
-
-  /** Which space the sheet is open on, so a late answer for another is dropped. */
-  let opened = null;
-
-  function waiting() {
-    replaceChildren(head, []);
-    replaceChildren(columns, [el('p', { class: 'prose', text: 'Opening this space…' })]);
-    replaceChildren(foot, []);
-  }
-
-  /** Build the sheet, once there is a room to build it about. */
-  function mount(venueId, roomId) {
-    const key = `${venueId}/${roomId}`;
-    draft = drafts.get(key) ?? blankDraft(venueId, roomId, room);
-    drafts.set(key, draft);
-    attempted = false;
-    touched.clear();
-    cachedDraft = null;
-    replaceChildren(columns, [noteCol, whenCol]);
-
-    intent.value = draft.intentText;
-    size.value = draft.groupSize;
-    organization.value = draft.organizationName ?? '';
-    syncStepper();
-    week.setRoom(venueId, roomId);
-    week.setSchedule(draft);
-
-    renderHead();
-    renderNoteColumn();
-    replaceChildren(whenCol, [
-      el('h2', { class: 'eyebrow', text: 'When you would come' }),
-      el('div', { class: 'field field--freq' }, [frequency, until]),
-      week.element,
-      scheduleNote,
-    ]);
-    renderWhen();
-    renderFootShell();
-    renderCount();
-    renderFoot(null);
-    sheet.scrollTop = 0;
-  }
-
   function spoken() {
     if (!venue || !room) return 'Opening this space.';
-    return [
-      `Your request to ${venue.name} about ${room.name}, ${venue.suburb}.`,
-      `Seats ${room.capacity}. Welcomes ${room.activities.join(', ')}.`,
-      'Write your plans, choose one activity and a group size, then paint your hours on the week card.',
-      draft.startTime ? `Chosen so far: ${scheduleSentence(draft)}.` : 'No hours chosen yet.',
-    ].join(' ');
+    return `${room.name} at ${venue.name}. Seats ${room.capacity}. Choose your dates and times, then tell the host about your event. Review the estimated cost before sending.`;
   }
-
-  return {
-    element,
-    open,
-    spoken,
-    focus: () => sheet.focus?.(),
-    refresh: () => {
-      if (!venue || !room) return;
-      week.render();
-      renderFoot();
-    },
-  };
+  return { element, open, spoken, focus: () => sheet.focus(), refresh: () => { if (room) renderFoot(); } };
 }

@@ -374,6 +374,11 @@ export function getRoomAvailability(roomId, { from, to } = /** @type {any} */ ({
   return get(`/listings/${encodeURIComponent(roomId)}/availability`, { from, to }, { notFoundAsNull: true });
 }
 
+/** Existing anonymous dry-run; the submitted schedule uses this same wire shape. */
+export function checkRoomAvailability(roomId, schedule) {
+  return send('POST', `/listings/${encodeURIComponent(roomId)}/availability/check`, { schedule });
+}
+
 /** Public, revealed venue comments; their count is separate from the rating aggregate. */
 export function getVenueReviews(venueId, { page = 1, pageSize = 10, signal = null } = {}) {
   return get(`/venues/${encodeURIComponent(venueId)}/ratings`, { page, pageSize }, { signal });

@@ -174,6 +174,7 @@ export function createRoomPanel({ onRequest }) {
   }
 
   function paint(venue, room) {
+    cta.textContent = room.bookingMode === 'instant' ? 'Book this space' : 'Request this space';
     const { amount, unit, free } = priceParts(room);
     const scroller = sheetScroller(element, body);
     const held = scroller.scrollTop;
