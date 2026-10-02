@@ -191,7 +191,9 @@ no background worker.
   from the caller (organizer → venue, venue manager → organizer), one immutable row per
   direction. Opens after the booking has a past `occurred`/`noShow` occurrence; closes 14 days
   after completion/cancellation. `204` on success. Errors: `400 invalid_rating`,
-  `409 invalid_state`, `404 not_found`, `429 rate_limited`.
+  `409 invalid_state`, `404 not_found`, `429 rate_limited`. The immutable rating row and
+  `ratingReceived` inbox/outbox work commit together; the server's `rating_submitted` analytics
+  event runs only after that commit.
 
 ### Notifications (inbox = truth) ✅
 `GET /api/v1/me/notifications?after=<cursor>&pageSize=` →

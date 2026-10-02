@@ -3,9 +3,10 @@ using Npgsql;
 using Steeple.Api.Services.Ratings;
 
 namespace Steeple.Api.Proxies.Ratings;
-/// <summary>EF adapter for ratings. Reveal rules stay in the service; queries load their inputs.</summary>
+/// <summary>EF adapter for ratings, including server-side double-blind reveal reads.</summary>
 public class EfRatingRepository : IRatingRepository
 {
+    private static readonly TimeSpan RevealWindow = TimeSpan.FromDays(14);
     private readonly SteepleDbContext _db;
 
     /// <summary>Creates the repository over the supplied EF context.</summary>
@@ -28,18 +29,52 @@ public class EfRatingRepository : IRatingRepository
     }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Rating>> GetVisibleForVenuesAsync(
-        IReadOnlyCollection<Guid> venueIds, CancellationToken ct = default) =>
-        GetVisibleAggregateCandidatesAsync(
-            _db.Ratings.Where(r => venueIds.Contains(r.VenueId) && r.RateeType == RatingRateeType.Venue),
-            ct);
+    public async Task<IReadOnlyDictionary<Guid, RatingAggregate>> GetVenueSummaryAggregatesAsync(
+        IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default)
+    {
+        if (venueIds.Count == 0)
+        {
+            return new Dictionary<Guid, RatingAggregate>();
+        }
+
+        var aggregates = await RevealedVisibleRatings(
+                _db.Ratings
+                    .AsNoTracking()
+                    .Where(r => venueIds.Contains(r.VenueId) && r.RateeType == RatingRateeType.Venue),
+                nowUtc)
+            .GroupBy(r => r.VenueId)
+            .Select(g => new { VenueId = g.Key, AverageStars = g.Average(r => (double)r.Stars), Count = g.Count() })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return aggregates.ToDictionary(
+            aggregate => aggregate.VenueId,
+            aggregate => new RatingAggregate(aggregate.AverageStars, aggregate.Count));
+    }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<Rating>> GetVisibleForOrganizersAsync(
-        IReadOnlyCollection<Guid> organizerIds, CancellationToken ct = default) =>
-        GetVisibleAggregateCandidatesAsync(
-            _db.Ratings.Where(r => organizerIds.Contains(r.OrganizerId) && r.RateeType == RatingRateeType.Organizer),
-            ct);
+    public async Task<IReadOnlyDictionary<Guid, RatingAggregate>> GetOrganizerSummaryAggregatesAsync(
+        IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default)
+    {
+        if (organizerIds.Count == 0)
+        {
+            return new Dictionary<Guid, RatingAggregate>();
+        }
+
+        var aggregates = await RevealedVisibleRatings(
+                _db.Ratings
+                    .AsNoTracking()
+                    .Where(r => organizerIds.Contains(r.OrganizerId) && r.RateeType == RatingRateeType.Organizer),
+                nowUtc)
+            .GroupBy(r => r.OrganizerId)
+            .Select(g => new { OrganizerId = g.Key, AverageStars = g.Average(r => (double)r.Stars), Count = g.Count() })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return aggregates.ToDictionary(
+            aggregate => aggregate.OrganizerId,
+            aggregate => new RatingAggregate(aggregate.AverageStars, aggregate.Count));
+    }
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<Guid, OrganizerReputationInputs>> GetOrganizerReputationInputsAsync(
@@ -81,25 +116,39 @@ public class EfRatingRepository : IRatingRepository
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<Rating>> GetVisibleCommentedForVenueAsync(
-        Guid venueId, CancellationToken ct = default)
+    public async Task<PublicVenueReviewPage> GetPublicVenueReviewsAsync(
+        Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default)
     {
-        // Identity resolution (not plain no-tracking): the reveal rule reads back through
-        // Booking.Ratings, and EF rejects that Include cycle under AsNoTracking().
-        return await _db.Ratings
-            .AsNoTrackingWithIdentityResolution()
-            .Where(r =>
-                r.VenueId == venueId
-                && r.RateeType == RatingRateeType.Venue
-                && r.HiddenAtUtc == null
-                && r.Comment != null
-                && r.Comment != "")
-            .Include(r => r.Rater)
-            .Include(r => r.Booking!).ThenInclude(b => b.Occurrences)
-            .Include(r => r.Booking!).ThenInclude(b => b.Ratings)
+        var reviews = RevealedVisibleRatings(
+                _db.Ratings
+                    .AsNoTracking()
+                    .Where(r =>
+                        r.VenueId == venueId
+                        && r.RateeType == RatingRateeType.Venue
+                        && r.Comment != null
+                        && r.Comment != ""),
+                nowUtc);
+        var totalCount = await reviews.CountAsync(ct).ConfigureAwait(false);
+        var offset = ((long)page - 1) * pageSize;
+        if (offset >= totalCount)
+        {
+            return new PublicVenueReviewPage([], totalCount);
+        }
+
+        var items = await reviews
             .OrderByDescending(r => r.CreatedAtUtc)
+            .ThenBy(r => r.Id)
+            .Skip((int)offset)
+            .Take(pageSize)
+            .Select(r => new PublicVenueReview(
+                r.Stars,
+                r.Comment,
+                string.IsNullOrWhiteSpace(r.Rater!.DisplayName) ? "Steeple user" : r.Rater.DisplayName,
+                r.CreatedAtUtc))
             .ToListAsync(ct)
             .ConfigureAwait(false);
+
+        return new PublicVenueReviewPage(items, totalCount);
     }
 
     /// <inheritdoc />
@@ -136,16 +185,22 @@ public class EfRatingRepository : IRatingRepository
         }
     }
 
-    private static async Task<IReadOnlyList<Rating>> GetVisibleAggregateCandidatesAsync(
-        IQueryable<Rating> query, CancellationToken ct)
+    private IQueryable<Rating> RevealedVisibleRatings(IQueryable<Rating> query, DateTimeOffset nowUtc)
     {
-        // Same cycle constraint as GetVisibleCommentedForVenueAsync.
-        return await query
-            .AsNoTrackingWithIdentityResolution()
-            .Where(r => r.HiddenAtUtc == null)
-            .Include(r => r.Booking!).ThenInclude(b => b.Occurrences)
-            .Include(r => r.Booking!).ThenInclude(b => b.Ratings)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+        var revealCutoffUtc = nowUtc - RevealWindow;
+        return query.Where(r =>
+            r.HiddenAtUtc == null
+            && (_db.Ratings.Any(other =>
+                    other.BookingId == r.BookingId
+                    && other.RateeType != r.RateeType
+                    && other.HiddenAtUtc == null)
+                || (r.Booking!.Status == BookingStatus.Cancelled
+                    && r.Booking.CancelledAtUtc != null
+                    && r.Booking.CancelledAtUtc < revealCutoffUtc)
+                || (r.Booking!.Status != BookingStatus.Cancelled
+                    && r.Booking.Occurrences.Any(o => o.Status != OccurrenceStatus.Cancelled)
+                    && r.Booking.Occurrences
+                        .Where(o => o.Status != OccurrenceStatus.Cancelled)
+                        .Max(o => o.EndUtc) < revealCutoffUtc)));
     }
 }

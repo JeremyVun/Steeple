@@ -95,7 +95,8 @@ clients read the outcome from the submit response, never from this field alone.
 Public, revealed venue review comments, newest first. `page` defaults to 1; `pageSize` defaults
 to 10 and is clamped to 1–50. Returns an empty page unless the venue has
 at least one Published room inside the beachhead. Hidden rows and unrevealed double-blind ratings
-are excluded. Response:
+are excluded. Filtering, count, latest-first ordering (then rating id for timestamp ties), and
+page bounds execute in the database; the response projects review fields only. Response:
 `{items:[{stars, comment?, raterName, createdAtUtc}], totalCount, page, pageSize}`.
 
 ### `GET /api/v1/suburbs` ✅ → `["Vienna", …]` · `GET /api/v1/sitemap` ✅ → `[{venueSlug, roomSlug, lastModifiedUtc}]` · `GET /api/v1/geofence` ✅ → `{areaName, center, beachhead}`

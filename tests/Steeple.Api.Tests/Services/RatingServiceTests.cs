@@ -61,6 +61,27 @@ public class RatingServiceTests
     }
 
     [Fact]
+    public async Task SubmitAsync_RegistersAnalyticsAfterTheRatingAndNotificationTransaction()
+    {
+        var scenario = NewScenario(occurrenceEndOffset: TimeSpan.FromHours(-2));
+        var transactions = new DeferredServiceTransaction();
+        var service = CreateService(scenario, out var ratings, out var notifications, out var analytics, transactions);
+
+        var result = await service.SubmitAsync(
+            scenario.Booking.Id, scenario.Organizer.Id, new SubmitRatingRequest(5));
+
+        Assert.Null(result.Error);
+        Assert.Equal(1, transactions.RunCount);
+        Assert.Single(ratings.Ratings);
+        Assert.Single(notifications.Calls);
+        Assert.Empty(analytics.Events);
+
+        await transactions.RunAfterCommitAsync();
+
+        Assert.Contains(analytics.Events, entry => entry.EventType == "rating_submitted");
+    }
+
+    [Fact]
     public async Task SubmitAsync_CommentOverOneThousandCharacters_ReturnsInvalidRating()
     {
         var scenario = NewScenario(occurrenceEndOffset: TimeSpan.FromHours(-2));
@@ -393,7 +414,8 @@ public class RatingServiceTests
         Scenario scenario,
         out FakeRatingRepository ratings,
         out FakeNotificationDispatcher notifications,
-        out FakeAnalyticsSink analytics)
+        out FakeAnalyticsSink analytics,
+        IServiceTransaction? transactions = null)
     {
         ratings = new FakeRatingRepository();
         notifications = new FakeNotificationDispatcher();
@@ -402,7 +424,8 @@ public class RatingServiceTests
         var managers = new FakeVenueManagerRepository();
         managers.AddManager(scenario.Venue.Id, scenario.Manager);
         return new RatingService(
-            ratings, bookings, managers, new FakeGeofencePolicy(), notifications, analytics, new FixedTimeProvider(FixedNow));
+            ratings, bookings, managers, new FakeGeofencePolicy(), notifications, analytics, new FixedTimeProvider(FixedNow),
+            transactions ?? new PassThroughServiceTransaction());
     }
 
     private sealed record Scenario(Venue Venue, Room Room, User Organizer, User Manager, Booking Booking);
@@ -410,6 +433,39 @@ public class RatingServiceTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class DeferredServiceTransaction : IServiceTransaction
+    {
+        private readonly List<Func<Task>> _afterCommit = [];
+
+        public int RunCount { get; private set; }
+
+        public async Task<T> RunAsync<T>(Func<Task<T>> operation, CancellationToken ct = default)
+        {
+            RunCount++;
+            return await operation();
+        }
+
+        public async Task RunAsync(Func<Task> operation, CancellationToken ct = default)
+        {
+            RunCount++;
+            await operation();
+        }
+
+        public Task AfterCommitAsync(Func<Task> action)
+        {
+            _afterCommit.Add(action);
+            return Task.CompletedTask;
+        }
+
+        public async Task RunAfterCommitAsync()
+        {
+            foreach (var action in _afterCommit)
+            {
+                await action();
+            }
+        }
     }
 
     private sealed class FakeRatingRepository : IRatingRepository
@@ -422,15 +478,25 @@ public class RatingServiceTests
             IReadOnlyCollection<Guid> bookingIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Rating>>(Ratings.Where(r => bookingIds.Contains(r.BookingId)).ToList());
 
-        public Task<IReadOnlyList<Rating>> GetVisibleForVenuesAsync(
-            IReadOnlyCollection<Guid> venueIds, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<Rating>>(
-                Ratings.Where(r => r.HiddenAtUtc is null && venueIds.Contains(r.VenueId)).ToList());
+        public Task<IReadOnlyDictionary<Guid, RatingAggregate>> GetVenueSummaryAggregatesAsync(
+            IReadOnlyCollection<Guid> venueIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, RatingAggregate>>(
+                Ratings
+                    .Where(r => venueIds.Contains(r.VenueId) && r.RateeType == RatingRateeType.Venue && IsRevealed(r, nowUtc))
+                    .GroupBy(r => r.VenueId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => new RatingAggregate(group.Average(r => r.Stars), group.Count())));
 
-        public Task<IReadOnlyList<Rating>> GetVisibleForOrganizersAsync(
-            IReadOnlyCollection<Guid> organizerIds, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<Rating>>(
-                Ratings.Where(r => r.HiddenAtUtc is null && organizerIds.Contains(r.OrganizerId)).ToList());
+        public Task<IReadOnlyDictionary<Guid, RatingAggregate>> GetOrganizerSummaryAggregatesAsync(
+            IReadOnlyCollection<Guid> organizerIds, DateTimeOffset nowUtc, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, RatingAggregate>>(
+                Ratings
+                    .Where(r => organizerIds.Contains(r.OrganizerId) && r.RateeType == RatingRateeType.Organizer && IsRevealed(r, nowUtc))
+                    .GroupBy(r => r.OrganizerId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => new RatingAggregate(group.Average(r => r.Stars), group.Count())));
 
         public Task<IReadOnlyDictionary<Guid, OrganizerReputationInputs>> GetOrganizerReputationInputsAsync(
             IReadOnlyCollection<Guid> organizerIds, DateTimeOffset noShowSinceUtc, CancellationToken ct = default) =>
@@ -441,16 +507,32 @@ public class RatingServiceTests
                         NoShowCounts.GetValueOrDefault(id),
                         CompletedCounts.GetValueOrDefault(id))));
 
-        public Task<IReadOnlyList<Rating>> GetVisibleCommentedForVenueAsync(
-            Guid venueId, CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<Rating>>(
-                Ratings
-                    .Where(r =>
-                        r.VenueId == venueId
-                        && r.RateeType == RatingRateeType.Venue
-                        && r.HiddenAtUtc is null
-                        && !string.IsNullOrEmpty(r.Comment))
-                    .ToList());
+        public Task<PublicVenueReviewPage> GetPublicVenueReviewsAsync(
+            Guid venueId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken ct = default)
+        {
+            var reviews = Ratings
+                .Where(r =>
+                    r.VenueId == venueId
+                    && r.RateeType == RatingRateeType.Venue
+                    && !string.IsNullOrEmpty(r.Comment)
+                    && IsRevealed(r, nowUtc))
+                .OrderByDescending(r => r.CreatedAtUtc)
+                .ThenBy(r => r.Id)
+                .ToList();
+            var offset = ((long)page - 1) * pageSize;
+            var items = offset >= reviews.Count
+                ? []
+                : reviews
+                    .Skip((int)offset)
+                    .Take(pageSize)
+                    .Select(r => new PublicVenueReview(
+                        r.Stars,
+                        r.Comment,
+                        string.IsNullOrWhiteSpace(r.Rater?.DisplayName) ? "Steeple user" : r.Rater.DisplayName,
+                        r.CreatedAtUtc))
+                    .ToList();
+            return Task.FromResult(new PublicVenueReviewPage(items, reviews.Count));
+        }
 
         public Task<bool> VenueHasPublishedRoomInAreaAsync(
             Guid venueId, BoundingBox beachhead, CancellationToken ct = default) =>
@@ -465,6 +547,31 @@ public class RatingServiceTests
 
             Ratings.Add(rating);
             return Task.FromResult(true);
+        }
+
+        private bool IsRevealed(Rating rating, DateTimeOffset nowUtc)
+        {
+            if (rating.HiddenAtUtc is not null || rating.Booking is null)
+            {
+                return false;
+            }
+
+            if (Ratings.Any(other =>
+                    other.BookingId == rating.BookingId
+                    && other.RateeType != rating.RateeType
+                    && other.HiddenAtUtc is null))
+            {
+                return true;
+            }
+
+            var booking = rating.Booking;
+            var closesAtUtc = booking.Status == BookingStatus.Cancelled
+                ? booking.CancelledAtUtc?.AddDays(14)
+                : booking.Occurrences
+                    .Where(occurrence => occurrence.Status != OccurrenceStatus.Cancelled)
+                    .Select(occurrence => (DateTimeOffset?)occurrence.EndUtc)
+                    .Max()?.AddDays(14);
+            return closesAtUtc is { } closesAt && nowUtc > closesAt;
         }
     }
 

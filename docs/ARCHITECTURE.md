@@ -241,7 +241,9 @@ aggregates, and organizer summaries only once both directions exist or the windo
 Optional comments (≤1000 chars) are immutable with the rating; public venue review pages show
 revealed, non-hidden venue-directed comments newest-first. Admin can hide/unhide rating rows via
 `HiddenAtUtc`; hidden rows drop out of aggregates and public/booking displays.
-Web room sheets paginate the public comments beneath house rules, without fallback reviews.
+Summary aggregates and public review reveal/count/order/page filtering execute in SQL, and review
+rows project only public fields; timestamps tie-break by rating id. Web room sheets paginate the
+public comments beneath house rules, without fallback reviews.
 Guest and host booking letters also expose confirmed no-show marking for past `Occurred`
 occurrences, retaining the server-returned marker identity in the in-memory mirror.
 

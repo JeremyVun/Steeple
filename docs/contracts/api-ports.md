@@ -38,7 +38,7 @@ project-wide global usings — `Namespace = Project.Folder`, no per-file usings.
 | Identity | SSO verification, own token issue/rotation, `/me`, agreements, deletion, devices (`Controllers/Identity/`) | `IIdentityService`, `IIdentityRepository`, `IIdTokenVerifier` (×2, +dev), `IAccessTokenIssuer`, `ITurnstileVerifier` |
 | Applications | apply → message → counter-offer → decide state machine; venue-manager authz reads (`Controllers/Applications/`) | `ApplicationService` orchestrates `ApplicationTransitionRules`, `ApplicationSchedulePolicy`, `ApplicationExpiryPolicy`, `ApplicationNotifications`, and `ApplicationPresentation`; ports: `IApplicationService`, `IApplicationRepository`, `IVenueManagerRepository` |
 | Bookings | confirmation transaction (instant submit/manual approval/counter acceptance), occurrences, cancel, no-show, lazy sweeps (`Controllers/Bookings/`) | `IBookingService`, `IBookingRepository`, `ScheduleMaterializer` (pure) |
-| Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` |
+| Ratings | double-blind ratings + public review reads (`Controllers/Ratings/`) | `IRatingService`, `IRatingRepository` (SQL-side reveal predicates, grouped summary aggregates, and bounded review projections) |
 | Payments | method-on-file, per-occurrence charging + failure ladder, refunds, payout onboarding, the `PaymentSweeper` worker (`Controllers/Payments/` — `contracts/payments.md`) | `IPaymentService`, `IPaymentRepository`, `IPaymentGateway`, `IHostPaymentOnboardingService`, `IConnectOnboardingGateway`, `ChargePlanner` (pure) |
 | Notifications | inbox rows (= truth), cursor paging, transactional email/push outbox + delivery worker (`Controllers/Notifications/`) | `INotificationService`, `INotificationRepository`, `INotificationDispatcher`, `NotificationOutboxWorker`, `INotificationStream`, `IEmailGateway`, `IPushGateway`, `IDeviceRegistry` |
 | Reminders | the T−7d / T−1d upcoming-booking sweep + its sent-ledger (no controller; its worker is enabled by `ReminderOptions.Enabled`) | `IBookingReminderService`, `IBookingReminderRepository` |
@@ -70,7 +70,7 @@ publish gate and Listings' public `openHours` both go through the port).
 | `IManageRepository` | `EfManageRepository` (venue/room CRUD, venue-manager-scoped) |
 | `IAvailabilityRepository` | `EfAvailabilityRepository` |
 | `IBookingRepository` | `EfBookingRepository` (same-room creates queue on a transaction-scoped room-row lock before the GiST exclusion check; atomic save translates SQLSTATE 23P01) |
-| `IRatingRepository` | `EfRatingRepository` |
+| `IRatingRepository` | `EfRatingRepository` (shared SQL reveal predicate: visible opposite direction or strict post-window expiry; grouped summaries and counted, ordered review pages project no booking graph) |
 | `IPaymentGateway` | `MockPaymentGateway` (instant success; card ending 0002 declines) — real guest charging remains deferred |
 | `IPaymentRepository` | `EfPaymentRepository` (claim-first charge rows under the partial unique index; sweep advisory lock) |
 | `INotificationRepository` | `EfNotificationRepository` (atomic inbox/outbox insert, lease-based bounded outbox claims with `SKIP LOCKED`, delivery/failure stamps, cursor paging, caller-scoped mark-read) |

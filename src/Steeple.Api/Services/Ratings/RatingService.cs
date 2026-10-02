@@ -21,6 +21,7 @@ public sealed class RatingService : IRatingService
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly IServiceTransaction _transactions;
 
     /// <summary>Creates the service from its ports.</summary>
     public RatingService(
@@ -30,7 +31,8 @@ public sealed class RatingService : IRatingService
         IGeofencePolicy geofence,
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
-        TimeProvider clock)
+        TimeProvider clock,
+        IServiceTransaction transactions)
     {
         _ratings = ratings;
         _bookings = bookings;
@@ -39,6 +41,7 @@ public sealed class RatingService : IRatingService
         _notifications = notifications;
         _analytics = analytics;
         _clock = clock;
+        _transactions = transactions;
     }
 
     /// <inheritdoc />
@@ -58,76 +61,78 @@ public sealed class RatingService : IRatingService
                 BookingErrorCodes.InvalidRating, "Comments must be 1000 characters or fewer.");
         }
 
-        var booking = await _bookings.GetAsync(bookingId, ct).ConfigureAwait(false);
-        if (booking?.Room?.Venue is null)
+        return await _transactions.RunAsync(async () =>
         {
-            return BookingResult<RatingSubmissionResult>.Fail(BookingErrorCodes.NotFound, "Booking not found.");
-        }
-
-        var callerRates = await InferRateeTypeAsync(booking, callerId, ct).ConfigureAwait(false);
-        if (callerRates is null)
-        {
-            return BookingResult<RatingSubmissionResult>.Fail(BookingErrorCodes.NotFound, "Booking not found.");
-        }
-
-        var now = _clock.GetUtcNow();
-        if (SweepForRatingEligibility(booking, now))
-        {
-            await _bookings.SaveAsync(ct).ConfigureAwait(false);
-        }
-
-        var window = GetWindow(booking);
-        if (!window.HasPastOccurrence)
-        {
-            return BookingResult<RatingSubmissionResult>.Fail(
-                BookingErrorCodes.InvalidState, "This booking cannot be rated until at least one occurrence has happened.");
-        }
-
-        if (window.ClosesAtUtc is { } closesAt && now > closesAt)
-        {
-            return BookingResult<RatingSubmissionResult>.Fail(
-                BookingErrorCodes.InvalidState, "The rating window for this booking has closed.");
-        }
-
-        var existing = await _ratings.GetForBookingsAsync([booking.Id], ct).ConfigureAwait(false);
-        if (existing.Any(r => r.RateeType == callerRates.Value))
-        {
-            return BookingResult<RatingSubmissionResult>.Fail(
-                BookingErrorCodes.InvalidState, "This side has already rated this booking.");
-        }
-
-        var rating = new Rating
-        {
-            Id = Guid.NewGuid(),
-            BookingId = booking.Id,
-            RaterId = callerId,
-            RateeType = callerRates.Value,
-            Stars = (short)request.Stars,
-            Comment = comment,
-            CreatedAtUtc = now,
-            VenueId = booking.Room.VenueId,
-            OrganizerId = booking.OrganizerId,
-        };
-
-        if (!await _ratings.TryAddAsync(rating, ct).ConfigureAwait(false))
-        {
-            return BookingResult<RatingSubmissionResult>.Fail(
-                BookingErrorCodes.InvalidState, "This side has already rated this booking.");
-        }
-
-        await NotifyOtherSideAsync(booking, callerRates.Value, ct).ConfigureAwait(false);
-
-        await TrackSafelyAsync(
-            "rating_submitted",
-            new
+            var booking = await _bookings.GetAsync(bookingId, ct).ConfigureAwait(false);
+            if (booking?.Room?.Venue is null)
             {
-                rateeType = callerRates.Value == RatingRateeType.Venue ? "venue" : "organizer",
-                stars = request.Stars,
-                hasComment = comment is not null,
-            },
-            ct).ConfigureAwait(false);
+                return BookingResult<RatingSubmissionResult>.Fail(BookingErrorCodes.NotFound, "Booking not found.");
+            }
 
-        return BookingResult<RatingSubmissionResult>.Ok(new RatingSubmissionResult());
+            var callerRates = await InferRateeTypeAsync(booking, callerId, ct).ConfigureAwait(false);
+            if (callerRates is null)
+            {
+                return BookingResult<RatingSubmissionResult>.Fail(BookingErrorCodes.NotFound, "Booking not found.");
+            }
+
+            var now = _clock.GetUtcNow();
+            if (SweepForRatingEligibility(booking, now))
+            {
+                await _bookings.SaveAsync(ct).ConfigureAwait(false);
+            }
+
+            var window = GetWindow(booking);
+            if (!window.HasPastOccurrence)
+            {
+                return BookingResult<RatingSubmissionResult>.Fail(
+                    BookingErrorCodes.InvalidState, "This booking cannot be rated until at least one occurrence has happened.");
+            }
+
+            if (window.ClosesAtUtc is { } closesAt && now > closesAt)
+            {
+                return BookingResult<RatingSubmissionResult>.Fail(
+                    BookingErrorCodes.InvalidState, "The rating window for this booking has closed.");
+            }
+
+            var existing = await _ratings.GetForBookingsAsync([booking.Id], ct).ConfigureAwait(false);
+            if (existing.Any(r => r.RateeType == callerRates.Value))
+            {
+                return BookingResult<RatingSubmissionResult>.Fail(
+                    BookingErrorCodes.InvalidState, "This side has already rated this booking.");
+            }
+
+            var rating = new Rating
+            {
+                Id = Guid.NewGuid(),
+                BookingId = booking.Id,
+                RaterId = callerId,
+                RateeType = callerRates.Value,
+                Stars = (short)request.Stars,
+                Comment = comment,
+                CreatedAtUtc = now,
+                VenueId = booking.Room.VenueId,
+                OrganizerId = booking.OrganizerId,
+            };
+
+            if (!await _ratings.TryAddAsync(rating, ct).ConfigureAwait(false))
+            {
+                return BookingResult<RatingSubmissionResult>.Fail(
+                    BookingErrorCodes.InvalidState, "This side has already rated this booking.");
+            }
+
+            await NotifyOtherSideAsync(booking, callerRates.Value, ct).ConfigureAwait(false);
+            await _transactions.AfterCommitAsync(() => TrackSafelyAsync(
+                "rating_submitted",
+                new
+                {
+                    rateeType = callerRates.Value == RatingRateeType.Venue ? "venue" : "organizer",
+                    stars = request.Stars,
+                    hasComment = comment is not null,
+                },
+                CancellationToken.None)).ConfigureAwait(false);
+
+            return BookingResult<RatingSubmissionResult>.Ok(new RatingSubmissionResult());
+        }, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -192,15 +197,14 @@ public sealed class RatingService : IRatingService
             return new Dictionary<Guid, RatingSummaryDto>();
         }
 
-        var rows = await _ratings.GetVisibleForVenuesAsync(venueIds, ct).ConfigureAwait(false);
-        return rows
-            .Where(r => r.RateeType == RatingRateeType.Venue && IsRevealed(r, nowUtc))
-            .GroupBy(r => r.VenueId)
-            .ToDictionary(
-                g => g.Key,
-                g => new RatingSummaryDto(
-                    AverageStars: Math.Round(g.Average(r => r.Stars), 2),
-                    Count: g.Count()));
+        var aggregates = await _ratings
+            .GetVenueSummaryAggregatesAsync(venueIds, nowUtc, ct)
+            .ConfigureAwait(false);
+        return aggregates.ToDictionary(
+            aggregate => aggregate.Key,
+            aggregate => new RatingSummaryDto(
+                AverageStars: Math.Round(aggregate.Value.AverageStars, 2),
+                Count: aggregate.Value.Count));
     }
 
     /// <inheritdoc />
@@ -212,13 +216,12 @@ public sealed class RatingService : IRatingService
             return new Dictionary<Guid, OrganizerRatingSummaryDto>();
         }
 
-        var rows = await _ratings.GetVisibleForOrganizersAsync(organizerIds, ct).ConfigureAwait(false);
-        var ratingAggregates = rows
-            .Where(r => r.RateeType == RatingRateeType.Organizer && IsRevealed(r, nowUtc))
-            .GroupBy(r => r.OrganizerId)
-            .ToDictionary(
-                g => g.Key,
-                g => (Average: Math.Round(g.Average(r => r.Stars), 2), Count: g.Count()));
+        var aggregates = await _ratings
+            .GetOrganizerSummaryAggregatesAsync(organizerIds, nowUtc, ct)
+            .ConfigureAwait(false);
+        var ratingAggregates = aggregates.ToDictionary(
+            aggregate => aggregate.Key,
+            aggregate => (Average: Math.Round(aggregate.Value.AverageStars, 2), Count: aggregate.Value.Count));
 
         if (ratingAggregates.Count == 0)
         {
@@ -256,29 +259,18 @@ public sealed class RatingService : IRatingService
             return new VenueReviewPageDto([], 0, safePage, safePageSize);
         }
 
-        var rows = await _ratings.GetVisibleCommentedForVenueAsync(venueId, ct).ConfigureAwait(false);
-        var revealed = rows
-            .Where(r => IsRevealed(r, nowUtc))
-            .OrderByDescending(r => r.CreatedAtUtc)
-            .ToList();
-
-        var offset = ((long)safePage - 1) * safePageSize;
-        if (offset >= revealed.Count)
-        {
-            return new VenueReviewPageDto([], revealed.Count, safePage, safePageSize);
-        }
-
-        var items = revealed
-            .Skip((int)offset)
-            .Take(safePageSize)
+        var reviews = await _ratings
+            .GetPublicVenueReviewsAsync(venueId, safePage, safePageSize, nowUtc, ct)
+            .ConfigureAwait(false);
+        var items = reviews.Items
             .Select(r => new VenueReviewDto(
                 Stars: r.Stars,
                 Comment: r.Comment,
-                RaterName: PublicRaterName(r.Rater),
+                RaterName: r.RaterName,
                 CreatedAtUtc: r.CreatedAtUtc))
             .ToList();
 
-        return new VenueReviewPageDto(items, revealed.Count, safePage, safePageSize);
+        return new VenueReviewPageDto(items, reviews.TotalCount, safePage, safePageSize);
     }
 
     private async Task<RatingRateeType?> InferRateeTypeAsync(Booking booking, Guid callerId, CancellationToken ct)
@@ -298,9 +290,6 @@ public sealed class RatingService : IRatingService
         var trimmed = comment?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
-
-    private static string PublicRaterName(User? user) =>
-        string.IsNullOrWhiteSpace(user?.DisplayName) ? "Steeple user" : user.DisplayName;
 
     private async Task NotifyOtherSideAsync(Booking booking, RatingRateeType rateeType, CancellationToken ct)
     {
