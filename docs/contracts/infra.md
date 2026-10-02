@@ -124,9 +124,9 @@ Stripe Dashboard requirements, and AU platform limitation: [Stripe runbook](../r
 ## Release readiness (2026-09-20)
 
 `GET /health` is process liveness. `GET /health/ready` checks database access and the booking
-schema (including migration 025), with a three-second database deadline. It returns 503 on
+schema (including migrations 025 and 026), with a three-second database deadline. It returns 503 on
 failure without exposing connection details. Local and deployment API health checks use it.
 The API still never migrates. Deploy schema, API and web as a coordinated release; migration
 024 requires its matching API because older code inferred collection mode from price presence.
-The infra migration bundle includes 022–024 and omits only local fixture migrations 002/012/018.
+The infra migration bundle includes 022–026 and omits only local fixture migrations 002/012/018.
 `python3 tools/check-deploy-migrations.py` verifies SQL and changeset parity without reading env files; historical comment differences and the intentionally omitted 010 seed repricing are preserved.

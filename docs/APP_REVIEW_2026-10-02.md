@@ -1,6 +1,6 @@
 # Steeple app review 2 October 2026
 
-Review and remediation completed locally. All 17 original findings and the confirmed follow-up defects are fixed, with no remaining actionable findings in the exercised scope. The findings below preserve the original evidence from `ef2650993745fad74bed092c3f8995797c3c65c6`; the final verification section records the fixes and test results. This is a finite review, not proof that the app has no possible bugs. No deployment occurred.
+Review and remediation completed. All 17 original findings and the confirmed follow-up defects are fixed, with no remaining actionable findings in the exercised scope. The findings below preserve the original evidence from `ef2650993745fad74bed092c3f8995797c3c65c6`; the final verification section records the fixes and test results. This is a finite review, not proof that the app has no possible bugs. Jeremy subsequently requested deployment; the production follow-up is recorded below.
 
 ## Jeremy's brief verbatim
 
@@ -352,3 +352,21 @@ These are build sizes, not measured real-device loading or frame times. The fina
 fix passed 36 real-cookie checks, 17 recovery checks, lint/typecheck and production build.
 All task-owned servers, browsers, containers and the Astra simulator have stopped. Review
 captures remain available at the evidence paths; no production settings or data were changed.
+
+## Deployment follow-up — 2 October 2026
+
+At Jeremy's request, app commit `5fe6524` and infra commit `1992f86` were deployed to
+`syd1` at approximately 21:44 AEST. Both main checkouts were clean and pushed before
+deployment. API, web and admin images carry the `5fe6524` tag and source revision label.
+Deployctl job `b35661f6374fe27871783e883d14178b` succeeded with no warnings: the old
+Steeple services stopped before migration, the migration exited successfully, and all
+three services passed their health gates. Shared Postgres and its volumes were retained.
+
+Public HTTPS checks passed for the home page, browse route, listing search/detail, listing
+document, flags and sitemap. The served entry asset matched the built release. A real
+browser journey opened discovery, a listing and the booking form; selecting 9 October
+10 am–12 pm returned available and the expected USD 2 estimate at USD 1/hour. Saved-terms
+and direct-payment guidance appeared, Google and Apple sign-in controls were present,
+and the browser reported no warnings or errors. No booking was submitted and no provider
+sign-in or email delivery was exercised. Payment collection, onboarding and native
+apply/manage flags remain disabled. Remaining pilot gates are in the release runbook.

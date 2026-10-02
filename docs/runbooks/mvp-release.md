@@ -1,6 +1,7 @@
 # First MVP release
 
-Status: local hardening and app review remediation completed; not deployed. Updated 2026-10-02.
+Status: hardening and app review remediation deployed to the web/API/admin stack on
+2026-10-02; remaining pilot gates are below.
 
 The first release can be a small, supported web pilot with payment arranged directly with
 venues. Live Stripe collection and native app-store release are separate gates.
@@ -51,9 +52,11 @@ record below is retained for the provider/backup work that was outside this app 
 
 ## Remaining gates for a web pilot
 
-1. **Deployment.** Build matching API/web/admin images from the reviewed release and deploy
-   them with the corresponding `projects` infra changes. Both `main` checkouts must be clean
-   before deployment. No deployment was attempted during this hardening work.
+1. **Deployment — complete.** App `5fe6524` and infra `1992f86` deployed to `syd1` on
+   2 October 2026. Both `main` checkouts were clean and pushed. Migration and service health
+   gates passed; public HTTPS and browse-to-booking-form checks passed. Deployctl job:
+   `b35661f6374fe27871783e883d14178b`. This did not exercise real sign-in, booking submission
+   or email delivery; those remain in gate 4.
 2. **Real supply.** Select and verify the first participating venues, obtain accurate prices,
    photos, hours and rules, and remove/unpublish sample inventory from the public database.
    Agree who responds to requests and handles cancellations or disputes.
