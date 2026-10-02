@@ -8,13 +8,14 @@ import { effectiveRoom, roomEdits } from '../data/store.js';
 
 // Also printed verbatim in index.html's pre-rendered splash — change both.
 export const ARRIVAL = {
-  eyebrow: 'Community space in the Washington, DC area',
+  eyebrow: 'Washington, DC area',
   wordmark: 'Steeple',
-  line: 'Affordable halls, studios and gyms to rent by the hour from neighborhood venues — for playgroups, classes, rehearsals and clubs.',
+  title: 'Space to rent',
+  titleEnd: 'by the hour.',
+  line: 'For playgroups, classes, rehearsals and clubs.',
   cta: 'Find a space',
   ctaHost: 'Host a space',
-  hint: 'Or scroll to browse the spaces nearby.',
-  scroll: 'Scroll down to the spaces nearby',
+  scroll: 'Browse spaces',
 };
 
 /** Where the breadcrumb, the back links and the announcer all come home to. */

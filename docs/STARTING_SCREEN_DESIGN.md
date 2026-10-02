@@ -77,6 +77,25 @@ decision; Astra owns arrival markup/copy/styles, any necessary matching scenery 
 visual regression and owning design/web docs. The lead reviews nonvisual boot/route
 behavior and runs applicable repository gates, then integrates the verified result.
 
+### B implementation — 2 October 2026
+
+Astra is implementing the selected direction in
+`/private/tmp/steeple-starting-screen-build-web-dvrhhj/source`.
+The full-window camera and all seven matched poster variants remain unchanged.
+The chosen phone refinement is Opus's paper-coverage option: the reading area and
+primary action stand on solid paper, fading into the village below the control.
+Desktop uses a clean paper reading column and a softer transition beyond it.
+
+The heading is “Space to rent by the hour.” and the supporting copy is “For
+playgroups, classes, rehearsals and clubs.” This names the service and intended
+uses without promising currently published gyms, studios or low prices. The location
+is shortened to “Washington, DC area”. Host stays in the header and the down action
+keeps its native browse destination, now with a 48px target and “Browse spaces” label.
+
+Initial poster checks pass at 1440×900, 390×844 and 320×740, DPR2. Visual iteration
+keeps “by the hour” together as a phrase. Enlarged-text verification and actual input
+checks are in progress; the implementation is not yet integrated or deployed.
+
 ### Astra's findings and recommendation
 
 Astra recommends **A, Open page**. Its critique: the current landscape has character,

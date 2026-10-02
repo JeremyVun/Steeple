@@ -663,26 +663,30 @@ body {
 /* ── Arrival ────────────────────────────────────────────────────────────── */
 
 .arrival {
+  --arrival-gutter: clamp(2rem, 4.45vw, 4rem);
   position: absolute;
   inset: 0;
   z-index: 2;
-  display: grid;
-  place-items: center;
-  text-align: center;
+  overflow-y: auto;
+  overflow-x: hidden;
   opacity: 0;
   transition: opacity 320ms var(--ease), visibility 0s linear 330ms;
 }
 
+.arrival.is-scrollable {
+  pointer-events: auto;
+  overscroll-behavior: contain;
+}
+
 .arrival::before {
   content: '';
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: radial-gradient(
-    62% 52% at 50% 40%,
-    rgba(251, 247, 240, 0.88),
-    rgba(251, 247, 240, 0.6) 46%,
-    rgba(251, 247, 240, 0) 78%
-  );
+  background: linear-gradient(90deg,
+    var(--paper) 0% 31%,
+    color-mix(in srgb, var(--paper) 98%, transparent) 37%,
+    color-mix(in srgb, var(--paper) 75%, transparent) 45%,
+    transparent 66%);
 }
 
 .arrival.is-open {
@@ -691,10 +695,6 @@ body {
   transition-delay: 0s;
 }
 
-/* Once the roll is moving the title gives way by the roll's own measure, frame
-   by frame — a transition of its own would only smear a scrub. The words and
-   the paper under them leave separately: type never sits half-transparent over
-   a village on the move. */
 .arrival.is-going {
   transition: none;
 }
@@ -709,128 +709,221 @@ body {
 
 .arrival__sheet {
   position: relative;
-  max-width: 40rem;
-  padding: 0 24px;
-  /* The fallback matters: this sheet is on screen before any script has run,
-     so --roll may not have been published yet, and an unset var would throw the
-     transform away — a 5vh jump the moment the interface arrives. */
-  transform: translateY(calc(-5vh - var(--roll, 0) * 7vh));
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.arrival__eyebrow {
-  color: var(--ink-faint);
-}
-
-.arrival__mark {
-  margin: 22px 0 16px;
-  color: var(--terracotta);
-  line-height: 0;
-}
-
-.arrival__wordmark {
-  margin: 0;
-  font-family: var(--serif);
-  font-size: clamp(3.6rem, 7.4vw, 5.6rem);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: -0.018em;
-  color: var(--ink);
-}
-
-.arrival__line {
-  margin: 20px auto 0;
-  max-width: 30rem;
-  font-size: 16.5px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-  text-wrap: balance;
-}
-
-/* Two ways in, and they are not equals: one is what almost everyone came for,
-   the other is the door for a church with a hall standing empty. */
-.arrival__actions {
+.arrival__header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 2rem var(--arrival-gutter);
+}
+
+.arrival__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.arrival__brand svg {
+  flex: none;
+  width: 1.5625rem;
+  height: 1.5625rem;
+  color: var(--terracotta);
+}
+
+.arrival__brand span {
+  font-family: var(--serif);
+  font-size: 1.9375rem;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.arrival__copy {
+  position: relative;
+  padding: clamp(2rem, 8vh, 5rem) var(--arrival-gutter) 2rem;
+  width: min(100%, 46rem);
+}
+
+.arrival__eyebrow {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+}
+
+.arrival__title {
+  margin: 1.625rem 0 0;
+  max-width: 7.8em;
+  font-family: var(--serif);
+  font-size: clamp(3.25rem, 5.4vw, 5rem);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+.arrival__title span {
+  display: block;
+}
+
+.arrival__line {
+  margin: 1.5625rem 0 0;
+  max-width: 19rem;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.arrival .pill {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin-top: 30px;
+  min-height: 48px;
+  padding: 0.8125rem 1.375rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
 }
 
 .arrival__cta {
-  pointer-events: auto;
-  box-shadow: var(--shadow-chip);
+  gap: 1.375rem;
+  margin-top: 1.875rem;
+  box-shadow: none;
 }
 
-.arrival__host,
-.arrival__host:hover {
-  padding: 11px 20px;
-  font-size: 14px;
-  background: color-mix(in srgb, var(--paper) 62%, transparent);
-  border-color: color-mix(in srgb, var(--ink) 20%, transparent);
+.arrival__arrow::before {
+  content: '→';
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.arrival__host {
+  background: var(--paper);
+  border-color: var(--line-strong);
   color: var(--ink-soft);
 }
 
 .arrival__host:hover {
+  background: var(--paper);
   border-color: var(--terracotta);
   color: var(--terracotta-deep);
 }
 
-.arrival__hint {
-  margin: 14px auto 0;
-  max-width: 23rem;
-  font-size: 12.5px;
-  line-height: 1.55;
-  color: var(--ink-soft);
-  text-wrap: balance;
+.arrival__footer {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  padding: 2rem var(--arrival-gutter);
 }
 
-/* The invitation to scroll: a thread off the foot of the page and the smallest
-   chevron, breathing about as fast as the village does. */
 .arrival__scroll {
   display: inline-flex;
-  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  margin-top: 22px;
-  padding: 6px 14px 4px;
-  border: 0;
+  justify-content: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
-  background: none;
-  cursor: pointer;
-  animation: arrival-breathe 4.6s var(--ease) infinite;
+  background: var(--paper);
+  color: var(--ink-soft);
+  text-decoration: none;
 }
 
-@keyframes arrival-breathe {
-  0%,
-  100% {
-    transform: translateY(0);
+.arrival__down::before {
+  content: '↓';
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.arrival a:focus-visible {
+  outline: 3px solid var(--sage-deep);
+  outline-offset: 4px;
+}
+
+@media (max-width: 700px) {
+  .arrival {
+    --arrival-gutter: 1.5rem;
   }
-  50% {
-    transform: translateY(5px);
+
+  .arrival::before {
+    background: none;
+  }
+
+  .arrival__header {
+    padding: 1.5rem var(--arrival-gutter);
+    background: var(--paper);
+  }
+
+  .arrival__brand span {
+    font-size: 1.75rem;
+  }
+
+  .arrival .arrival__host {
+    min-height: var(--touch-target);
+    padding: 0.625rem 1rem;
+    font-size: 0.75rem;
+  }
+
+  .arrival__copy {
+    width: 100%;
+    padding: 2rem var(--arrival-gutter) 1.5rem;
+    background: var(--paper);
+  }
+
+  .arrival__copy::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 11rem;
+    background: linear-gradient(var(--paper), transparent);
+    pointer-events: none;
+  }
+
+  .arrival__eyebrow {
+    font-size: 0.625rem;
+  }
+
+  .arrival__title {
+    margin-top: 1.375rem;
+    font-size: 3.25rem;
+  }
+
+  .arrival__line {
+    margin-top: 1.25rem;
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+
+  .arrival .arrival__cta {
+    margin-top: 1.5rem;
+    padding: 0.8125rem 1.125rem;
+    gap: 1rem;
+  }
+
+  .arrival__footer {
+    justify-content: flex-end;
+    min-height: 10rem;
+    padding: 1.5rem var(--arrival-gutter);
   }
 }
 
-.arrival__thread {
-  width: 1px;
-  height: 26px;
-  background: linear-gradient(
-    color-mix(in srgb, var(--ink) 0%, transparent),
-    color-mix(in srgb, var(--ink) 34%, transparent)
-  );
-}
+@media (max-width: 350px) {
+  .arrival {
+    --arrival-gutter: 1.25rem;
+  }
 
-.arrival__chevron {
-  width: 8px;
-  height: 8px;
-  border-right: 1.4px solid var(--ink-faint);
-  border-bottom: 1.4px solid var(--ink-faint);
-  transform: rotate(45deg);
-  transition: border-color 160ms var(--ease);
-}
-
-.arrival__scroll:hover .arrival__chevron {
-  border-color: var(--terracotta);
+  .arrival__title {
+    font-size: 2.875rem;
+  }
 }
 
 /* A press that landed before the product did. It is not an error and not a

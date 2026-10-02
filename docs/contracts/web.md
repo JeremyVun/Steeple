@@ -59,6 +59,14 @@ map, rows and property sheets own every selection. Canvas click, wheel, touch
 scrub and arrival keys still start the roll, and Escape keeps its product
 navigation meaning. The renderer remains stopped for the whole product act.
 
+The starting screen uses the approved village opening (2026-10-02): header host
+entry, a left service heading and primary guest entry, plus the down link. Markup,
+fallback builder and `ARRIVAL` copy stay equivalent. At enlarged text sizes a
+`ResizeObserver` marks an overflowing arrival as a native scroll surface; its wheel
+events stay on that surface so the flat gesture listener cannot unexpectedly enter
+browse. Ordinary frames leave canvas gestures intact. No camera/poster, boot ownership,
+intent timing or analytics seam changes accompany this composition.
+
 - `src/core/intent.js` is the critical controller: **the entry's first import, importing only
   `core/router.js`, which imports nothing** — no bus, no roll, no session/store, no Leaflet,
   no panels, no Three, no world. It records `{destination, requestedAt}`, sets

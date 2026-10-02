@@ -49,6 +49,13 @@ wordmark still rolls up to the title page, which without a village is paper.
 
 ## How it boots (2026-08-07)
 
+The starting screen now uses the approved village opening: a small Steeple header
+with Host a space, the heading “Space to rent by the hour.”, one supporting paragraph,
+and Find a space. The full-window miniature and all matched poster assets are unchanged.
+Desktop copy sits on a paper fade; phone paper continues below the primary action.
+At enlarged text sizes the arrival scrolls natively instead of clipping its controls.
+The design decision and evidence live in `../../docs/STARTING_SCREEN_DESIGN.md`.
+
 The first paint owes nothing to JavaScript. The title page's markup is printed
 in `index.html` itself — `ui/arrival.js` adopts that DOM rather than rebuilding
 it, and `ui/index.js` clears everything in `#ui` *except* it — and under the

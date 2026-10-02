@@ -218,6 +218,24 @@ Pill-shaped, min touch target 44×44 (48 standard height), `button` type style.
 One primary button per screen. Loading state = inline spinner replacing the label, button
 stays same width (no layout jump).
 
+#### Web starting screen (2026-10-02)
+
+The approved village opening keeps the full-window miniature and its matched poster
+family. A left-aligned service heading uses the existing serif; the smaller Steeple
+mark and host entry share the header. The location is “Washington, DC area”. The
+heading says “Space to rent by the hour.” rather than advertising unverified inventory
+categories or prices. One sans paragraph names intended uses, followed by Find a space.
+
+Desktop reading text stands on paper, with the fade beyond its reading column. On
+phones, paper extends below the primary action and fades into the full-window scene;
+the action never sits over a building. The three entry targets are at least 44×44px,
+normally 48px tall. The down arrow has the accessible name “Browse spaces”. No scroll
+sentence is needed. The current web binding remains warm light under dark preference.
+
+Arrival typography and spacing scale in rem. When enlarged text exceeds the viewport,
+the arrival becomes a native scroll surface rather than clipping its controls. Ordinary
+frames retain the canvas gestures. Reduced motion does not change text placement.
+
 ### 8.2 Chips
 
 - **Filter chip (interactive):** pill, `surfaceRaised` bg + `borderStrong`; selected →

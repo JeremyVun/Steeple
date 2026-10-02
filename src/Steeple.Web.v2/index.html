@@ -176,39 +176,37 @@
            it is armed a press is answered without leaving the document (the
            same path, written by hand, query intact), and once the roll is live
            it is the cinematic instead (build_plan Phase 3.5 · SEO-D1). -->
-      <div id="arrival" class="arrival is-open">
+      <section id="arrival" class="arrival is-open" aria-labelledby="arrival-title">
         <div class="arrival__sheet">
-          <p class="eyebrow arrival__eyebrow">Community space in the Washington, DC area</p>
-          <div class="arrival__mark">
-            <svg viewBox="0 0 32 32" width="34" height="34" aria-hidden="true" focusable="false">
-              <path
-                d="M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z"
-                fill="currentColor"
-              />
-            </svg>
-          </div>
-          <h1 class="arrival__wordmark">Steeple</h1>
-          <p class="arrival__line">
-            Affordable halls, studios and gyms to rent by the hour from neighborhood venues —
-            for playgroups, classes, rehearsals and clubs.
-          </p>
-          <div class="arrival__actions">
-            <a class="pill pill--primary arrival__cta" href="browse" data-intent="village">Find a space</a>
+          <header class="arrival__header">
+            <div class="arrival__brand">
+              <svg viewBox="0 0 32 32" width="25" height="25" aria-hidden="true" focusable="false">
+                <path
+                  d="M16 2 21 14 25 14 25 17 23 17 23 30 19 30 19 24a3 3 0 0 0-6 0v6H9V17H7v-3h4Z"
+                  fill="currentColor"
+                />
+              </svg>
+              <span>Steeple</span>
+            </div>
             <a class="pill arrival__host" href="desk" data-intent="desk">Host a space</a>
+          </header>
+          <div class="arrival__copy">
+            <p class="eyebrow arrival__eyebrow">Washington, DC area</p>
+            <h1 id="arrival-title" class="arrival__title"><span>Space to rent</span> <span>by the hour.</span></h1>
+            <p class="arrival__line">For playgroups, classes, rehearsals and clubs.</p>
+            <a class="pill pill--primary arrival__cta" href="browse" data-intent="village">
+              Find a space<span class="arrival__arrow" aria-hidden="true"></span>
+            </a>
           </div>
-          <p class="arrival__hint">Or scroll to browse the spaces nearby.</p>
-          <a
-            class="arrival__scroll"
-            href="browse"
-            data-intent="village"
-            aria-label="Scroll down to the spaces nearby"
-          >
-            <span class="arrival__thread" aria-hidden="true"></span>
-            <span class="arrival__chevron" aria-hidden="true"></span>
-          </a>
+          <div class="arrival__footer">
+            <a class="arrival__scroll" href="browse" data-intent="village" aria-label="Browse spaces">
+              <span class="arrival__down" aria-hidden="true"></span>
+            </a>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
+    <noscript><style>.arrival { pointer-events: auto; }</style></noscript>
     <div id="a11y" class="visually-hidden" aria-live="polite"></div>
     <!-- One module entry. The arrival intent controller (src/core/intent.js) is
          the entry's first static import and imports nothing itself, so it is

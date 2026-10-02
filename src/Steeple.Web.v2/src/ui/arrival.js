@@ -1,17 +1,4 @@
-// The title page. Text sits directly on the sky over a soft paper wash, and
-// everything on it is one gesture: roll down into the product. The two calls to
-// action differ only in where they land — a guest looking for a hall, or a
-// church with one to share — so the second is set quietly beside the first.
-//
-// The markup itself is printed into index.html so it is on screen before any
-// script has arrived (the first paint must not wait on this module); this file
-// adopts that DOM and wires it. The build path below is the same markup for any
-// page that lacks it — keep the two, and ui/copy.js ARRIVAL, saying one thing.
-//
-// The presses themselves have been answered since before this module existed:
-// the controls are real links to their clean routes and core/intent.js has been
-// recording what was asked for. This file says only what a press *means* once
-// there is a roll to mean it with; main.js decides when that is (releaseArrival).
+// Adopt the first-frame markup; the fallback and ARRIVAL must say the same thing.
 
 import { bus, rollTo, setView, state } from '../core/bus.js';
 import { reportArrival, setArrivalHandler } from '../core/intent.js';
@@ -24,47 +11,42 @@ function roll(land = null) {
 }
 
 function build() {
-  return el('div', { id: 'arrival', class: 'arrival is-open' }, [
+  return el('section', { id: 'arrival', class: 'arrival is-open', 'aria-labelledby': 'arrival-title' }, [
     el('div', { class: 'arrival__sheet' }, [
-      el('p', { class: 'eyebrow arrival__eyebrow', text: ARRIVAL.eyebrow }),
-      el('div', { class: 'arrival__mark' }, steepleMark(34)),
-      el('h1', { class: 'arrival__wordmark', text: ARRIVAL.wordmark }),
-      el('p', { class: 'arrival__line', text: ARRIVAL.line }),
-      // Links, not buttons, and the same links index.html prints: a press must
-      // record its destination in the address bar even on a page where no
-      // handler has arrived (core/intent.js). Base-relative, like the printed
-      // ones — `browse`, not `/browse` — so a stripped prefix survives.
-      el('div', { class: 'arrival__actions' }, [
-        el(
-          'a',
-          { class: 'pill pill--primary arrival__cta', href: 'browse', 'data-intent': 'village' },
-          ARRIVAL.cta
-        ),
+      el('header', { class: 'arrival__header' }, [
+        el('div', { class: 'arrival__brand' }, [steepleMark(25), el('span', { text: ARRIVAL.wordmark })]),
         el('a', { class: 'pill arrival__host', href: 'desk', 'data-intent': 'desk' }, ARRIVAL.ctaHost),
       ]),
-      el('p', { class: 'arrival__hint', text: ARRIVAL.hint }),
-      // The invitation to scroll, drawn rather than written: a thread down off
-      // the page and the smallest chevron. It answers to a click for anyone who
-      // would rather ask than scroll.
-      el(
-        'a',
-        {
-          class: 'arrival__scroll',
-          href: 'browse',
-          'data-intent': 'village',
-          'aria-label': ARRIVAL.scroll,
-        },
-        [
-          el('span', { class: 'arrival__thread', 'aria-hidden': 'true' }),
-          el('span', { class: 'arrival__chevron', 'aria-hidden': 'true' }),
-        ]
-      ),
+      el('div', { class: 'arrival__copy' }, [
+        el('p', { class: 'eyebrow arrival__eyebrow', text: ARRIVAL.eyebrow }),
+        el('h1', { id: 'arrival-title', class: 'arrival__title' }, [
+          el('span', { text: ARRIVAL.title }), ' ', el('span', { text: ARRIVAL.titleEnd }),
+        ]),
+        el('p', { class: 'arrival__line', text: ARRIVAL.line }),
+        el('a', { class: 'pill pill--primary arrival__cta', href: 'browse', 'data-intent': 'village' }, [
+          ARRIVAL.cta,
+          el('span', { class: 'arrival__arrow', 'aria-hidden': 'true' }),
+        ]),
+      ]),
+      el('div', { class: 'arrival__footer' }, [
+        el('a', { class: 'arrival__scroll', href: 'browse', 'data-intent': 'village', 'aria-label': ARRIVAL.scroll },
+          el('span', { class: 'arrival__down', 'aria-hidden': 'true' })),
+      ]),
     ]),
   ]);
 }
 
 export function createArrival() {
   const element = document.getElementById('arrival') ?? build();
+  // Large text gets a native scroll surface; ordinary frames leave gestures to the canvas.
+  const fit = new ResizeObserver(() => {
+    element.classList.toggle('is-scrollable', element.scrollHeight > element.clientHeight + 1);
+  });
+  fit.observe(element);
+  fit.observe(element.querySelector('.arrival__sheet'));
+  element.addEventListener('wheel', (event) => {
+    if (element.classList.contains('is-scrollable')) event.stopPropagation();
+  }, { passive: true });
 
   // One handler for all three controls, held by core/intent.js and used only
   // once main.js has released the page to the roll. Handing it over rather than
