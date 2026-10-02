@@ -16,9 +16,9 @@ import { bus, setMode, setView, state } from '../../core/bus.js';
 import { refreshHosted, refreshMine } from '../../data/correspondence.js';
 import * as session from '../../data/session.js';
 import { getApplication } from '../../data/store.js';
-import { heldVenue } from '../../data/catalog.js';
+import { heldVenue, forgetVenues } from '../../data/catalog.js';
 import { el, replaceChildren } from '../dom.js';
-import { createComposer } from './composer.js';
+import { createComposer, prefillRequest } from './composer.js';
 import { createJournal } from './journal.js';
 import { createLetterView } from './letter.js';
 import { plural } from './copy.js';
@@ -82,6 +82,11 @@ export function createGuestFlows({
     // A failed charge on a booked date is the one thing on this page that is
     // fixed somewhere else. The panel is the shelf's, so it is handed in.
     onFixPayment,
+    onReviewRequest: (app) => {
+      prefillRequest(app);
+      forgetVenues();
+      setView('apply', { venueId: app.venueId, roomId: app.roomId });
+    },
   });
 
   const surfaces = [

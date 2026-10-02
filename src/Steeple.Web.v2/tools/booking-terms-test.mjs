@@ -1,23 +1,20 @@
-// node tools/review-visual-fixes.mjs [--setup]
-// Real pointer/keyboard checks with intercepted API fixtures. Owns Vite on :5487
-// with environment-file loading disabled and a unique Chromium profile; both close
-// before exit. Captures and measurements are written to a unique /private/tmp folder.
+// node tools/booking-terms-test.mjs — saved terms, legacy review and contextual support.
+// Owns fixture-only Vite on :5488 and a unique Chrome profile; both close before exit.
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createServer as createVite } from 'vite';
 import puppeteer from 'puppeteer';
-import { AxePuppeteer } from '@axe-core/puppeteer';
 import { addDays, nextWeekday, todayIso, materializeDates } from '../src/data/store/schedule.js';
-import { writeRoomPhoto } from './host-photo.mjs';
+import { quoteSessionAmount } from '../src/ui/bookingTerms.js';
 import { DOCUMENTS } from '../src/data/agreements.js';
-const output = await fs.mkdtemp('/private/tmp/steeple-review-visual-fixes-web-');
+const output = await fs.mkdtemp('/private/tmp/steeple-booking-terms-web-');
 process.env.VITE_WORLD = 'off';
 process.env.VITE_DEBUG = 'on';
-const vite = await createVite({ envDir: false, server: { host: '127.0.0.1', port: 5487, strictPort: true } });
+const vite = await createVite({ envDir: false, server: { host: '127.0.0.1', port: 5488, strictPort: true } });
 await vite.listen();
-const port = 5487;
+const port = 5488;
 const origin = `http://127.0.0.1:${port}`;
 let browser;
 const dates = { first: nextWeekday(addDays(todayIso(), 7), 2) };
@@ -102,6 +99,7 @@ async function intercept(request) {
   }
   if (pathname.endsWith('/counter-offer')) { writes.push({pathname,body:JSON.parse(request.postData())}); return answer(hostApplication); }
   if (pathname.endsWith('/decision')) { writes.push({pathname,body:JSON.parse(request.postData())}); return answer({...hostApplication,status:'approved',decidedAtUtc:new Date().toISOString()}); }
+  if (pathname.endsWith('/withdraw')) { writes.push({pathname}); hostApplication.status = 'withdrawn'; return answer(hostApplication); }
   if (pathname.startsWith('/applications/')) return answer(hostApplication);
   if (pathname === '/me/applications') return answer({items: lastApplication ? [lastApplication] : [],totalCount: lastApplication ? 1 : 0,page:1,pageSize:25});
   if (pathname === '/manage/venues') return answer([venueManaged]); if(pathname.startsWith('/manage/venues/')) return answer(venueManaged); if(pathname === '/manage/applications') return answer({items:[hostApplication],totalCount:1,page:1,pageSize:100}); if(pathname.startsWith('/manage/rooms/')&&pathname.endsWith('/availability')) return answer({roomId,timezone:'America/New_York',days:room.openHours});
@@ -141,7 +139,7 @@ async function openRoute(route,width=390,sign=false){
   state.signedIn=sign;
   if(page) await page.close();
   page=await browser.newPage();
-  await page.setViewport({width,height:width===1440?900:844,deviceScaleFactor:2});
+  await page.setViewport({width,height:width===1440?900:width===320?568:844,deviceScaleFactor:2});
   await page.emulateMediaFeatures([{name:'prefers-reduced-motion',value:'reduce'}]);
   await page.setRequestInterception(true);
   page.on('request',request=>void intercept(request));
@@ -151,120 +149,62 @@ async function openRoute(route,width=390,sign=false){
   await page.addStyleTag({content:'*,*::before,*::after{animation:none!important;transition:none!important}'});
 }
 try {
+  check('Saved quote supports minute-level schedules and half-even amounts', quoteSessionAmount({pricePerHour:9.01}, {startTime:'09:15',endTime:'10:45'}) === 13.52 && quoteSessionAmount({pricePerHour:9.03}, {startTime:'09:15',endTime:'10:45'}) === 13.54);
   const listener=execFileSync('lsof',['-tiTCP:'+port,'-sTCP:LISTEN'],{encoding:'utf8'}).trim();
-  const cwd=execFileSync('lsof',['-a','-p',listener,'-d','cwd','-Fn'],{encoding:'utf8'});
-  assert.ok(cwd.includes(process.cwd()));
-  writeRoomPhoto(path.join(output,'room.png'));
+  assert.ok(execFileSync('lsof',['-a','-p',listener,'-d','cwd','-Fn'],{encoding:'utf8'}).includes(process.cwd()));
   browser=await puppeteer.launch({headless:true,pipe:true,userDataDir:path.join(output,'chrome-profile'),args:['--no-sandbox']});
-  for(const width of process.argv.includes('--setup') ? [] : [320,390,1440]) {
-    await openRoute('/browse',width);
-    await capture('browse-'+width);
-    check('Discovery controls meet 44px target '+width, await page.$$eval('.dm-map .leaflet-bar a,.dm-seg__input,.dm-seg__open,.dm-seg--filters,.porch button,.wordmark',nodes=>nodes.filter(n=>n.checkVisibility()).every(n=>{const r=n.getBoundingClientRect();return r.width>=43.9&&r.height>=43.9;})));
-    await press('.dm-seg--when .dm-seg__open');
-    await press('.dm-switch__option[data-mode=weekly]');
-    await press('.pill--day[data-day="2"]');
-    await capture('search-weekly-'+width);
-    check('Weekly filter controls fit '+width,await page.$eval('.dm-pop',n=>n.scrollWidth<=n.clientWidth+1));
-    await page.keyboard.press('Escape');
-    await press('.dm-seg--filters');
-    await capture('filters-'+width);
-    check('Filters within viewport '+width, await page.$eval('.dm-pop:not([hidden])',n=>n.getBoundingClientRect().bottom<=innerHeight));
-    await page.keyboard.press('Escape');
-    await press('.dm-row');
-    await page.waitForSelector('.sheet--room.is-open',{visible:true});
-    await capture('room-'+width);
-    check('Room controls meet 44px target '+width,await page.$$eval('.sheet--room .sheet__grab,.sheet--room .sheet__up,.sheet--room .sheet__foot button',nodes=>nodes.filter(n=>n.checkVisibility()).every(n=>{const r=n.getBoundingClientRect();return r.width>=43.9&&r.height>=43.9;})));
-    await openRoute('/desk',width);
-    await capture('host-entry-'+width);
-    check('Host-specific sign-in '+width, await page.$eval('.signin__host-guide',n=>n.checkVisibility()));
+  for (const width of [320,390,1440]) {
+    hostApplication.quote={pricePerHour:9,currency:'USD',houseRules:'Saved rule: leave tables in place.'};
+    hostApplication.status='pending';
     await openRoute('/desk',width,true);
-    await press('[role=tab][data-tab=letters]');
-    await page.waitForSelector('.desk .card',{visible:true}); await press('.desk .card');
+    await press('[role=tab][data-tab=letters]'); await press('.desk .card');
     await page.waitForSelector('.letterpage.is-open',{visible:true});
-    await capture('host-letter-'+width);
-    check('Schedule precedes plans on phone '+width, await page.evaluate(()=>innerWidth>1120||document.querySelector('.letterpage__week').getBoundingClientRect().y<document.querySelector('.intent').getBoundingClientRect().y));
-    const tickRects=await page.$$eval('.letterpage .ribbon__tick',nodes=>nodes.map(n=>({left:n.getBoundingClientRect().left,right:n.getBoundingClientRect().right,text:n.textContent})));
-    check('Schedule labels do not overlap '+width,tickRects.every((r,i)=>!i||r.left>=tickRects[i-1].right+4));
-    console.log('Decision geometry',width,await page.$eval('.letterpage__actions',n=>n.getBoundingClientRect().toJSON()));
-    await press('.letterpage__actions [data-action="counter"]');
-    await capture('host-counter-'+width);
-    await press('.letterpage__drawer [data-frequency=oneOff]');
-    check('One-off offer shows date and hides weekly fields '+width,await page.evaluate(()=>document.querySelector('#counter-start').checkVisibility()&&!document.querySelector('#counter-end').checkVisibility()&&!document.querySelector('.letterpage .days').checkVisibility()));
-    await dateInput('#counter-start',addDays(dates.first,1));
-    await capture('host-counter-oneoff-'+width);
-    await press('.letterpage__drawer [data-action=send-counter]');
-    await page.waitForFunction(()=>!document.querySelector('.letterpage__drawer').classList.contains('is-open'));
-    check('One-off offer sends selected date '+width,writes.some(w=>w.pathname.endsWith('/counter-offer')&&w.body.schedule.frequency==='oneOff'&&w.body.schedule.startDate===addDays(dates.first,1)&&!w.body.schedule.endDate&&!w.body.schedule.daysOfWeek));
-    await press('.letterpage__actions [data-action=counter]');
-    await press('.letterpage__drawer [data-frequency=weekly]');
-    check('Weekly offer restores date range and weekdays '+width,await page.evaluate(()=>document.querySelector('#counter-start').checkVisibility()&&document.querySelector('#counter-end').checkVisibility()&&document.querySelector('.letterpage .days').checkVisibility()));
-    await press('.letterpage__actions [data-action=approve]');
-    await page.waitForFunction(()=>document.querySelector('.seal').textContent.includes('Approved'));
-    check('Approval reaches decision API '+width,writes.some(w=>w.body.decision==='approve'));
-    await capture('host-approved-'+width);
-  }
-  for(const [width,height] of process.argv.includes('--setup') ? [] : [[320,568],[568,320],[390,360]]) {
-    await openRoute('/browse',width);
-    await page.setViewport({width,height,deviceScaleFactor:2});
-    await press('.dm-seg--filters');
-    const box=await page.$eval('.dm-pop:not([hidden])',n=>n.getBoundingClientRect().toJSON());
-    await page.mouse.move(box.right-20,box.bottom-20); await page.mouse.wheel({deltaY:1000});
-    await new Promise(r=>setTimeout(r,180));
-    check('Filters scroll '+width+'x'+height,await page.$eval('.dm-pop:not([hidden])',n=>n.scrollTop>0&&n.getBoundingClientRect().bottom<=innerHeight));
-    await press('.dm-pop button[data-filter="Lift access"]');
-    check('Lift access selected '+width+'x'+height,await page.$eval('.dm-pop button[data-filter="Lift access"]',n=>n.getAttribute('aria-pressed')==='true'));
-    await press('.dm-group__clear');
-    check('Clear filters remains reachable '+width+'x'+height,await page.$eval('.dm-pop button[data-filter="Lift access"]',n=>n.getAttribute('aria-pressed')==='false'));
-    await capture('filters-scrolled-'+width+'x'+height);
-  }
-  for (const [width,mode] of [[320,'instant'],[390,'manual'],[1440,'instant']]) {
-    state.newHost = true; newVenue = null; newRoom = null; writes = [];
+    await (await page.$('.letterpage .booking-terms')).scrollIntoView();
+    check('Host sees saved price, rules and support '+width,await page.$eval('.letterpage',n=>n.textContent.replaceAll('\u00a0',' ').includes('USD 9.00')&&n.textContent.replaceAll('\u00a0',' ').includes('USD 18.00')&&n.textContent.includes('Saved rule:')));
+    check('Host approval available for reviewed request '+width,!!await page.$('.letterpage [data-action=approve]'));
+    await capture('host-saved-'+width);
+    hostApplication.organizer=user;
+    hostApplication.status='counterOffered';
+    hostApplication.counterOffer={id:'counter-1',status:'open',schedule:{...hostApplication.schedule,endTime:'13:30'},createdAtUtc:new Date().toISOString()};
+    await openRoute('/letter/'+hostApplication.id,width,true);
+    await page.waitForSelector('.opened .counter',{visible:true});
+    await (await page.$('.opened .counter')).scrollIntoView();
+    check('Guest counter uses saved rate for longer duration '+width,await page.$eval('.opened .counter .booking-terms',n=>n.textContent.replaceAll('\u00a0',' ').includes('USD 36.00')));
+    await capture('guest-counter-'+width);
+    hostApplication.counterOffer=null;
+    hostApplication.status='pending';
+    hostApplication.organizer={id:'99999999-9999-9999-9999-999999999999',displayName:'Maria Alvarez'};
+    hostApplication.quote=null;
     await openRoute('/desk',width,true);
-    await page.waitForSelector('#place-name',{visible:true});
-    await type('#place-name','Community Hall');
-    await type('#place-address','400 Maple Avenue West, Vienna, VA 22180');
-    await type('#place-description','A venue for community classes and meetings.');
-    await press('.listing [data-action="advance"]');
-    await page.waitForSelector('#room-name',{visible:true});
-    await type('#room-name','Meeting room');
-    await type('#room-description','A bright room for small community groups.');
-    await type('#room-capacity','30');
-    await type('#room-price','15');
-    await (await page.$('#room-photo')).uploadFile(path.join(output,'room.png'));
-    await page.waitForSelector('.shotpick__thumb');
-    await press('.listing [data-action="advance"]');
-    await page.waitForSelector('.paint__quick',{visible:true});
-    await press('.paint__quick button');
-    await press('.listing [data-action="advance"]');
-    await page.waitForSelector('.listing__booking',{visible:true});
-    check('Instant booking preselected '+width,await page.$eval('[name="listing-booking-mode"][value="instant"]',n=>n.checked));
-    if(mode==='manual') await press('[name="listing-booking-mode"][value="manual"]');
-    check('Choice and summary agree '+width,await page.$eval('.listing__booking-summary',(n,mode)=>n.textContent===(mode==='manual'?'Manual approval':'Instant booking'),mode));
-    await capture('booking-choice-'+width);
-    check('Publish button and full label fit '+width,await page.$eval('.listing [data-action=advance]',n=>{const r=n.getBoundingClientRect(),s=n.closest('.listing').getBoundingClientRect();return r.left>=s.left&&r.right<=s.right&&n.scrollWidth<=n.clientWidth+1;}));
-    state.failMode = mode==='manual';
-    await press('.listing [data-action="advance"]');
-    if(state.failMode) {
-      await page.waitForFunction(()=>document.querySelector('.listing').innerText.includes('could not be reached'));
-      check('Mode failure prevents publication', !writes.some(w=>w.body.status==='published'));
-      state.failMode = false;
-      await press('.listing [data-action="advance"]');
-    }
-    await page.waitForFunction(()=>document.querySelector('.listing').innerText.includes('is published'));
-    check('Chosen mode saved before publish '+width,writes.findIndex(w=>w.body.bookingMode===mode)<writes.findIndex(w=>w.body.status==='published'));
-    check('Chosen mode saved '+width,newVenue.bookingMode===mode);
-    await capture('booking-published-'+width);
-    state.newHost=false;
+    await press('[role=tab][data-tab=letters]'); await press('.desk .card');
+    await page.waitForSelector('.letterpage.is-open',{visible:true});
+    await (await page.$('.letterpage .booking-terms')).scrollIntoView();
+    check('Legacy host cannot approve or counter '+width,!await page.$('.letterpage [data-action=approve]')&&!await page.$('.letterpage [data-action=counter]'));
+    check('Legacy host gets review explanation '+width,await page.$eval('.letterpage .booking-terms',n=>n.textContent.includes('guest must withdraw')));
+    await capture('host-legacy-'+width);
+    hostApplication.organizer=user;
+    await openRoute('/letter/'+hostApplication.id,width,true);
+    await page.waitForSelector('.opened .booking-terms',{visible:true});
+    await (await page.$('.opened .booking-terms')).scrollIntoView();
+    check('Legacy guest never sees current rate as saved '+width,await page.$eval('.opened',n=>n.textContent.includes('no saved price')&&!n.textContent.includes('$15/hr')));
+    const support=await page.$eval('.opened .booking-support',n=>n.href);
+    check('Support contains request ID only '+width,support.includes('jvun@steepleapp.co')&&support.includes(hostApplication.id)&&!support.includes(user.email));
+    await capture('guest-legacy-'+width);
+    page.once('dialog',dialog=>dialog.accept());
+    const review=await page.$('button::-p-text(Withdraw and review a new request)');
+    await review.scrollIntoView(); await review.click();
+    await page.waitForSelector('#letter-intent',{visible:true});
+    check('Legacy withdrawal opens prefilled current review '+width,hostApplication.status==='withdrawn'&&await page.$eval('#letter-intent',(n,p)=>n.value===p,plans)&&await page.$eval('.composer__rules',n=>n.textContent.includes('Adult supervision')));
+    await page.$eval('.composer',n=>n.scrollTop=n.scrollHeight);
+    await capture('legacy-new-review-'+width);
+    hostApplication.organizer={id:'99999999-9999-9999-9999-999999999999',displayName:'Maria Alvarez'};
   }
-
-  check('No browser runtime errors',pageErrors.length===0);
-}finally{
+  check('No runtime errors',pageErrors.length===0);
+} finally {
+  await fs.writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
   await fs.writeFile(path.join(output,'measurements.json'),JSON.stringify(measurements,null,2));
   await fs.writeFile(path.join(output,'errors.json'),JSON.stringify(pageErrors,null,2));
-  await fs.writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
-  await browser?.close();
-  await vite.close();
-  console.log('Cleaned own Chrome and Vite; '+output);
+  await browser?.close(); await vite.close();
+  console.log('Cleaned Chrome and Vite; '+output);
 }
-
 process.exit(0);

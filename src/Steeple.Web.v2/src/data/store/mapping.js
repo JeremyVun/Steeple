@@ -34,6 +34,7 @@ export function fromWireApplication(dto) {
     organizerRating: dto.organizer?.ratingSummary ?? null,
     organizationName: dto.organizationName ?? null,
     hasPaymentMethod: dto.hasPaymentMethod === true,
+    quote: dto.quote ?? null,
     activityType: ACTIVITY_LABELS[String(dto.activityType ?? '').toLowerCase()] ?? dto.activityType,
     groupSize: dto.groupSize,
     intentText: dto.intentText ?? '',

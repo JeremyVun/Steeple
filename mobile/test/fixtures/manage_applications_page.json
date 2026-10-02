@@ -37,7 +37,12 @@
       "bookingId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
       "messageCount": 2,
       "messages": [],
-      "organizationName": "Vienna Toddler Playgroup"
+      "organizationName": "Vienna Toddler Playgroup",
+      "quote": {
+        "pricePerHour": 45.0,
+        "currency": "USD",
+        "houseRules": "No open flames. Please stack chairs and wipe down tables before leaving. Kitchen use requires 24h notice."
+      }
     },
     {
       "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -94,7 +99,12 @@
           }
         ]
       },
-      "organizationName": "Vienna Toddler Playgroup"
+      "organizationName": "Vienna Toddler Playgroup",
+      "quote": {
+        "pricePerHour": 45.0,
+        "currency": "USD",
+        "houseRules": "No open flames. Please stack chairs and wipe down tables before leaving. Kitchen use requires 24h notice."
+      }
     }
   ],
   "totalCount": 2,

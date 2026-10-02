@@ -8,6 +8,8 @@ import '../../../core/models/models.dart';
 import '../../../core/navigation/route_names.dart';
 import '../../../core/utils/dates.dart';
 import '../../../core/widgets/widgets.dart';
+import '../../apply/providers.dart';
+import '../../listing/providers.dart';
 import '../../profile/providers.dart' show ensureCurrentAgreements;
 import '../application/application_thread_providers.dart';
 import 'widgets/counter_offer_card.dart';
@@ -74,8 +76,28 @@ class _ApplicationThreadScreenState
             padding: const EdgeInsets.all(SteepleTokens.gutter),
             children: [
               _HeaderCard(application: application),
-              if (counterOpen) ...[
+              BookingTerms(
+                quote: application.quote,
+                schedule: canWithdraw ? application.schedule : null,
+                legacyRequest: canWithdraw,
+              ),
+              BookingSupport(
+                kind: bookingId == null ? 'request' : 'booking',
+                id: bookingId ?? application.id,
+              ),
+              if (canWithdraw && application.quote == null)
+                FilledButton(
+                  onPressed: _respondingToCounter
+                      ? null
+                      : () => _reviewLegacy(application),
+                  child: const Text('Withdraw and review a new request'),
+                ),
+              if (counterOpen && application.quote != null) ...[
                 const SizedBox(height: SteepleTokens.space4),
+                BookingTerms(
+                  quote: application.quote,
+                  schedule: counter.schedule,
+                ),
                 CounterOfferCard(
                   requested: application.schedule,
                   offer: counter,
@@ -190,13 +212,22 @@ class _ApplicationThreadScreenState
         .read(applicationThreadProvider(widget.applicationId))
         .value;
     final offer = application?.counterOffer;
-    if (offer == null) return;
+    if (offer == null || application?.quote == null) return;
     final offered = scheduleSummary(offer.schedule);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Accept this time?'),
-        content: Text('This books $offered; your original ask goes away.'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('This books $offered.'),
+              BookingTerms(quote: application!.quote, schedule: offer.schedule),
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -238,11 +269,77 @@ class _ApplicationThreadScreenState
       final text = switch (code) {
         'slot_taken' =>
           'That time was just booked elsewhere — refresh to see the latest.',
+        'quote_required' =>
+          'Review the current price and house rules, then send a new request.',
         'invalid_state' =>
           "This suggestion isn't open anymore — refresh to see the latest.",
         _ => "Couldn't send your response. Try again in a moment.",
       };
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    } finally {
+      if (mounted) setState(() => _respondingToCounter = false);
+    }
+  }
+
+  Future<void> _reviewLegacy(Application application) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Review a new request?'),
+        content: const Text(
+          'This withdraws your old request and opens a draft with your dates and plans. Review the current price and house rules before sending.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep request'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Withdraw and review'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _respondingToCounter = true);
+    try {
+      await ref
+          .read(applicationThreadProvider(widget.applicationId).notifier)
+          .withdraw();
+      if (!mounted) return;
+      ref
+          .read(applyDraftProvider(application.roomId).notifier)
+          .update(
+            ApplicationDraft(
+              activityType: application.activityType,
+              groupSize: application.groupSize,
+              schedule: application.schedule,
+              intentText: application.intentText,
+              organizationName: application.organizationName,
+            ),
+          );
+      ref.invalidate(
+        listingDetailProvider((
+          venueSlug: application.venueSlug,
+          roomSlug: application.roomSlug,
+        )),
+      );
+      await context.pushNamed(
+        RouteNames.apply,
+        pathParameters: {
+          'venueSlug': application.venueSlug,
+          'roomSlug': application.roomSlug,
+        },
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not withdraw this request. Try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _respondingToCounter = false);
     }

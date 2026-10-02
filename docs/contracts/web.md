@@ -960,3 +960,20 @@ claim that live bookings or cross-border payouts are enabled. Web never loads th
 Test invocation and disposable-stack requirements: `tools/HARNESS.md`, `test:host-onboarding`.
 
 Review regression follow-up (2026-10-02): explicit discovery Retry passes `retry:true`, overriding outage cooldowns while preserving `Retry-After`. Session generation is checked before handling delayed `/me` and refresh failures so stale identities cannot expire a replacement sign-in. Transport failures from reads, writes and uploads remain `ApiError(status:0)`, distinct from successful-response parsing errors.
+
+
+## Saved booking terms and support (2026-10-02)
+
+The composer submits the exact hourly rate, currency and house rules shown in its review.
+A `quote_changed` refusal reloads the listing and preserves the draft; another explicit send
+is required after reviewing the updated terms. Request and booking letters use the saved
+quote, never the current listing, and booking payment snapshots own the per-session amount.
+Counter-offer review recomputes duration costs from the saved hourly rate. Legacy pending
+requests cannot be approved or accepted; guests can withdraw and reopen a prefilled draft
+against the current listing. Narrow guest letters scroll as one document so terms remain
+readable below long headings and schedules.
+
+Contextual support links open email to `jvun@steepleapp.co` with the request or booking ID
+and a subject. They include no profile or payment details. `tools/booking-terms-test.mjs`
+checks saved rates, legacy host blocking, guest withdrawal/prefill and support context using
+real browser input with intercepted fixtures at 320, 390 and 1440 pixels.

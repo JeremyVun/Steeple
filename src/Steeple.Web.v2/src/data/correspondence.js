@@ -94,6 +94,7 @@ export function problemText(error) {
   if (neverArrived(error?.status)) {
     return 'Steeple could not be reached just now — nothing was sent. Try again in a moment.';
   }
+  if (error?.code === 'quote_required') return 'This request has no saved price or house rules. The guest must review and send a new request before it can be booked.';
   if (error?.code === 'slot_taken') {
     return 'That time was taken while this was open. Nothing was booked — choose another.';
   }

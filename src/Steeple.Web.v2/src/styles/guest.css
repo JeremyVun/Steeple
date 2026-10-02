@@ -2390,7 +2390,7 @@
    once — a phone on its side, mostly — gives the pinning up rather than squeeze
    the correspondence into a slot: the sheet scrolls as one piece again, which
    is what it did before the head was pinned. Nothing is ever out of reach. */
-@media (max-height: 620px) {
+@media (max-height: 620px), (max-width: 620px) {
   .opened {
     display: block;
     overflow-y: auto;
@@ -2432,7 +2432,7 @@
 .composer .choice > span { display: flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; font-size: 14px; }
 .composer .choice--segment > span { padding: 8px 20px; font-weight: 600; }
 .composer__weekdays { margin: 0 0 18px; padding: 0; border: 0; min-width: 0; }
-.composer__days { display: flex; justify-content: space-between; gap: 4px; }
+.composer__days { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; }
 .composer__day > span { padding: 0; width: 44px; }
 .composer__dates, .composer__times, .composer__event-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .composer__dates:not(.is-weekly) { grid-template-columns: 1fr; }

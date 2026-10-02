@@ -106,6 +106,16 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
             ),
           ),
         ),
+        BookingTerms(
+          quote: application.quote,
+          schedule: application.schedule,
+          host: true,
+          legacyRequest: undecided,
+        ),
+        BookingSupport(
+          kind: application.bookingId == null ? 'request' : 'booking',
+          id: application.bookingId ?? application.id,
+        ),
         if (application.conflicts != null) ...[
           const SizedBox(height: SteepleTokens.space5),
           AvailabilityVerdictCard(
@@ -159,7 +169,10 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
               const SizedBox(width: SteepleTokens.space3),
               Expanded(
                 child: FilledButton(
-                  onPressed: (_deciding || awaitingOrganizer)
+                  onPressed:
+                      (_deciding ||
+                          awaitingOrganizer ||
+                          application.quote == null)
                       ? null
                       : () => _confirmDecide(approve: true),
                   child: _deciding
@@ -188,7 +201,7 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
           const SizedBox(height: SteepleTokens.space3),
           Center(
             child: TextButton.icon(
-              onPressed: _deciding
+              onPressed: (_deciding || application.quote == null)
                   ? null
                   : () => _openCounterSheet(application),
               icon: const Icon(Icons.schedule_rounded, size: 18),
@@ -288,7 +301,9 @@ class _ManageRequestScreenState extends ConsumerState<ManageRequestScreen> {
     } catch (e) {
       if (!mounted) return;
       final appError = e is AppError ? e : null;
-      final text = appError?.code == 'slot_taken'
+      final text = appError?.code == 'quote_required'
+          ? 'The guest must review the current price and house rules, then send a new request.'
+          : appError?.code == 'slot_taken'
           ? 'That time slot was just booked elsewhere — refresh to see the latest.'
           : "Couldn't record your decision. Try again in a moment.";
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));

@@ -1,3 +1,4 @@
+import '../../../../core/api/app_error.dart';
 import '../../../../core/fixtures/fixture_loader.dart';
 import '../../../../core/models/models.dart';
 import '../applications_repository.dart';
@@ -13,7 +14,7 @@ const counterOfferedApplicationId = 'a1a1a1a1-aaaa-4aaa-8aaa-a1a1a1a1a1a1';
 /// and thread screens show what the user actually typed.
 class FakeApplicationsRepository implements ApplicationsRepository {
   FakeApplicationsRepository({FixtureLoader? fixtures})
-      : fixtures = fixtures ?? FixtureLoader();
+    : fixtures = fixtures ?? FixtureLoader();
 
   final FixtureLoader fixtures;
   final Map<String, Application> _overrides = {};
@@ -24,8 +25,9 @@ class FakeApplicationsRepository implements ApplicationsRepository {
   Future<Application> _base(String id) async {
     final override = _overrides[id];
     if (override != null) return override;
-    final name =
-        id == counterOfferedApplicationId ? 'application_counter_offer' : 'application';
+    final name = id == counterOfferedApplicationId
+        ? 'application_counter_offer'
+        : 'application';
     return fixtures.load(name, Application.fromJson);
   }
 
@@ -36,8 +38,16 @@ class FakeApplicationsRepository implements ApplicationsRepository {
     required String idempotencyKey,
     required String turnstileToken,
   }) async {
+    if (draft.quote == null) {
+      throw const AppError(
+        kind: AppErrorKind.conflict,
+        code: 'quote_changed',
+        retryable: false,
+      );
+    }
     final base = await fixtures.load('application', Application.fromJson);
     return base.copyWith(
+      quote: draft.quote,
       activityType: draft.activityType,
       groupSize: draft.groupSize,
       schedule: draft.schedule ?? base.schedule,
@@ -50,11 +60,15 @@ class FakeApplicationsRepository implements ApplicationsRepository {
 
   @override
   Future<Paged<Application>> mine({String? status, int page = 1}) async {
-    final application = await fixtures.load('application', Application.fromJson);
+    final application = await fixtures.load(
+      'application',
+      Application.fromJson,
+    );
     final counter = await _base(counterOfferedApplicationId);
-    final items = <Application>[application, counter]
-        .where((a) => status == null || a.status == status)
-        .toList();
+    final items = <Application>[
+      application,
+      counter,
+    ].where((a) => status == null || a.status == status).toList();
     return Paged(items: items, totalCount: items.length, page: 1, pageSize: 24);
   }
 
@@ -63,7 +77,10 @@ class FakeApplicationsRepository implements ApplicationsRepository {
 
   @override
   Future<ApplicationMessage> sendMessage(String id, String body) async {
-    final application = await fixtures.load('application', Application.fromJson);
+    final application = await fixtures.load(
+      'application',
+      Application.fromJson,
+    );
     return ApplicationMessage(
       id: 'fake-message-${DateTime.now().millisecondsSinceEpoch}',
       senderId: application.organizer.id,
@@ -79,7 +96,10 @@ class FakeApplicationsRepository implements ApplicationsRepository {
     final updated = application.copyWith(
       status: 'withdrawn',
       counterOffer: counter != null && counter.isOpen
-          ? counter.copyWith(status: 'lapsed', respondedAtUtc: DateTime.now().toUtc())
+          ? counter.copyWith(
+              status: 'lapsed',
+              respondedAtUtc: DateTime.now().toUtc(),
+            )
           : counter,
     );
     _overrides[id] = updated;
@@ -87,21 +107,37 @@ class FakeApplicationsRepository implements ApplicationsRepository {
   }
 
   @override
-  Future<Application> respondToCounter(String id, {required bool accept}) async {
+  Future<Application> respondToCounter(
+    String id, {
+    required bool accept,
+  }) async {
     final application = await _base(id);
     final counter = application.counterOffer;
+    if (accept && application.quote == null) {
+      throw const AppError(
+        kind: AppErrorKind.conflict,
+        code: 'quote_required',
+        retryable: false,
+      );
+    }
     final now = DateTime.now().toUtc();
     final updated = accept
         ? application.copyWith(
             status: 'approved',
             decidedAtUtc: now,
-            bookingId: application.bookingId ?? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-            counterOffer: counter?.copyWith(status: 'accepted', respondedAtUtc: now),
+            bookingId:
+                application.bookingId ?? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            counterOffer: counter?.copyWith(
+              status: 'accepted',
+              respondedAtUtc: now,
+            ),
           )
         : application.copyWith(
             status: 'pending',
-            counterOffer:
-                counter?.copyWith(status: 'declinedByOrganizer', respondedAtUtc: now),
+            counterOffer: counter?.copyWith(
+              status: 'declinedByOrganizer',
+              respondedAtUtc: now,
+            ),
           );
     _overrides[id] = updated;
     return updated;

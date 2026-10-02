@@ -1,3 +1,4 @@
+import { bookingTerms, supportLink } from '../bookingTerms.js';
 // A REQUEST, OPENED — one application in full: what was asked, in the guest's
 // own words; everything the host has said back; and whichever single decision
 // is genuinely the guest's to make right now.
@@ -38,7 +39,7 @@ import {
   timeAgo,
 } from './copy.js';
 
-export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFixPayment }) {
+export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onReviewRequest, onFixPayment }) {
   let applicationId = null;
   // The space this letter is about, as the catalog knows it: the photograph,
   // the seats, the price, and the venue's street address. A request carries
@@ -129,8 +130,8 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
     // money. What this booking actually costs is on the held block below, from
     // the booking's own snapshot.
     const priced = app.status !== APP_STATUS.approved
-      && room.pricePerHour !== null && room.pricePerHour !== undefined;
-    const { amount, unit, free } = priceParts(room);
+      && app.quote != null;
+    const { amount, unit, free } = priceParts(app.quote ?? {});
     return el('header', { class: 'opened__head', dataset: { tone: statusTone(app.status) } }, [
       el('div', { class: 'opened__heading' }, [
         el(
@@ -203,13 +204,11 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
   function spaceCard(app, venue, room) {
     const photo = listing?.primaryPhotoUrl ?? listing?.photos?.[0]?.cardUrl ?? null;
     const capacity = listing?.capacity ?? room.capacity ?? null;
-    const price = app.status === APP_STATUS.approved ? null : (listing?.pricePerHour ?? room.pricePerHour ?? null);
     // The venue is named twice over the card already — the letterhead is the
     // room and the line under it is the venue — so the card says only what the
     // head does not: how many it seats and what it costs.
     const facts = [
       capacity ? `Seats ${capacity}` : null,
-      price == null ? null : `$${price}/hr`,
     ].filter(Boolean);
     return el(
       'button',
@@ -334,6 +333,7 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
           el('p', { class: 'counter__sched', text: scheduleSentence(counter) }),
         ]),
       ]),
+      bookingTerms(app.quote, counter),
       el('div', { class: 'counter__actions' }, [
         el(
           'button',
@@ -918,13 +918,20 @@ export function createLetterView({ announce, onBack, onBrowse, onOpenRoom, onFix
       // The space first, as on the host's own letter: which room this is about
       // is the first question, and a photograph answers it faster than words.
       spaceCard(app, venue, room),
-      counter && counterBlock(app, venue, counter),
+      bookingTerms(booking ? booking.quote : app.quote, app.status === APP_STATUS.approved ? null : app, { payment: booking?.payment, legacyRequest: UNDECIDED.has(app.status) }),
+      !app.quote && UNDECIDED.has(app.status) && el('button', { type: 'button', class: 'pill booking-review', text: 'Withdraw and review a new request', onclick: async () => {
+        if (!window.confirm('Withdraw this request and open a new draft? Review the current price and house rules before sending.')) return;
+        const withdrawn = await move(() => wire.withdraw(app.id));
+        if (withdrawn) onReviewRequest?.(app);
+      } }),
+      counter && app.quote && counterBlock(app, venue, counter),
       booking && occurrenceBlock(app),
       // After what this booking was, before anything still being said about it.
       booking && ratingBlock(app, venue, booking),
       intentBlock(app, venue),
       threadBlock(app, venue),
       closingBlock(app, venue),
+      supportLink(app.bookingId ? 'booking' : 'request', app.bookingId ?? app.id),
     ]);
     replaceChildren(body, [
       letterhead(app, venue, room),

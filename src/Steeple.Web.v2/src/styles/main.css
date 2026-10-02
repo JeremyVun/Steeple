@@ -1834,3 +1834,8 @@ a.linkish,
 .signin--host .identity:not(.is-verified) > .identity__title { display: none; }
 
 .signin--host .identity.is-verified .signin__host-guide { display: none; }
+
+.booking-terms { margin-block: 1rem; overflow-wrap: anywhere; }
+.booking-terms p { margin-block: 0.65em; white-space: pre-line; }
+.booking-support { display: inline-flex; align-items: center; min-height: var(--touch-target); margin-block: 1rem; }
+.booking-review { max-width: 100%; white-space: normal; }

@@ -51,6 +51,7 @@ export function toSubmitRequest(draft, { organizationName, turnstileToken = null
     groupSize: Number(draft.groupSize),
     schedule: toWireSchedule(draft),
     intentText: String(draft.intentText ?? '').trim(),
+    quote: draft.quote,
     turnstileToken,
     organizationName: org || null,
   };
@@ -120,6 +121,10 @@ export async function sendRequest(draft, { turnstileToken = null } = {}) {
     // state where the request may or may not exist at steeple.
     if (error?.status === 402 || error?.code === 'payment_method_required') {
       return { ok: false, needsCard: true, problem: problemText(error) };
+    }
+    if (error?.code === 'quote_changed') {
+      delete draft.idempotencyKey;
+      return { ok: false, quoteChanged: true, problem: 'The price or house rules changed. Review the updated details before sending again.' };
     }
     if (error?.code === 'slot_taken') {
       // Nothing persisted: the slot went to another group between the sheet

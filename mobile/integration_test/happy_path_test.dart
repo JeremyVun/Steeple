@@ -57,7 +57,7 @@ void main() {
     // Start the application.
     await tester.tap(find.widgetWithText(FilledButton, 'Ask to book'));
     await tester.pumpAndSettle(const Duration(seconds: 2));
-    expect(find.textContaining('Ask '), findsWidgets);
+    expect(find.text('Booking details'), findsOneWidget);
     expect(find.textContaining('Tell them about your group'), findsOneWidget);
   });
 }

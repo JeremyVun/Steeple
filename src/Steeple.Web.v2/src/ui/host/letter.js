@@ -1,3 +1,4 @@
+import { bookingTerms, supportLink } from '../bookingTerms.js';
 // A REQUEST — one application, opened. On the left, the space it names (photo
 // first — a host with many rooms identifies by sight), what was asked and by
 // whom, and the message thread with its reply box: writing back is part of
@@ -700,9 +701,9 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
     // Two decisions, and one quiet third way. Writing back is not here at all —
     // the reply box lives on the thread, where a person looks for it.
     replaceChildren(actions, [
-      button('Approve', 'approve', 'pill pill--primary', onApprove),
+      application.quote ? button('Approve', 'approve', 'pill pill--primary', onApprove) : null,
       button('Decline', 'decline', 'pill pill--quiet', openDecline),
-      button('Suggest another time', 'counter', 'linkish', () => openCounter()),
+      application.quote ? button('Suggest another time', 'counter', 'linkish', () => openCounter()) : null,
     ]);
   }
 
@@ -1247,7 +1248,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
     const facts = [
       venue?.shortName ?? null,
       `Seats ${room.capacity}`,
-      room.pricePerHour == null ? 'Free' : `$${room.pricePerHour}/hr`,
+      application.quote ? `${application.quote.currency} ${application.quote.pricePerHour}/hr · saved rate` : 'Price not saved',
     ].filter(Boolean);
     return el(
       'button',
@@ -1383,6 +1384,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       // The space first: with many rooms, "which one is this about" is the
       // first question, and a photo answers it faster than any line of text.
       room ? spaceBlock(room, venue) : null,
+      bookingTerms(heldBooking() ? heldBooking().quote : application.quote, booked() ? null : application, { payment: heldBooking()?.payment, host: true, legacyRequest: undecided }),
       el('section', { class: 'intent' }, [
         el('h2', { class: 'eyebrow', text: 'Plans' }),
         el('p', { class: 'intent__body', text: application.intentText }),
@@ -1391,6 +1393,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       threadBlock(),
       counterHistoryBlock(),
       undecided ? null : outcomeBlock(),
+      supportLink(application.bookingId ? 'booking' : 'request', application.bookingId ?? application.id),
     ]);
 
     replaceChildren(week, [

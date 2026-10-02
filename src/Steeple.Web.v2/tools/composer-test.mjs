@@ -43,7 +43,7 @@ async function intercept(request) {
   if (pathname === '/auth/refresh') return state.signedIn ? answer({ accessToken: 'composer-fixture', user }) : answer({}, 401);
   if (pathname === '/auth/sessions' && request.method() === 'POST') { state.signedIn = true; return answer({ accessToken: 'composer-fixture', user }); }
   if (pathname === '/me') return answer({ ...user, agreements: DOCUMENTS.map(({ docType, version }) => ({ docType, version, acceptedAtUtc: '2026-10-01T00:00:00Z' })) });
-  if (pathname.startsWith('/listings/by-slug/')) return answer({ ...room, bookingMode: state.mode, houseRules: state.emptyRules ? '' : state.long ? rules.repeat(18) : rules, roomName: state.long ? 'Youth Activity Room for Community Classes, Rehearsals and After-school Groups' : room.roomName });
+  if (pathname.startsWith('/listings/by-slug/')) return answer({ ...room, pricePerHour: state.updatedQuote ? 25 : room.pricePerHour, bookingMode: state.mode, houseRules: state.updatedQuote ? 'Updated rule: clean the kitchen after use.' : state.emptyRules ? '' : state.long ? rules.repeat(18) : rules, roomName: state.long ? 'Youth Activity Room for Community Classes, Rehearsals and After-school Groups' : room.roomName });
   if (pathname === `/listings/${roomId}/availability/check`) {
     const body = JSON.parse(request.postData()); state.checks.push(body.schedule);
     const occurrences = scheduleDates(body.schedule);
@@ -63,6 +63,7 @@ async function intercept(request) {
   if (pathname === `/listings/${roomId}/applications`) {
     const body = JSON.parse(request.postData()); state.posts.push({ body, key: request.headers()['idempotency-key'] });
     if (state.submit === 'error') return answer({ code: 'temporarily_unavailable', detail: 'Try again shortly.' }, 503);
+    if (state.submit === 'quote_changed') { state.updatedQuote = true; return answer({ code: 'quote_changed' }, 409); }
     if (state.submit === 'slot_taken') return answer({ code: 'slot_taken' }, 409);
     if (state.submit === 'card') return answer({ code: 'payment_method_required' }, 402);
     lastApplication = { id: '44444444-4444-4444-4444-444444444444', roomId, roomSlug: room.roomSlug, roomName: room.roomName, venueName: room.venue.name, venueSlug: room.venue.slug, organizer: user, ...body, status: state.submit === 'instant' ? 'approved' : 'pending', createdAtUtc: new Date().toISOString(), messages: [], messageCount: 0, hasPaymentMethod: state.payments };
@@ -135,9 +136,9 @@ async function shot(name, at = 'top') {
     const spills = [...sheet.querySelectorAll('p,h1,h2,h3,label,select,input,textarea')].filter((node) => node.checkVisibility() && !['TEXTAREA','INPUT'].includes(node.tagName) && node.scrollWidth > node.clientWidth + 1).map((node) => ({ tag: node.tagName, cls: node.className, text: node.textContent.slice(0, 60) }));
     return { width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scroll: sheet.scrollTop, scrollHeight: sheet.scrollHeight, clientHeight: sheet.clientHeight, horizontalOverflow: sheet.scrollWidth > sheet.clientWidth + 1, small, spills };
   });
-  if (geometry.small.length || geometry.spills.length) console.log(JSON.stringify(geometry));
+  if (geometry.small.length || geometry.spills.length || name.includes('320')) console.log(JSON.stringify(geometry));
   const desktop = name.includes('1440');
-  check(`${name} viewport and geometry`, geometry.width === (desktop ? 1440 : 390) && geometry.height === (desktop ? 900 : 844) && geometry.dpr === 2 && !geometry.horizontalOverflow && !geometry.small.length && !geometry.spills.length);
+  check(`${name} viewport and geometry`, geometry.width === (desktop ? 1440 : name.includes('320') ? 320 : 390) && geometry.height === (desktop ? 900 : name.includes('320') ? 568 : 844) && geometry.dpr === 2 && !geometry.horizontalOverflow && !geometry.small.length && !geometry.spills.length);
   recorded.push({ name, ...geometry });
   const filename = path.join(output, `${name}.png`); await page.screenshot({ path: filename });
   console.log(filename);
@@ -154,6 +155,9 @@ try {
   await schedule(true); await event();
   check('exact estimate for all 21 dates', (await page.$eval('.composer__total', (node) => node.textContent)).includes('630.00'));
   await shot('recurring-390'); await shot('recurring-390-deep', 'bottom');
+  await page.setViewport({ width: 320, height: 568, deviceScaleFactor: 2 });
+  await shot('review-320-deep', 'bottom');
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   if (!process.argv.includes('--quick')) {
     await press('.composer button[type="submit"]');
     await page.waitForSelector('.composer .identity:not([hidden])', { visible: true });
@@ -204,12 +208,23 @@ try {
     await start({ signedIn: true }); await schedule(true); await event();
     await press('.composer button[type="submit"]');
     await page.waitForFunction(() => !!document.querySelector('.letter__error'));
+    check('manual submit carries reviewed price and house rules', state.posts[0].body.quote?.pricePerHour === 15 && state.posts[0].body.quote?.houseRules === rules && state.posts[0].body.quote?.currency === 'USD');
     check('manual submit preserves exact full schedule and event fields', state.posts[0].body.schedule.daysOfWeek.join(',') === 'tuesday,thursday' && state.posts[0].body.schedule.startDate === dates.first && state.posts[0].body.schedule.endDate === dates.last && state.posts[0].body.intentText === plans && state.posts[0].body.groupSize === 24);
     await press('.composer button[type="submit"]'); await page.waitForFunction(() => !!document.querySelector('.letter__error'));
     check('retry reuses idempotency key and body', state.posts.length === 2 && state.posts[0].key === state.posts[1].key && JSON.stringify(state.posts[0].body) === JSON.stringify(state.posts[1].body));
     state.submit = 'pending'; await press('.composer button[type="submit"]');
     await page.waitForSelector('.sent:not([hidden])', { visible: true });
     check('manual success returns to room with sent confirmation', state.posts.length === 3 && await page.$eval('.sent', node => node.textContent.includes('on its way')));
+
+    await start({ signedIn: true, submit: 'quote_changed' }); await schedule(); await event();
+    await press('.composer button[type="submit"]');
+    await page.waitForFunction(() => document.querySelector('.composer__rules')?.textContent.includes('Updated rule'));
+    check('changed quote requires another visible review without auto-submit', state.posts.length === 1 && await page.$eval('.letter__foot', node => node.textContent.includes('25.00') && node.textContent.includes('Review the updated details')));
+    await shot('changed-quote-390-deep', 'bottom');
+    await page.waitForFunction(() => document.querySelector('.composer__availability').textContent.includes('available right now'));
+    state.submit = 'pending'; await press('.composer button[type="submit"]');
+    await page.waitForFunction(() => document.querySelector('.sent:not([hidden])'));
+    check('fresh press sends newly reviewed quote', state.posts.length === 2 && state.posts[1].body.quote.pricePerHour === 25 && state.posts[1].body.quote.houseRules.startsWith('Updated rule') && state.posts[0].key !== state.posts[1].key);
 
     await start({ signedIn: true, mode: 'instant', submit: 'slot_taken' }); await schedule(); await event();
     check('instant commitment and action are explicit', await page.$eval('.letter__foot', (node) => node.textContent.includes('confirm your booking immediately') && node.querySelector('button[type="submit"]').textContent === 'Book this space'));
@@ -253,7 +268,7 @@ try {
     check('disabled preview leaves submission to the booking API', state.posts.length === 1);
 
     await start({ emptyRules: true });
-    check('missing house rules leave no empty rules card', await page.$eval('.composer__rules', (node) => node.hidden));
+    check('missing house rules are explicit in the review', await page.$eval('.composer__rules', (node) => !node.hidden && node.textContent.includes('No house rules listed.')));
     await press('.composer__calendar summary');
     await page.waitForSelector('.week__grid [data-day]', { visible: true });
     await shot('calendar-390');
@@ -303,3 +318,5 @@ try {
   }
   console.log(`Cleaned browser and Vite. ${checks.length} checks. ${output}`);
 }
+
+process.exit(0);

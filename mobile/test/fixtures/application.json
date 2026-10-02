@@ -48,5 +48,10 @@
       "sentAtUtc": "2026-07-02T09:22:00Z"
     }
   ],
-  "organizationName": "Vienna Toddler Playgroup"
+  "organizationName": "Vienna Toddler Playgroup",
+  "quote": {
+    "pricePerHour": 45.0,
+    "currency": "USD",
+    "houseRules": "No open flames. Please stack chairs and wipe down tables before leaving. Kitchen use requires 24h notice."
+  }
 }

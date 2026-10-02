@@ -146,3 +146,5 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   have committed.
 - Shared-database rows whose bytes live in another worktree's media-store can 404 as local
   console noise.
+
+- `node tools/booking-terms-test.mjs` owns fixture-only Vite on :5488 and a unique Chrome profile. It checks saved quote/counter pricing, blocked legacy host decisions, guest withdrawal and fresh prefilled review, plus contextual email support at 320, 390 and 1440 pixels. No API, database or secrets are used. Captures go to `/private/tmp/steeple-booking-terms-web-*`; all owned processes close before exit.

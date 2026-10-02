@@ -594,6 +594,7 @@ export function mirrorBooking(dto) {
     cancelReason: dto.cancelReason ?? null,
     venueTimezone: dto.venueTimezone ?? null,
     payment: dto.payment ?? null,
+    quote: dto.quote ?? null,
     // How each side said it went, exactly as steeple scoped it for this viewer:
     // `{byOrganizer?, byVenue?, canRate, rateByUtc?}`, where the names say who
     // WROTE it. `canRate` and whether the other side's rating is present at all

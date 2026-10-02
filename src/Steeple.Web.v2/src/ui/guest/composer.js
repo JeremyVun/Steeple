@@ -1,6 +1,6 @@
 import { track } from '../../data/analytics.js';
 import { checkRoomAvailability } from '../../data/api.js';
-import { getRoomAvailability, getListing, readFailure } from '../../data/catalog.js';
+import { getRoomAvailability, getListing, forgetVenues, readFailure } from '../../data/catalog.js';
 import { toWireSchedule } from '../../data/correspondence.js';
 import { isEnabled } from '../../data/flags.js';
 import { FEATURE_FLAG_KEYS } from '../../data/wireTokens.js';
@@ -16,6 +16,10 @@ import { createIdentityStep } from './sso.js';
 import { createWeekCard } from './weekCard.js';
 
 const drafts = new Map();
+export function prefillRequest(app) {
+  const { activityType, groupSize, organizationName, frequency, startDate, endDate, daysOfWeekMask, startTime, endTime, intentText, venueId, roomId } = app;
+  drafts.set(`${venueId}/${roomId}`, { activityType, groupSize, organizationName, frequency, startDate, endDate, daysOfWeekMask, startTime, endTime, intentText, venueId, roomId });
+}
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const scheduleFields = ['schedule', 'frequency', 'startDate', 'endDate', 'startTime', 'endTime', 'daysOfWeekMask'];
 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -249,7 +253,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       row(`${plural(priced.hours, 'hour')} × ${money(room.pricePerHour)}`, `${money(priced.perSession)} / session`),
       row('Sessions', String(priced.sessions)),
       row('Estimated total', money(priced.total), 'composer__total'),
-      el('p', { class: 'composer__hint', text: 'Based on the current hourly rate and all selected dates. The final price is set when the booking is confirmed.' }),
+      el('p', { class: 'composer__hint', text: 'This hourly rate and these house rules are saved with your request. A different duration changes the price per session.' }),
     ] : [
       el('p', { class: 'composer__schedule', text: `${money(room.pricePerHour)} / hour` }),
       el('p', { class: 'composer__hint', text: 'Choose valid dates and times to see the estimated cost.' }),
@@ -268,8 +272,8 @@ export function createComposer({ announce, onSent, onLeave }) {
         : paymentsEnabled === false ? 'Online booking payments are not available on Steeple. Arrange payment directly with the host.'
           : 'Payment details will appear here before you send.' }),
     ]);
-    rules.hidden = !room.houseRules?.trim();
-    replaceChildren(rules, rules.hidden ? [] : [el('h3', { text: 'House rules' }), el('p', { text: room.houseRules })]);
+    rules.hidden = false;
+    replaceChildren(rules, [el('h3', { text: 'House rules' }), el('p', { text: room.houseRules || 'No house rules listed.' })]);
     renderHead();
   }
 
@@ -463,7 +467,12 @@ export function createComposer({ announce, onSent, onLeave }) {
         return;
       }
       closeIdentity();
+      if (result.quoteChanged) {
+        forgetVenues();
+        await loadRoom(draft.venueId, draft.roomId, generation);
+      }
       renderFoot(result.problem);
+      if (result.quoteChanged) foot.scrollIntoView({ block: 'start' });
       announce?.(
         result.retake
           ? result.problem
@@ -509,6 +518,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       room = { ...listing, houseRules: listing.houseRules ?? '', activities: listing.activities ?? [] };
       bookingMode = listing.bookingMode ?? 'manual'; roomHours = listing.openHours ?? null;
       draft = drafts.get(opened) ?? blankDraft(venueId, roomId, room);
+      draft.quote = { pricePerHour: listing.pricePerHour, currency: listing.currency ?? 'USD', houseRules: listing.houseRules ?? '' };
       draft.remoteRoomId = listing.roomId; drafts.set(opened, draft);
       intent.value = draft.intentText; size.value = draft.groupSize; size.max = String(room.capacity);
       organization.value = draft.organizationName ?? '';

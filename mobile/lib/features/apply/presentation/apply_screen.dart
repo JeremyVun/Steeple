@@ -86,6 +86,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   final _groupSizeController = TextEditingController();
   final _intentController = TextEditingController();
   bool _submitting = false;
+  bool _quoteUnavailable = false;
   bool _tracked = false;
   bool _seededFromSearch = false;
 
@@ -183,8 +184,9 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       )),
     );
 
+    final form = detail.hasValue ? _buildForm(detail.requireValue) : null;
     return Scaffold(
-      appBar: AppBar(title: const Text('Ask to book')),
+      appBar: AppBar(title: const Text('Booking details')),
       body: AsyncValueView<RoomDetail>(
         value: detail,
         onRetry: () => ref.invalidate(
@@ -202,7 +204,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
             );
           }
           _seedScheduleFromSearch(room.roomId);
-          return _buildForm(room);
+          return form!;
         },
       ),
     );
@@ -248,14 +250,16 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
             padding: const EdgeInsets.all(SteepleTokens.gutter),
             children: [
               Text(
-                'Ask ${room.venue.name}',
+                room.bookingMode == 'instant'
+                    ? 'Book ${room.roomName}'
+                    : 'Request ${room.roomName}',
                 style: SteepleTypography.displaySerif.copyWith(
                   color: colors.textPrimary,
                 ),
               ),
               const SizedBox(height: SteepleTokens.space1),
               Text(
-                '${room.roomName} · they usually reply within a few days',
+                room.venue.name,
                 style: SteepleTypography.bodySm.copyWith(
                   color: colors.textSecondary,
                 ),
@@ -346,6 +350,28 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                   color: colors.textTertiary,
                 ),
               ),
+              if (_quoteUnavailable) ...[
+                const Text(
+                  'The latest price and house rules could not be loaded. Reload them before sending.',
+                ),
+                TextButton(
+                  onPressed: _submitting ? null : _reloadQuote,
+                  child: const Text('Reload price and house rules'),
+                ),
+              ],
+              BookingTerms(
+                quote: ApplicationQuote(
+                  pricePerHour: room.pricePerHour,
+                  currency: room.currency,
+                  houseRules: room.houseRules,
+                ),
+                schedule: schedule,
+              ),
+              Text(
+                room.bookingMode == 'instant'
+                    ? 'Submitting can confirm your booking immediately.'
+                    : 'Nothing is booked until the host accepts your request.',
+              ),
               const SizedBox(height: SteepleTokens.space8),
             ],
           ),
@@ -370,7 +396,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
                         color: Colors.white,
                       ),
                     )
-                  : Text('Send to ${room.venue.name}'),
+                  : const Text('Review and send'),
             ),
           ),
         ),
@@ -382,7 +408,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
   /// advisory check didn't come back unavailable (DESIGN_SYSTEM §8.13 — the
   /// button disables while a check says the schedule clashes).
   bool _canSubmit(ApplicationDraft draft) {
-    if (!_isComplete(draft) || _submitting) return false;
+    if (!_isComplete(draft) || _submitting || _quoteUnavailable) return false;
     if (_checking) return false;
     if (_checkResult != null && !_checkResult!.available) return false;
     return true;
@@ -405,8 +431,77 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
     return true;
   }
 
+  Future<void> _reloadQuote() async {
+    setState(() {
+      _submitting = true;
+      _quoteUnavailable = true;
+    });
+    try {
+      final provider = listingDetailProvider((
+        venueSlug: widget.venueSlug,
+        roomSlug: widget.roomSlug,
+      ));
+      ref.invalidate(provider);
+      await ref.read(provider.future);
+      if (mounted) setState(() => _quoteUnavailable = false);
+    } on AppError {
+      // Keep commitment blocked until the latest terms can be reviewed.
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Future<void> _submit(RoomDetail room) async {
-    // The SSO gate, only at the moment of commitment.
+    final quote = ApplicationQuote(
+      pricePerHour: room.pricePerHour,
+      currency: room.currency,
+      houseRules: room.houseRules,
+    );
+    final reviewedDraft = ref.read(applyDraftProvider(room.roomId));
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          room.bookingMode == 'instant'
+              ? 'Review your booking'
+              : 'Review your request',
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(scheduleSummary(reviewedDraft.schedule!)),
+              BookingTerms(quote: quote, schedule: reviewedDraft.schedule),
+              Text(
+                room.bookingMode == 'instant'
+                    ? 'Sending can confirm this booking immediately. If you already have several upcoming bookings, the host may need to approve it.'
+                    : 'The host must approve your request before it is booked.',
+              ),
+              const Text(
+                'This rate and these rules are saved with your request.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              room.bookingMode == 'instant'
+                  ? 'Book this space'
+                  : 'Send request',
+            ),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+    // The reviewed quote survives sign-in and every retry.
     if (ref.read(sessionProvider) is! SignedIn) {
       final result = await showSsoSheet(
         context,
@@ -418,7 +513,7 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
 
     if (!await ensureCurrentAgreements(context, ref) || !mounted) return;
     setState(() => _submitting = true);
-    final draft = ref.read(applyDraftProvider(room.roomId));
+    final draft = reviewedDraft.copyWith(quote: quote);
     try {
       final application = await ref
           .read(applicationsRepositoryProvider)
@@ -436,6 +531,18 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
       await _showSubmitted(room, application);
     } on AppError catch (error) {
       if (!mounted) return;
+      if (error.code == 'quote_changed') {
+        await _reloadQuote();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'The price or house rules changed. Review the updated details before sending again.',
+            ),
+          ),
+        );
+        return;
+      }
       // The submit-time hard block: re-render the conflict list in the shared
       // verdict card (danger treatment) rather than a snackbar.
       if (error.kind == AppErrorKind.conflict &&
@@ -476,10 +583,15 @@ class _ApplyScreenState extends ConsumerState<ApplyScreen> {
           color: colors.selectedFg,
           size: 40,
         ),
-        title: Text('Sent to ${room.venue.name}'),
-        content: const Text(
-          'They usually reply within a few days. '
-          'Want to know the moment they do?',
+        title: Text(
+          application.statusValue == ApplicationStatus.approved
+              ? 'Your space is booked'
+              : 'Sent to ${room.venue.name}',
+        ),
+        content: Text(
+          application.statusValue == ApplicationStatus.approved
+              ? 'Your booking is confirmed. Turn on notifications for booking updates.'
+              : 'Your request is waiting for the host. Turn on notifications for their reply.',
         ),
         actions: [
           TextButton(

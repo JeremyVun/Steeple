@@ -117,6 +117,8 @@ class _BookingDetailBody extends ConsumerWidget {
             ),
           ),
         ),
+        BookingTerms(quote: booking.quote, legacyRequest: false),
+        BookingSupport(kind: 'booking', id: booking.id),
         if (showRenewalNudge) ...[
           const SizedBox(height: SteepleTokens.space4),
           _RenewalBanner(booking: booking),

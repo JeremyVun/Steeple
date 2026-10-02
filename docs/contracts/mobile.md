@@ -493,3 +493,18 @@ exports `ensureCurrentAgreements` and `openLegalDocument`; apply, host approvals
 before writing and preserves the draft on refusal/failure. Profile offers review and both legal
 links. Links use `EnvConfig.canonicalWebHost` (default `steeple.jeremyvun.com`). Production
 native apply remains disabled until its Turnstile integration and provider setup are verified.
+
+
+## Booking review and contextual support (2026-10-02)
+
+Apply shows the current price and house rules, then requires an explicit scrollable review
+before commitment. It sends that reviewed `ApplicationQuote`; a `quote_changed` response
+refreshes the visible listing and requires another review. `RoomDetail.bookingMode` defaults
+to `manual` for older responses and supplies truthful instant/manual commitment copy.
+
+`BookingTerms` presents saved request terms and counter-offer duration pricing. Booking
+detail keeps `payment.perOccurrenceAmount` authoritative. Legacy pending requests explain
+the missing record and disable host approval/counter proposals; the guest can withdraw and
+open a prefilled request to review current terms. `BookingSupport` opens contextual email
+to `jvun@steepleapp.co` with only the request/booking ID and subject; if no email app opens,
+it shows the address and ID as selectable text.
