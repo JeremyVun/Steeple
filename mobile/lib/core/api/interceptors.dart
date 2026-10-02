@@ -20,10 +20,16 @@ class AuthInterceptor extends Interceptor {
   final Dio _retryDio;
 
   static const _retriedKey = 'steeple.authRetried';
+  static const _identityGenerationKey = 'steeple.identityGeneration';
 
   @override
-  Future<void> onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
-    final token = await _sessionManager().validAccessToken();
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    final sessionManager = _sessionManager();
+    final token = await sessionManager.validAccessToken();
+    options.extra[_identityGenerationKey] = sessionManager.identityGeneration;
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
     }
@@ -31,16 +37,28 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     final options = err.requestOptions;
     if (err.response?.statusCode != 401 || options.extra[_retriedKey] == true) {
       return handler.next(err);
     }
-    final refreshed = await _sessionManager().refreshAfter401();
+    final sessionManager = _sessionManager();
+    final requestGeneration = options.extra[_identityGenerationKey];
+    if (requestGeneration != sessionManager.identityGeneration) {
+      return handler.next(err);
+    }
+
+    final refreshed = await sessionManager.refreshAfter401();
     if (!refreshed) return handler.next(err);
 
-    final token = await _sessionManager().validAccessToken();
-    if (token == null) return handler.next(err);
+    final token = await sessionManager.validAccessToken();
+    if (token == null ||
+        requestGeneration != sessionManager.identityGeneration) {
+      return handler.next(err);
+    }
     try {
       options.extra[_retriedKey] = true;
       options.headers['Authorization'] = 'Bearer $token';
@@ -64,7 +82,10 @@ class RetryInterceptor extends Interceptor {
   static const _attemptKey = 'steeple.retryAttempt';
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+    DioException err,
+    ErrorInterceptorHandler handler,
+  ) async {
     final options = err.requestOptions;
     final attempt = (options.extra[_attemptKey] as int?) ?? 0;
     if (!_shouldRetry(err) || attempt >= maxRetries) {
@@ -89,8 +110,7 @@ class RetryInterceptor extends Interceptor {
       DioExceptionType.connectionError ||
       DioExceptionType.connectionTimeout ||
       DioExceptionType.receiveTimeout ||
-      DioExceptionType.sendTimeout =>
-        true,
+      DioExceptionType.sendTimeout => true,
       DioExceptionType.badResponse => (err.response?.statusCode ?? 0) >= 500,
       _ => false,
     };
@@ -101,7 +121,10 @@ class RetryInterceptor extends Interceptor {
 /// the console).
 class RedactedLogInterceptor extends Interceptor {
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+  void onResponse(
+    Response<dynamic> response,
+    ResponseInterceptorHandler handler,
+  ) {
     debugPrint(
       '[api] ${response.requestOptions.method} ${response.requestOptions.uri.path} '
       '→ ${response.statusCode}',

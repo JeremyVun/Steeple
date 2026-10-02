@@ -138,6 +138,7 @@ class SignedIn extends SessionState { final UserProfile user; }
 
 abstract class SessionManager {
   ValueListenable<SessionState> get state;      // exposed as sessionProvider
+  int get identityGeneration;                    // changes when an identity operation supersedes another
   Future<void> restore();                       // storage → state at bootstrap (resolves SessionUnknown)
   Future<SignInResult> signIn(SsoProvider provider);   // native sheet → POST /auth/sessions
   Future<void> signOut();                       // hooks (device unregister) → revoke → wipe storage
@@ -149,7 +150,12 @@ abstract class SessionManager {
 ```
 
 Rules: tokens only in `flutter_secure_storage`; refresh is single-flight (concurrent 401s
-await one refresh); `forceSignOut` emits `SignedOut(wasForced: true)` → router redirects
+await one refresh); restore, sign-in, sign-out, and refresh capture an identity generation before
+awaiting I/O, so stale completion cannot write credentials, publish a prior user, or force-sign-out
+a newer identity. Secure-storage mutations are serialized in that generation order. The auth
+interceptor records that generation when it sends a request and never retries a 401 under a newer
+identity. A restored refresh token can recover a missing or expired access token; only a definitive
+refresh `401` forces local sign-out. `forceSignOut` emits `SignedOut(wasForced: true)` → router redirects
 + one snackbar ("You've been signed out"). The apply draft **survives** sign-in (§8 —
 draft lives in a provider keyed outside the auth state).
 
@@ -305,7 +311,7 @@ feature/agent may touch; everything else is private):
 |---|---|---|
 | core | `envProvider`, `dioProvider`, `apiClientProvider`, `sessionProvider`, `sessionManagerProvider`, `flagsProvider`, `analyticsProvider`, `connectivityProvider`/`isOnlineProvider`, `pushServiceProvider` | Session is `SessionState`; flags is snapshot map; repos inject `ApiClient` |
 | discovery | `searchFiltersProvider` | `Notifier<SearchFilters>` — the one filter state; `SearchFilters.when` is a `WhenFilter` (date XOR daysOfWeek + timeOfDay band/custom range — additive, availability plan commit 6) |
-| | `searchResultsProvider` | `AsyncNotifier<ListingSearchResult>`; debounces 350ms, cancels in-flight, caches last result (stale-while-revalidate) |
+| | `searchResultsProvider` | `AsyncNotifier<ListingSearchResult>`; debounces 350ms, cancels superseded work, and drains every stable matching search page before publishing one aggregate result (stale-while-revalidate). The aggregate reports `page: 1` and its loaded item count as `pageSize`; repositories still preserve the wire response page metadata. |
 | listing | `listingDetailProvider(slugPair)` | family `AsyncNotifier<RoomDetail>`; in-memory cache for back-nav |
 | | `roomAvailabilityProvider(roomId)` | family `AsyncNotifier<RoomAvailability>`; fetches today..+`availabilityWindowDays` (42) once, kept alive; feeds both the detail "When it's open" strip and the apply calendar |
 | apply | `applyDraftProvider(roomId)` | family `Notifier<ApplicationDraft>` — survives the SSO gate; cleared on submit success |

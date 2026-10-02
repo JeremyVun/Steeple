@@ -61,13 +61,17 @@ class FakeDiscoveryRepository implements DiscoveryRepository {
       ];
     }
 
+    final totalCount = items.length;
+    final offset = (query.page - 1) * query.pageSize;
+    final pageItems = items.skip(offset).take(query.pageSize).toList();
+
     return ListingSearchResult(
-      items: items,
-      totalCount: items.length,
-      isZeroResult: items.isEmpty,
+      items: pageItems,
+      totalCount: totalCount,
+      isZeroResult: totalCount == 0,
       appliedBounds: all.appliedBounds,
       center: all.center,
-      page: 1,
+      page: query.page,
       pageSize: query.pageSize,
     );
   }

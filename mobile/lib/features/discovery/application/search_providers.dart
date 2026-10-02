@@ -136,12 +136,18 @@ final mapRegionProvider = NotifierProvider<MapRegionNotifier, BoundingBox?>(
 /// revalidating (MOBILE_DESIGN §4 rule 5 — AsyncNotifier preserves the
 /// previous value through rebuilds, AsyncValueView renders it stale).
 class SearchResultsNotifier extends AsyncNotifier<ListingSearchResult> {
+  CancelToken? _activeCancel;
+  var _searchGeneration = 0;
+
   @override
   Future<ListingSearchResult> build() async {
     final filters = ref.watch(searchFiltersProvider);
     final region = ref.watch(mapRegionProvider);
 
+    final generation = ++_searchGeneration;
+    _activeCancel?.cancel('Search inputs changed');
     final cancel = CancelToken();
+    _activeCancel = cancel;
     ref.onDispose(() {
       if (!cancel.isCancelled) cancel.cancel();
     });
@@ -150,13 +156,59 @@ class SearchResultsNotifier extends AsyncNotifier<ListingSearchResult> {
       // Debounce interactive changes only — never the cold start.
       await Future<void>.delayed(const Duration(milliseconds: 350));
     }
-    return ref
-        .read(discoveryRepositoryProvider)
-        .search(filters.toQuery(region), cancel: cancel);
+    _throwIfSuperseded(generation, cancel);
+    return _loadAllPages(filters.toQuery(region), generation, cancel);
   }
 
   Future<void> refresh() async {
     ref.invalidateSelf();
     await future;
+  }
+
+  Future<ListingSearchResult> _loadAllPages(
+    SearchQuery query,
+    int generation,
+    CancelToken cancel,
+  ) async {
+    final repository = ref.read(discoveryRepositoryProvider);
+    final firstPage = await repository.search(
+      query.copyWith(page: 1),
+      cancel: cancel,
+    );
+    _throwIfSuperseded(generation, cancel);
+
+    final items = List<RoomSummary>.of(firstPage.items);
+    var nextPage = firstPage.page + 1;
+    while (items.length < firstPage.totalCount) {
+      final page = await repository.search(
+        query.copyWith(page: nextPage),
+        cancel: cancel,
+      );
+      _throwIfSuperseded(generation, cancel);
+      if (page.page != nextPage || page.items.isEmpty) break;
+      items.addAll(page.items);
+      nextPage++;
+    }
+
+    return ListingSearchResult(
+      items: items,
+      totalCount: firstPage.totalCount,
+      isZeroResult: items.isEmpty,
+      appliedBounds: firstPage.appliedBounds,
+      center: firstPage.center,
+      page: 1,
+      pageSize: items.length,
+    );
+  }
+
+  void _throwIfSuperseded(int generation, CancelToken cancel) {
+    if (generation != _searchGeneration || cancel.isCancelled) {
+      final cancellation = cancel.cancelError;
+      if (cancellation != null) throw cancellation;
+      throw DioException.requestCancelled(
+        requestOptions: RequestOptions(path: '/api/v1/listings/search'),
+        reason: 'Search inputs changed',
+      );
+    }
   }
 }

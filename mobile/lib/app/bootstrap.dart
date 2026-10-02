@@ -37,7 +37,17 @@ Future<void> bootstrap() async {
 
   final sessionManager = env.useFakes
       ? FakeSessionManager() as SessionManager
-      : ApiSessionManager(authDio: Dio(BaseOptions(baseUrl: env.apiBaseUrl.toString())));
+      : ApiSessionManager(
+          authDio: Dio(
+            BaseOptions(
+              baseUrl: env.apiBaseUrl.toString(),
+              connectTimeout: const Duration(seconds: 10),
+              sendTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(seconds: 20),
+              headers: {'Accept': 'application/json'},
+            ),
+          ),
+        );
   final pushService = UpgradablePushService();
 
   final container = ProviderContainer(
@@ -63,7 +73,9 @@ Future<void> bootstrap() async {
     ],
   );
 
-  runApp(UncontrolledProviderScope(container: container, child: const SteepleApp()));
+  runApp(
+    UncontrolledProviderScope(container: container, child: const SteepleApp()),
+  );
 
   SchedulerBinding.instance.addPostFrameCallback((_) {
     unawaited(_deferredInit(container, env, sessionManager, pushService));
@@ -76,7 +88,9 @@ Future<void> bootstrap() async {
 final fakeRepositoryOverrides = <Override>[
   discoveryRepositoryProvider.overrideWith((ref) => FakeDiscoveryRepository()),
   listingRepositoryProvider.overrideWith((ref) => FakeListingRepository()),
-  applicationsRepositoryProvider.overrideWith((ref) => FakeApplicationsRepository()),
+  applicationsRepositoryProvider.overrideWith(
+    (ref) => FakeApplicationsRepository(),
+  ),
   inboxRepositoryProvider.overrideWith((ref) => FakeInboxRepository()),
   bookingsRepositoryProvider.overrideWith((ref) => FakeBookingsRepository()),
   profileRepositoryProvider.overrideWith((ref) => FakeProfileRepository()),
@@ -154,7 +168,8 @@ class UpgradablePushService implements PushService {
   }
 
   @override
-  Future<void> requestPermissionInContext() => _delegate.requestPermissionInContext();
+  Future<void> requestPermissionInContext() =>
+      _delegate.requestPermissionInContext();
 
   @override
   Future<void> registerIfPermitted() => _delegate.registerIfPermitted();

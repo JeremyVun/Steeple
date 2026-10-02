@@ -17,6 +17,7 @@ class FakeSessionManager implements SessionManager {
   final bool startSignedIn;
   final _state = ValueNotifier<SessionState>(const SessionUnknown());
   final List<Future<void> Function()> _signOutHandlers = [];
+  var _identityGeneration = 0;
 
   /// Set to make the next [signIn] fail or cancel — error-state UI work.
   SignInResult? nextSignInResult;
@@ -25,13 +26,21 @@ class FakeSessionManager implements SessionManager {
   ValueListenable<SessionState> get state => _state;
 
   @override
+  int get identityGeneration => _identityGeneration;
+
+  @override
   Future<void> restore() async {
-    _state.value = startSignedIn ? SignedIn(await _fixtureUser()) : const SignedOut();
+    _identityGeneration++;
+    _state.value = startSignedIn
+        ? SignedIn(await _fixtureUser())
+        : const SignedOut();
   }
 
   @override
   Future<SignInResult> signIn(SsoProvider provider) async {
+    final generation = ++_identityGeneration;
     await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (generation != _identityGeneration) return const SignInCancelled();
     final scripted = nextSignInResult;
     if (scripted != null) {
       nextSignInResult = null;
@@ -44,16 +53,18 @@ class FakeSessionManager implements SessionManager {
 
   @override
   Future<void> signOut() async {
+    final generation = ++_identityGeneration;
     for (final handler in List.of(_signOutHandlers)) {
       try {
         await handler();
       } catch (_) {}
     }
-    _state.value = const SignedOut();
+    if (generation == _identityGeneration) _state.value = const SignedOut();
   }
 
   @override
   Future<void> forceSignOut() async {
+    _identityGeneration++;
     _state.value = const SignedOut(wasForced: true);
   }
 
@@ -65,11 +76,14 @@ class FakeSessionManager implements SessionManager {
   Future<bool> refreshAfter401() async => _state.value is SignedIn;
 
   @override
-  void addSignOutHandler(Future<void> Function() handler) => _signOutHandlers.add(handler);
+  void addSignOutHandler(Future<void> Function() handler) =>
+      _signOutHandlers.add(handler);
 
   Future<UserProfile> _fixtureUser() async {
     final raw = await rootBundle.loadString('test/fixtures/auth_session.json');
-    final session = AuthSession.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    final session = AuthSession.fromJson(
+      jsonDecode(raw) as Map<String, dynamic>,
+    );
     return session.user;
   }
 }

@@ -13,6 +13,11 @@ abstract class SessionManager {
   /// Exposed to the app as [sessionProvider]; the router's refresh listenable.
   ValueListenable<SessionState> get state;
 
+  /// Changes whenever a restore, sign-in, or sign-out supersedes the active
+  /// identity. Interceptors use it to avoid retrying one account's request
+  /// with another account's token.
+  int get identityGeneration;
+
   /// Restores tokens/user from secure storage at bootstrap; resolves
   /// [SessionUnknown] into SignedIn/SignedOut.
   Future<void> restore();
@@ -47,7 +52,9 @@ abstract class SessionManager {
 /// MOBILE_CONTRACTS §8). Overridden in bootstrap with the real manager's
 /// listenable.
 final sessionManagerProvider = Provider<SessionManager>(
-  (ref) => throw UnimplementedError('sessionManagerProvider is overridden in bootstrap'),
+  (ref) => throw UnimplementedError(
+    'sessionManagerProvider is overridden in bootstrap',
+  ),
 );
 
 final sessionProvider = Provider<SessionState>((ref) {
