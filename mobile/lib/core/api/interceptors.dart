@@ -28,8 +28,18 @@ class AuthInterceptor extends Interceptor {
     RequestInterceptorHandler handler,
   ) async {
     final sessionManager = _sessionManager();
+    final requestGeneration = sessionManager.identityGeneration;
     final token = await sessionManager.validAccessToken();
-    options.extra[_identityGenerationKey] = sessionManager.identityGeneration;
+    if (requestGeneration != sessionManager.identityGeneration) {
+      return handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.cancel,
+          message: 'The account changed before this request was sent.',
+        ),
+      );
+    }
+    options.extra[_identityGenerationKey] = requestGeneration;
     if (token != null) {
       options.headers['Authorization'] = 'Bearer $token';
     }

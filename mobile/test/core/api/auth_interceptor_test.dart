@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,7 +78,52 @@ class _ChangingSessionManager implements SessionManager {
   Future<String?> validAccessToken() async => 'access-token';
 }
 
+class _TokenLookupSession extends _ChangingSessionManager {
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<String?> validAccessToken() async {
+    started.complete();
+    await release.future;
+    return null;
+  }
+}
+
 void main() {
+  test(
+    'never sends an old account draft after identity changes during token lookup',
+    () async {
+      final session = _TokenLookupSession();
+      final firstAdapter = _StatusAdapter(401);
+      final retryAdapter = _StatusAdapter(200);
+      final retryDio = Dio()..httpClientAdapter = retryAdapter;
+      final dio = Dio()
+        ..interceptors.add(AuthInterceptor(() => session, retryDio))
+        ..httpClientAdapter = firstAdapter;
+      final pending = expectLater(
+        dio.post<void>(
+          '/applications',
+          data: {'intentText': 'Old account draft'},
+        ),
+        throwsA(
+          isA<DioException>().having(
+            (e) => e.type,
+            'type',
+            DioExceptionType.cancel,
+          ),
+        ),
+      );
+      await session.started.future;
+      session._identityGeneration++;
+      session.release.complete();
+      await pending;
+      expect(firstAdapter.requests, 0);
+      expect(retryAdapter.requests, 0);
+      expect(session.refreshCalls, 0);
+    },
+  );
+
   test('does not retry a 401 with a token from a newer identity', () async {
     final session = _ChangingSessionManager();
     final retryAdapter = _StatusAdapter(200);

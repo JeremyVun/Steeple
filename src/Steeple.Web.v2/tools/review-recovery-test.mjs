@@ -247,6 +247,106 @@ for (const delayed of ['profile', 'refresh', 'retried-profile']) {
   });
 }
 
+await check('a write waiting on profile restoration cannot cross accounts', async () => {
+  let release;
+  let id = 'old';
+  let writes = 0;
+  globalThis.fetch = async (url, init = {}) => {
+    if (url.endsWith('/auth/sessions') && init.method === 'POST') return json(person(id));
+    if (url.endsWith('/auth/sessions') && init.method === 'DELETE') return new Response(null, { status: 204 });
+    if (url.endsWith('/auth/refresh')) return json({}, { status: 401 });
+    if (url.endsWith('/me')) return new Promise((resolve) => { release = () => resolve(json(person('old').user)); });
+    throw new Error(`unexpected request ${url}`);
+  };
+  const session = await import('../src/data/session.js?review-restoring-write');
+  await session.signIn({ email: 'old@example.com' });
+  const restoration = session.fetchCurrentUser();
+  await settled(() => release);
+  const pending = assert.rejects(session.withAccess(async () => { writes++; }), (error) => error.status === 401);
+  id = 'new';
+  await session.signIn({ email: 'new@example.com' });
+  release();
+  await Promise.all([restoration, pending]);
+  assert.equal(writes, 0);
+  assert.equal(session.currentUser()?.id, 'new');
+  await session.signOut();
+});
+
+await check('automatic recovery expires a held profile after definitive refresh refusal', async () => {
+  const nativeSetTimeout = globalThis.setTimeout;
+  let retry;
+  let phase = 'boot';
+  const changes = [];
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 5000) {
+      retry = () => callback(...args);
+      return 1;
+    }
+    return nativeSetTimeout(callback, delay, ...args);
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    if (url.endsWith('/auth/sessions') && init.method === 'POST') return json(person('held'));
+    if (url.endsWith('/auth/sessions') && init.method === 'DELETE') return new Response(null, { status: 204 });
+    if (url.endsWith('/auth/refresh')) return json({}, { status: phase === 'outage' ? 503 : 401 });
+    throw new Error(`unexpected request ${url}`);
+  };
+  const session = await import('../src/data/session.js?review-recovery-refusal');
+  const unwatch = session.onSessionChange((_held, reason) => changes.push(reason));
+  try {
+    await session.signIn({ email: 'held@example.com' });
+    phase = 'outage';
+    await assert.rejects(session.withAccess(async () => { throw new api.ApiError('expired', 401); }));
+    assert.equal(session.isSignedIn(), true);
+    await settled(() => retry);
+    phase = 'refused';
+    retry();
+    await settled(() => !session.isSignedIn());
+    assert.equal(session.currentUser(), null);
+    assert.equal(session.accessToken(), null);
+    assert.equal(changes.filter((reason) => reason === session.REASON.expired).length, 1);
+  } finally {
+    unwatch();
+    await session.signOut();
+    globalThis.setTimeout = nativeSetTimeout;
+  }
+});
+
+for (const supersededBy of ['sign-out', 'new-sign-in', 'sibling-sign-out']) {
+  await check(`a delayed sign-in cannot replace ${supersededBy}`, async () => {
+    const previousWindow = globalThis.window;
+    let receive;
+    globalThis.window = { BroadcastChannel: class {
+      addEventListener(_name, listener) { receive = listener; }
+      postMessage() {}
+    } };
+    let release;
+    let creates = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      if (url.endsWith('/auth/sessions') && init.method === 'POST') {
+        if (++creates === 1) return new Promise((resolve) => { release = () => resolve(json(person('old'))); });
+        return json(person('new'));
+      }
+      if (url.endsWith('/auth/sessions') && init.method === 'DELETE') return new Response(null, { status: 204 });
+      if (url.endsWith('/auth/refresh')) return json({}, { status: 401 });
+      throw new Error(`unexpected request ${url}`);
+    };
+    const session = await import(`../src/data/session.js?review-sign-in-${supersededBy}`);
+    try {
+      const pending = assert.rejects(session.signIn({ email: 'old@example.com' }), (error) => error.status === 401);
+      await settled(() => release);
+      if (supersededBy === 'new-sign-in') await session.signIn({ email: 'new@example.com' });
+      else if (supersededBy === 'sibling-sign-out') receive({ data: { type: 'session', state: 'out' } });
+      else await session.signOut();
+      release();
+      await pending;
+      assert.equal(session.currentUser()?.id ?? null, supersededBy === 'new-sign-in' ? 'new' : null);
+    } finally {
+      await session.signOut();
+      globalThis.window = previousWindow;
+    }
+  });
+}
+
 function wireRoom(number) {
   return {
     roomId: `room-${number}`,

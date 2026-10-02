@@ -164,6 +164,10 @@ export async function signInWithProvider({
   displayName = null,
   turnstileToken = null,
 }) {
+  const started = ++generation;
+  clearRefreshRetry();
+  refreshing = null;
+  restoring = null;
   const answer = await api.createSession({
     provider,
     idToken,
@@ -174,7 +178,7 @@ export async function signInWithProvider({
     refreshTransport: 'cookie',
   });
 
-  generation += 1;
+  if (started !== generation) throw new api.ApiError('session changed during sign-in', 401);
   suppressed = false;
   cookieRefused = false;
   clearRefreshRetry();
@@ -275,9 +279,10 @@ function expireIfHeld() {
  * @returns {Promise<T>}
  */
 export async function withAccess(work) {
-  if (restoring) await restoring;
-  if (suppressed) throw new api.ApiError('not signed in', 401);
   const started = generation;
+  if (restoring) await restoring;
+  if (started !== generation) throw new api.ApiError('session changed', 401);
+  if (suppressed) throw new api.ApiError('not signed in', 401);
 
   let token = access;
   if (!token) {
@@ -333,7 +338,11 @@ export function fetchCurrentUser(reason = REASON.refreshed) {
     let token = access;
     try {
       token ??= await refresh();
-      if (!token || started !== generation || suppressed) return currentUser();
+      if (started !== generation || suppressed) return currentUser();
+      if (!token) {
+        expireIfHeld();
+        return currentUser();
+      }
 
       let me;
       try {
