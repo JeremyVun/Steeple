@@ -287,6 +287,7 @@ public class BookingIntegrityTests
     {
         await using var db = CreateContext();
         var organizer = NewUser("Organizer");
+        var room = await db.Rooms.SingleAsync(r => r.Id == roomId);
         var application = new Application
         {
             Id = Guid.NewGuid(),
@@ -301,6 +302,9 @@ public class BookingIntegrityTests
             StartTime = startTime,
             EndTime = endTime,
             IntentText = "Weekly community gathering.",
+            QuotedPricePerHour = room.PricePerHour,
+            QuotedCurrency = room.Currency,
+            QuotedHouseRules = room.HouseRules,
             Status = ApplicationStatus.Pending,
             CreatedAtUtc = FixedNow,
             ExpiresAtUtc = FixedNow.AddDays(14),
@@ -334,10 +338,19 @@ public class BookingIntegrityTests
         StartTime = startTime,
         EndTime = endTime,
         IntentText = "A community gathering.",
+        QuotedPricePerHour = QuoteForRoom(roomId).PricePerHour,
+        QuotedCurrency = QuoteForRoom(roomId).Currency,
+        QuotedHouseRules = QuoteForRoom(roomId).HouseRules,
         Status = ApplicationStatus.Pending,
         CreatedAtUtc = FixedNow,
         ExpiresAtUtc = FixedNow.AddDays(14),
     };
+
+    private static (decimal PricePerHour, string Currency, string HouseRules) QuoteForRoom(Guid roomId) => roomId == GymnasiumId
+        ? (60m, "USD", "Non-marking shoes required on the court. No outside food on the gym floor.")
+        : roomId == MusicRoomId
+            ? (35m, "USD", "Piano use included. No food or drink near the instrument.")
+            : (25m, "USD", "Erase whiteboards after use. Stack chairs before leaving.");
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {

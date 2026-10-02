@@ -31,7 +31,10 @@ public record BookingDto(
     IReadOnlyList<OccurrenceDto> Occurrences,
     BookingRatingsDto? Ratings,
     // Additive 2026-08-05 (payments rails): how money moves for this booking.
-    BookingPaymentDto? Payment = null);
+    BookingPaymentDto? Payment = null,
+    // The approved application terms, frozen for the booking's lifetime. Legacy bookings that
+    // predate quote snapshots return null.
+    ApplicationQuoteDto? Quote = null);
 
 /// <summary>
 /// The booking's payment posture (additive 2026-08-05 — docs/contracts/payments.md).

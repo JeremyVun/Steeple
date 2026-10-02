@@ -236,7 +236,8 @@ public sealed class AtomicBookingNotificationsTests(PostgresDatabaseFixture fixt
     }
 
     private static SubmitApplicationRequest Request() => new("community", 10,
-        new ScheduleDto("oneOff", new DateOnly(2027, 1, 12), null, null, "10:00", "12:00"), "Weekly gathering", null);
+        new ScheduleDto("oneOff", new DateOnly(2027, 1, 12), null, null, "10:00", "12:00"), "Weekly gathering", null,
+        Quote: new ApplicationQuoteDto(40m, "USD", ""));
 
     private sealed class FixedClock : TimeProvider
     {

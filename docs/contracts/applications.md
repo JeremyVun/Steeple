@@ -16,7 +16,9 @@
                 "startDate": "2026-09-01", "endDate": "2026-12-15",   // endDate mandatory when recurring
                 "daysOfWeek": ["tuesday", "thursday"], "startTime": "09:00", "endTime": "11:30" },
   "intentText": "Toddler playgroup, ~15 people…", "turnstileToken": "…",
-  "organizationName": "Vienna Toddler Playgroup" }  // optional ≤200 chars, additive 2026-07-08
+  "organizationName": "Vienna Toddler Playgroup", // optional ≤200 chars
+  "quote": { "pricePerHour": 45.00, "currency": "USD",
+             "houseRules": "No open flames. Clean-up required before departure." } }
 ```
 `schedule.daysOfWeek` *(replaced `dayOfWeek: string` 2026-07-05 — clean break, no released
 clients)*: array of weekday tokens (`"sunday"`…`"saturday"` — `conventions.md` §2.1),
@@ -34,6 +36,7 @@ whose selected weekdays occur between its dates — it would materialize zero oc
 via `payments.md` first; applies to every room, instant or manual)*,
 `403 turnstile_failed`, `404 room_not_bookable` (unknown **and** unpublished rooms answer
 identically — no existence leak),
+`409 quote_changed` (missing or no longer exact `quote`; review the room terms and submit again),
 `409 schedule_unavailable` (any occurrence outside open hours / on a blackout / already booked —
 body carries the per-date conflict list, `manage.md` "Guest availability reads"; skipped for
 rooms with no availability rules), `409 slot_taken` *(instant venues only, below)*,
@@ -70,11 +73,20 @@ status, createdAtUtc, decidedAtUtc?, expiresAtUtc,
 bookingId? /* set once approved — the booking it created */, messageCount,
 messages: [{id, senderId, body, sentAtUtc}],
 hasPaymentMethod /* additive 2026-08-05: the organizer has a card on file — host-visible
-trust signal; always true for applications submitted behind the 402 gate */ }`
+trust signal; always true for applications submitted behind the 402 gate */,
+quote? /* {pricePerHour, currency, houseRules}; null only for legacy rows */ }`
 `status`: `pending | needsInfo | counterOffered | approved | declined | withdrawn | expired`.
 List endpoints return `messages: []` (thread stays behind the detail fetch); `messageCount` is
 always set. Undecided applications auto-expire 14 days after submission (lazy sweep on read —
 no worker).
+
+The quote must exactly equal the published room's terms when the request is first submitted.
+The server saves that reviewed rate, currency, and rules with the application; a later listing
+edit cannot alter either party's agreement. Replaying an existing `Idempotency-Key` returns its
+original application before checking current terms. Applications created before the snapshot
+schema retain a null quote and cannot be approved or counter-accepted: those actions return
+`409 quote_required` without changing application or counter state, so the organizer must review
+and submit a new request.
 
 **Counter-offers ✅ *(built 2026-07-05 — availability plan commit 8; behind `booking.counter_offers`)*:**
 
@@ -163,6 +175,7 @@ occurrences: [{id, startUtc, endUtc, localDate, status: "scheduled"|"occurred"|"
 payment /* additive 2026-08-05 (payments.md): {mode: "inApp"|"offline", perOccurrenceAmount?,
   currency?, nextChargeAtUtc? /* when the next unpaid occurrence charges; null when nothing
   remains or offline */} */,
+quote? /* {pricePerHour, currency, houseRules}; null only for pre-quote legacy bookings */,
 ratings?{byOrganizer?{stars, comment?, createdAtUtc}, byVenue?{stars, comment?, createdAtUtc}, canRate, rateByUtc?} }`
 List endpoints return `occurrences: []` (the set stays behind the detail fetch);
 `nextOccurrence` is always populated where one exists. `localDate` and `schedule` are

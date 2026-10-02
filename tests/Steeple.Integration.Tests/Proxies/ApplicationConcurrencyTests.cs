@@ -264,11 +264,18 @@ public class ApplicationConcurrencyTests
         StartTime = startTime,
         EndTime = endTime,
         IntentText = "A community gathering.",
+        QuotedPricePerHour = QuoteForRoom(roomId).PricePerHour,
+        QuotedCurrency = QuoteForRoom(roomId).Currency,
+        QuotedHouseRules = QuoteForRoom(roomId).HouseRules,
         Status = ApplicationStatus.Pending,
         IdempotencyKey = idempotencyKey,
         CreatedAtUtc = FixedNow,
         ExpiresAtUtc = FixedNow.AddDays(14),
     };
+
+    private static (decimal PricePerHour, string Currency, string HouseRules) QuoteForRoom(Guid roomId) => roomId == GymnasiumId
+        ? (60m, "USD", "Non-marking shoes required on the court. No outside food on the gym floor.")
+        : (35m, "USD", "Piano use included. No food or drink near the instrument.");
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {

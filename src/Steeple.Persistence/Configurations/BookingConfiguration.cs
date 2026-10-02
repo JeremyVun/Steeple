@@ -19,6 +19,8 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         // Price and collection mode are independent (024-offline-booking-prices.sql).
         builder.Property(b => b.PricePerOccurrence).HasPrecision(12, 2);
         builder.Property(b => b.Currency).HasMaxLength(3);
+        builder.Property(b => b.QuotedPricePerHour).HasPrecision(12, 2);
+        builder.Property(b => b.QuotedHouseRules).HasColumnType("text");
         builder.Property(b => b.InAppPayment).HasDefaultValue(false);
 
         // One booking per application, ever.

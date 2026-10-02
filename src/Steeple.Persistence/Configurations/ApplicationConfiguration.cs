@@ -22,6 +22,9 @@ public class ApplicationConfiguration : IEntityTypeConfiguration<Application>
 
         builder.Property(a => a.IntentText).IsRequired().HasMaxLength(2000);
         builder.Property(a => a.OrganizationName).HasMaxLength(200);
+        builder.Property(a => a.QuotedPricePerHour).HasPrecision(12, 2);
+        builder.Property(a => a.QuotedCurrency).HasMaxLength(3);
+        builder.Property(a => a.QuotedHouseRules).HasColumnType("text");
 
         // Single-value and status enums persist as their underlying int (repo convention).
         builder.Property(a => a.ActivityType).HasConversion<int>();

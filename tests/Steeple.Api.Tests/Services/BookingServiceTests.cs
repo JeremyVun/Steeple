@@ -419,6 +419,9 @@ public class BookingServiceTests
         var booking = Assert.Single(repo.Bookings);
         Assert.Equal(100m, booking.PricePerOccurrence); // $40/h × 2.5h — frozen at confirmation
         Assert.Equal("USD", booking.Currency);
+        Assert.Equal(40m, booking.QuotedPricePerHour);
+        Assert.Equal("No open flames.", booking.QuotedHouseRules);
+        Assert.Equal(40m, confirmation.Booking!.Quote!.PricePerHour);
         Assert.Equal("inApp", confirmation.Booking!.Payment!.Mode);
         Assert.Equal(100m, confirmation.Booking.Payment.PerOccurrenceAmount);
     }
@@ -441,6 +444,47 @@ public class BookingServiceTests
         Assert.Equal(100m, confirmation.Booking!.Payment!.PerOccurrenceAmount);
         Assert.Null(confirmation.Booking.Payment.NextChargeAtUtc);
         Assert.Equal("offline", confirmation.Booking!.Payment!.Mode);
+    }
+
+    [Fact]
+    public async Task ConfirmFromApplicationAsync_UsesAcceptedQuoteForCounterDurationAfterRoomEdit()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        room.PricePerHour = 40m;
+        room.HouseRules = "Original rules.";
+        var application = NewApprovedApplication(room, organizer);
+        room.PricePerHour = 999m;
+        room.Currency = "AUD";
+        room.HouseRules = "Changed rules.";
+        var service = CreateService(repo, managers, out _, out _);
+        var counter = new ScheduleSpec(
+            ScheduleFrequency.OneOff, application.StartDate, null, null,
+            new TimeOnly(13, 0), new TimeOnly(14, 30));
+
+        var confirmation = await service.ConfirmFromApplicationAsync(application, counter);
+
+        Assert.Null(confirmation.Error);
+        var booking = Assert.Single(repo.Bookings);
+        Assert.Equal(60m, booking.PricePerOccurrence);
+        Assert.Equal("USD", booking.Currency);
+        Assert.Equal(40m, booking.QuotedPricePerHour);
+        Assert.Equal("Original rules.", booking.QuotedHouseRules);
+    }
+
+    [Fact]
+    public async Task ConfirmFromApplicationAsync_LegacyApplicationRequiresResubmissionWithoutSaving()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApprovedApplication(room, organizer);
+        application.QuotedPricePerHour = null;
+        application.QuotedCurrency = null;
+        application.QuotedHouseRules = null;
+        var service = CreateService(repo, managers, out _, out _);
+
+        var confirmation = await service.ConfirmFromApplicationAsync(application);
+
+        Assert.Equal(ApplicationErrorCodes.QuoteRequired, confirmation.Error!.Code);
+        Assert.Empty(repo.Bookings);
     }
 
     [Fact]
@@ -516,6 +560,9 @@ public class BookingServiceTests
         Name = "Fellowship Hall",
         Slug = $"fellowship-hall-{Guid.NewGuid():N}",
         Status = RoomStatus.Published,
+        PricePerHour = 40m,
+        Currency = "USD",
+        HouseRules = "No open flames.",
         CreatedAtUtc = FixedNow,
     };
 
@@ -543,6 +590,9 @@ public class BookingServiceTests
         StartTime = new TimeOnly(9, 0),
         EndTime = new TimeOnly(11, 30),
         IntentText = "A community meetup.",
+        QuotedPricePerHour = room.PricePerHour,
+        QuotedCurrency = room.Currency,
+        QuotedHouseRules = room.HouseRules,
         Status = ApplicationStatus.Approved,
         CreatedAtUtc = FixedNow,
         DecidedAtUtc = FixedNow,

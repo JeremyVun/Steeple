@@ -130,6 +130,8 @@ public sealed class ApplicationsController : ControllerBase
             ApplicationErrorCodes.InvalidState => StatusCodes.Status409Conflict,
             ApplicationErrorCodes.SlotTaken => StatusCodes.Status409Conflict,
             ApplicationErrorCodes.ScheduleUnavailable => StatusCodes.Status409Conflict,
+            ApplicationErrorCodes.QuoteChanged => StatusCodes.Status409Conflict,
+            ApplicationErrorCodes.QuoteRequired => StatusCodes.Status409Conflict,
             ApplicationErrorCodes.PaymentMethodRequired => StatusCodes.Status402PaymentRequired,
             ApplicationErrorCodes.InvalidApplication => StatusCodes.Status400BadRequest,
             _ => StatusCodes.Status404NotFound,

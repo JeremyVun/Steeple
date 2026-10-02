@@ -78,6 +78,13 @@ public sealed class BookingService : IBookingService
         var venue = room.Venue ?? throw new InvalidOperationException("Application passed without its venue.");
         _ = application.Organizer ?? throw new InvalidOperationException("Application passed without its organizer.");
 
+        if (application.QuoteDto() is not { } quote)
+        {
+            return new BookingConfirmation(null, false, new ApplicationError(
+                ApplicationErrorCodes.QuoteRequired,
+                "This request was created before its price and rules could be saved. Ask the organizer to review and submit it again."));
+        }
+
         // IANA ids resolve natively on the ICU-backed platforms we run on (Linux containers, macOS).
         // Venues are founder-seeded (concierge phase), so an unknown zone is a data bug, not user input.
         var venueZone = TimeZoneInfo.FindSystemTimeZoneById(venue.Timezone);
@@ -112,7 +119,7 @@ public sealed class BookingService : IBookingService
         // offline commitment; editing a room's advertised rate must never change its agreed price.
         var paid = _flags.IsEnabled(PaymentService.PaymentsFlag);
         var pricePerOccurrence = decimal.Round(
-            room.PricePerHour * (decimal)(spec.EndTime - spec.StartTime).TotalHours, 2);
+            quote.PricePerHour * (decimal)(spec.EndTime - spec.StartTime).TotalHours, 2);
 
         var booking = new Booking
         {
@@ -128,7 +135,9 @@ public sealed class BookingService : IBookingService
             EndTime = spec.EndTime,
             Status = BookingStatus.Confirmed,
             PricePerOccurrence = pricePerOccurrence,
-            Currency = room.Currency,
+            Currency = quote.Currency,
+            QuotedPricePerHour = quote.PricePerHour,
+            QuotedHouseRules = quote.HouseRules,
             InAppPayment = paid,
             CreatedAtUtc = now,
         };

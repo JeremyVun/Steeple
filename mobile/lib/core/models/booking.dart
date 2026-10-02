@@ -67,6 +67,9 @@ abstract class Occurrence with _$Occurrence {
     /// Wire token: `scheduled | occurred | noShow | cancelled`.
     required String status,
     String? noShowMarkedBy,
+
+    /// Charge state when this occurrence has an in-app payment.
+    String? paymentStatus,
   }) = _Occurrence;
 
   factory Occurrence.fromJson(Map<String, dynamic> json) =>
@@ -118,6 +121,9 @@ abstract class Booking with _$Booking {
     @Default(<Occurrence>[]) List<Occurrence> occurrences,
     BookingRatings? ratings,
     BookingPayment? payment,
+
+    /// The accepted room terms, null for pre-quote legacy bookings.
+    ApplicationQuote? quote,
   }) = _Booking;
 
   factory Booking.fromJson(Map<String, dynamic> json) =>

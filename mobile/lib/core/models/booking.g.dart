@@ -69,6 +69,7 @@ _Occurrence _$OccurrenceFromJson(Map<String, dynamic> json) => _Occurrence(
   localDate: json['localDate'] as String,
   status: json['status'] as String,
   noShowMarkedBy: json['noShowMarkedBy'] as String?,
+  paymentStatus: json['paymentStatus'] as String?,
 );
 
 Map<String, dynamic> _$OccurrenceToJson(_Occurrence instance) =>
@@ -79,6 +80,7 @@ Map<String, dynamic> _$OccurrenceToJson(_Occurrence instance) =>
       'localDate': instance.localDate,
       'status': instance.status,
       'noShowMarkedBy': instance.noShowMarkedBy,
+      'paymentStatus': instance.paymentStatus,
     };
 
 _Booking _$BookingFromJson(Map<String, dynamic> json) => _Booking(
@@ -117,6 +119,9 @@ _Booking _$BookingFromJson(Map<String, dynamic> json) => _Booking(
   payment: json['payment'] == null
       ? null
       : BookingPayment.fromJson(json['payment'] as Map<String, dynamic>),
+  quote: json['quote'] == null
+      ? null
+      : ApplicationQuote.fromJson(json['quote'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
@@ -143,4 +148,5 @@ Map<String, dynamic> _$BookingToJson(_Booking instance) => <String, dynamic>{
   'occurrences': instance.occurrences,
   'ratings': instance.ratings,
   'payment': instance.payment,
+  'quote': instance.quote,
 };

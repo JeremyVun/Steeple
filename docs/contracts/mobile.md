@@ -483,6 +483,11 @@ surface `mobile`; provider readiness and preference events remain server-authori
 Offline bookings show the frozen price and direct-payment instruction; missing legacy prices
 stay unknown. `booking.json` covers an offline price snapshot.
 
+`Application.quote` and `Booking.quote` mirror `{pricePerHour, currency, houseRules}`; both are
+nullable only for legacy server rows. `ApplicationDraft.quote` sends the reviewed terms on submit.
+`Application.hasPaymentMethod` defaults to false when absent, and `Occurrence.paymentStatus` is
+optional for uncharged and offline occurrences.
+
 `core/models/legal_documents.dart` shares the API/web document versions. Profile's public seam
 exports `ensureCurrentAgreements` and `openLegalDocument`; apply, host approvals/counter-offers, guest acceptance and room edits wait for explicit agreement
 before writing and preserves the draft on refusal/failure. Profile offers review and both legal

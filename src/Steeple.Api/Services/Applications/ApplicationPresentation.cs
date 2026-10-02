@@ -50,8 +50,17 @@ public static class ApplicationPresentation
             CounterOffer: includeThread ? application.LatestCounterOfferDto() : null,
             OrganizationName: application.OrganizationName,
             // Display cache on the loaded organizer — the host-visible trust signal.
-            HasPaymentMethod: organizer.PaymentMethodSetAtUtc is not null);
+            HasPaymentMethod: organizer.PaymentMethodSetAtUtc is not null,
+            Quote: application.QuoteDto());
     }
+
+    /// <summary>Returns the saved agreement only when all terms are present; pre-quote rows stay legacy.</summary>
+    public static ApplicationQuoteDto? QuoteDto(this Application application) =>
+        application.QuotedPricePerHour is { } price
+        && application.QuotedCurrency is { } currency
+        && application.QuotedHouseRules is { } houseRules
+            ? new ApplicationQuoteDto(price, currency, houseRules)
+            : null;
 
     /// <summary>
     /// The latest non-superseded counter-offer on an application as its wire DTO — the open counter

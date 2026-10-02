@@ -46,6 +46,20 @@ abstract class ProposedSchedule with _$ProposedSchedule {
       parseWireEnum(frequency, ScheduleFrequency.tokens, ScheduleFrequency.unknown);
 }
 
+/// The room terms reviewed at submission. A confirmed booking carries the same snapshot even if
+/// the room changes afterwards.
+@freezed
+abstract class ApplicationQuote with _$ApplicationQuote {
+  const factory ApplicationQuote({
+    required double pricePerHour,
+    required String currency,
+    required String houseRules,
+  }) = _ApplicationQuote;
+
+  factory ApplicationQuote.fromJson(Map<String, dynamic> json) =>
+      _$ApplicationQuoteFromJson(json);
+}
+
 /// Provider-facing organizer reputation summary.
 @freezed
 abstract class OrganizerRatingSummary with _$OrganizerRatingSummary {
@@ -205,6 +219,12 @@ abstract class Application with _$Application {
     /// The organizer's group/organization ("Who's asking") — additive
     /// 2026-07-08, null when not given.
     String? organizationName,
+
+    /// The submission-time room terms. Null on legacy applications.
+    ApplicationQuote? quote,
+
+    /// Host-visible trust signal returned by the API.
+    @Default(false) bool hasPaymentMethod,
   }) = _Application;
 
   factory Application.fromJson(Map<String, dynamic> json) =>
@@ -228,6 +248,9 @@ abstract class ApplicationDraft with _$ApplicationDraft {
 
     /// Optional "Who's asking" group/organization (additive 2026-07-08).
     String? organizationName,
+
+    /// The room terms reviewed before this draft is submitted.
+    ApplicationQuote? quote,
   }) = _ApplicationDraft;
 
   factory ApplicationDraft.fromJson(Map<String, dynamic> json) =>

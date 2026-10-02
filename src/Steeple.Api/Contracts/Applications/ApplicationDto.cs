@@ -30,7 +30,10 @@ public record ApplicationDto(
     string? OrganizationName = null,
     // Additive 2026-08-05 (payments rails): the organizer has a payment method on file — the
     // host-visible trust signal (always true for applications submitted after the 402 gate).
-    bool HasPaymentMethod = false);
+    bool HasPaymentMethod = false,
+    // The rate, currency and rules both parties agreed to when this request was submitted.
+    // Legacy rows without a complete snapshot remain null.
+    ApplicationQuoteDto? Quote = null);
 
 /// <summary>The applying organizer as shown to the provider, including reputation once available.</summary>
 public record OrganizerDto(Guid Id, string DisplayName, OrganizerRatingSummaryDto? RatingSummary);

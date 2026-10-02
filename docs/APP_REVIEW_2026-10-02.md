@@ -16,7 +16,7 @@ Status: implementation in progress. Preserve the findings below as the original 
 
 Plan: fix availability and notification transaction correctness; repair web session, HTTP and catalogue recovery; repair native session/paging behavior and review-query scaling; preserve quoted commitments; implement the approved visual fixes with Astra; run regression and adversarial review passes until the exercised scope produces no new actionable findings. Passing a finite review is not proof of an issue-free application.
 
-Owner decisions on 2 October 2026: “Yes, assign Astra these fixes”; “Keep instant booking preselected”; support address “jvun@steepleapp.co”. Still pending: migration behavior for pending requests with no saved quote; contact-only versus in-app case resolution. Independent correctness work proceeds while these are pending. No production deployment is included in this fix pass.
+Owner decisions on 2 October 2026: “Yes, assign Astra these fixes”; “Keep instant booking preselected”; support address “jvun@steepleapp.co”; “Require review and resubmission” for legacy unquoted requests; “Start with contextual support email”. No product decision is currently pending. No production deployment is included in this fix pass.
 
 ## Review plan
 

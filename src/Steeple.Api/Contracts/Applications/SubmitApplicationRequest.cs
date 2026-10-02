@@ -12,10 +12,13 @@ namespace Steeple.Api.Contracts.Applications;
 /// <param name="OrganizationName">The organizer's group/organization (≤200 chars). Optional,
 /// additive 2026-07-08 — shown to the host as "Who's asking" (a bare "our nonprofit" was the
 /// sole approval blocker in the discovery study).</param>
+/// <param name="Quote">The exact room terms the organizer reviewed. A changed or missing quote
+/// must be reviewed and submitted again.</param>
 public record SubmitApplicationRequest(
     string ActivityType,
     int GroupSize,
     ScheduleDto Schedule,
     string IntentText,
     string? TurnstileToken,
-    string? OrganizationName = null);
+    string? OrganizationName = null,
+    ApplicationQuoteDto? Quote = null);

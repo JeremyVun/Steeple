@@ -21,7 +21,7 @@ public sealed class ReleaseReadinessHttpTests(PostgresDatabaseFixture database)
         var roomId = Guid.NewGuid(); // Missing room proves whether the protected action was reached.
         var request = new SubmitApplicationRequest("community", 12,
             new ScheduleDto("oneOff", new DateOnly(2027, 9, 21), null, null, "18:00", "20:00"),
-            "Community meeting", null);
+            "Community meeting", null, Quote: new ApplicationQuoteDto(40m, "USD", ""));
         var path = $"/api/v1/listings/{roomId}/applications";
 
         using (var blocked = await host.Send(HttpMethod.Post, path, token, request))

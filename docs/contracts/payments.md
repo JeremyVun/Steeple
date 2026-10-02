@@ -22,7 +22,9 @@ Development). Off = no 402 gate, offline collection, sweeper idle. Since 2026-08
 no longer touches booking modes: instant book confirms either way (offline, uncharged) and
 `RoomDetail.bookingMode` emits the host's stored choice — the uncarded spam caps in
 `applications.md` are the guest-side guard the card was standing in for.
-Every new booking snapshots its per-session price and currency, including offline bookings.
+Every new application snapshots the reviewed hourly rate, currency, and house rules; its confirmed
+booking preserves those terms and computes the per-session amount from the accepted schedule,
+including offline bookings.
 `Booking.InAppPayment` freezes the collection mode independently. A booking confirmed while
 the flag was off **stays offline forever**, including after payments are enabled. The charge
 repository and charge service both require in-app mode. Migration 024 backfills the old mode;
@@ -72,9 +74,10 @@ on file → **`402 payment_method_required`** otherwise (card-at-request, bookin
 
 ## Charge timing + failure ladder ✅ (booking-modes.md, supersedes payments.md §5 in part)
 
-- Price snapshot at confirmation: `bookings.PricePerOccurrence = room.pricePerHour × schedule
-  hours`, `Currency` — frozen for the booking's life. Column writes only, inside the booking
-  transaction; the gateway is never called there.
+- Price snapshot at confirmation: `bookings.PricePerOccurrence = application.quotedPricePerHour ×
+  approved-or-counter schedule hours`, rounded to two decimals. Currency and house rules come from
+  the application quote, never the current room; all are frozen for the booking's life. Column
+  writes only, inside the booking transaction; the gateway is never called there.
 - **First occurrence charges at confirmation** (post-commit kick; a one-off is the
   single-occurrence case). **Later occurrences charge at T−48h** via the `PaymentSweeper`
   (`IHostedService`, ~5 min cadence, Postgres advisory lock; intervals in the `Payments`

@@ -196,11 +196,16 @@ recurring term entering its last 14 days gets its one renewal nudge
 (`RenewalNudgeSentAtUtc`). Cancel (either party): occurrences starting beyond the **48h
 notice window** are freed, nearer ones stand; other party notified. No-show: either party
 marks the other on a past, non-cancelled occurrence (feeds ratings in Phase 6).
+An application saves the exact published hourly rate, currency, and house rules reviewed at
+submission. Confirmation copies those terms and derives the per-occurrence amount from the
+approved or counter schedule, so later room edits cannot change a commitment. Pre-snapshot
+applications remain legacy and reject approval or counter acceptance with `quote_required`;
+the attempted state transition is not saved.
 
 **Payments** (built 2026-08-05 — mock-gateway era; wire truth `docs/contracts/payments.md`,
 design `docs/backlog/payments.md` + charge timing `docs/backlog/booking-modes.md`; behind the
 `payments.enabled` flag) — guest method-on-file (`/me/payments/*`; display brand/last4 only,
-never a PAN), the apply-time 402 gate, price snapshot at confirmation, per-occurrence charging
+never a PAN), the apply-time 402 gate, submission-time quote preserved at confirmation, per-occurrence charging
 (first occurrence at confirmation, later ones at T−48h), the failure ladder (notify → paced
 retries → auto-cancel at T−24h → 2 consecutive cancels end the term), the declarative refund
 rule (every charge on a cancelled occurrence refunds in full — host rescinds and guest ≥48h
@@ -485,11 +490,13 @@ data-retention indexes (021): global oldest-first scans for terminal tokens, not
 
 rooms 1─* applications *─1 users (organizer)
   ActivityType, GroupSize, venue-local schedule (dates/times + optional DayOfWeek),
-  IntentText, Status, ExpiresAtUtc; unique filtered (OrganizerId, IdempotencyKey)
+  IntentText, quoted PricePerHour/Currency/HouseRules?, Status, ExpiresAtUtc;
+  unique filtered (OrganizerId, IdempotencyKey)
   applications 1─* application_messages (the "ask" thread)
 
 applications 1─0..1 bookings (created by approval or an instant-mode submit; unique ApplicationId;
-  EndDate always bounded; + PricePerOccurrence?/Currency? price snapshot at confirmation — 014)
+  EndDate always bounded; + PricePerOccurrence?/Currency? plus quoted PricePerHour?/HouseRules?
+  from the application agreement — 014/026)
   bookings 1─* booking_occurrences (denormalized RoomId; UTC StartUtc/EndUtc; venue-local LocalDate)
     EXCLUDE USING gist ("RoomId" WITH =, tstzrange("StartUtc","EndUtc") WITH &&)
       WHERE ("Status" <> 3)      ← cancelled rows leave the constraint = cancellation frees slots

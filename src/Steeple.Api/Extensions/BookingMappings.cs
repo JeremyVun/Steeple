@@ -55,7 +55,12 @@ public static class BookingMappings
             NextOccurrence: next?.ToDto(paymentStatuses),
             Occurrences: includeOccurrences ? occurrences.Select(o => o.ToDto(paymentStatuses)).ToList() : [],
             Ratings: ratings,
-            Payment: ToPaymentDto(booking, occurrences, paymentStatuses, nowUtc, chargeWindow));
+            Payment: ToPaymentDto(booking, occurrences, paymentStatuses, nowUtc, chargeWindow),
+            Quote: booking.QuotedPricePerHour is { } price
+                && booking.Currency is { } currency
+                && booking.QuotedHouseRules is { } houseRules
+                    ? new ApplicationQuoteDto(price, currency, houseRules)
+                    : null);
     }
 
     /// <summary>Maps one occurrence.</summary>

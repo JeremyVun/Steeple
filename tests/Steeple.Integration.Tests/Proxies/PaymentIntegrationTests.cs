@@ -135,7 +135,9 @@ public class PaymentIntegrationTests
             var result = await applications.SubmitAsync(
                 ClassroomBId, organizerId,
                 SubmitRequest(new DateOnly(2027, 8, 3), new TimeOnly(18, 0), new TimeOnly(20, 0),
-                    endDate: new DateOnly(2027, 8, 10), daysOfWeek: ["tuesday"]),
+                    endDate: new DateOnly(2027, 8, 10), daysOfWeek: ["tuesday"],
+                    pricePerHour: 25m,
+                    houseRules: "Erase whiteboards after use. Stack chairs before leaving."),
                 idempotencyKey: null, remoteIp: null);
             Assert.Null(result.Error);
 
@@ -244,7 +246,10 @@ public class PaymentIntegrationTests
         {
             var (applications, _, _) = CreateStack(db);
             var result = await applications.SubmitAsync(
-                ClassroomBId, organizerId, SubmitRequest(new DateOnly(2027, 8, 27), new TimeOnly(14, 0), new TimeOnly(16, 0)),
+                ClassroomBId, organizerId, SubmitRequest(
+                    new DateOnly(2027, 8, 27), new TimeOnly(14, 0), new TimeOnly(16, 0),
+                    pricePerHour: 25m,
+                    houseRules: "Erase whiteboards after use. Stack chairs before leaving."),
                 idempotencyKey: null, remoteIp: null);
 
             // Instant book still confirms — the charge is post-commit; failure enters the ladder.
@@ -321,7 +326,8 @@ public class PaymentIntegrationTests
     }
 
     private static SubmitApplicationRequest SubmitRequest(
-        DateOnly date, TimeOnly start, TimeOnly end, DateOnly? endDate = null, IReadOnlyList<string>? daysOfWeek = null) =>
+        DateOnly date, TimeOnly start, TimeOnly end, DateOnly? endDate = null, IReadOnlyList<string>? daysOfWeek = null,
+        decimal pricePerHour = 60m, string houseRules = "Non-marking shoes required on the court. No outside food on the gym floor.") =>
         new(
             ActivityType: "community",
             GroupSize: 12,
@@ -333,7 +339,8 @@ public class PaymentIntegrationTests
                 StartTime: start.ToString("HH\\:mm"),
                 EndTime: end.ToString("HH\\:mm")),
             IntentText: "A community gathering.",
-            TurnstileToken: null);
+            TurnstileToken: null,
+            Quote: new ApplicationQuoteDto(pricePerHour, "USD", houseRules));
 
     /// <summary>An organizer, optionally with a mock payment method on file (never a PAN).</summary>
     private async Task<Guid> SeedOrganizerAsync(string? last4)

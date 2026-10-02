@@ -537,19 +537,28 @@ export function acceptAgreement(docType, version, { accessToken } = /** @type {a
  */
 
 /**
+ * @typedef {object} ApplicationQuote  room terms reviewed at submission
+ * @property {number} pricePerHour
+ * @property {string} currency
+ * @property {string} houseRules
+ */
+
+/**
  * `POST /listings/{roomId}/applications` — the ask, authorized.
  *
  * `roomId` is steeple's GUID, not the product's `venueSlug:roomSlug`. The body
  * is SubmitApplicationRequest verbatim; `organizationName` is optional and is
- * shown to the host as "Who's asking". An `Idempotency-Key` makes a replay
+ * shown to the host as "Who's asking". `quote` must exactly mirror the currently loaded
+ * room's `pricePerHour`, `currency`, and `houseRules`. An `Idempotency-Key` makes a replay
  * return the original application rather than filing a second one — the answer
  * is then 200 instead of 201, and identical either way.
  *
  * Failures arrive as problem documents: `invalid_application` (400),
- * `schedule_unavailable` / `slot_taken` (409), `turnstile_failed` (403).
+ * `schedule_unavailable` / `slot_taken` / `quote_changed` / `quote_required` (409),
+ * `turnstile_failed` (403).
  *
  * @param {string} roomId
- * @param {{activityType:string,groupSize:number,schedule:WireSchedule,intentText:string,turnstileToken:string|null,organizationName?:string|null}} body
+ * @param {{activityType:string,groupSize:number,schedule:WireSchedule,intentText:string,turnstileToken:string|null,organizationName?:string|null,quote:ApplicationQuote}} body
  * @returns {Promise<object>} ApplicationDto
  */
 export function submitApplication(roomId, body, { accessToken, idempotencyKey = null } = /** @type {any} */ ({})) {

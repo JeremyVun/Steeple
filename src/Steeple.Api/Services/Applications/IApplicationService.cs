@@ -125,6 +125,12 @@ public static class ApplicationErrorCodes
     /// </summary>
     public const string ScheduleUnavailable = "schedule_unavailable";
 
+    /// <summary>The room's rate, currency or rules changed after the organizer reviewed them.</summary>
+    public const string QuoteChanged = "quote_changed";
+
+    /// <summary>An older application has no saved terms and must be reviewed and submitted again.</summary>
+    public const string QuoteRequired = "quote_required";
+
     /// <summary>
     /// Submit requires a payment method on file (402 — docs/contracts/payments.md): the caller
     /// must run the <c>/me/payments/setup</c> loop first. Card-at-request, booking-modes.md.

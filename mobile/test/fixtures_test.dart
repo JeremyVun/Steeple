@@ -136,6 +136,9 @@ void main() {
       expect(application.messages, hasLength(2));
       expect(application.bookingId, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
       expect(application.organizer.ratingSummary?.ratingCount, 2);
+      expect(application.quote?.pricePerHour, 45.0);
+      expect(application.quote?.currency, 'USD');
+      expect(application.hasPaymentMethod, isFalse);
     });
 
     test('tolerates an unknown status token and unrecognized fields', () {
@@ -197,9 +200,11 @@ void main() {
       expect(booking.occurrences, hasLength(3));
       expect(booking.nextOccurrence?.statusValue, OccurrenceStatus.scheduled);
       expect(booking.occurrences[0].statusValue, OccurrenceStatus.occurred);
+      expect(booking.nextOccurrence?.paymentStatus, isNull);
       expect(booking.ratings?.byVenue?.stars, 5);
       expect(booking.ratings?.byVenue?.comment, contains('tidy'));
       expect(booking.ratings?.canRate, isTrue);
+      expect(booking.quote?.houseRules, contains('No open flames'));
     });
   });
 

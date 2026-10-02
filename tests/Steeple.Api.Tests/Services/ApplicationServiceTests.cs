@@ -28,6 +28,21 @@ public class ApplicationServiceTests
         Assert.Equal(expectedSize, result.Value.PageSize);
     }
 
+    [Fact]
+    public async Task ApplicationQuote_IsReturnedToOrganizerAndManagerLists()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        repo.Applications.Add(application);
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var organizerResult = await service.GetForOrganizerAsync(organizer.Id, null, 1, 24);
+        var managerResult = await service.GetForManagerAsync(manager.Id, null, 1, 24);
+
+        Assert.Equal(40m, Assert.Single(organizerResult.Value!.Items).Quote!.PricePerHour);
+        Assert.Equal("No open flames.", Assert.Single(managerResult.Value!.Items).Quote!.HouseRules);
+    }
+
     // ----- Submit ---------------------------------------------------------------------------
 
     [Fact]
@@ -47,6 +62,10 @@ public class ApplicationServiceTests
         Assert.Equal(ApplicationStatus.Pending, created.Status);
         Assert.Equal(FixedNow, created.CreatedAtUtc);
         Assert.Equal(FixedNow.AddDays(14), created.ExpiresAtUtc);
+        Assert.Equal(room.PricePerHour, created.QuotedPricePerHour);
+        Assert.Equal(room.Currency, created.QuotedCurrency);
+        Assert.Equal(room.HouseRules, created.QuotedHouseRules);
+        Assert.Equal(created.QuotedPricePerHour, result.Value.Application.Quote!.PricePerHour);
 
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.ApplicationReceived, notification.Type);
@@ -70,6 +89,69 @@ public class ApplicationServiceTests
         Assert.False(second.Value!.Created);
         Assert.Equal(first.Value.Application.Id, second.Value.Application.Id);
         Assert.Single(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_MissingQuote_ReturnsQuoteChangedAndPersistsNothing()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(includeQuote: false), null, null);
+
+        Assert.Equal(ApplicationErrorCodes.QuoteChanged, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_StaleQuote_ReturnsQuoteChangedAndPersistsNothing()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        room.PricePerHour = 55m;
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var result = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), null, null);
+
+        Assert.Equal(ApplicationErrorCodes.QuoteChanged, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_IdempotentReplay_ReturnsOriginalAfterRoomTermsChange()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out var turnstile, out _);
+        var key = Guid.NewGuid();
+
+        var first = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), key, null);
+        room.HouseRules = "New rules";
+        turnstile.ShouldPass = false;
+        var replay = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), key, null);
+
+        Assert.Null(first.Error);
+        Assert.Null(replay.Error);
+        Assert.False(replay.Value!.Created);
+        Assert.Equal(first.Value!.Application.Id, replay.Value.Application.Id);
+        Assert.Equal("No open flames.", replay.Value.Application.Quote!.HouseRules);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_QuoteReadRemainsTheReviewedTermsAfterRoomEdit()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+
+        var submitted = await service.SubmitAsync(room.Id, organizer.Id, NewSubmitRequest(), null, null);
+        room.PricePerHour = 999m;
+        room.Currency = "AUD";
+        room.HouseRules = "Changed rules.";
+        var listed = await service.GetForOrganizerAsync(organizer.Id, null, 1, 24);
+
+        Assert.Null(submitted.Error);
+        var quote = Assert.Single(listed.Value!.Items).Quote;
+        Assert.Equal(40m, quote!.PricePerHour);
+        Assert.Equal("USD", quote.Currency);
+        Assert.Equal("No open flames.", quote.HouseRules);
     }
 
     [Fact]
@@ -607,6 +689,29 @@ public class ApplicationServiceTests
         Assert.Equal(ApplicationStatus.Approved, repo.Applications.Single().Status);
     }
 
+    [Fact]
+    public async Task DecideAsync_LegacyQuoteRequired_LeavesRequestPendingWithoutBooking()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var application = NewApplication(room, organizer);
+        application.QuotedPricePerHour = null;
+        application.QuotedCurrency = null;
+        application.QuotedHouseRules = null;
+        repo.Applications.Add(application);
+        var bookings = new FakeBookingService
+        {
+            Error = new ApplicationError(ApplicationErrorCodes.QuoteRequired, "Resubmit the reviewed request."),
+        };
+        var service = CreateService(repo, managers, out _, out _, out _, bookings);
+
+        var result = await service.DecideAsync(application.Id, manager.Id, new ApplicationDecisionRequest("approve", null));
+
+        Assert.Equal(ApplicationErrorCodes.QuoteRequired, result.Error!.Code);
+        Assert.Equal(ApplicationStatus.Pending, application.Status);
+        Assert.Null(application.DecidedAtUtc);
+        Assert.Empty(bookings.Confirmed);
+    }
+
     // ----- Withdraw ------------------------------------------------------------------------------
 
     [Fact]
@@ -978,6 +1083,32 @@ public class ApplicationServiceTests
         var notification = Assert.Single(notifications.Calls);
         Assert.Equal(NotificationType.CounterOfferAccepted, notification.Type);
         Assert.Contains(analytics.Events, e => e.EventType == "counter_offer_responded");
+    }
+
+    [Fact]
+    public async Task RespondToCounterOfferAsync_LegacyQuoteRequired_LeavesCounterOpenWithoutBooking()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var application = NewApplication(room, organizer, ApplicationStatus.CounterOffered);
+        application.QuotedPricePerHour = null;
+        application.QuotedCurrency = null;
+        application.QuotedHouseRules = null;
+        var counter = NewCounter(application);
+        repo.Applications.Add(application);
+        var bookings = new FakeBookingService
+        {
+            Error = new ApplicationError(ApplicationErrorCodes.QuoteRequired, "Resubmit the reviewed request."),
+        };
+        var service = CreateService(repo, managers, out _, out _, out _, bookings, flags: CounterFlag());
+
+        var result = await service.RespondToCounterOfferAsync(
+            application.Id, organizer.Id, new CounterOfferResponseRequest("accept"));
+
+        Assert.Equal(ApplicationErrorCodes.QuoteRequired, result.Error!.Code);
+        Assert.Equal(ApplicationStatus.CounterOffered, application.Status);
+        Assert.Equal(CounterOfferStatus.Open, counter.Status);
+        Assert.Null(counter.RespondedAtUtc);
+        Assert.Empty(bookings.Confirmed);
     }
 
     [Fact]
@@ -1370,6 +1501,9 @@ public class ApplicationServiceTests
         Name = "Fellowship Hall",
         Slug = $"fellowship-hall-{Guid.NewGuid():N}",
         Status = status,
+        PricePerHour = 40m,
+        Currency = "USD",
+        HouseRules = "No open flames.",
         CreatedAtUtc = FixedNow,
     };
 
@@ -1404,6 +1538,9 @@ public class ApplicationServiceTests
             StartTime = new TimeOnly(9, 0),
             EndTime = new TimeOnly(11, 0),
             IntentText = "We'd like to host a community meetup.",
+            QuotedPricePerHour = room.PricePerHour,
+            QuotedCurrency = room.Currency,
+            QuotedHouseRules = room.HouseRules,
             Status = status,
             CreatedAtUtc = created,
             DecidedAtUtc = decidedAtUtc,
@@ -1435,6 +1572,9 @@ public class ApplicationServiceTests
         StartTime = TimeOnly.ParseExact(startTime, "HH:mm"),
         EndTime = TimeOnly.ParseExact(endTime, "HH:mm"),
         IntentText = "Weekly gathering.",
+        QuotedPricePerHour = room.PricePerHour,
+        QuotedCurrency = room.Currency,
+        QuotedHouseRules = room.HouseRules,
         Status = status,
         CreatedAtUtc = FixedNow,
         DecidedAtUtc = status is ApplicationStatus.Pending or ApplicationStatus.NeedsInfo ? null : FixedNow,
@@ -1462,12 +1602,15 @@ public class ApplicationServiceTests
         int groupSize = 20,
         ScheduleDto? schedule = null,
         string intentText = "We'd like to host a community meetup for local families.",
-        string? turnstileToken = "turnstile-token") => new(
+        string? turnstileToken = "turnstile-token",
+        ApplicationQuoteDto? quote = null,
+        bool includeQuote = true) => new(
         ActivityType: activityType,
         GroupSize: groupSize,
         Schedule: schedule ?? NewSchedule(),
         IntentText: intentText,
-        TurnstileToken: turnstileToken);
+        TurnstileToken: turnstileToken,
+        Quote: includeQuote ? quote ?? new ApplicationQuoteDto(40m, "USD", "No open flames.") : null);
 
     private static ApplicationService CreateService(
         FakeApplicationRepository repo,
@@ -1501,6 +1644,8 @@ public class ApplicationServiceTests
     {
         public bool SlotTaken { get; set; }
 
+        public ApplicationError? Error { get; set; }
+
         /// <summary>What <see cref="CountUpcomingForOrganizerAsync"/> answers (the uncarded cap read).</summary>
         public UpcomingBookingCounts Upcoming { get; set; } = new(0, 0);
 
@@ -1519,6 +1664,11 @@ public class ApplicationServiceTests
         public Task<BookingConfirmation> ConfirmFromApplicationAsync(
             Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
         {
+            if (Error is { } error)
+            {
+                return Task.FromResult(new BookingConfirmation(null, SlotTaken: false, Error: error));
+            }
+
             if (SlotTaken)
             {
                 return Task.FromResult(new BookingConfirmation(null, SlotTaken: true));

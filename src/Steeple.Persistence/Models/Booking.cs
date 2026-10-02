@@ -61,6 +61,12 @@ public class Booking
     /// <summary>ISO currency code of the snapshot; null when a legacy price is unknown.</summary>
     public string? Currency { get; set; }
 
+    /// <summary>The agreed hourly room rate copied from the accepted application.</summary>
+    public decimal? QuotedPricePerHour { get; set; }
+
+    /// <summary>The agreed room rules copied from the accepted application.</summary>
+    public string? QuotedHouseRules { get; set; }
+
     /// <summary>Payment collection mode frozen at confirmation; a price alone never authorizes charging.</summary>
     public bool InAppPayment { get; set; }
 

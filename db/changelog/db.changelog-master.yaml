@@ -77,3 +77,6 @@ databaseChangeLog:
   - include:
       file: 025-availability-configured.sql
       relativeToChangelogFile: true
+  - include:
+      file: 026-application-quotes.sql
+      relativeToChangelogFile: true

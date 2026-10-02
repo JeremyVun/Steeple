@@ -68,6 +68,14 @@ public sealed class ApplicationService : IApplicationService
     public async Task<ApplicationResult<SubmitOutcome>> SubmitAsync(
         Guid roomId, Guid organizerId, SubmitApplicationRequest request, Guid? idempotencyKey, string? remoteIp, CancellationToken ct = default)
     {
+        // A replay is the original completed operation, not a new submission subject to today's
+        // room terms or an expiring bot token. Check it before every mutable precondition.
+        if (idempotencyKey is { } key
+            && await _repository.FindByIdempotencyKeyAsync(organizerId, key, ct).ConfigureAwait(false) is { } existing)
+        {
+            return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(existing.ToDto(includeThread: true), Created: false));
+        }
+
         if (!await _turnstile.VerifyAsync(request.TurnstileToken, remoteIp, ct).ConfigureAwait(false))
         {
             return ApplicationResult<SubmitOutcome>.Fail(
@@ -111,6 +119,13 @@ public sealed class ApplicationService : IApplicationService
             // distinguish a Draft room from no room (same stance as the listing visibility gate).
             return ApplicationResult<SubmitOutcome>.Fail(
                 ApplicationErrorCodes.RoomNotBookable, "This space isn't taking requests.");
+        }
+
+        if (!QuoteMatches(request.Quote, room))
+        {
+            return ApplicationResult<SubmitOutcome>.Fail(
+                ApplicationErrorCodes.QuoteChanged,
+                "The price or house rules changed. Review the request and submit it again.");
         }
 
         // Past-date guard on the venue's own wall clock (the calendar the schedule speaks, same as
@@ -163,6 +178,9 @@ public sealed class ApplicationService : IApplicationService
             EndTime = schedule.EndTime,
             IntentText = request.IntentText.Trim(),
             OrganizationName = string.IsNullOrWhiteSpace(request.OrganizationName) ? null : request.OrganizationName.Trim(),
+            QuotedPricePerHour = request.Quote!.PricePerHour,
+            QuotedCurrency = request.Quote.Currency,
+            QuotedHouseRules = request.Quote.HouseRules,
             Status = instant ? ApplicationStatus.Approved : ApplicationStatus.Pending,
             DecidedAtUtc = instant ? now : null,
             IdempotencyKey = idempotencyKey,
@@ -199,6 +217,12 @@ public sealed class ApplicationService : IApplicationService
 
         return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(created.ToDto(includeThread: true), Created: true));
     }
+
+    private static bool QuoteMatches(ApplicationQuoteDto? quote, Room room) =>
+        quote is not null
+        && quote.PricePerHour == room.PricePerHour
+        && string.Equals(quote.Currency, room.Currency, StringComparison.Ordinal)
+        && string.Equals(quote.HouseRules, room.HouseRules, StringComparison.Ordinal);
 
     /// <summary>
     /// The instant-book spam guard (booking-modes.md, 2026-08-08 — instant no longer rides on

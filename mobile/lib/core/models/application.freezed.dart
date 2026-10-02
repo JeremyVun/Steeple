@@ -315,6 +315,275 @@ as String,
 
 
 /// @nodoc
+mixin _$ApplicationQuote {
+
+ double get pricePerHour; String get currency; String get houseRules;
+/// Create a copy of ApplicationQuote
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ApplicationQuoteCopyWith<ApplicationQuote> get copyWith => _$ApplicationQuoteCopyWithImpl<ApplicationQuote>(this as ApplicationQuote, _$identity);
+
+  /// Serializes this ApplicationQuote to a JSON map.
+  Map<String, dynamic> toJson();
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApplicationQuote&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,pricePerHour,currency,houseRules);
+
+@override
+String toString() {
+  return 'ApplicationQuote(pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ApplicationQuoteCopyWith<$Res>  {
+  factory $ApplicationQuoteCopyWith(ApplicationQuote value, $Res Function(ApplicationQuote) _then) = _$ApplicationQuoteCopyWithImpl;
+@useResult
+$Res call({
+ double pricePerHour, String currency, String houseRules
+});
+
+
+
+
+}
+/// @nodoc
+class _$ApplicationQuoteCopyWithImpl<$Res>
+    implements $ApplicationQuoteCopyWith<$Res> {
+  _$ApplicationQuoteCopyWithImpl(this._self, this._then);
+
+  final ApplicationQuote _self;
+  final $Res Function(ApplicationQuote) _then;
+
+/// Create a copy of ApplicationQuote
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? pricePerHour = null,Object? currency = null,Object? houseRules = null,}) {
+  return _then(_self.copyWith(
+pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as String,houseRules: null == houseRules ? _self.houseRules : houseRules // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [ApplicationQuote].
+extension ApplicationQuotePatterns on ApplicationQuote {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>(TResult Function( _ApplicationQuote value)?  $default,{required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case _ApplicationQuote() when $default != null:
+return $default(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>(TResult Function( _ApplicationQuote value)  $default,){
+final _that = this;
+switch (_that) {
+case _ApplicationQuote():
+return $default(_that);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>(TResult? Function( _ApplicationQuote value)?  $default,){
+final _that = this;
+switch (_that) {
+case _ApplicationQuote() when $default != null:
+return $default(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( double pricePerHour,  String currency,  String houseRules)?  $default,{required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case _ApplicationQuote() when $default != null:
+return $default(_that.pricePerHour,_that.currency,_that.houseRules);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( double pricePerHour,  String currency,  String houseRules)  $default,) {final _that = this;
+switch (_that) {
+case _ApplicationQuote():
+return $default(_that.pricePerHour,_that.currency,_that.houseRules);case _:
+  throw StateError('Unexpected subclass');
+
+}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( double pricePerHour,  String currency,  String houseRules)?  $default,) {final _that = this;
+switch (_that) {
+case _ApplicationQuote() when $default != null:
+return $default(_that.pricePerHour,_that.currency,_that.houseRules);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+@JsonSerializable()
+
+class _ApplicationQuote implements ApplicationQuote {
+  const _ApplicationQuote({required this.pricePerHour, required this.currency, required this.houseRules});
+  factory _ApplicationQuote.fromJson(Map<String, dynamic> json) => _$ApplicationQuoteFromJson(json);
+
+@override final  double pricePerHour;
+@override final  String currency;
+@override final  String houseRules;
+
+/// Create a copy of ApplicationQuote
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+_$ApplicationQuoteCopyWith<_ApplicationQuote> get copyWith => __$ApplicationQuoteCopyWithImpl<_ApplicationQuote>(this, _$identity);
+
+@override
+Map<String, dynamic> toJson() {
+  return _$ApplicationQuoteToJson(this, );
+}
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApplicationQuote&&(identical(other.pricePerHour, pricePerHour) || other.pricePerHour == pricePerHour)&&(identical(other.currency, currency) || other.currency == currency)&&(identical(other.houseRules, houseRules) || other.houseRules == houseRules));
+}
+
+@JsonKey(includeFromJson: false, includeToJson: false)
+@override
+int get hashCode => Object.hash(runtimeType,pricePerHour,currency,houseRules);
+
+@override
+String toString() {
+  return 'ApplicationQuote(pricePerHour: $pricePerHour, currency: $currency, houseRules: $houseRules)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class _$ApplicationQuoteCopyWith<$Res> implements $ApplicationQuoteCopyWith<$Res> {
+  factory _$ApplicationQuoteCopyWith(_ApplicationQuote value, $Res Function(_ApplicationQuote) _then) = __$ApplicationQuoteCopyWithImpl;
+@override @useResult
+$Res call({
+ double pricePerHour, String currency, String houseRules
+});
+
+
+
+
+}
+/// @nodoc
+class __$ApplicationQuoteCopyWithImpl<$Res>
+    implements _$ApplicationQuoteCopyWith<$Res> {
+  __$ApplicationQuoteCopyWithImpl(this._self, this._then);
+
+  final _ApplicationQuote _self;
+  final $Res Function(_ApplicationQuote) _then;
+
+/// Create a copy of ApplicationQuote
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? pricePerHour = null,Object? currency = null,Object? houseRules = null,}) {
+  return _then(_ApplicationQuote(
+pricePerHour: null == pricePerHour ? _self.pricePerHour : pricePerHour // ignore: cast_nullable_to_non_nullable
+as double,currency: null == currency ? _self.currency : currency // ignore: cast_nullable_to_non_nullable
+as String,houseRules: null == houseRules ? _self.houseRules : houseRules // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+
+/// @nodoc
 mixin _$OrganizerRatingSummary {
 
  double get averageStars; int get ratingCount; int get noShowCount; int get completedBookings;
@@ -2015,7 +2284,9 @@ mixin _$Application {
 /// counter; the application's own [status] is `counterOffered` while it is.
  CounterOffer? get counterOffer;/// The organizer's group/organization ("Who's asking") — additive
 /// 2026-07-08, null when not given.
- String? get organizationName;
+ String? get organizationName;/// The submission-time room terms. Null on legacy applications.
+ ApplicationQuote? get quote;/// Host-visible trust signal returned by the API.
+ bool get hasPaymentMethod;
 /// Create a copy of Application
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2028,16 +2299,16 @@ $ApplicationCopyWith<Application> get copyWith => _$ApplicationCopyWithImpl<Appl
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is Application&&(identical(other.id, id) || other.id == id)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.organizer, organizer) || other.organizer == organizer)&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.decidedAtUtc, decidedAtUtc) || other.decidedAtUtc == decidedAtUtc)&&(identical(other.expiresAtUtc, expiresAtUtc) || other.expiresAtUtc == expiresAtUtc)&&(identical(other.bookingId, bookingId) || other.bookingId == bookingId)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&const DeepCollectionEquality().equals(other.messages, messages)&&(identical(other.conflicts, conflicts) || other.conflicts == conflicts)&&(identical(other.counterOffer, counterOffer) || other.counterOffer == counterOffer)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is Application&&(identical(other.id, id) || other.id == id)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.organizer, organizer) || other.organizer == organizer)&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.decidedAtUtc, decidedAtUtc) || other.decidedAtUtc == decidedAtUtc)&&(identical(other.expiresAtUtc, expiresAtUtc) || other.expiresAtUtc == expiresAtUtc)&&(identical(other.bookingId, bookingId) || other.bookingId == bookingId)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&const DeepCollectionEquality().equals(other.messages, messages)&&(identical(other.conflicts, conflicts) || other.conflicts == conflicts)&&(identical(other.counterOffer, counterOffer) || other.counterOffer == counterOffer)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName)&&(identical(other.quote, quote) || other.quote == quote)&&(identical(other.hasPaymentMethod, hasPaymentMethod) || other.hasPaymentMethod == hasPaymentMethod));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,roomId,roomName,venueName,venueSlug,roomSlug,organizer,activityType,groupSize,schedule,intentText,status,createdAtUtc,decidedAtUtc,expiresAtUtc,bookingId,messageCount,const DeepCollectionEquality().hash(messages),conflicts,counterOffer,organizationName]);
+int get hashCode => Object.hashAll([runtimeType,id,roomId,roomName,venueName,venueSlug,roomSlug,organizer,activityType,groupSize,schedule,intentText,status,createdAtUtc,decidedAtUtc,expiresAtUtc,bookingId,messageCount,const DeepCollectionEquality().hash(messages),conflicts,counterOffer,organizationName,quote,hasPaymentMethod]);
 
 @override
 String toString() {
-  return 'Application(id: $id, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, organizer: $organizer, activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, status: $status, createdAtUtc: $createdAtUtc, decidedAtUtc: $decidedAtUtc, expiresAtUtc: $expiresAtUtc, bookingId: $bookingId, messageCount: $messageCount, messages: $messages, conflicts: $conflicts, counterOffer: $counterOffer, organizationName: $organizationName)';
+  return 'Application(id: $id, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, organizer: $organizer, activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, status: $status, createdAtUtc: $createdAtUtc, decidedAtUtc: $decidedAtUtc, expiresAtUtc: $expiresAtUtc, bookingId: $bookingId, messageCount: $messageCount, messages: $messages, conflicts: $conflicts, counterOffer: $counterOffer, organizationName: $organizationName, quote: $quote, hasPaymentMethod: $hasPaymentMethod)';
 }
 
 
@@ -2048,11 +2319,11 @@ abstract mixin class $ApplicationCopyWith<$Res>  {
   factory $ApplicationCopyWith(Application value, $Res Function(Application) _then) = _$ApplicationCopyWithImpl;
 @useResult
 $Res call({
- String id, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, Organizer organizer, String activityType, int groupSize, ProposedSchedule schedule, String intentText, String status, DateTime createdAtUtc, DateTime? decidedAtUtc, DateTime expiresAtUtc, String? bookingId, int messageCount, List<ApplicationMessage> messages, ApplicationConflicts? conflicts, CounterOffer? counterOffer, String? organizationName
+ String id, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, Organizer organizer, String activityType, int groupSize, ProposedSchedule schedule, String intentText, String status, DateTime createdAtUtc, DateTime? decidedAtUtc, DateTime expiresAtUtc, String? bookingId, int messageCount, List<ApplicationMessage> messages, ApplicationConflicts? conflicts, CounterOffer? counterOffer, String? organizationName, ApplicationQuote? quote, bool hasPaymentMethod
 });
 
 
-$OrganizerCopyWith<$Res> get organizer;$ProposedScheduleCopyWith<$Res> get schedule;$ApplicationConflictsCopyWith<$Res>? get conflicts;$CounterOfferCopyWith<$Res>? get counterOffer;
+$OrganizerCopyWith<$Res> get organizer;$ProposedScheduleCopyWith<$Res> get schedule;$ApplicationConflictsCopyWith<$Res>? get conflicts;$CounterOfferCopyWith<$Res>? get counterOffer;$ApplicationQuoteCopyWith<$Res>? get quote;
 
 }
 /// @nodoc
@@ -2065,7 +2336,7 @@ class _$ApplicationCopyWithImpl<$Res>
 
 /// Create a copy of Application
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? organizer = null,Object? activityType = null,Object? groupSize = null,Object? schedule = null,Object? intentText = null,Object? status = null,Object? createdAtUtc = null,Object? decidedAtUtc = freezed,Object? expiresAtUtc = null,Object? bookingId = freezed,Object? messageCount = null,Object? messages = null,Object? conflicts = freezed,Object? counterOffer = freezed,Object? organizationName = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? organizer = null,Object? activityType = null,Object? groupSize = null,Object? schedule = null,Object? intentText = null,Object? status = null,Object? createdAtUtc = null,Object? decidedAtUtc = freezed,Object? expiresAtUtc = null,Object? bookingId = freezed,Object? messageCount = null,Object? messages = null,Object? conflicts = freezed,Object? counterOffer = freezed,Object? organizationName = freezed,Object? quote = freezed,Object? hasPaymentMethod = null,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
@@ -2088,7 +2359,9 @@ as int,messages: null == messages ? _self.messages : messages // ignore: cast_nu
 as List<ApplicationMessage>,conflicts: freezed == conflicts ? _self.conflicts : conflicts // ignore: cast_nullable_to_non_nullable
 as ApplicationConflicts?,counterOffer: freezed == counterOffer ? _self.counterOffer : counterOffer // ignore: cast_nullable_to_non_nullable
 as CounterOffer?,organizationName: freezed == organizationName ? _self.organizationName : organizationName // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,quote: freezed == quote ? _self.quote : quote // ignore: cast_nullable_to_non_nullable
+as ApplicationQuote?,hasPaymentMethod: null == hasPaymentMethod ? _self.hasPaymentMethod : hasPaymentMethod // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 /// Create a copy of Application
@@ -2132,6 +2405,18 @@ $CounterOfferCopyWith<$Res>? get counterOffer {
 
   return $CounterOfferCopyWith<$Res>(_self.counterOffer!, (value) {
     return _then(_self.copyWith(counterOffer: value));
+  });
+}/// Create a copy of Application
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApplicationQuoteCopyWith<$Res>? get quote {
+    if (_self.quote == null) {
+    return null;
+  }
+
+  return $ApplicationQuoteCopyWith<$Res>(_self.quote!, (value) {
+    return _then(_self.copyWith(quote: value));
   });
 }
 }
@@ -2215,10 +2500,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName,  ApplicationQuote? quote,  bool hasPaymentMethod)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _Application() when $default != null:
-return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName);case _:
+return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName,_that.quote,_that.hasPaymentMethod);case _:
   return orElse();
 
 }
@@ -2236,10 +2521,10 @@ return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venue
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName,  ApplicationQuote? quote,  bool hasPaymentMethod)  $default,) {final _that = this;
 switch (_that) {
 case _Application():
-return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName);case _:
+return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName,_that.quote,_that.hasPaymentMethod);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2256,10 +2541,10 @@ return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venue
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String id,  String roomId,  String roomName,  String venueName,  String venueSlug,  String roomSlug,  Organizer organizer,  String activityType,  int groupSize,  ProposedSchedule schedule,  String intentText,  String status,  DateTime createdAtUtc,  DateTime? decidedAtUtc,  DateTime expiresAtUtc,  String? bookingId,  int messageCount,  List<ApplicationMessage> messages,  ApplicationConflicts? conflicts,  CounterOffer? counterOffer,  String? organizationName,  ApplicationQuote? quote,  bool hasPaymentMethod)?  $default,) {final _that = this;
 switch (_that) {
 case _Application() when $default != null:
-return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName);case _:
+return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venueSlug,_that.roomSlug,_that.organizer,_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.status,_that.createdAtUtc,_that.decidedAtUtc,_that.expiresAtUtc,_that.bookingId,_that.messageCount,_that.messages,_that.conflicts,_that.counterOffer,_that.organizationName,_that.quote,_that.hasPaymentMethod);case _:
   return null;
 
 }
@@ -2271,7 +2556,7 @@ return $default(_that.id,_that.roomId,_that.roomName,_that.venueName,_that.venue
 @JsonSerializable()
 
 class _Application extends Application {
-  const _Application({required this.id, required this.roomId, required this.roomName, required this.venueName, required this.venueSlug, required this.roomSlug, required this.organizer, required this.activityType, required this.groupSize, required this.schedule, required this.intentText, required this.status, required this.createdAtUtc, this.decidedAtUtc, required this.expiresAtUtc, this.bookingId, required this.messageCount, final  List<ApplicationMessage> messages = const <ApplicationMessage>[], this.conflicts, this.counterOffer, this.organizationName}): _messages = messages,super._();
+  const _Application({required this.id, required this.roomId, required this.roomName, required this.venueName, required this.venueSlug, required this.roomSlug, required this.organizer, required this.activityType, required this.groupSize, required this.schedule, required this.intentText, required this.status, required this.createdAtUtc, this.decidedAtUtc, required this.expiresAtUtc, this.bookingId, required this.messageCount, final  List<ApplicationMessage> messages = const <ApplicationMessage>[], this.conflicts, this.counterOffer, this.organizationName, this.quote, this.hasPaymentMethod = false}): _messages = messages,super._();
   factory _Application.fromJson(Map<String, dynamic> json) => _$ApplicationFromJson(json);
 
 @override final  String id;
@@ -2312,6 +2597,10 @@ class _Application extends Application {
 /// The organizer's group/organization ("Who's asking") — additive
 /// 2026-07-08, null when not given.
 @override final  String? organizationName;
+/// The submission-time room terms. Null on legacy applications.
+@override final  ApplicationQuote? quote;
+/// Host-visible trust signal returned by the API.
+@override@JsonKey() final  bool hasPaymentMethod;
 
 /// Create a copy of Application
 /// with the given fields replaced by the non-null parameter values.
@@ -2326,16 +2615,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Application&&(identical(other.id, id) || other.id == id)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.organizer, organizer) || other.organizer == organizer)&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.decidedAtUtc, decidedAtUtc) || other.decidedAtUtc == decidedAtUtc)&&(identical(other.expiresAtUtc, expiresAtUtc) || other.expiresAtUtc == expiresAtUtc)&&(identical(other.bookingId, bookingId) || other.bookingId == bookingId)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&const DeepCollectionEquality().equals(other._messages, _messages)&&(identical(other.conflicts, conflicts) || other.conflicts == conflicts)&&(identical(other.counterOffer, counterOffer) || other.counterOffer == counterOffer)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _Application&&(identical(other.id, id) || other.id == id)&&(identical(other.roomId, roomId) || other.roomId == roomId)&&(identical(other.roomName, roomName) || other.roomName == roomName)&&(identical(other.venueName, venueName) || other.venueName == venueName)&&(identical(other.venueSlug, venueSlug) || other.venueSlug == venueSlug)&&(identical(other.roomSlug, roomSlug) || other.roomSlug == roomSlug)&&(identical(other.organizer, organizer) || other.organizer == organizer)&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.status, status) || other.status == status)&&(identical(other.createdAtUtc, createdAtUtc) || other.createdAtUtc == createdAtUtc)&&(identical(other.decidedAtUtc, decidedAtUtc) || other.decidedAtUtc == decidedAtUtc)&&(identical(other.expiresAtUtc, expiresAtUtc) || other.expiresAtUtc == expiresAtUtc)&&(identical(other.bookingId, bookingId) || other.bookingId == bookingId)&&(identical(other.messageCount, messageCount) || other.messageCount == messageCount)&&const DeepCollectionEquality().equals(other._messages, _messages)&&(identical(other.conflicts, conflicts) || other.conflicts == conflicts)&&(identical(other.counterOffer, counterOffer) || other.counterOffer == counterOffer)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName)&&(identical(other.quote, quote) || other.quote == quote)&&(identical(other.hasPaymentMethod, hasPaymentMethod) || other.hasPaymentMethod == hasPaymentMethod));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hashAll([runtimeType,id,roomId,roomName,venueName,venueSlug,roomSlug,organizer,activityType,groupSize,schedule,intentText,status,createdAtUtc,decidedAtUtc,expiresAtUtc,bookingId,messageCount,const DeepCollectionEquality().hash(_messages),conflicts,counterOffer,organizationName]);
+int get hashCode => Object.hashAll([runtimeType,id,roomId,roomName,venueName,venueSlug,roomSlug,organizer,activityType,groupSize,schedule,intentText,status,createdAtUtc,decidedAtUtc,expiresAtUtc,bookingId,messageCount,const DeepCollectionEquality().hash(_messages),conflicts,counterOffer,organizationName,quote,hasPaymentMethod]);
 
 @override
 String toString() {
-  return 'Application(id: $id, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, organizer: $organizer, activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, status: $status, createdAtUtc: $createdAtUtc, decidedAtUtc: $decidedAtUtc, expiresAtUtc: $expiresAtUtc, bookingId: $bookingId, messageCount: $messageCount, messages: $messages, conflicts: $conflicts, counterOffer: $counterOffer, organizationName: $organizationName)';
+  return 'Application(id: $id, roomId: $roomId, roomName: $roomName, venueName: $venueName, venueSlug: $venueSlug, roomSlug: $roomSlug, organizer: $organizer, activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, status: $status, createdAtUtc: $createdAtUtc, decidedAtUtc: $decidedAtUtc, expiresAtUtc: $expiresAtUtc, bookingId: $bookingId, messageCount: $messageCount, messages: $messages, conflicts: $conflicts, counterOffer: $counterOffer, organizationName: $organizationName, quote: $quote, hasPaymentMethod: $hasPaymentMethod)';
 }
 
 
@@ -2346,11 +2635,11 @@ abstract mixin class _$ApplicationCopyWith<$Res> implements $ApplicationCopyWith
   factory _$ApplicationCopyWith(_Application value, $Res Function(_Application) _then) = __$ApplicationCopyWithImpl;
 @override @useResult
 $Res call({
- String id, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, Organizer organizer, String activityType, int groupSize, ProposedSchedule schedule, String intentText, String status, DateTime createdAtUtc, DateTime? decidedAtUtc, DateTime expiresAtUtc, String? bookingId, int messageCount, List<ApplicationMessage> messages, ApplicationConflicts? conflicts, CounterOffer? counterOffer, String? organizationName
+ String id, String roomId, String roomName, String venueName, String venueSlug, String roomSlug, Organizer organizer, String activityType, int groupSize, ProposedSchedule schedule, String intentText, String status, DateTime createdAtUtc, DateTime? decidedAtUtc, DateTime expiresAtUtc, String? bookingId, int messageCount, List<ApplicationMessage> messages, ApplicationConflicts? conflicts, CounterOffer? counterOffer, String? organizationName, ApplicationQuote? quote, bool hasPaymentMethod
 });
 
 
-@override $OrganizerCopyWith<$Res> get organizer;@override $ProposedScheduleCopyWith<$Res> get schedule;@override $ApplicationConflictsCopyWith<$Res>? get conflicts;@override $CounterOfferCopyWith<$Res>? get counterOffer;
+@override $OrganizerCopyWith<$Res> get organizer;@override $ProposedScheduleCopyWith<$Res> get schedule;@override $ApplicationConflictsCopyWith<$Res>? get conflicts;@override $CounterOfferCopyWith<$Res>? get counterOffer;@override $ApplicationQuoteCopyWith<$Res>? get quote;
 
 }
 /// @nodoc
@@ -2363,7 +2652,7 @@ class __$ApplicationCopyWithImpl<$Res>
 
 /// Create a copy of Application
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? organizer = null,Object? activityType = null,Object? groupSize = null,Object? schedule = null,Object? intentText = null,Object? status = null,Object? createdAtUtc = null,Object? decidedAtUtc = freezed,Object? expiresAtUtc = null,Object? bookingId = freezed,Object? messageCount = null,Object? messages = null,Object? conflicts = freezed,Object? counterOffer = freezed,Object? organizationName = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? roomId = null,Object? roomName = null,Object? venueName = null,Object? venueSlug = null,Object? roomSlug = null,Object? organizer = null,Object? activityType = null,Object? groupSize = null,Object? schedule = null,Object? intentText = null,Object? status = null,Object? createdAtUtc = null,Object? decidedAtUtc = freezed,Object? expiresAtUtc = null,Object? bookingId = freezed,Object? messageCount = null,Object? messages = null,Object? conflicts = freezed,Object? counterOffer = freezed,Object? organizationName = freezed,Object? quote = freezed,Object? hasPaymentMethod = null,}) {
   return _then(_Application(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as String,roomId: null == roomId ? _self.roomId : roomId // ignore: cast_nullable_to_non_nullable
@@ -2386,7 +2675,9 @@ as int,messages: null == messages ? _self._messages : messages // ignore: cast_n
 as List<ApplicationMessage>,conflicts: freezed == conflicts ? _self.conflicts : conflicts // ignore: cast_nullable_to_non_nullable
 as ApplicationConflicts?,counterOffer: freezed == counterOffer ? _self.counterOffer : counterOffer // ignore: cast_nullable_to_non_nullable
 as CounterOffer?,organizationName: freezed == organizationName ? _self.organizationName : organizationName // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,quote: freezed == quote ? _self.quote : quote // ignore: cast_nullable_to_non_nullable
+as ApplicationQuote?,hasPaymentMethod: null == hasPaymentMethod ? _self.hasPaymentMethod : hasPaymentMethod // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 
@@ -2432,6 +2723,18 @@ $CounterOfferCopyWith<$Res>? get counterOffer {
   return $CounterOfferCopyWith<$Res>(_self.counterOffer!, (value) {
     return _then(_self.copyWith(counterOffer: value));
   });
+}/// Create a copy of Application
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApplicationQuoteCopyWith<$Res>? get quote {
+    if (_self.quote == null) {
+    return null;
+  }
+
+  return $ApplicationQuoteCopyWith<$Res>(_self.quote!, (value) {
+    return _then(_self.copyWith(quote: value));
+  });
 }
 }
 
@@ -2440,7 +2743,8 @@ $CounterOfferCopyWith<$Res>? get counterOffer {
 mixin _$ApplicationDraft {
 
  String get activityType; int get groupSize; ProposedSchedule? get schedule; String get intentText;/// Optional "Who's asking" group/organization (additive 2026-07-08).
- String? get organizationName;
+ String? get organizationName;/// The room terms reviewed before this draft is submitted.
+ ApplicationQuote? get quote;
 /// Create a copy of ApplicationDraft
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -2453,16 +2757,16 @@ $ApplicationDraftCopyWith<ApplicationDraft> get copyWith => _$ApplicationDraftCo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApplicationDraft&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ApplicationDraft&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName)&&(identical(other.quote, quote) || other.quote == quote));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,activityType,groupSize,schedule,intentText,organizationName);
+int get hashCode => Object.hash(runtimeType,activityType,groupSize,schedule,intentText,organizationName,quote);
 
 @override
 String toString() {
-  return 'ApplicationDraft(activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, organizationName: $organizationName)';
+  return 'ApplicationDraft(activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, organizationName: $organizationName, quote: $quote)';
 }
 
 
@@ -2473,11 +2777,11 @@ abstract mixin class $ApplicationDraftCopyWith<$Res>  {
   factory $ApplicationDraftCopyWith(ApplicationDraft value, $Res Function(ApplicationDraft) _then) = _$ApplicationDraftCopyWithImpl;
 @useResult
 $Res call({
- String activityType, int groupSize, ProposedSchedule? schedule, String intentText, String? organizationName
+ String activityType, int groupSize, ProposedSchedule? schedule, String intentText, String? organizationName, ApplicationQuote? quote
 });
 
 
-$ProposedScheduleCopyWith<$Res>? get schedule;
+$ProposedScheduleCopyWith<$Res>? get schedule;$ApplicationQuoteCopyWith<$Res>? get quote;
 
 }
 /// @nodoc
@@ -2490,14 +2794,15 @@ class _$ApplicationDraftCopyWithImpl<$Res>
 
 /// Create a copy of ApplicationDraft
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? activityType = null,Object? groupSize = null,Object? schedule = freezed,Object? intentText = null,Object? organizationName = freezed,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? activityType = null,Object? groupSize = null,Object? schedule = freezed,Object? intentText = null,Object? organizationName = freezed,Object? quote = freezed,}) {
   return _then(_self.copyWith(
 activityType: null == activityType ? _self.activityType : activityType // ignore: cast_nullable_to_non_nullable
 as String,groupSize: null == groupSize ? _self.groupSize : groupSize // ignore: cast_nullable_to_non_nullable
 as int,schedule: freezed == schedule ? _self.schedule : schedule // ignore: cast_nullable_to_non_nullable
 as ProposedSchedule?,intentText: null == intentText ? _self.intentText : intentText // ignore: cast_nullable_to_non_nullable
 as String,organizationName: freezed == organizationName ? _self.organizationName : organizationName // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,quote: freezed == quote ? _self.quote : quote // ignore: cast_nullable_to_non_nullable
+as ApplicationQuote?,
   ));
 }
 /// Create a copy of ApplicationDraft
@@ -2511,6 +2816,18 @@ $ProposedScheduleCopyWith<$Res>? get schedule {
 
   return $ProposedScheduleCopyWith<$Res>(_self.schedule!, (value) {
     return _then(_self.copyWith(schedule: value));
+  });
+}/// Create a copy of ApplicationDraft
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApplicationQuoteCopyWith<$Res>? get quote {
+    if (_self.quote == null) {
+    return null;
+  }
+
+  return $ApplicationQuoteCopyWith<$Res>(_self.quote!, (value) {
+    return _then(_self.copyWith(quote: value));
   });
 }
 }
@@ -2594,10 +2911,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName,  ApplicationQuote? quote)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _ApplicationDraft() when $default != null:
-return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName);case _:
+return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName,_that.quote);case _:
   return orElse();
 
 }
@@ -2615,10 +2932,10 @@ return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentTe
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName,  ApplicationQuote? quote)  $default,) {final _that = this;
 switch (_that) {
 case _ApplicationDraft():
-return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName);case _:
+return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName,_that.quote);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -2635,10 +2952,10 @@ return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentTe
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( String activityType,  int groupSize,  ProposedSchedule? schedule,  String intentText,  String? organizationName,  ApplicationQuote? quote)?  $default,) {final _that = this;
 switch (_that) {
 case _ApplicationDraft() when $default != null:
-return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName);case _:
+return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentText,_that.organizationName,_that.quote);case _:
   return null;
 
 }
@@ -2650,7 +2967,7 @@ return $default(_that.activityType,_that.groupSize,_that.schedule,_that.intentTe
 @JsonSerializable()
 
 class _ApplicationDraft implements ApplicationDraft {
-  const _ApplicationDraft({this.activityType = '', this.groupSize = 0, this.schedule, this.intentText = '', this.organizationName});
+  const _ApplicationDraft({this.activityType = '', this.groupSize = 0, this.schedule, this.intentText = '', this.organizationName, this.quote});
   factory _ApplicationDraft.fromJson(Map<String, dynamic> json) => _$ApplicationDraftFromJson(json);
 
 @override@JsonKey() final  String activityType;
@@ -2659,6 +2976,8 @@ class _ApplicationDraft implements ApplicationDraft {
 @override@JsonKey() final  String intentText;
 /// Optional "Who's asking" group/organization (additive 2026-07-08).
 @override final  String? organizationName;
+/// The room terms reviewed before this draft is submitted.
+@override final  ApplicationQuote? quote;
 
 /// Create a copy of ApplicationDraft
 /// with the given fields replaced by the non-null parameter values.
@@ -2673,16 +2992,16 @@ Map<String, dynamic> toJson() {
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApplicationDraft&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _ApplicationDraft&&(identical(other.activityType, activityType) || other.activityType == activityType)&&(identical(other.groupSize, groupSize) || other.groupSize == groupSize)&&(identical(other.schedule, schedule) || other.schedule == schedule)&&(identical(other.intentText, intentText) || other.intentText == intentText)&&(identical(other.organizationName, organizationName) || other.organizationName == organizationName)&&(identical(other.quote, quote) || other.quote == quote));
 }
 
 @JsonKey(includeFromJson: false, includeToJson: false)
 @override
-int get hashCode => Object.hash(runtimeType,activityType,groupSize,schedule,intentText,organizationName);
+int get hashCode => Object.hash(runtimeType,activityType,groupSize,schedule,intentText,organizationName,quote);
 
 @override
 String toString() {
-  return 'ApplicationDraft(activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, organizationName: $organizationName)';
+  return 'ApplicationDraft(activityType: $activityType, groupSize: $groupSize, schedule: $schedule, intentText: $intentText, organizationName: $organizationName, quote: $quote)';
 }
 
 
@@ -2693,11 +3012,11 @@ abstract mixin class _$ApplicationDraftCopyWith<$Res> implements $ApplicationDra
   factory _$ApplicationDraftCopyWith(_ApplicationDraft value, $Res Function(_ApplicationDraft) _then) = __$ApplicationDraftCopyWithImpl;
 @override @useResult
 $Res call({
- String activityType, int groupSize, ProposedSchedule? schedule, String intentText, String? organizationName
+ String activityType, int groupSize, ProposedSchedule? schedule, String intentText, String? organizationName, ApplicationQuote? quote
 });
 
 
-@override $ProposedScheduleCopyWith<$Res>? get schedule;
+@override $ProposedScheduleCopyWith<$Res>? get schedule;@override $ApplicationQuoteCopyWith<$Res>? get quote;
 
 }
 /// @nodoc
@@ -2710,14 +3029,15 @@ class __$ApplicationDraftCopyWithImpl<$Res>
 
 /// Create a copy of ApplicationDraft
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? activityType = null,Object? groupSize = null,Object? schedule = freezed,Object? intentText = null,Object? organizationName = freezed,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? activityType = null,Object? groupSize = null,Object? schedule = freezed,Object? intentText = null,Object? organizationName = freezed,Object? quote = freezed,}) {
   return _then(_ApplicationDraft(
 activityType: null == activityType ? _self.activityType : activityType // ignore: cast_nullable_to_non_nullable
 as String,groupSize: null == groupSize ? _self.groupSize : groupSize // ignore: cast_nullable_to_non_nullable
 as int,schedule: freezed == schedule ? _self.schedule : schedule // ignore: cast_nullable_to_non_nullable
 as ProposedSchedule?,intentText: null == intentText ? _self.intentText : intentText // ignore: cast_nullable_to_non_nullable
 as String,organizationName: freezed == organizationName ? _self.organizationName : organizationName // ignore: cast_nullable_to_non_nullable
-as String?,
+as String?,quote: freezed == quote ? _self.quote : quote // ignore: cast_nullable_to_non_nullable
+as ApplicationQuote?,
   ));
 }
 
@@ -2732,6 +3052,18 @@ $ProposedScheduleCopyWith<$Res>? get schedule {
 
   return $ProposedScheduleCopyWith<$Res>(_self.schedule!, (value) {
     return _then(_self.copyWith(schedule: value));
+  });
+}/// Create a copy of ApplicationDraft
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$ApplicationQuoteCopyWith<$Res>? get quote {
+    if (_self.quote == null) {
+    return null;
+  }
+
+  return $ApplicationQuoteCopyWith<$Res>(_self.quote!, (value) {
+    return _then(_self.copyWith(quote: value));
   });
 }
 }

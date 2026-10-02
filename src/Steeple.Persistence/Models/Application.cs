@@ -46,6 +46,15 @@ public class Application
     /// <summary>The organizer's group/organization, shown to the host ("Who's asking"). Optional.</summary>
     public string? OrganizationName { get; set; }
 
+    /// <summary>The hourly rate the organizer reviewed before submitting this application.</summary>
+    public decimal? QuotedPricePerHour { get; set; }
+
+    /// <summary>The currency paired with <see cref="QuotedPricePerHour"/>.</summary>
+    public string? QuotedCurrency { get; set; }
+
+    /// <summary>The room rules the organizer reviewed before submitting this application.</summary>
+    public string? QuotedHouseRules { get; set; }
+
     /// <summary>Current lifecycle state.</summary>
     public ApplicationStatus Status { get; set; }
 

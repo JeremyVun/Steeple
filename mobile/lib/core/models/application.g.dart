@@ -28,6 +28,20 @@ Map<String, dynamic> _$ProposedScheduleToJson(_ProposedSchedule instance) =>
       'endTime': instance.endTime,
     };
 
+_ApplicationQuote _$ApplicationQuoteFromJson(Map<String, dynamic> json) =>
+    _ApplicationQuote(
+      pricePerHour: (json['pricePerHour'] as num).toDouble(),
+      currency: json['currency'] as String,
+      houseRules: json['houseRules'] as String,
+    );
+
+Map<String, dynamic> _$ApplicationQuoteToJson(_ApplicationQuote instance) =>
+    <String, dynamic>{
+      'pricePerHour': instance.pricePerHour,
+      'currency': instance.currency,
+      'houseRules': instance.houseRules,
+    };
+
 _OrganizerRatingSummary _$OrganizerRatingSummaryFromJson(
   Map<String, dynamic> json,
 ) => _OrganizerRatingSummary(
@@ -175,6 +189,10 @@ _Application _$ApplicationFromJson(Map<String, dynamic> json) => _Application(
       ? null
       : CounterOffer.fromJson(json['counterOffer'] as Map<String, dynamic>),
   organizationName: json['organizationName'] as String?,
+  quote: json['quote'] == null
+      ? null
+      : ApplicationQuote.fromJson(json['quote'] as Map<String, dynamic>),
+  hasPaymentMethod: json['hasPaymentMethod'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
@@ -200,6 +218,8 @@ Map<String, dynamic> _$ApplicationToJson(_Application instance) =>
       'conflicts': instance.conflicts,
       'counterOffer': instance.counterOffer,
       'organizationName': instance.organizationName,
+      'quote': instance.quote,
+      'hasPaymentMethod': instance.hasPaymentMethod,
     };
 
 _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>
@@ -211,6 +231,9 @@ _ApplicationDraft _$ApplicationDraftFromJson(Map<String, dynamic> json) =>
           : ProposedSchedule.fromJson(json['schedule'] as Map<String, dynamic>),
       intentText: json['intentText'] as String? ?? '',
       organizationName: json['organizationName'] as String?,
+      quote: json['quote'] == null
+          ? null
+          : ApplicationQuote.fromJson(json['quote'] as Map<String, dynamic>),
     );
 
 Map<String, dynamic> _$ApplicationDraftToJson(_ApplicationDraft instance) =>
@@ -220,4 +243,5 @@ Map<String, dynamic> _$ApplicationDraftToJson(_ApplicationDraft instance) =>
       'schedule': instance.schedule,
       'intentText': instance.intentText,
       'organizationName': instance.organizationName,
+      'quote': instance.quote,
     };
