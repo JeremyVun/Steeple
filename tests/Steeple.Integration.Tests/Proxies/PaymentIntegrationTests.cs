@@ -311,7 +311,8 @@ public class PaymentIntegrationTests
 
         var payments = new PaymentService(
             new EfPaymentRepository(db), new MockPaymentGateway(),
-            new NullNotifications(), new NullAnalytics(), flags, clock, options);
+            new NullNotifications(), new NullAnalytics(), flags, clock, options,
+            new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
         var bookings = new BookingService(
             new EfBookingRepository(db), venueManagers, new NullRatings(), payments, flags,

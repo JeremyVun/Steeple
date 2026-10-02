@@ -23,6 +23,7 @@ public sealed class PaymentService : IPaymentService
     private readonly IFeatureFlags _flags;
     private readonly TimeProvider _clock;
     private readonly PaymentsOptions _options;
+    private readonly IServiceTransaction _transactions;
 
     /// <summary>Creates the service from its ports.</summary>
     public PaymentService(
@@ -32,7 +33,8 @@ public sealed class PaymentService : IPaymentService
         IAnalyticsSink analytics,
         IFeatureFlags flags,
         TimeProvider clock,
-        IOptions<PaymentsOptions> options)
+        IOptions<PaymentsOptions> options,
+        IServiceTransaction transactions)
     {
         _repository = repository;
         _gateway = gateway;
@@ -41,6 +43,7 @@ public sealed class PaymentService : IPaymentService
         _flags = flags;
         _clock = clock;
         _options = options.Value;
+        _transactions = transactions;
     }
 
     private TimeSpan ChargeWindow => TimeSpan.FromHours(_options.ChargeWindowHours);
@@ -288,42 +291,52 @@ public sealed class PaymentService : IPaymentService
             }
         }
 
-        claim.UpdatedAtUtc = nowUtc;
-        if (result.Succeeded)
+        try
         {
-            claim.Status = PaymentStatus.Succeeded;
-            claim.ProviderPaymentId = result.ProviderPaymentId;
+            // The provider call above has no database transaction around it. Once it returns, the
+            // outcome and its durable first-failure notice are one local transaction: if the
+            // notice cannot be stored, the claim remains Pending for the idempotent recovery run.
+            await _transactions.RunAsync(async () =>
+            {
+                claim.UpdatedAtUtc = nowUtc;
+                if (result.Succeeded)
+                {
+                    claim.Status = PaymentStatus.Succeeded;
+                    claim.ProviderPaymentId = result.ProviderPaymentId;
+                }
+                else
+                {
+                    claim.Status = PaymentStatus.Failed;
+                    // ProviderPaymentId stays null on failed rows: the idempotent provider id
+                    // belongs to the eventual successful attempt.
+                    claim.FailureCode = result.FailureCode;
+                }
+
+                // Save first so xmin resolves any concurrent recovery before notification rows
+                // are added. The surrounding transaction still rolls this update back if the
+                // notification dispatcher fails afterwards.
+                await _repository.SaveAsync(ct).ConfigureAwait(false);
+
+                if (!result.Succeeded && notifyOnFirstFailure && priorFailures == 0)
+                {
+                    await NotifyPaymentFailedAsync(claim, ct).ConfigureAwait(false);
+                }
+
+                await _transactions.AfterCommitAsync(() => TrackSafelyAsync(
+                    result.Succeeded ? "payment_succeeded" : "payment_failed",
+                    result.Succeeded
+                        ? new { bookingId = booking.Id, occurrenceId = claim.OccurrenceId, amount = claim.Amount, currency = claim.Currency }
+                        : new { bookingId = booking.Id, occurrenceId = claim.OccurrenceId, failureCode = claim.FailureCode },
+                    CancellationToken.None)).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
         }
-        else
+        catch (ConcurrentUpdateException)
         {
-            claim.Status = PaymentStatus.Failed;
-            // ProviderPaymentId stays null on failed rows: the idempotent provider id belongs to
-            // the eventual successful attempt (unique index) — the failure code is the history.
-            claim.FailureCode = result.FailureCode;
+            // Another recovery worker committed the same idempotent gateway result. Its outcome
+            // and inbox rows won together, so this worker has nothing left to persist.
         }
 
-        await _repository.SaveAsync(ct).ConfigureAwait(false);
-
-        if (result.Succeeded)
-        {
-            await TrackSafelyAsync(
-                "payment_succeeded",
-                new { bookingId = booking.Id, occurrenceId = claim.OccurrenceId, amount = claim.Amount, currency = claim.Currency },
-                ct).ConfigureAwait(false);
-            return true;
-        }
-
-        await TrackSafelyAsync(
-            "payment_failed",
-            new { bookingId = booking.Id, occurrenceId = claim.OccurrenceId, failureCode = claim.FailureCode },
-            ct).ConfigureAwait(false);
-
-        if (notifyOnFirstFailure && priorFailures == 0)
-        {
-            await NotifyPaymentFailedAsync(claim, ct).ConfigureAwait(false);
-        }
-
-        return false;
+        return result.Succeeded;
     }
 
     /// <summary>
@@ -356,18 +369,31 @@ public sealed class PaymentService : IPaymentService
                 continue; // stays Succeeded-on-cancelled; the next sweep retries the refund
             }
 
-            var now = _clock.GetUtcNow();
-            payment.Status = PaymentStatus.Refunded;
-            payment.RefundedAtUtc = now;
-            payment.UpdatedAtUtc = now;
-            await _repository.SaveAsync(ct).ConfigureAwait(false);
-            refunded++;
-
-            await TrackSafelyAsync(
-                "refund_issued",
-                new { bookingId = payment.BookingId, occurrenceId = payment.OccurrenceId, amount = payment.Amount, currency = payment.Currency },
-                ct).ConfigureAwait(false);
-            await NotifyRefundedAsync(payment, ct).ConfigureAwait(false);
+            try
+            {
+                // As with charge outcomes, do not record a completed refund unless its durable
+                // recipient notice is stored in the same transaction. A retry uses the provider
+                // payment id and is safe after an ambiguous local failure.
+                await _transactions.RunAsync(async () =>
+                {
+                    var now = _clock.GetUtcNow();
+                    payment.Status = PaymentStatus.Refunded;
+                    payment.RefundedAtUtc = now;
+                    payment.UpdatedAtUtc = now;
+                    await _repository.SaveAsync(ct).ConfigureAwait(false);
+                    await NotifyRefundedAsync(payment, ct).ConfigureAwait(false);
+                    await _transactions.AfterCommitAsync(() => TrackSafelyAsync(
+                        "refund_issued",
+                        new { bookingId = payment.BookingId, occurrenceId = payment.OccurrenceId, amount = payment.Amount, currency = payment.Currency },
+                        CancellationToken.None)).ConfigureAwait(false);
+                }, ct).ConfigureAwait(false);
+                refunded++;
+            }
+            catch (ConcurrentUpdateException)
+            {
+                // A concurrent refund recovery committed first. Its status and notification are
+                // already durable; do not send another one.
+            }
         }
 
         return refunded;

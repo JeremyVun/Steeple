@@ -36,7 +36,10 @@ public static class ChargePlanner
             return Action.Wait; // already started — nothing to charge or cancel (no-show rules own it)
         }
 
-        if (start - nowUtc > chargeWindow)
+        // Confirmation targets the first occurrence immediately. If that kick was missed or
+        // failed, recovery keeps trying it with the normal backoff even when it is still farther
+        // away than the later-occurrence window.
+        if (!candidate.IsFirstOccurrence && start - nowUtc > chargeWindow)
         {
             return Action.Wait; // not yet inside the charge window
         }

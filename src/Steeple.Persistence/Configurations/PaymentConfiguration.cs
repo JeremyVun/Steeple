@@ -12,6 +12,12 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasKey(p => p.Id);
 
+        // A gateway result is persisted after the remote call. xmin prevents a second recovery
+        // worker from committing a duplicate outcome or notice after another worker won.
+        builder.Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .IsRowVersion();
+
         builder.Property(p => p.Amount).HasPrecision(12, 2);
         builder.Property(p => p.Currency).IsRequired().HasMaxLength(3);
         builder.Property(p => p.ApplicationFee).HasPrecision(12, 2).HasDefaultValue(0m);

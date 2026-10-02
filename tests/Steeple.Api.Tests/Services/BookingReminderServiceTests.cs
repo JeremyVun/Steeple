@@ -47,6 +47,8 @@ public class BookingReminderServiceTests
         Assert.Equal(2, notifications.Calls.Count);
         Assert.All(notifications.Calls, c => Assert.StartsWith("Tomorrow:", c.Email!.Subject, StringComparison.Ordinal));
         Assert.Equal("tomorrow", GetProp(notifications.Calls[0].Payload, "reminderKind"));
+        var organizerEmail = Assert.Single(notifications.Calls, c => c.Recipients.Any(r => r.UserId == organizer.Id)).Email!;
+        Assert.Contains("Sessions cancelled with less than 48 hours' notice still go ahead.", organizerEmail.TextBody);
     }
 
     [Fact]
@@ -279,7 +281,8 @@ public class BookingReminderServiceTests
             analytics,
             new FixedTimeProvider(FixedNow),
             Options.Create(new ReminderOptions()),
-            NullLogger<BookingReminderService>.Instance);
+            NullLogger<BookingReminderService>.Instance,
+            new FakeReminderTransaction(repo));
 
     private sealed class FixedTimeProvider : TimeProvider
     {
@@ -325,6 +328,36 @@ public class BookingReminderServiceTests
             Claims.Remove((occurrenceId, kind));
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>Gives the in-memory ledger the same rollback behavior as the EF transaction.</summary>
+    private sealed class FakeReminderTransaction(FakeReminderRepository repository) : IServiceTransaction
+    {
+        public async Task<T> RunAsync<T>(Func<Task<T>> operation, CancellationToken ct = default)
+        {
+            var claims = repository.Claims.ToList();
+            try
+            {
+                return await operation().ConfigureAwait(false);
+            }
+            catch
+            {
+                repository.Claims.Clear();
+                repository.Claims.AddRange(claims);
+                throw;
+            }
+        }
+
+        public async Task RunAsync(Func<Task> operation, CancellationToken ct = default)
+        {
+            await RunAsync(async () =>
+            {
+                await operation().ConfigureAwait(false);
+                return true;
+            }, ct).ConfigureAwait(false);
+        }
+
+        public Task AfterCommitAsync(Func<Task> action) => action();
     }
 
     private sealed class FakeVenueManagerRepository : IVenueManagerRepository

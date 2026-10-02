@@ -17,6 +17,12 @@ public class BookingOccurrenceConfiguration : IEntityTypeConfiguration<BookingOc
 
         builder.HasKey(o => o.Id);
 
+        // No-show marks and lifecycle sweeps are independent writes to the same occurrence.
+        // Keep the winning state rather than allowing a stale tracker to replace it.
+        builder.Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .IsRowVersion();
+
         builder.Property(o => o.Status).HasConversion<int>();
 
         builder.HasIndex(o => new { o.BookingId, o.StartUtc });

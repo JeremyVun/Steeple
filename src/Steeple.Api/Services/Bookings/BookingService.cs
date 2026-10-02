@@ -204,14 +204,23 @@ public sealed class BookingService : IBookingService
         }
 
         (page, pageSize) = Paging.Normalize(page, pageSize);
-        var (items, total) = await _repository
-            .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
-            .ConfigureAwait(false);
-
-        var now = await SweepAsync(items, ct).ConfigureAwait(false);
-
-        var dtos = await ToDtosWithRatingsAsync(items, organizerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
-        return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
+        for (var attempt = 0; ; attempt++)
+        {
+            var (items, total) = await _repository
+                .GetForOrganizerAsync(organizerId, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
+                .ConfigureAwait(false);
+            try
+            {
+                var now = await SweepAsync(items, ct).ConfigureAwait(false);
+                var dtos = await ToDtosWithRatingsAsync(items, organizerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
+                return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
+            }
+            catch (ConcurrentUpdateException) when (attempt == 0)
+            {
+                // The lazy sweep lost to another reader. Its transaction was rolled back and the
+                // tracker cleared, so load the winner and project that state on one bounded retry.
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -232,38 +241,67 @@ public sealed class BookingService : IBookingService
             return BookingResult<BookingListResult>.Ok(new BookingListResult([], 0, page, pageSize));
         }
 
-        var (items, total) = await _repository
-            .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
-            .ConfigureAwait(false);
-
-        var now = await SweepAsync(items, ct).ConfigureAwait(false);
-
-        var dtos = await ToDtosWithRatingsAsync(items, managerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
-        return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
+        for (var attempt = 0; ; attempt++)
+        {
+            var (items, total) = await _repository
+                .GetForVenuesAsync(venueIds, statusFilter, _clock.GetUtcNow(), page, pageSize, ct)
+                .ConfigureAwait(false);
+            try
+            {
+                var now = await SweepAsync(items, ct).ConfigureAwait(false);
+                var dtos = await ToDtosWithRatingsAsync(items, managerId, includeOccurrences: false, now, ct).ConfigureAwait(false);
+                return BookingResult<BookingListResult>.Ok(new BookingListResult(dtos, total, page, pageSize));
+            }
+            catch (ConcurrentUpdateException) when (attempt == 0)
+            {
+                // See the organizer read above: only a read-side sweep is retried.
+            }
+        }
     }
 
     /// <inheritdoc />
     public async Task<BookingResult<BookingDto>> GetAsync(Guid bookingId, Guid callerId, CancellationToken ct = default)
     {
-        var (booking, error) = await LoadScopedAsync(bookingId, callerId, ct).ConfigureAwait(false);
-        if (error is not null)
+        for (var attempt = 0; ; attempt++)
         {
-            return BookingResult<BookingDto>.Fail(error.Code, error.Detail);
-        }
+            var (booking, error) = await LoadScopedAsync(bookingId, callerId, ct).ConfigureAwait(false);
+            if (error is not null)
+            {
+                return BookingResult<BookingDto>.Fail(error.Code, error.Detail);
+            }
 
-        var scopedBooking = booking!;
-        var now = await SweepAsync([scopedBooking], ct).ConfigureAwait(false);
-        var ratings = await _ratings.GetBookingOverviewsAsync([scopedBooking], callerId, now, ct).ConfigureAwait(false);
-        var payments = await GetPaymentStatusesAsync([scopedBooking], ct).ConfigureAwait(false);
-        return BookingResult<BookingDto>.Ok(scopedBooking.ToDto(
-            includeOccurrences: true, now, ratings.GetValueOrDefault(scopedBooking.Id), payments, _chargeWindow));
+            var scopedBooking = booking!;
+            try
+            {
+                var now = await SweepAsync([scopedBooking], ct).ConfigureAwait(false);
+                var ratings = await _ratings.GetBookingOverviewsAsync([scopedBooking], callerId, now, ct).ConfigureAwait(false);
+                var payments = await GetPaymentStatusesAsync([scopedBooking], ct).ConfigureAwait(false);
+                return BookingResult<BookingDto>.Ok(scopedBooking.ToDto(
+                    includeOccurrences: true, now, ratings.GetValueOrDefault(scopedBooking.Id), payments, _chargeWindow));
+            }
+            catch (ConcurrentUpdateException) when (attempt == 0)
+            {
+                // Re-load the state committed by the other reader. This retry owns no caller
+                // mutation, so it cannot replay a cancellation or no-show transition.
+            }
+        }
     }
 
     /// <inheritdoc />
     public async Task<BookingResult<BookingDto>> CancelAsync(
         Guid bookingId, Guid callerId, CancelBookingRequest request, CancellationToken ct = default)
     {
-        var result = await _transactions.RunAsync(() => CancelCoreAsync(bookingId, callerId, request, ct), ct).ConfigureAwait(false);
+        BookingResult<BookingDto> result;
+        try
+        {
+            result = await _transactions.RunAsync(() => CancelCoreAsync(bookingId, callerId, request, ct), ct).ConfigureAwait(false);
+        }
+        catch (ConcurrentUpdateException)
+        {
+            return BookingResult<BookingDto>.Fail(
+                BookingErrorCodes.InvalidState,
+                "This booking changed while the cancellation was being processed. Reload to see its current status.");
+        }
         return result.Error is null ? await GetAsync(bookingId, callerId, ct).ConfigureAwait(false) : result;
     }
 
@@ -344,8 +382,19 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
-    public Task<BookingResult<BookingDto>> MarkNoShowAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default) =>
-        _transactions.RunAsync(() => MarkNoShowCoreAsync(occurrenceId, callerId, ct), ct);
+    public async Task<BookingResult<BookingDto>> MarkNoShowAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default)
+    {
+        try
+        {
+            return await _transactions.RunAsync(() => MarkNoShowCoreAsync(occurrenceId, callerId, ct), ct).ConfigureAwait(false);
+        }
+        catch (ConcurrentUpdateException)
+        {
+            return BookingResult<BookingDto>.Fail(
+                BookingErrorCodes.InvalidState,
+                "This occurrence changed while the no-show was being recorded. Reload to see its current status.");
+        }
+    }
 
     private async Task<BookingResult<BookingDto>> MarkNoShowCoreAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default)
     {
@@ -402,15 +451,28 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
-    public Task CancelOccurrencesForPaymentFailureAsync(
-        Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default) =>
-        _transactions.RunAsync(() => CancelOccurrencesForPaymentFailureCoreAsync(bookingId, occurrenceIds, cancelRemainingTerm, ct), ct);
+    public async Task CancelOccurrencesForPaymentFailureAsync(
+        Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default)
+    {
+        try
+        {
+            await _transactions.RunAsync(
+                () => CancelOccurrencesForPaymentFailureCoreAsync(bookingId, occurrenceIds, cancelRemainingTerm, ct), ct).ConfigureAwait(false);
+        }
+        catch (ConcurrentUpdateException)
+        {
+            // A simultaneous cancellation or payment-failure pass won. It already established the
+            // occurrence state, so the ladder has no transition left to replay.
+        }
+    }
 
     private async Task CancelOccurrencesForPaymentFailureCoreAsync(
         Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default)
     {
         var booking = await _repository.GetAsync(bookingId, ct).ConfigureAwait(false);
-        if (booking is null || booking.Status != BookingStatus.Confirmed)
+        var standingAfterGuestCancellation = booking?.Status == BookingStatus.Cancelled
+            && booking.CancelledBy == booking.OrganizerId;
+        if (booking is null || (booking.Status != BookingStatus.Confirmed && !standingAfterGuestCancellation))
         {
             return; // already cancelled/completed — nothing left for the ladder to free
         }
@@ -419,7 +481,8 @@ public sealed class BookingService : IBookingService
         var targets = booking.Occurrences
             .Where(o => o.Status == OccurrenceStatus.Scheduled && occurrenceIds.Contains(o.Id))
             .ToList();
-        if (targets.Count == 0 && !cancelRemainingTerm)
+        var endRemainingTerm = cancelRemainingTerm && booking.Status == BookingStatus.Confirmed;
+        if (targets.Count == 0 && !endRemainingTerm)
         {
             return;
         }
@@ -429,7 +492,7 @@ public sealed class BookingService : IBookingService
             occurrence.Status = OccurrenceStatus.Cancelled;
         }
 
-        if (cancelRemainingTerm)
+        if (endRemainingTerm)
         {
             // Second consecutive payment-failure cancel (payments.md §5): the term itself ends.
             // Every remaining scheduled occurrence frees — they're unpaid or refunding anyway.
@@ -451,7 +514,7 @@ public sealed class BookingService : IBookingService
         var room = booking.Room!;
         var venue = room.Venue!;
         var deepLink = $"/bookings/{booking.Id}";
-        var termLine = cancelRemainingTerm
+        var termLine = endRemainingTerm
             ? "Because payments failed twice in a row, the rest of the booking has been cancelled as well.\n\n"
             : "The rest of the booking stands.\n\n";
 
@@ -476,7 +539,7 @@ public sealed class BookingService : IBookingService
                 TextBody:
                     $"{booking.Organizer!.DisplayName}'s booking of {room.Name} ({dates}) was cancelled " +
                     "because their payment didn't go through. The time is open to new requests.\n\n" +
-                    (cancelRemainingTerm ? "The remaining term was cancelled as well." : "The rest of the booking stands.")),
+                    (endRemainingTerm ? "The remaining term was cancelled as well." : "The rest of the booking stands.")),
             ct).ConfigureAwait(false);
 
         await TrackSafelyAsync(
@@ -488,7 +551,7 @@ public sealed class BookingService : IBookingService
                 cancelledBy = "system",
                 reason = "payment_failure",
                 occurrenceCount = targets.Count,
-                cancelRemainingTerm,
+                cancelRemainingTerm = endRemainingTerm,
             },
             ct).ConfigureAwait(false);
     }
@@ -676,6 +739,10 @@ public sealed class BookingService : IBookingService
 
         // Asymmetric copy matches the asymmetric rule: a guest cancel leaves in-window sessions
         // standing (charges stand too); a host cancel frees everything and refunds everything.
+        var refundLine = booking.InAppPayment
+            ? "Any in-app payments already collected for cancelled sessions will be refunded in full automatically."
+            : "Please arrange any refund directly with the venue.";
+
         return cancelledByOrganizer
             ? new EmailContent(
                 Subject: $"{booking.Organizer!.DisplayName} cancelled their booking of {room.Name}",
@@ -690,8 +757,7 @@ public sealed class BookingService : IBookingService
                 TextBody:
                     $"{venue.Name} has cancelled your booking of {room.Name} ({DescribeSchedule(booking)}).\n\n" +
                     reasonLine +
-                    "All upcoming sessions are cancelled, and anything you've already paid for them " +
-                    "will be refunded in full automatically. " +
+                    "All upcoming sessions are cancelled. " + refundLine + " " +
                     "There are more spaces nearby on Steeple — the details are in your inbox.");
     }
 

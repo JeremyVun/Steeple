@@ -12,6 +12,12 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.HasKey(b => b.Id);
 
+        // Booking transitions can race with cancellation, the lazy completion sweep, and renewal
+        // nudges. PostgreSQL's xmin makes the losing write visible instead of overwriting it.
+        builder.Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .IsRowVersion();
+
         builder.Property(b => b.Type).HasConversion<int>();
         builder.Property(b => b.Status).HasConversion<int>();
         builder.Property(b => b.DaysOfWeek).HasColumnName("DaysOfWeekMask").HasConversion<int?>();

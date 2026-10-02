@@ -95,7 +95,10 @@ public static class BookingMappings
         }
 
         DateTimeOffset? nextChargeAtUtc = null;
-        if (chargeWindow is { } window && booking.Status == BookingStatus.Confirmed)
+        var hasStandingGuestCancellation = booking.Status == BookingStatus.Cancelled
+            && booking.CancelledBy == booking.OrganizerId;
+        if (chargeWindow is { } window
+            && (booking.Status == BookingStatus.Confirmed || hasStandingGuestCancellation))
         {
             var nextUnpaid = occurrences.FirstOrDefault(o =>
                 o.Status == OccurrenceStatus.Scheduled
@@ -105,7 +108,10 @@ public static class BookingMappings
                     || status is PaymentStatus.Failed));
             if (nextUnpaid is not null)
             {
-                nextChargeAtUtc = ChargePlanner.NextChargeAtUtc(nextUnpaid.StartUtc, nowUtc, window);
+                var first = occurrences.OrderBy(o => o.StartUtc).FirstOrDefault();
+                nextChargeAtUtc = first?.Id == nextUnpaid.Id
+                    ? nowUtc
+                    : ChargePlanner.NextChargeAtUtc(nextUnpaid.StartUtc, nowUtc, window);
             }
         }
 

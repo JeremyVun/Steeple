@@ -272,7 +272,17 @@ public class EfPaymentRepository : IPaymentRepository
     }
 
     /// <inheritdoc />
-    public Task SaveAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+    public async Task SaveAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new ConcurrentUpdateException(ex);
+        }
+    }
 
     /// <inheritdoc />
     public async Task<bool> TryAcquireSweepLockAsync(CancellationToken ct = default)
@@ -323,8 +333,14 @@ public class EfPaymentRepository : IPaymentRepository
         _db.BookingOccurrences
             .Include(o => o.Booking!).ThenInclude(b => b.Room!).ThenInclude(r => r.Venue)
             .Include(o => o.Booking!).ThenInclude(b => b.Organizer)
+            .Include(o => o.Booking!).ThenInclude(b => b.Occurrences)
             .Where(o => o.Status == OccurrenceStatus.Scheduled
-                && o.Booking!.Status == BookingStatus.Confirmed
+                // A guest cancellation inside the notice window keeps the scheduled session
+                // standing. It remains chargeable even though the parent is Cancelled; host and
+                // timely guest cancellations have no scheduled occurrences left to reach here.
+                && (o.Booking!.Status == BookingStatus.Confirmed
+                    || (o.Booking.Status == BookingStatus.Cancelled
+                        && o.Booking.CancelledBy == o.Booking.OrganizerId))
                 && o.Booking.InAppPayment
                 && o.Booking.PricePerOccurrence != null
                 && !_db.Payments.Any(p => p.OccurrenceId == o.Id && p.Status != PaymentStatus.Failed));
@@ -354,9 +370,11 @@ public class EfPaymentRepository : IPaymentRepository
         var byOccurrence = failures.ToDictionary(f => f.OccurrenceId);
 
         return occurrences
-            .Select(o => byOccurrence.TryGetValue(o.Id, out var f)
-                ? new ChargeCandidate(o, f.Count, f.Last)
-                : new ChargeCandidate(o, 0, null))
+            .Select(o => new ChargeCandidate(
+                o,
+                byOccurrence.TryGetValue(o.Id, out var f) ? f.Count : 0,
+                byOccurrence.TryGetValue(o.Id, out f) ? f.Last : null,
+                IsFirstOccurrence: o.Booking!.Occurrences.All(other => other.StartUtc >= o.StartUtc)))
             .ToList();
     }
 }

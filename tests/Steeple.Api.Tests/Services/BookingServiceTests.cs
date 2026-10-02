@@ -86,6 +86,22 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public async Task CancelAsync_OfflineVenueCancellation_TellsOrganizerToArrangeAnyRefundDirectly()
+    {
+        var (repo, managers, _, room, organizer, manager) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [TimeSpan.FromHours(240)]);
+        booking.InAppPayment = false;
+        repo.Bookings.Add(booking);
+        var service = CreateService(repo, managers, out var notifications, out _);
+
+        await service.CancelAsync(booking.Id, manager.Id, new CancelBookingRequest(null));
+
+        var email = Assert.Single(notifications.Calls).Email!;
+        Assert.Contains("Please arrange any refund directly with the venue.", email.TextBody);
+        Assert.DoesNotContain("automatically", email.TextBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task CancelAsync_AlreadyCancelled_ReturnsInvalidState()
     {
         var (repo, managers, _, room, organizer, _) = NewScenario();
@@ -525,6 +541,27 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.Cancelled, booking.Status);
         Assert.Null(booking.CancelledBy); // system, not a party
         Assert.All(booking.Occurrences, o => Assert.Equal(OccurrenceStatus.Cancelled, o.Status));
+    }
+
+    [Fact]
+    public async Task CancelOccurrencesForPaymentFailure_StandingGuestCancellation_PreservesCancellationAttribution()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var booking = NewBooking(room, organizer, occurrenceOffsets: [TimeSpan.FromHours(20)]);
+        booking.Status = BookingStatus.Cancelled;
+        booking.CancelledBy = organizer.Id;
+        booking.CancelledAtUtc = FixedNow;
+        booking.CancelReason = "Guest cancellation";
+        repo.Bookings.Add(booking);
+        var service = CreateService(repo, managers, out _, out _);
+
+        await service.CancelOccurrencesForPaymentFailureAsync(
+            booking.Id, [booking.Occurrences.Single().Id], cancelRemainingTerm: true);
+
+        Assert.Equal(BookingStatus.Cancelled, booking.Status);
+        Assert.Equal(organizer.Id, booking.CancelledBy);
+        Assert.Equal("Guest cancellation", booking.CancelReason);
+        Assert.Equal(OccurrenceStatus.Cancelled, booking.Occurrences.Single().Status);
     }
 
     // ----- Scenario / fixture builders ----------------------------------------------------------

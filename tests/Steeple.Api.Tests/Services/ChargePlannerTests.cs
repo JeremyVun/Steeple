@@ -42,6 +42,20 @@ public class ChargePlannerTests
         Assert.Equal(ChargePlanner.Action.Charge, ChargePlanner.Plan(candidate, Now, Window, Deadline, Retry));
     }
 
+    [Theory]
+    [InlineData(100, 0, null)]
+    [InlineData(100, 1, 2.0)]
+    public void Plan_FirstOccurrenceOutsideWindow_ChargesAndRecovers(double hoursUntilStart, int failedAttempts, double? failureHoursAgo)
+    {
+        var candidate = Candidate(
+            hoursUntilStart,
+            failedAttempts,
+            failureHoursAgo is { } hours ? TimeSpan.FromHours(hours) : null,
+            isFirstOccurrence: true);
+
+        Assert.Equal(ChargePlanner.Action.Charge, ChargePlanner.Plan(candidate, Now, Window, Deadline, Retry));
+    }
+
     [Fact]
     public void Plan_PastDeadlineWithFailure_AutoCancels()
     {
@@ -71,7 +85,11 @@ public class ChargePlannerTests
         Assert.Equal(Now, ChargePlanner.NextChargeAtUtc(alreadyDue, Now, Window));
     }
 
-    private static ChargeCandidate Candidate(double hoursUntilStart, int failedAttempts, TimeSpan? lastFailureAgo)
+    private static ChargeCandidate Candidate(
+        double hoursUntilStart,
+        int failedAttempts,
+        TimeSpan? lastFailureAgo,
+        bool isFirstOccurrence = false)
     {
         var start = Now.AddHours(hoursUntilStart);
         var occurrence = new BookingOccurrence
@@ -84,6 +102,10 @@ public class ChargePlannerTests
             LocalDate = DateOnly.FromDateTime(start.UtcDateTime),
             Status = OccurrenceStatus.Scheduled,
         };
-        return new ChargeCandidate(occurrence, failedAttempts, lastFailureAgo is { } ago ? Now - ago : null);
+        return new ChargeCandidate(
+            occurrence,
+            failedAttempts,
+            lastFailureAgo is { } ago ? Now - ago : null,
+            IsFirstOccurrence: isFirstOccurrence);
     }
 }

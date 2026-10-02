@@ -85,8 +85,10 @@ on file → **`402 payment_method_required`** otherwise (card-at-request, bookin
   `CancelDeadlineHours`).
 - Charge flow per occurrence: **claim** (insert a Pending `payments` row under the partial
   unique index — a concurrent claimer loses and skips) → gateway charge with **idempotency
-  key = occurrence id** → record Succeeded/Failed. Stale Pending rows (crash between claim
-  and outcome) are re-driven under the same key.
+  key = occurrence id** → atomically record Succeeded/Failed and any first-failure inbox/outbox
+  work. The gateway call is never inside that database transaction. If local outcome or notice
+  persistence fails, the claim remains Pending; stale Pending rows (crash between claim and
+  outcome) are re-driven under the same key.
 - **Failure ladder:** first failure → organizer notified (`paymentFailed`, inbox + email,
   `deepLink: /bookings/{id}`) → sweeper retries (paced by `RetryIntervalSeconds`) → still
   unpaid at **T−24h** with a failure on record → that occurrence auto-cancels **through the
@@ -107,7 +109,8 @@ booking-modes.md refund table reduces to it (recorded in SYSTEM_DESIGN §17):
 | Payment failure at T−24h | Auto-cancelled | Never succeeded — nothing to refund |
 
 Refunds run immediately post-cancel *and* every sweep pass (crash-safe: a missed refund is
-re-attempted, never lost). Organizer notified per refund (`occurrenceRefunded`); wire state:
+re-attempted, never lost). The post-gateway `Refunded` state and its organizer inbox/outbox work
+commit together, so a notice fault leaves the refund retryable. Organizer notified per refund (`occurrenceRefunded`); wire state:
 the occurrence's `paymentStatus` becomes `refunded`. Not yet built (Stripe-time with the
 policy page): venue-no-show auto-refund, goodwill refund endpoint
 (`POST /manage/occurrences/{id}/refund`), partial refunds.

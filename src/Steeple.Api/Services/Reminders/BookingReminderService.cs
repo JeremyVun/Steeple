@@ -23,6 +23,7 @@ public sealed class BookingReminderService : IBookingReminderService
     private readonly TimeProvider _clock;
     private readonly ReminderOptions _options;
     private readonly ILogger<BookingReminderService> _logger;
+    private readonly IServiceTransaction _transactions;
 
     /// <summary>Creates the sweep from its ports.</summary>
     public BookingReminderService(
@@ -32,7 +33,8 @@ public sealed class BookingReminderService : IBookingReminderService
         IAnalyticsSink analytics,
         TimeProvider clock,
         IOptions<ReminderOptions> options,
-        ILogger<BookingReminderService> logger)
+        ILogger<BookingReminderService> logger,
+        IServiceTransaction transactions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
@@ -41,6 +43,7 @@ public sealed class BookingReminderService : IBookingReminderService
         _clock = clock;
         _options = options.Value;
         _logger = logger;
+        _transactions = transactions;
     }
 
     /// <inheritdoc />
@@ -55,9 +58,10 @@ public sealed class BookingReminderService : IBookingReminderService
         {
             foreach (var (occurrence, kind) in DueReminders(booking, now))
             {
-                if (await SendAsync(booking, occurrence, kind, now, ct).ConfigureAwait(false))
+                if (await SendAsync(booking, occurrence, kind, now, ct).ConfigureAwait(false) is { } recipientCount)
                 {
                     sent++;
+                    await TrackSafelyAsync(booking, kind, recipientCount, ct).ConfigureAwait(false);
                 }
             }
         }
@@ -95,61 +99,61 @@ public sealed class BookingReminderService : IBookingReminderService
     }
 
     /// <summary>
-    /// Claims the reminder, then tells both sides. The claim comes first so a crash between the
-    /// two costs at most one missed nudge, never a duplicate one; a failed dispatch hands the
-    /// claim back for the next sweep.
+    /// Claims the reminder and stores both parties' inbox/outbox work in one transaction. A
+    /// failed dispatch rolls the claim back too, so the next sweep can retry without preserving a
+    /// partial fan-out or deleting a later worker's successful claim.
     /// </summary>
-    private async Task<bool> SendAsync(
+    private async Task<int?> SendAsync(
         Booking booking, BookingOccurrence occurrence, BookingReminderKind kind, DateTimeOffset now, CancellationToken ct)
     {
-        if (!await _repository.TryClaimAsync(occurrence.Id, kind, now, ct).ConfigureAwait(false))
-        {
-            return false;
-        }
-
         try
         {
-            var payload = BuildPayload(booking, occurrence, kind);
-            var when = DescribeOccurrence(booking, occurrence);
-            var room = booking.Room!;
-            var venue = room.Venue!;
-            var organizerName = booking.Organizer!.DisplayName;
-            var recipientCount = 0;
-            // Email only once, on the eve of the booking's first occurrence. The inbox and push
-            // still carry every reminder, but a weekly booking must not become two recurring
-            // emails forever (one to each party), and the confirmation already covers T-7.
-            var emailFirstTomorrow = kind == BookingReminderKind.Tomorrow
-                && booking.Occurrences.OrderBy(item => item.StartUtc).First().Id == occurrence.Id;
-
-            await _notifications.NotifyAsync(
-                [new NotificationRecipient(booking.OrganizerId, booking.Organizer.Email)],
-                NotificationType.BookingReminder,
-                payload,
-                emailFirstTomorrow ? OrganizerTomorrowEmail(room.Name, venue.Name, when) : null,
-                ct).ConfigureAwait(false);
-            recipientCount++;
-
-            var managers = await _venueManagers.GetManagersAsync(venue.Id, ct).ConfigureAwait(false);
-            if (managers.Count > 0)
+            return await _transactions.RunAsync(async () =>
             {
+                if (!await _repository.TryClaimAsync(occurrence.Id, kind, now, ct).ConfigureAwait(false))
+                {
+                    return (int?)null;
+                }
+
+                var payload = BuildPayload(booking, occurrence, kind);
+                var when = DescribeOccurrence(booking, occurrence);
+                var room = booking.Room!;
+                var venue = room.Venue!;
+                var organizerName = booking.Organizer!.DisplayName;
+                var recipientCount = 0;
+                // Email only once, on the eve of the booking's first occurrence. The inbox and push
+                // still carry every reminder, but a weekly booking must not become two recurring
+                // emails forever (one to each party), and the confirmation already covers T-7.
+                var emailFirstTomorrow = kind == BookingReminderKind.Tomorrow
+                    && booking.Occurrences.OrderBy(item => item.StartUtc).First().Id == occurrence.Id;
+
                 await _notifications.NotifyAsync(
-                    managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
+                    [new NotificationRecipient(booking.OrganizerId, booking.Organizer.Email)],
                     NotificationType.BookingReminder,
                     payload,
-                    emailFirstTomorrow ? HostTomorrowEmail(room.Name, organizerName, when) : null,
+                    emailFirstTomorrow ? OrganizerTomorrowEmail(room.Name, venue.Name, when) : null,
                     ct).ConfigureAwait(false);
-                recipientCount += managers.Count;
-            }
+                recipientCount++;
 
-            await TrackSafelyAsync(booking, kind, recipientCount, ct).ConfigureAwait(false);
-            return true;
+                var managers = await _venueManagers.GetManagersAsync(venue.Id, ct).ConfigureAwait(false);
+                if (managers.Count > 0)
+                {
+                    await _notifications.NotifyAsync(
+                        managers.Select(m => new NotificationRecipient(m.Id, m.Email)).ToList(),
+                        NotificationType.BookingReminder,
+                        payload,
+                        emailFirstTomorrow ? HostTomorrowEmail(room.Name, organizerName, when) : null,
+                        ct).ConfigureAwait(false);
+                    recipientCount += managers.Count;
+                }
+
+                return (int?)recipientCount;
+            }, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Nothing (or only half) went out: release the claim so the next sweep tries again.
             _logger.LogWarning(ex, "Booking reminder dispatch failed for occurrence {OccurrenceId}.", occurrence.Id);
-            await _repository.ReleaseClaimAsync(occurrence.Id, kind, CancellationToken.None).ConfigureAwait(false);
-            return false;
+            return null;
         }
     }
 
@@ -159,8 +163,8 @@ public sealed class BookingReminderService : IBookingReminderService
             TextBody:
                 $"A reminder that you have {roomName} at {venueName} booked tomorrow.\n\n" +
                 $"When: {when}\n\n" +
-                "If your plans have changed, cancelling from your booking frees the time for " +
-                "someone else.");
+                "If your plans have changed, you can cancel from your booking. Sessions cancelled " +
+                "with less than 48 hours' notice still go ahead.");
 
     private static EmailContent HostTomorrowEmail(string roomName, string organizerName, string when) =>
         new(

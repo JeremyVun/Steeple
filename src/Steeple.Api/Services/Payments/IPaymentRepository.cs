@@ -91,4 +91,5 @@ public interface IPaymentRepository
 public sealed record ChargeCandidate(
     BookingOccurrence Occurrence,
     int FailedAttempts,
-    DateTimeOffset? LastFailureAtUtc);
+    DateTimeOffset? LastFailureAtUtc,
+    bool IsFirstOccurrence = false);

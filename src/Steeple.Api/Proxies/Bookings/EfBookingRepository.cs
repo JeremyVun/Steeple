@@ -147,7 +147,17 @@ public class EfBookingRepository : IBookingRepository
     }
 
     /// <inheritdoc />
-    public Task SaveAsync(CancellationToken ct = default) => _db.SaveChangesAsync(ct);
+    public async Task SaveAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            throw new ConcurrentUpdateException(ex);
+        }
+    }
 
     private IQueryable<Booking> Graph() =>
         _db.Bookings
