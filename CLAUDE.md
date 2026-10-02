@@ -20,6 +20,7 @@ Each doc owns one concern; **update the owning doc in the same PR as the change*
 | `docs/DESIGN_SYSTEM.md` | Design tokens + component/UX specs — never hardcode values |
 | `docs/UX_REVIEW_2026-10-01.md` | Current web UX/UI review, Jeremy's trust brief, evidence and recommendations |
 | `docs/APP_REVIEW_2026-10-02.md` | App review brief, correctness and usability findings, verification evidence |
+| `docs/STARTING_SCREEN_DESIGN.md` | Starting-screen brief, comp rounds and owner design decisions |
 | `docs/runbooks/` | Third-party services in production (Resend, SSO, Turnstile) |
 
 Target-state docs describe things that **don't exist yet**; ARCHITECTURE.md and the code
