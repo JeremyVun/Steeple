@@ -178,6 +178,10 @@ export function saveVenue(draft) {
   });
 }
 
+export function saveBookingMode(venueId, bookingMode) {
+  return attempt((token) => api.updateManagedVenue(venueId, { bookingMode }, { accessToken: token }));
+}
+
 /** Create the room, or update the one this draft already made. */
 export function saveRoom(draft) {
   const room = draft.room;

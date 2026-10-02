@@ -549,6 +549,9 @@
   top: calc(100% + 7px);
   z-index: 20;
   min-width: 250px;
+  max-height: calc(100dvh - 160px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   max-width: min(400px, calc(100% - var(--dm-gutter) * 2));
   padding: 15px 17px 13px;
   border: 1px solid var(--line);
@@ -1315,3 +1318,25 @@
     transition: none;
   }
 }
+
+.dm-map.leaflet-container .leaflet-bar a {
+  width: var(--touch-target);
+  height: var(--touch-target);
+  line-height: var(--touch-target);
+}
+.dm-grab,
+.dm-seg,
+.dm-typeahead__item {
+  min-height: var(--touch-target);
+}
+@media (max-width: 640px), (max-height: 500px) {
+  .dm-pop {
+    position: fixed;
+    inset: auto 12px 12px !important;
+    max-height: calc(100dvh - 96px);
+    max-width: none;
+    min-width: 0;
+  }
+}
+
+.dm-seg--filters { min-width: var(--touch-target); }

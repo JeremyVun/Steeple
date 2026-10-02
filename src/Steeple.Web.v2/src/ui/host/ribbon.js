@@ -57,14 +57,16 @@ export function createRibbon({ compact = false } = {}) {
     compact ? null : heldRow,
   ]);
 
-  // `held` is the ribbon on a booked letter: the lanes are not a proposal being
-  // weighed, they are dates this venue already stands behind, and a lane marked
-  // "free" over a booking of one's own is simply untrue.
-  function update({ venueId, roomId, proposal, ghost = null, exceptApplicationId = null, held = false }) {
-    const { lanes, axis } = weekLanes(venueId, roomId, proposal, { exceptApplicationId });
-
+  let currentAxis = null;
+  function drawTicks() {
+    if (!currentAxis) return;
+    const axis = currentAxis;
     const ticks = [];
-    const step = axis.end - axis.start > 12 * 60 ? 120 : 60;
+    const width = axisRow.getBoundingClientRect().width;
+    const intervals = Math.max(1, Math.floor(width / 48));
+    const step = [60, 120, 180, 240, 360, 720, 1440].find((minutes) =>
+      (axis.end - axis.start) / minutes <= intervals
+    ) ?? 1440;
     const first = Math.ceil(axis.start / step) * step;
     lanesRow.style.setProperty('--tick-step', pct(step / (axis.end - axis.start)));
     lanesRow.style.setProperty('--tick-offset', pct((first - axis.start) / (axis.end - axis.start)));
@@ -77,6 +79,17 @@ export function createRibbon({ compact = false } = {}) {
       ticks.push(tick);
     }
     replaceChildren(axisRow, ticks);
+  }
+  if (!compact) new ResizeObserver(drawTicks).observe(axisRow);
+
+  // `held` is the ribbon on a booked letter: the lanes are not a proposal being
+  // weighed, they are dates this venue already stands behind, and a lane marked
+  // "free" over a booking of one's own is simply untrue.
+  function update({ venueId, roomId, proposal, ghost = null, exceptApplicationId = null, held = false }) {
+    const { lanes, axis } = weekLanes(venueId, roomId, proposal, { exceptApplicationId });
+
+    currentAxis = axis;
+    drawTicks();
 
     replaceChildren(
       lanesRow,

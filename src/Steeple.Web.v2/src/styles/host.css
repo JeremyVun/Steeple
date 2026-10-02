@@ -1371,6 +1371,7 @@
 }
 
 .letterpage__left {
+  order: -1;
   display: grid;
   align-content: start;
   /* Content-sized rows, said out loud. This column is a scroller with a
@@ -3103,6 +3104,8 @@
   }
 
   .letterpage__right {
+    order: -2;
+    border-bottom: 1px solid var(--line);
     padding-left: 26px;
     padding-bottom: 22px;
   }
@@ -3173,4 +3176,27 @@
   .listing__hint:empty {
     display: none;
   }
+}
+
+.letterpage__space {
+  margin: 0 0 16px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.listing__booking {
+  min-width: 0;
+  margin: 20px 0;
+  border: 0;
+  padding: 0;
+}
+.listing__booking .settings__modes { margin-top: 12px; }
+.mode { min-height: var(--touch-target); }
+
+.paint { container-type: inline-size; }
+@container (max-width: 480px) {
+  .paint .ribbon__tick:nth-child(2n) { visibility: hidden; }
+}
+@container (max-width: 300px) {
+  .paint .ribbon__tick:not(:nth-child(4n + 1)) { visibility: hidden; }
 }

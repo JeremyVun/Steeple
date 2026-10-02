@@ -1095,3 +1095,10 @@
     transition: none;
   }
 }
+
+.sheet__grab,
+.sheet__up,
+.sheet__foot .pill {
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+}

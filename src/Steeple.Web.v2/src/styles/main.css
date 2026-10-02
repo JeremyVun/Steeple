@@ -22,6 +22,7 @@
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, sans-serif;
 
+  --touch-target: 44px;
   --radius-card: 14px;
   --radius-input: 9px;
   --radius-pill: 999px;
@@ -1801,3 +1802,35 @@ body {
 .reduced-motion .browse__sky {
   display: none;
 }
+
+/* Shared controls retain a full touch area on every surface. */
+.pill,
+button.linkish,
+a.linkish,
+.account,
+.letters,
+.porchswitch,
+.wordmark {
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+}
+
+.signin__host-guide {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.signin__host-guide[hidden] { display: none; }
+.signin__host-title {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font: 600 26px / 1.2 var(--serif);
+}
+.signin__host-guide p { margin: 12px 0 0; }
+.signin--host .identity:not(.is-verified) > .eyebrow,
+.signin--host .identity:not(.is-verified) > .identity__title { display: none; }
+
+.signin--host .identity.is-verified .signin__host-guide { display: none; }

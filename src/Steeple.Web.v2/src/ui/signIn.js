@@ -10,6 +10,7 @@
 // anywhere: the village, an open letter, the desk.
 
 import { track } from '../data/analytics.js';
+import { isEnabled } from '../data/flags.js';
 import * as session from '../data/session.js';
 import { createIdentityStep } from './guest/sso.js';
 import { el } from './dom.js';
@@ -68,6 +69,15 @@ export function createSignInPanel({ announce } = {}) {
     [identity.element]
   );
 
+  const hostPayment = el('p', { text: 'Payment options are shown before a booking is confirmed.' });
+  const hostGuide = el('section', { class: 'signin__host-guide', hidden: true }, [
+    el('h2', { class: 'signin__host-title', text: 'Host a space' }),
+    el('p', { text: 'Set your hourly price and open hours. Choose instant booking or review each request yourself.' }),
+    hostPayment,
+    el('p', { text: 'You can message guests about their booking.' }),
+    el('p', { text: 'Sign in to create your venue and add its spaces.' }),
+  ]);
+  identity.element.prepend(hostGuide);
   const element = el('div', { class: 'modal__layer signin__layer', hidden: true }, [sheet]);
 
   /**
@@ -80,6 +90,13 @@ export function createSignInPanel({ announce } = {}) {
    */
   function open(from = null, { trigger = 'account', onDone = null } = {}) {
     track('sso_started', { surface: 'header', trigger });
+    hostGuide.hidden = trigger !== 'host';
+    if (trigger === 'host') isEnabled('payments.enabled').then((enabled) => {
+      hostPayment.textContent = enabled
+        ? 'Online payment terms are shown to guests before they confirm a booking.'
+        : 'Online payments are unavailable. Guests arrange payment directly with you.';
+    });
+    sheet.classList.toggle('signin--host', trigger === 'host');
     done = onDone;
     opener = from ?? document.activeElement;
     element.hidden = false;

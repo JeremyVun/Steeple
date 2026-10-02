@@ -71,7 +71,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
   const right = el('div', { class: 'letterpage__right' }, [week, invitation, actions, drawer]);
   const sheet = el('article', { class: 'letterpage__sheet' }, [
     head,
-    el('div', { class: 'letterpage__cols' }, [left, right]),
+    el('div', { class: 'letterpage__cols' }, [right, left]),
   ]);
   const seal = el('div', { class: 'seal' });
   const element = el('div', { class: 'letterpage' }, [sheet, seal]);
@@ -1395,6 +1395,7 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
     ]);
 
     replaceChildren(week, [
+      el('p', { class: 'letterpage__space', text: `${room?.name ?? application.roomName} · ${venue?.name ?? application.venueName}` }),
       el('h2', {
         class: 'eyebrow',
         text: booked() ? (rescinded() ? 'What was held' : 'What is held') : 'When',

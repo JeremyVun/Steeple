@@ -651,6 +651,33 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     return state === 'published' || state === 'review' ? state : null;
   }
 
+  function bookingChoice() {
+    return el('fieldset', { class: 'settings listing__booking' }, [
+      el('legend', { class: 'eyebrow', text: 'How guests book' }),
+      el('p', { class: 'field__hint', text: 'This applies to every space at this venue. You can change it later in your desk.' }),
+      el('div', { class: 'settings__modes' }, [
+        ['instant', 'Instant booking', 'Guests can confirm available times without waiting for your approval.'],
+        ['manual', 'Manual approval', 'Each request waits for your approval before the booking is confirmed.'],
+      ].map(([value, label, blurb]) => el('label', { class: `mode${draft.bookingMode === value ? ' is-on' : ''}` }, [
+        el('input', {
+          type: 'radio', class: 'mode__input', name: 'listing-booking-mode', value,
+          checked: draft.bookingMode === value,
+          onchange: (event) => {
+            draft.bookingMode = value;
+            body.querySelector('.listing__booking-summary').textContent = label;
+            for (const option of event.target.closest('.settings__modes').children) {
+              option.classList.toggle('is-on', option.querySelector('input').checked);
+            }
+          },
+        }),
+        el('span', { class: 'mode__body' }, [
+          el('span', { class: 'mode__label', text: label }),
+          el('span', { class: 'mode__blurb', text: blurb }),
+        ]),
+      ]))),
+    ]);
+  }
+
   function publishStep() {
     const room = effectiveRoom(draft.venueId, draft.roomId) ?? draft.room;
     const state = outcome?.state ?? standing();
@@ -677,6 +704,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       // The one disclosure the Verify step used to make, said where it matters:
       // the host's name goes out with the listing, and the mark beside it is a
       // fact about the session, never a decoration.
+      el('dt', { class: 'eyebrow', text: 'Booking' }),
+      el('dd', { class: 'listing__booking-summary', text: draft.bookingMode === 'manual' ? 'Manual approval' : 'Instant booking' }),
       el('dt', { class: 'eyebrow', text: 'Listed by' }),
       el('dd', { class: 'facts__by' }, [
         el('span', { text: manage.whoAmI()?.displayName ?? 'You' }),
@@ -686,7 +715,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
 
     if (state === 'published') {
       return publishLayout([
-        el('p', { class: 'prose', text: `${room.name} is published. Groups can find it and send you a request.` }),
+        el('p', { class: 'prose', text: `${room.name} is published. ${draft.bookingMode === 'manual' ? 'Groups can find it and request a booking.' : 'Groups can find it and book available times instantly.'}` }),
         noticeBlock(),
         summary,
       ]);
@@ -758,6 +787,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
           : 'Everything is in place. Publishing puts this space on the map and opens it to requests.',
       }),
       noticeBlock(),
+      bookingChoice(),
       summary,
     ]);
   }
@@ -804,6 +834,16 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       return;
     }
 
+    if (draft.entry === 'venue' || draft.bookingMode !== draft.savedBookingMode) {
+      const saved = await manage.saveBookingMode(draft.remote.venueId, draft.bookingMode);
+      if (!saved.ok) {
+        reportProblem(saved);
+        announce?.(saved.detail);
+        return;
+      }
+      draft.savedBookingMode = saved.value.bookingMode;
+      upsertPlacedVenue({ id: draft.venueId, bookingMode: saved.value.bookingMode });
+    }
     const answer = await manage.askToPublish(draft);
     if (!answer.ok) {
       if (answer.reach === 'offline') {
@@ -823,7 +863,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     onChanged?.();
     announce?.(
       outcome.state === 'published'
-        ? `${answer.value.name} is published. Groups can find it and send you a request.`
+        ? `${answer.value.name} is published. ${draft.bookingMode === 'manual' ? 'Groups can find it and request a booking.' : 'Groups can find it and book available times instantly.'}`
         : `${answer.value.name} has been sent to Steeple for review.`
     );
   }
@@ -947,6 +987,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
   }
 
   function renderFoot() {
+    const choice = body.querySelector('.listing__booking');
+    if (choice) choice.disabled = busy;
     const list = steps();
     const index = list.indexOf(step);
     const hint = footHint();
@@ -1240,6 +1282,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       const editing = want === 'venue-edit';
       draft = {
         entry: editing ? 'venue-edit' : room ? 'room' : 'add-room',
+        bookingMode: venue.bookingMode === 'manual' ? 'manual' : 'instant',
+        savedBookingMode: venue.bookingMode === 'manual' ? 'manual' : 'instant',
         venueId,
         roomId: room ? roomId : null,
         // The five villages steeple seeded have no manager on this API, so a
@@ -1297,6 +1341,8 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
     } else {
       draft = {
         entry: 'venue',
+        bookingMode: 'instant',
+        savedBookingMode: 'instant',
         venueId: null,
         roomId: null,
         localOnly: false,
