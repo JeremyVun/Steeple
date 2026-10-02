@@ -74,6 +74,40 @@ function cancelBody(response) {
   void response.body?.cancel().catch(() => {});
 }
 
+function requestControl(timeoutMs, signal = null) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const withdraw = () => controller.abort();
+  if (signal?.aborted) withdraw();
+  else signal?.addEventListener('abort', withdraw, { once: true });
+
+  return {
+    controller,
+    failed(path, cause, { retryAfterMs = null } = {}) {
+      if (signal?.aborted) {
+        const withdrawn = new ApiError(`${path} was withdrawn`);
+        withdrawn.aborted = true;
+        return withdrawn;
+      }
+      const aborted = timedOut || controller.signal.aborted || cause?.name === 'AbortError';
+      return new ApiError(
+        aborted ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`,
+        0,
+        null,
+        { timedOut: aborted, retryAfterMs }
+      );
+    },
+    finish() {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', withdraw);
+    },
+  };
+}
+
 /**
  * steeple's query vocabulary: repeatable values repeat the key (activities,
  * amenities, accessibility, daysOfWeek), and anything absent stays absent —
@@ -99,17 +133,15 @@ export function getPublicFlags({ platform = 'web', build = null } = {}) {
 }
 
 async function get(path, params, { notFoundAsNull = false, accessToken = null, signal = null } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+  const request = requestControl(READ_TIMEOUT_MS, signal);
   // A caller may withdraw its question — a search superseded by the next
   // keystroke. Its abort and the timeout's are the same signal to fetch and two
   // different things to a caller, so the failure says which one happened.
-  const withdraw = () => controller.abort();
-  signal?.addEventListener('abort', withdraw, { once: true });
-  let response;
+  let response = null;
+  let responseRetryAfterMs = null;
   try {
     response = await fetch(`${BASE}${path}${queryString(params)}`, {
-      signal: controller.signal,
+      signal: request.controller.signal,
       // An authenticated read is about one person at one moment and must never
       // come out of a cache. The API sends no cache headers, so a browser is
       // free to apply its own heuristics — and did: a `GET /me` taken before
@@ -121,32 +153,29 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
       },
     });
-  } catch (cause) {
-    if (signal?.aborted) {
-      const withdrawn = new ApiError(`${path} was withdrawn`);
-      withdrawn.aborted = true;
-      throw withdrawn;
+
+    // A 404 is an answer — an unpublished or unknown listing — not a failure.
+    if (response.status === 404 && notFoundAsNull) {
+      cancelBody(response);
+      return null;
     }
-    const abort = cause.name === 'AbortError';
-    throw new ApiError(
-      abort ? `${path} timed out after ${READ_TIMEOUT_MS}ms` : `${path} did not answer`,
-      0,
-      null,
-      { timedOut: abort }
-    );
+    if (!response.ok) {
+      responseRetryAfterMs = retryAfterMs(response);
+      const text = await response.text();
+      throw new ApiError(`${path} answered ${response.status}`, response.status, text ? safeJson(text) : null, {
+        retryAfterMs: responseRetryAfterMs,
+      });
+    }
+    return await response.json();
+  } catch (cause) {
+    if (cause instanceof ApiError) throw cause;
+    if (request.controller.signal.aborted) {
+      throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
+    }
+    throw cause;
   } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', withdraw);
+    request.finish();
   }
-  // A 404 is an answer — an unpublished or unknown listing — not a failure.
-  if (response.status === 404 && notFoundAsNull) return null;
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new ApiError(`${path} answered ${response.status}`, response.status, text ? safeJson(text) : null, {
-      retryAfterMs: retryAfterMs(response),
-    });
-  }
-  return response.json();
 }
 
 /**
@@ -154,18 +183,18 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
  * whatever problem document came with it, so callers can tell "group size must
  * be between 1 and 1000" from "nothing answered".
  */
-async function send(method, path, body, { accessToken = null, headers = {}, timeoutMs = WRITE_TIMEOUT_MS } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+async function send(method, path, body, { accessToken = null, headers = {}, timeoutMs = WRITE_TIMEOUT_MS, signal = null } = {}) {
+  const request = requestControl(timeoutMs, signal);
   // `undefined` is a request with nothing to say — a revocation, a delete. It
   // carries no body and so declares no content type; `null` still means the
   // empty document, which is what every write here has always sent.
   const carries = body !== undefined;
-  let response;
+  let response = null;
+  let responseRetryAfterMs = null;
   try {
     response = await fetch(`${BASE}${path}`, {
       method,
-      signal: controller.signal,
+      signal: request.controller.signal,
       headers: {
         accept: 'application/json',
         ...(carries ? { 'content-type': 'application/json' } : {}),
@@ -174,25 +203,31 @@ async function send(method, path, body, { accessToken = null, headers = {}, time
       },
       ...(carries ? { body: JSON.stringify(body ?? {}) } : {}),
     });
-  } catch (cause) {
-    const abort = cause.name === 'AbortError';
-    throw new ApiError(
-      abort ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`,
-      0,
-      null,
-      { timedOut: abort }
-    );
-  } finally {
-    clearTimeout(timer);
-  }
 
-  if (response.status === 204) return null;
-  const text = await response.text();
-  const document = text ? safeJson(text) : null;
-  if (!response.ok) {
-    throw new ApiError(`${path} answered ${response.status}`, response.status, document);
+    if (response.status === 204) {
+      cancelBody(response);
+      return null;
+    }
+    if (!response.ok) {
+      responseRetryAfterMs = retryAfterMs(response);
+      const text = await response.text();
+      const document = text ? safeJson(text) : null;
+      throw new ApiError(`${path} answered ${response.status}`, response.status, document, {
+        retryAfterMs: responseRetryAfterMs,
+      });
+    }
+    const text = await response.text();
+    const document = text ? safeJson(text) : null;
+    return document;
+  } catch (cause) {
+    if (cause instanceof ApiError) throw cause;
+    if (request.controller.signal.aborted) {
+      throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
+    }
+    throw cause;
+  } finally {
+    request.finish();
   }
-  return document;
 }
 
 /**
@@ -200,35 +235,41 @@ async function send(method, path, body, { accessToken = null, headers = {}, time
  * so `content-type` is deliberately not passed. An image takes longer to travel
  * and longer to process than a JSON row, hence its own timeout.
  */
-async function upload(path, form, { accessToken = null, timeoutMs = 20000 } = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
+async function upload(path, form, { accessToken = null, timeoutMs = 20000, signal = null } = {}) {
+  const request = requestControl(timeoutMs, signal);
+  let response = null;
+  let responseRetryAfterMs = null;
   try {
     response = await fetch(`${BASE}${path}`, {
       method: 'POST',
-      signal: controller.signal,
+      signal: request.controller.signal,
       headers: {
         accept: 'application/json',
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
       },
       body: form,
     });
+
+    if (!response.ok) {
+      responseRetryAfterMs = retryAfterMs(response);
+      const text = await response.text();
+      const document = text ? safeJson(text) : null;
+      throw new ApiError(`${path} answered ${response.status}`, response.status, document, {
+        retryAfterMs: responseRetryAfterMs,
+      });
+    }
+    const text = await response.text();
+    const document = text ? safeJson(text) : null;
+    return document;
   } catch (cause) {
-    const abort = cause.name === 'AbortError';
-    throw new ApiError(
-      abort ? `${path} timed out after ${timeoutMs}ms` : `${path} did not answer`,
-      0,
-      null,
-      { timedOut: abort }
-    );
+    if (cause instanceof ApiError) throw cause;
+    if (request.controller.signal.aborted) {
+      throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
+    }
+    throw cause;
   } finally {
-    clearTimeout(timer);
+    request.finish();
   }
-  const text = await response.text();
-  const document = text ? safeJson(text) : null;
-  if (!response.ok) throw new ApiError(`${path} answered ${response.status}`, response.status, document);
-  return document;
 }
 
 const safeJson = (text) => {

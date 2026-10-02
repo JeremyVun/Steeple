@@ -62,6 +62,8 @@ export function createDiscovery({ announce = () => {} } = {}) {
   // area would be a claim about spaces that are not in front of them. `null`
   // until the first answer, so the map settling during boot prints nothing.
   let answered = null;
+  let answerTotal = 0;
+  let answerComplete = true;
   let troubled = false;
 
   const onMap = (item) =>
@@ -80,15 +82,18 @@ export function createDiscovery({ announce = () => {} } = {}) {
   function showAnswer({ whole = false } = {}) {
     const shown = whole ? answered : answered.filter(onMap);
     const clipped = shown.length < answered.length;
-    count.textContent = clipped ? inViewLine(shown) : resultLine(answered);
+    const fullLine = answerComplete ? resultLine(answered) : `Showing ${answered.length} of ${answerTotal} spaces`;
+    count.textContent = clipped ? `${inViewLine(shown)}. ${fullLine}` : fullLine;
     results.render(shown, clipped && shown.length === 0 ? { emptyText: EDGE } : {});
     results.setCurrent(state.venueId, state.roomId);
   }
 
   const search = createSearch({
     announce,
-    onResults: (items, { suburb = null } = {}) => {
+    onResults: (items, { suburb = null, total = items.length, complete = true } = {}) => {
       answered = items;
+      answerTotal = total;
+      answerComplete = complete;
       troubled = false;
       // Pins first: an answer may be the first sight of a venue — one a host
       // listed this morning, one beyond the last page of results — and it has
@@ -241,6 +246,13 @@ export function createDiscovery({ announce = () => {} } = {}) {
     // Publishing or editing a space is the one moment a venue the catalog is
     // holding stops being true, so it is read again rather than remembered.
     forgetVenues();
+    answered = [];
+    answerTotal = 0;
+    answerComplete = true;
+    count.textContent = '';
+    results.render([], { emptyText: '' });
+    atlas.setVenues(knownVenues());
+    atlas.setPrices([]);
     search.search();
   });
 

@@ -134,12 +134,16 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
   let settleTimer = 0;
   let inFlight = null;
 
+  function discoveryLine(items, total, complete) {
+    return complete ? resultLine(items) : `Showing ${items.length} of ${total} spaces`;
+  }
+
   function ask() {
     clearTimeout(settleTimer);
     settleTimer = setTimeout(search, SETTLE_MS);
   }
 
-  async function search() {
+  async function search({ retry = false } = {}) {
     clearTimeout(settleTimer);
     const token = (run += 1);
     inFlight?.abort();
@@ -147,7 +151,7 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     inFlight = withdraw;
     let answer;
     try {
-      answer = await searchListings(catalogQuery(), { signal: withdraw.signal });
+      answer = await searchListings(catalogQuery(), { signal: withdraw.signal, retry });
     } catch (error) {
       // A question this control withdrew is not a failure to report: the
       // answer it was superseded by is on its way.
@@ -165,13 +169,13 @@ export function createSearch({ announce = () => {}, onResults = () => {}, onTrou
     } finally {
       if (inFlight === withdraw) inFlight = null;
     }
-    const { items } = answer;
+    const { items, total = items.length, complete = true } = answer;
     if (token !== run) return; // a later question has already been asked
     paint();
     publish(items);
-    onResults(items, { suburb: query.suburb });
+    onResults(items, { suburb: query.suburb, total, complete });
     clearTimeout(announceTimer);
-    announceTimer = setTimeout(() => announce(`${resultLine(items)}.`), 350);
+    announceTimer = setTimeout(() => announce(`${discoveryLine(items, total, complete)}.`), 350);
   }
 
   // A filter set elsewhere — the debug API, a flow — is still a filter: adopt

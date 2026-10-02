@@ -42,7 +42,12 @@ let cookieRefused = false;
 let generation = 0;
 let refreshing = null;
 let restoring = null;
+let refreshBlocked = null;
+let refreshRetryTimer = 0;
 const watchers = new Set();
+
+const RETRY_AFTER_RATE_LIMIT_MS = 60_000;
+const RETRY_AFTER_TRANSIENT_MS = 5_000;
 
 export const REASON = {
   signedIn: 'signedIn',
@@ -83,9 +88,45 @@ function hold(user, reason, { announce = true } = {}) {
   if (announce) notify(reason);
 }
 
+function clearRefreshRetry() {
+  clearTimeout(refreshRetryTimer);
+  refreshRetryTimer = 0;
+  refreshBlocked = null;
+}
+
+function refreshCooldownError() {
+  const blocked = refreshBlocked;
+  const retryAfterMs = Math.max(0, (blocked?.until ?? Date.now()) - Date.now());
+  return new api.ApiError('session refresh is waiting to retry', blocked?.error?.status ?? 0, blocked?.error?.problem, {
+    retryAfterMs,
+  });
+}
+
+function retryRefreshAfter(error, started) {
+  const delay = Math.max(
+    0,
+    Number.isFinite(error?.retryAfterMs)
+      ? error.retryAfterMs
+      : error?.status === 429
+        ? RETRY_AFTER_RATE_LIMIT_MS
+        : RETRY_AFTER_TRANSIENT_MS
+  );
+  const until = Date.now() + delay;
+  if (refreshBlocked?.until >= until) return;
+  clearTimeout(refreshRetryTimer);
+  refreshBlocked = { until, error };
+  refreshRetryTimer = setTimeout(() => {
+    refreshRetryTimer = 0;
+    if (generation !== started || suppressed || cookieRefused) return;
+    refreshBlocked = null;
+    void fetchCurrentUser();
+  }, delay);
+}
+
 function drop(reason, { announce = true } = {}) {
   generation += 1;
   suppressed = true;
+  clearRefreshRetry();
   refreshing = null;
   restoring = null;
   hold(null, reason, { announce });
@@ -136,6 +177,7 @@ export async function signInWithProvider({
   generation += 1;
   suppressed = false;
   cookieRefused = false;
+  clearRefreshRetry();
   refreshing = null;
   restoring = null;
   access = answer.accessToken;
@@ -182,6 +224,8 @@ export async function signOut() {
 function refresh() {
   if (suppressed || cookieRefused) return Promise.resolve(null);
   if (refreshing) return refreshing;
+  if (refreshBlocked?.until > Date.now()) return Promise.reject(refreshCooldownError());
+  if (refreshBlocked) clearRefreshRetry();
 
   const started = generation;
   // Scheduled rather than called, so that `refreshing` below is assigned before
@@ -198,10 +242,16 @@ function refresh() {
       return access;
     })
     .catch((error) => {
-      // An outage is not an answer: it rethrows, and the cookie stays unknown.
-      if (!error?.status) throw error;
+      if (started !== generation || suppressed) return null;
+      // The refresh endpoint documents 401 as the proof that the refresh cookie
+      // is absent, expired or revoked. Every other result leaves that proof
+      // unknown: retaining the signed-in state is the only honest response.
+      if (error?.status !== 401) {
+        retryRefreshAfter(error, started);
+        throw error;
+      }
       cookieRefused = true;
-      if (started === generation) access = null;
+      access = null;
       return null;
     })
     .finally(() => {
@@ -248,12 +298,7 @@ export async function withAccess(work) {
   }
 
   access = null;
-  let fresh;
-  try {
-    fresh = await refresh();
-  } catch {
-    throw new api.ApiError('session refresh did not answer', 0);
-  }
+  const fresh = await refresh();
   if (!fresh) {
     expireIfHeld();
     throw new api.ApiError('not signed in', 401);
@@ -341,6 +386,7 @@ if (channel) {
     // A sibling tab signed in, so there is a cookie now whatever this tab was
     // last told.
     cookieRefused = false;
+    clearRefreshRetry();
     access = null;
     held = null;
     refreshing = null;

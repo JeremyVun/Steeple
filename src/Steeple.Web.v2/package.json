@@ -22,7 +22,9 @@
     "smoke:providers": "node tools/provider-smoke-test.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "test:composer-schedule": "node tools/composer-schedule-test.mjs",
-    "test:composer": "node tools/composer-test.mjs"
+    "test:composer": "node tools/composer-test.mjs",
+    "test:review-recovery": "node tools/review-recovery-test.mjs",
+    "test:review-recovery-browser": "node tools/review-recovery-browser-test.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

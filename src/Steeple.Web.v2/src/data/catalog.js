@@ -32,6 +32,7 @@ import {
 } from './vocabulary.js';
 
 const PAGE_SIZE = 100;
+const MAX_DISCOVERY_RESULTS = 1000;
 // Demo inventory is development-only. A production outage must never advertise
 // fictional spaces or availability, including provisional map pins.
 const ALLOW_DEMO_CATALOG = import.meta.env?.DEV === true;
@@ -49,16 +50,15 @@ const RETRY_AFTER_MS = 30_000;
 // Listing-by-slug 404 is translated to null in api.js before it reaches this predicate.
 const absent = (status) => status === 0 || status === 404 || status === 502 || status === 503;
 
-let quietUntil = 0;
-// Set → reads inside the quiet window fail the same way without asking again;
-// null → the seed is what the quiet window answers with.
-let quietFailure = null;
+// A cooldown belongs to the request that established it. A failed sitemap must
+// not stop a person asking the search endpoint, and an explicit search retry
+// may test recovery after an outage without overriding a server rate limit.
+const quietWindows = new Map();
 let saidSo = false;
 let readingSeed = false;
 
-function fallBackToSeed(error) {
-  quietUntil = Date.now() + RETRY_AFTER_MS;
-  quietFailure = null;
+function fallBackToSeed(error, key) {
+  quietWindows.set(key, { until: Date.now() + RETRY_AFTER_MS, failure: null });
   readingSeed = true;
   if (saidSo) return;
   saidSo = true;
@@ -67,29 +67,34 @@ function fallBackToSeed(error) {
 }
 
 /** Ask the API. Only development may substitute the seed for an absent origin. */
-async function live(fromApi, fromSeed) {
-  if (Date.now() < quietUntil) {
-    if (quietFailure) throw quietFailure;
+async function live(fromApi, fromSeed, { key = 'catalog', retry = false, generation = null } = {}) {
+  const quiet = quietWindows.get(key);
+  if (quiet?.until > Date.now() && !(retry && quiet.failure?.status !== 429)) {
+    if (quiet.failure) throw quiet.failure;
     return fromSeed();
   }
+  if (quiet) quietWindows.delete(key);
   try {
     const answer = await fromApi();
-    readingSeed = false;
+    if (generation === null || generation === catalogGeneration) readingSeed = false;
     return answer;
   } catch (error) {
+    if (generation !== null && generation !== catalogGeneration) throw error;
     // A question this browser withdrew is not an answer and not a silence.
     // Reading it as "nothing served /api/v1" would put a working catalog on the
     // seed for thirty seconds every time somebody typed quickly.
     if (error?.aborted) throw error;
     if (ALLOW_DEMO_CATALOG && absent(error?.status ?? 0)) {
-      fallBackToSeed(error);
+      fallBackToSeed(error, key);
       return fromSeed();
     }
     // Back off for unavailable APIs and rate limits. Other failures may be
     // query-specific, so the next question is still asked.
     if (error?.status === 429 || absent(error?.status ?? 0)) {
-      quietUntil = Date.now() + RETRY_AFTER_MS;
-      quietFailure = error;
+      quietWindows.set(key, {
+        until: Date.now() + (error?.status === 429 && Number.isFinite(error.retryAfterMs) ? error.retryAfterMs : RETRY_AFTER_MS),
+        failure: error,
+      });
     }
     throw error;
   }
@@ -463,6 +468,10 @@ export function knownVenues() {
 let lastItems = [];
 export const heldResults = () => lastItems;
 
+// Cache invalidation is also a boundary for answers already on the wire. A
+// pre-edit sitemap or listing must never repopulate the new catalogue.
+let catalogGeneration = 0;
+
 // A venue is read once and held: it changes when a listing is published, not
 // while somebody is browsing. `forgetVenues` is the other half — publishing or
 // editing a space is exactly the moment the held answer stops being true.
@@ -479,10 +488,17 @@ const listings = new Map();
 const listingReads = new Map();
 
 export function forgetVenues() {
+  catalogGeneration += 1;
+  quietWindows.clear();
   reads.clear();
   whole.clear();
   listings.clear();
   listingReads.clear();
+  sitemap = null;
+  lastItems = [];
+  venues.clear();
+  seededRoster = ALLOW_DEMO_CATALOG;
+  if (ALLOW_DEMO_CATALOG) for (const slug of bundled.venueSlugs()) record(slug);
 }
 
 /**
@@ -496,18 +512,39 @@ export function readVenue(venueSlug) {
   if (whole.has(venueSlug)) return Promise.resolve(heldVenue(venueSlug));
   let reading = reads.get(venueSlug);
   if (!reading) {
-    reading = assemble(venueSlug).finally(() => reads.delete(venueSlug));
+    const started = catalogGeneration;
+    reading = assemble(venueSlug, started).finally(() => {
+      if (reads.get(venueSlug) === reading) reads.delete(venueSlug);
+    });
     reads.set(venueSlug, reading);
   }
   return reading;
 }
 
-async function assemble(venueSlug) {
+function reconcileVenueRooms(venueSlug, roomSlugs, results) {
+  const venue = heldVenue(venueSlug);
+  if (!venue) return null;
+  const resultFor = new Map(results.map((result) => [result.roomSlug, result]));
+  venue.rooms = venue.rooms.filter((room) => {
+    if (!roomSlugs.has(room.id)) return false;
+    const result = resultFor.get(room.id);
+    return result?.failed || Boolean(result?.listing);
+  });
+  if (venue.rooms.length === 0) {
+    venues.delete(venueSlug);
+    return null;
+  }
+  return venue;
+}
+
+async function assemble(venueSlug, started) {
   let roomSlugs;
   try {
     const entries = await sitemapEntries();
+    if (started !== catalogGeneration) return null;
     roomSlugs = entries.filter((entry) => entry.venueSlug === venueSlug).map((e) => e.roomSlug);
   } catch {
+    if (started !== catalogGeneration) return null;
     // Nothing served the sitemap. The seed answers for its own venues and for
     // nothing else, which is the same promise every read here makes.
     const seeded = scenery(venueSlug);
@@ -522,12 +559,22 @@ async function assemble(venueSlug) {
   }
 
   // Each read keeps itself (see getListing) — the venue is what they add up to.
-  const listings = (
-    await Promise.all(roomSlugs.map((roomSlug) => getListing(venueSlug, roomSlug).catch(() => null)))
-  ).filter(Boolean);
-  if (listings.length === 0) return heldVenue(venueSlug);
-  whole.add(venueSlug);
-  return heldVenue(venueSlug);
+  // A sitemap answer is authoritative about membership; a failed room detail is
+  // not, so it leaves a previously known room in place for the next retry.
+  const rooms = new Set(roomSlugs);
+  const results = await Promise.all(
+    roomSlugs.map(async (roomSlug) => {
+      try {
+        return { roomSlug, listing: await getListing(venueSlug, roomSlug), failed: false };
+      } catch {
+        return { roomSlug, listing: null, failed: true };
+      }
+    })
+  );
+  if (started !== catalogGeneration) return null;
+  const venue = reconcileVenueRooms(venueSlug, rooms, results);
+  if (results.every((result) => !result.failed)) whole.add(venueSlug);
+  return venue;
 }
 
 // ─── the surface ─────────────────────────────────────────────────────────────
@@ -546,7 +593,8 @@ async function assemble(venueSlug) {
  * abort is not an answer and not a silence: it is rethrown as it is, so nothing
  * here mistakes it for a steeple that is away and starts reading the seed.
  */
-export async function searchListings(query = {}, { signal = null } = {}) {
+export async function searchListings(query = {}, { signal = null, retry = false } = {}) {
+  const started = catalogGeneration;
   const answer = await live(
     async () => {
       // The live search's schedule grammar, learned from the wire: time terms
@@ -557,28 +605,46 @@ export async function searchListings(query = {}, { signal = null } = {}) {
       const anchored = Boolean(query.date) || daysOfWeek.length > 0;
       const timeOfDay =
         anchored && query.timeOfDay ? String(query.timeOfDay).toLowerCase() : null;
-      const result = await api.searchListings(
-        {
-          suburb: query.suburb ?? null,
-          minCapacity: query.minCapacity || null,
-          activities: tokens(query.activities, ACTIVITY_TOKENS),
-          amenities: tokens(query.amenities, AMENITY_TOKENS),
-          accessibility: tokens(query.accessibility, ACCESS_TOKENS),
-          date: query.date ?? null,
-          daysOfWeek,
-          timeOfDay,
-          startTime: anchored && !timeOfDay ? (query.startTime ?? null) : null,
-          endTime: anchored && !timeOfDay ? (query.endTime ?? null) : null,
-          durationMinutes: anchored ? (query.durationMinutes ?? null) : null,
-          page: query.page ?? null,
-          pageSize: query.pageSize ?? PAGE_SIZE,
-        },
-        { signal }
+      const pageSize = Math.min(Math.max(1, query.pageSize ?? PAGE_SIZE), PAGE_SIZE);
+      const params = {
+        suburb: query.suburb ?? null,
+        minCapacity: query.minCapacity || null,
+        activities: tokens(query.activities, ACTIVITY_TOKENS),
+        amenities: tokens(query.amenities, AMENITY_TOKENS),
+        accessibility: tokens(query.accessibility, ACCESS_TOKENS),
+        date: query.date ?? null,
+        daysOfWeek,
+        timeOfDay,
+        startTime: anchored && !timeOfDay ? (query.startTime ?? null) : null,
+        endTime: anchored && !timeOfDay ? (query.endTime ?? null) : null,
+        durationMinutes: anchored ? (query.durationMinutes ?? null) : null,
+      };
+      const firstPage = query.page ?? 1;
+      const first = await api.searchListings({ ...params, page: firstPage, pageSize }, { signal });
+      const total = Math.max(first.items.length, Number(first.totalCount) || 0);
+      const serverPageSize = Math.min(Math.max(1, first.pageSize ?? pageSize), PAGE_SIZE);
+      const pageCount = Math.min(
+        Math.max(1, Math.ceil(total / serverPageSize)),
+        Math.floor(MAX_DISCOVERY_RESULTS / serverPageSize)
       );
-      return { items: result.items.map(summaryFrom), total: result.totalCount };
+      const pages = [first];
+      for (let page = firstPage + 1; page < firstPage + pageCount; page += 1) {
+        pages.push(await api.searchListings({ ...params, page, pageSize: serverPageSize }, { signal }));
+      }
+      const byId = new Map();
+      for (const page of pages) {
+        for (const item of page.items) {
+          const summary = summaryFrom(item);
+          byId.set(summary.id, summary);
+        }
+      }
+      const items = [...byId.values()];
+      return { items, total, complete: items.length >= total };
     },
-    () => bundled.searchListings(query)
+    async () => ({ ...(await bundled.searchListings(query)), complete: true }),
+    { key: 'search', retry, generation: started }
   );
+  if (started !== catalogGeneration) return answer;
   noteSummaries(answer.items, readingSeed);
   lastItems = answer.items;
   return answer;
@@ -599,13 +665,16 @@ export function getListing(venueSlug, roomSlug) {
   if (listings.has(key)) return Promise.resolve(listings.get(key));
   let reading = listingReads.get(key);
   if (!reading) {
-    reading = readListing(venueSlug, roomSlug, key).finally(() => listingReads.delete(key));
+    const started = catalogGeneration;
+    reading = readListing(venueSlug, roomSlug, key, started).finally(() => {
+      if (listingReads.get(key) === reading) listingReads.delete(key);
+    });
     listingReads.set(key, reading);
   }
   return reading;
 }
 
-async function readListing(venueSlug, roomSlug, key) {
+async function readListing(venueSlug, roomSlug, key, started) {
   const listing = await live(
     async () => {
       const detail = await api.getListingBySlug(venueSlug, roomSlug);
@@ -622,8 +691,10 @@ async function readListing(venueSlug, roomSlug, key) {
       await sitemapEntries();
       return null;
     },
-    () => bundled.getListing(venueSlug, roomSlug)
+    () => bundled.getListing(venueSlug, roomSlug),
+    { key: `listing:${key}`, generation: started }
   );
+  if (started !== catalogGeneration) return null;
   // Every listing read is also the answer to "who is this venue" — the block
   // behind it is the only place the address, the parking and the transit are
   // ever said. Keeping it is what lets a sheet open on a venue nobody searched.
@@ -640,10 +711,14 @@ async function readListing(venueSlug, roomSlug, key) {
 let sitemap = null;
 
 function sitemapEntries() {
-  sitemap ??= api.getSitemap().catch((error) => {
-    sitemap = null;
+  if (sitemap) return sitemap;
+  const started = catalogGeneration;
+  let reading;
+  reading = api.getSitemap().catch((error) => {
+    if (started === catalogGeneration && sitemap === reading) sitemap = null;
     throw error;
   });
+  sitemap = reading;
   return sitemap;
 }
 
@@ -666,7 +741,8 @@ export async function getVenueProfile(venueSlug) {
       const detail = await api.getListingBySlug(venueSlug, roomSlug);
       return detail ? profileFrom(detail.venue) : null;
     },
-    () => bundled.getVenueProfile(venueSlug)
+    () => bundled.getVenueProfile(venueSlug),
+    { key: `venue-profile:${venueSlug}` }
   );
 }
 
@@ -715,7 +791,8 @@ export async function getVenueReviews(venueId, { page = 1, pageSize = 10, signal
 export async function getSuburbs() {
   return live(
     () => api.getSuburbs(),
-    () => bundled.getSuburbs()
+    () => bundled.getSuburbs(),
+    { key: 'suburbs' }
   );
 }
 
@@ -729,7 +806,8 @@ export async function getGeofence() {
         center: { lat: fence.center.latitude, lng: fence.center.longitude },
       };
     },
-    () => bundled.getGeofence()
+    () => bundled.getGeofence(),
+    { key: 'geofence' }
   );
 }
 

@@ -96,9 +96,10 @@ and behind a stripped proxy prefix.
 - `ApiError {message, status, problem, code, detail, timedOut, retryAfterMs}` — `status: 0` means no response
   arrived; `timedOut` distinguishes a request the browser stopped waiting for from one it could
   not send. A JSON-request failure that arrived carries the RFC 9457 problem document verbatim with its stable
-  `code` lifted out.
-- Timeouts: **4s** for reads, **15s** for JSON writes and **20s** for photo upload.
-  `notFoundAsNull` turns a
+  `code` lifted out. `retryAfterMs` is retained from response headers even if that problem body stalls.
+- Timeouts: **4s** for reads, **15s** for JSON writes and **20s** for photo upload. Each
+  covers headers **and** body consumption. A caller's `AbortSignal` stays attached until that
+  body settles, so a stalled JSON document cannot outlive its request deadline. `notFoundAsNull` turns a
   404 into `null` for listing reads (an unpublished room is an answer, not a failure).
 - **A photograph is prepared before it is sent** (`data/photo.js`, 2026-08-07): decoded with the
   EXIF orientation applied, drawn down to the widest variant steeple keeps (1600px, never
@@ -192,11 +193,13 @@ expired, while an active tab still reports a refresh refusal as `expired`.
   helper. `providers.js` lazily loads Google or Apple only when its build-time client settings
   exist; unconfigured providers are not offered.
 - `refresh()` is **single-flight per tab** (one promise memoized). A sibling's opaque sign-out
-  event suppresses further refreshes. Refresh presents nothing: the cookie
-  is the credential. It resolves to `null` when steeple *refused*; an active profile is then
-  dropped and watchers are told `expired`. It **rejects** when nothing answered — an API that is not running
-  must not cost anyone their sign-in. Cross-tab collisions are safe by the server's rotation grace
-  (`identity.md`), not by this file.
+  event suppresses further refreshes. Refresh presents nothing: the cookie is the credential.
+  Only the endpoint's documented **401** refusal proves that cookie is absent, expired or revoked;
+  it resolves to `null`, drops an active profile and tells watchers `expired`. Every other error
+  preserves the profile and rejects the immediate work. A transient error retries profile recovery:
+  a 429 waits through its `Retry-After` (or 60 seconds when absent); other transient failures wait
+  five seconds unless the server supplied a delay. Cross-tab collisions are safe by the server's
+  rotation grace (`identity.md`), not by this file.
 - `withAccess(work)` runs one bearer-needing piece of work. With no access token in memory — which
   is **every reload of a signed-in browser** — it refreshes first; on a 401 it refreshes once and
   retries; a second 401 is an answer.
@@ -294,7 +297,7 @@ translations happen here and only here: **names** (wire `roomName/latitude/longi
 → product `name/lat/lng/total`) and **vocabulary** (wire camelCase tokens → printed labels,
 unknown tokens humanized rather than dropped).
 
-Exports: `searchListings(query, {signal})`, `getListing`, `getVenueProfile`, `getSuburbs`,
+Exports: `searchListings(query, {signal, retry})`, `getListing`, `getVenueProfile`, `getSuburbs`,
 `getGeofence`, `getRoomAvailability`, `readFailure(error)`, `isLive()`, and the venue-presence
 seam below (`heldVenue`, `heldRoom`, `knownVenues`, `heldResults`, `readVenue`, `forgetVenues`,
 `AREA_CENTER`). `getListing` additionally carries steeple's own `roomId`
@@ -322,8 +325,8 @@ seed pins and uses no seed descriptions or rooms; API failures show the existing
 
 | Failure | Statuses | Production behavior |
 |---|---|---|
-| Unavailable | `0`, `404`, `502`, `503` | Throw `ApiError`; cache the failure for 30 seconds to avoid hammering the API. |
-| Refused | `400`, `401`, `403`, `429`, `500`, … | Throw `ApiError`; `429` also has a 30-second quiet window. |
+| Unavailable | `0`, `404`, `502`, `503` | Throw `ApiError`; cache that request family's failure for 30 seconds to avoid hammering the API. |
+| Refused | `400`, `401`, `403`, `429`, `500`, … | Throw `ApiError`; `429` has a quiet window through its `Retry-After`, or 30 seconds when absent. |
 
 `tools/release-safety-test.mjs` builds the production catalogue and proves these failures never
 return demo rooms or provisional pins. `provider-smoke-test.mjs` checks the rendered outage.
@@ -342,7 +345,9 @@ Serving the seed for an answered refusal was review issue 4: the seed cannot hon
 term, so an API that refused a Tuesday-evening search printed nine rooms as though every one of
 them were free on Tuesday evening. Only **429** takes the quiet window with it (re-asking a
 service that refused for pace is the one retry that makes it worse); any other refusal may be
-about the question rather than the service, so the next question is asked.
+about the question rather than the service, so the next question is asked. Cooldowns are keyed by
+request family, so an auxiliary catalogue failure cannot suppress search. A visible **Try again**
+passes `retry: true`: it may bypass an unavailable-service quiet window, but never a 429 cooldown.
 
 `readFailure(error)` → `{reach, status, message}`, `reach` ∈ `busy` (429) · `refused` · `absent`,
 with our own calm sentence rather than steeple's `detail` (a read's problem document is written
@@ -369,7 +374,7 @@ rooms a venue has. One record per slug, filled in as answers land:
 | `knownVenues()` | sync | every venue the catalog has answered with, positioned — **the map's roster** |
 | `heldResults()` | sync | the rooms of the last search answer (what the surface is currently saying) |
 | `readVenue(slug)` | async | the venue **in full**: sitemap → `getListing` per room. Held for the session; answers from what is held when steeple cannot be reached; `null` when nothing anywhere knows the slug. |
-| `forgetVenues()` | | publishing or editing a space is the one moment a held venue stops being true (`ui/map/index.js`, on `store:change`) |
+| `forgetVenues()` | | publishing or editing a space is the one moment a held venue stops being true (`ui/map/index.js`, on `store:change`); clears sitemap, venue/result/detail caches and advances the cache generation |
 
 In development, the bundled seed can lend display names/descriptions and provisional map
 pins. Production records start from the API alone. Its initial map roster is empty until a
@@ -400,6 +405,11 @@ Three rules that fall out of it, and are asserted:
 `state.matching` is no longer derived from the scenery by `bus.setFilters`: only the search
 knows which venues answered, and it publishes the set with every answer.
 
+An invalidation clears the sitemap as well as room-detail caches. The next assembly reconciles a
+venue's rooms against its new sitemap and listing reads; removed rooms leave the roster. Every
+cache-owning read captures the generation that began it, so an older sitemap, detail or search
+answer cannot restore data after invalidation.
+
 **One question per settled gesture** (`ui/map/search.js`). Every control calls `ask()`, which
 waits **150ms** for the hand to stop before going to steeple; `search()` — the boot read, the
 **Try again** press, a filter set from elsewhere — goes immediately. Each run aborts whatever is
@@ -411,6 +421,13 @@ the bundled seed for thirty seconds), and the pill drops it silently rather than
 failure the next answer is about to replace. The sequence number stays — it stopped a stale
 answer being *painted*; the signal stops the request holding a connection and a rate-limit slot
 for a question nobody is waiting on.
+
+**Discovery paging is bounded and honest.** The catalogue reads consecutive 100-room pages up to
+1,000 matching spaces for a settled query and returns `{items, total, complete}`. The map and
+list receive every fetched item. When `complete` is false, the count and live announcement say
+“Showing N of T spaces”; they never present the bounded subset as the whole answer. The focused
+`tools/review-recovery-test.mjs` and `tools/review-recovery-browser-test.mjs` cover the page
+boundary, bound, retry action, rate-limit cooldown, stale reads and stalled response bodies.
 
 A **Draft is not a listing**, and `ui/index.js` opens the room sheet only on a published room.
 steeple settles this for everything it knows (Draft and Unlisted answer 404 to the public); the
@@ -733,12 +750,6 @@ arrives) is one `console.warn` and then `bootFlat` — the flat product, interac
   venue-profile endpoint, missing RoomDetail fields, no vocabulary endpoint, …).
 - ~~The property sheets are scenery-backed~~ — fixed 2026-08-06 (review issue 7). Pins and both
   property sheets are the catalog's; see "Venue presence" above.
-- **A search answers one page.** `searchListings` asks for `pageSize: 100` and the surface shows
-  what came back, so with more published rooms than that (the shared dev database holds ~108) a
-  venue past the end of the first page has no pin and no row until a narrower search reaches it.
-  Its *sheet* works either way — `readVenue` goes by slug through the sitemap — so a deep link
-  or an email CTA lands correctly. The count line says what is on the page, not `totalCount`.
-  Paging the map is unbuilt.
 - `.notice` belongs to the listing flow (`styles/host.css`). The session slip is `.slip`, and it
   now belongs to the session notice and the deep-link surface alone — notifications stopped
   borrowing it in 2026-08-09's inbox rework. Inbox messages are `.jmsg*`, the hosting buckets
