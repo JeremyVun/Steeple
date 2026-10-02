@@ -17,6 +17,8 @@ public sealed class DatabaseReadinessCheck(SteepleDbContext db) : IHealthCheck
             // projection checks the latest required booking column, even when there are no rows.
             await db.Bookings.Select(b => new { b.Id, b.InAppPayment }).Take(1)
                 .ToListAsync(deadline.Token).ConfigureAwait(false);
+            await db.Rooms.Select(r => new { r.Id, r.AvailabilityConfiguredAtUtc }).Take(1)
+                .ToListAsync(deadline.Token).ConfigureAwait(false);
             return HealthCheckResult.Healthy();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)

@@ -383,6 +383,26 @@ public class BookingServiceTests
         Assert.Equal(booking.Id, Assert.Single(payments.RefundKicks));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConfirmFromApplicationAsync_ElapsedSession_IsRejectedWithoutBooking(bool counter)
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var app = NewApprovedApplication(room, organizer);
+        app.StartDate = new DateOnly(2026, 7, 4);
+        app.EndDate = app.StartDate;
+        app.StartTime = new TimeOnly(7, 0);
+        app.EndTime = new TimeOnly(9, 0);
+        var service = CreateService(repo, managers, out _, out _);
+        var spec = counter ? new ScheduleSpec(ScheduleFrequency.OneOff, app.StartDate, app.EndDate,
+            null, app.StartTime, app.EndTime) : null;
+        var result = await service.ConfirmFromApplicationAsync(app, spec);
+        Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
+        Assert.Null(result.Booking);
+        Assert.Empty(repo.Bookings);
+    }
+
     [Fact]
     public async Task ConfirmFromApplicationAsync_PaymentsEnabled_SnapshotsPerOccurrencePrice()
     {

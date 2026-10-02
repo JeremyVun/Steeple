@@ -47,7 +47,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
                      "018-local-media-paths.sql", "019-photo-integrity.sql",
                      "020-notification-outbox.sql", "021-data-retention-indexes.sql",
                      "022-notification-stream.sql", "023-stripe-onboarding.sql",
-                     "024-offline-booking-prices.sql",
+                     "024-offline-booking-prices.sql", "025-availability-configured.sql",
                  })
         {
             var sql = await File.ReadAllTextAsync(Path.Combine(changelogDir, file));

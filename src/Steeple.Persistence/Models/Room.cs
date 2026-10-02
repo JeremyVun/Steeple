@@ -80,6 +80,9 @@ public class Room
     /// </summary>
     public DateTimeOffset? ProviderEditedAtUtc { get; set; }
 
+    /// <summary>Distinguishes explicitly closed rooms from legacy rooms without availability rules.</summary>
+    public DateTimeOffset? AvailabilityConfiguredAtUtc { get; set; }
+
     /// <summary>Photos for this room.</summary>
     public ICollection<RoomPhoto> Photos { get; set; } = new List<RoomPhoto>();
 

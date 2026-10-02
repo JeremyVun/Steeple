@@ -16,7 +16,7 @@ Status: implementation in progress. Preserve the findings below as the original 
 
 Plan: fix availability and notification transaction correctness; repair web session, HTTP and catalogue recovery; repair native session/paging behavior and review-query scaling; preserve quoted commitments; implement the approved visual fixes with Astra; run regression and adversarial review passes until the exercised scope produces no new actionable findings. Passing a finite review is not proof of an issue-free application.
 
-Pending owner decisions: Astra assignment for findings 13–17; booking-mode presentation in host setup; migration behavior for pending requests with no saved quote; support contact and contact-only versus in-app case resolution. Independent correctness work proceeds while these are pending. No production deployment is included in this fix pass.
+Owner decisions on 2 October 2026: “Yes, assign Astra these fixes”; “Keep instant booking preselected”; support address “jvun@steepleapp.co”. Still pending: migration behavior for pending requests with no saved quote; contact-only versus in-app case resolution. Independent correctness work proceeds while these are pending. No production deployment is included in this fix pass.
 
 ## Review plan
 
@@ -220,3 +220,7 @@ Full [Astra report](/private/tmp/steeple-app-review-web-YfVNHH/visual-review.md)
 - Mobile received a targeted code/contract review; Flutter analysis, native device interaction, real SSO, live email/payment delivery, production recovery and load testing were not performed.
 
 Only review documentation and reproduction tooling were added to the shared checkout. No product code, database, production setting or deployment was changed.
+
+Owner clarification: "Require review and resubmission" for pending requests with no saved quote; "Start with contextual support email" using jvun@steepleapp.co.
+
+Remediation checkpoint: availability configuration persists explicit closure (migration025); all availability reads honor scheduled occurrences after late cancellation; touching windows are contiguous; submission/counter/confirmation reject elapsed sessions and invalid DST durations. Focused checks passed195 service tests and13 PostgreSQL tests before the final DST regression additions. Temporary Flutter SDK checkout: /private/tmp/steeple-review-flutter-sdk-a5lIke/flutter (official3.41.1 tag).

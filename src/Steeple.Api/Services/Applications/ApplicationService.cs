@@ -99,11 +99,10 @@ public sealed class ApplicationService : IApplicationService
         // the Availability check endpoint): a valid same-evening request from a Virginia organizer
         // must not be rejected just because UTC has already crossed midnight. Needs the room, so it
         // can't live in ValidateSubmission.
-        if (request.Schedule!.StartDate
-            < ApplicationSchedulePolicy.VenueLocalToday(room.Venue.Timezone, _clock.GetUtcNow()))
+        if (ApplicationSchedulePolicy.UpcomingScheduleProblem(request.Schedule!, room.Venue.Timezone, _clock.GetUtcNow()) is { } timeProblem)
         {
             return ApplicationResult<SubmitOutcome>.Fail(
-                ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
+                ApplicationErrorCodes.InvalidApplication, timeProblem);
         }
 
         // Submit-time hard block (CONTRACTS §6): when the flag is on, reject a schedule that lands
@@ -233,6 +232,11 @@ public sealed class ApplicationService : IApplicationService
         _repository.AddPending(application);
 
         var confirmation = await _bookings.ConfirmFromApplicationAsync(application, instant: true, ct: ct).ConfigureAwait(false);
+        if (confirmation.Error is { } confirmationError)
+        {
+            return ApplicationResult<SubmitOutcome>.Fail(confirmationError.Code, confirmationError.Detail);
+        }
+
         if (confirmation.SlotTaken)
         {
             // Unlike approval's auto-decline, nothing existed before this call and nothing was
@@ -576,6 +580,8 @@ public sealed class ApplicationService : IApplicationService
         }
 
         var now = _clock.GetUtcNow();
+        var previousStatus = application.Status;
+        var previousDecidedAt = application.DecidedAtUtc;
         application.Status = approve ? ApplicationStatus.Approved : ApplicationStatus.Declined;
         application.DecidedAtUtc = now;
 
@@ -593,6 +599,13 @@ public sealed class ApplicationService : IApplicationService
         if (approve)
         {
             var confirmation = await _bookings.ConfirmFromApplicationAsync(application, ct: ct).ConfigureAwait(false);
+            if (confirmation.Error is { } confirmationError)
+            {
+                application.Status = previousStatus;
+                application.DecidedAtUtc = previousDecidedAt;
+                return ApplicationResult<ApplicationDto>.Fail(confirmationError.Code, confirmationError.Detail);
+            }
+
             if (confirmation.SlotTaken)
             {
                 return await AutoDeclineSlotTakenAsync(application, now, viaCounterOffer: false, ct).ConfigureAwait(false);
@@ -732,13 +745,10 @@ public sealed class ApplicationService : IApplicationService
         }
 
         // Same venue-local past-date guard as submit — the proposed time speaks the venue's calendar.
-        if (request.Schedule!.StartDate
-            < ApplicationSchedulePolicy.VenueLocalToday(
-                application.Room!.Venue!.Timezone,
-                _clock.GetUtcNow()))
+        if (ApplicationSchedulePolicy.UpcomingScheduleProblem(request.Schedule!, application.Room!.Venue!.Timezone, _clock.GetUtcNow()) is { } timeProblem)
         {
             return ApplicationResult<ApplicationDto>.Fail(
-                ApplicationErrorCodes.InvalidApplication, "The start date can't be in the past.");
+                ApplicationErrorCodes.InvalidApplication, timeProblem);
         }
 
         // Same submit-time availability hard block against the room's rules + confirmed bookings.
@@ -863,6 +873,15 @@ public sealed class ApplicationService : IApplicationService
 
             var spec = new ScheduleSpec(open.Frequency, open.StartDate, open.EndDate, open.DaysOfWeek, open.StartTime, open.EndTime);
             var confirmation = await _bookings.ConfirmFromApplicationAsync(application, spec, ct: ct).ConfigureAwait(false);
+            if (confirmation.Error is { } confirmationError)
+            {
+                application.Status = ApplicationStatus.CounterOffered;
+                application.DecidedAtUtc = null;
+                open.Status = CounterOfferStatus.Open;
+                open.RespondedAtUtc = null;
+                return ApplicationResult<ApplicationDto>.Fail(confirmationError.Code, confirmationError.Detail);
+            }
+
             if (confirmation.SlotTaken)
             {
                 // Same race handling as approval: the Accepted flip never committed (the booking save

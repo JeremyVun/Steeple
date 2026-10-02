@@ -171,7 +171,7 @@ are invalid. Calendar and availability date ranges handle the maximum ISO date
   additionally requires ≥1 open-hours window → `400 no_open_hours` (mirrors `no_photos`; the
   009 backfill seeded every already-published room, so nothing unpublishes when the flag turns on).
 - Public `RoomDetailDto` gains additive `openHours?` (same `days` shape, null when the room has
-  no rules rows) on the listing detail reads (`discovery.md`).
+  never configured availability; explicitly cleared hours return seven closed days) on the listing detail reads (`discovery.md`).
 
 **Guest availability reads ✅ *(built 2026-07-05 — availability plan commit 5)*:**
 
@@ -190,7 +190,10 @@ are invalid. Calendar and availability date ranges handle the maximum ISO date
 - **Submit hard block** ✅: `POST /listings/{roomId}/applications` rejects schedules with
   any conflicting occurrence → `409 schedule_unavailable`; the problem body carries the same
   `{available, totalOccurrences, conflicts[]}` payload. Rooms with **no** availability rules
-  (legacy, pre-gate) skip the block entirely. The `booking_occurrences` exclusion constraint
+  (legacy, pre-gate) skip only the open-hours check; booked occurrences still conflict.
+  Saving an empty rule set explicitly closes the room. Touching open windows form one
+  continuous span in both checks and calendar reads. A scheduled occurrence keeps time
+  reserved even if its booking was cancelled inside the cancellation window. The `booking_occurrences` exclusion constraint
   remains the final race authority (`slot_taken` on approval is unchanged).
 
 **Host review & venue calendar ✅ *(built 2026-07-05 — availability plan commit 7)*:**

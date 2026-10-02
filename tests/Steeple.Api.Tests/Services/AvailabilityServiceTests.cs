@@ -11,6 +11,48 @@ public class AvailabilityServiceTests
     private static readonly DateTimeOffset FixedNow = new(2026, 7, 5, 12, 0, 0, TimeSpan.Zero);
     private static readonly DateOnly TodayLocal = new(2026, 7, 5);
 
+    [Fact]
+    public async Task SaveRulesAsync_ClearAllHours_ClosesRoom()
+    {
+        var (repo, managers, room, manager) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
+        var service = CreateService(repo, managers, out _);
+        var saved = await service.SaveRulesAsync(manager.Id, room.Id, new SaveAvailabilityRulesRequest([], []));
+        Assert.Null(saved.Error);
+        var feed = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal);
+        Assert.Empty(Assert.Single(feed.Value!.Days).FreeWindows);
+        var published = await service.GetPublicOpenHoursAsync(room.Id);
+        Assert.Equal(7, published!.Count);
+        Assert.All(published, day => Assert.Empty(day.Windows));
+        var check = await service.CheckScheduleAsync(room.Id, NewSchedule("oneOff", TodayLocal, "10:00", "12:00"));
+        Assert.False(check.Value!.Available);
+    }
+
+    [Fact]
+    public async Task CheckScheduleAsync_AdjacentWindows_MatchAdvertisedAvailability()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "12:00"));
+        repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "12:00", "17:00"));
+        var service = CreateService(repo, managers, out _);
+        var feed = await service.GetPublicAvailabilityAsync(room.Id, TodayLocal, TodayLocal);
+        var window = Assert.Single(Assert.Single(feed.Value!.Days).FreeWindows);
+        Assert.Equal(("09:00", "17:00"), (window.StartTime, window.EndTime));
+        var check = await service.CheckScheduleAsync(room.Id, NewSchedule("oneOff", TodayLocal, "11:00", "13:00"));
+        Assert.True(check.Value!.Available);
+        Assert.Empty(check.Value.Conflicts);
+    }
+
+    [Fact]
+    public async Task CheckScheduleAsync_LegacyRoom_StillChecksBookedTime()
+    {
+        var (repo, managers, room, _) = NewScenario();
+        repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "10:00", "12:00"));
+        var service = CreateService(repo, managers, out _);
+        var check = await service.CheckScheduleAsync(room.Id, NewSchedule("oneOff", TodayLocal, "10:00", "12:00"));
+        Assert.False(check.Value!.Available);
+    }
+
     // ----- GET shape ---------------------------------------------------------------------------
 
     [Fact]
@@ -350,14 +392,14 @@ public class AvailabilityServiceTests
     }
 
     [Fact]
-    public async Task GetPublicAvailabilityAsync_ConfirmedBookingSubtracted_PendingAndCancelledDoNot()
+    public async Task GetPublicAvailabilityAsync_ScheduledOccurrencesHoldTimeUntilCancelled()
     {
         var (repo, managers, room, _) = NewScenario();
         repo.OpenHours.Add(Hours(room.Id, DayOfWeek.Sunday, "09:00", "17:00"));
 
         // A confirmed, scheduled occurrence 10:00–12:00 local reduces the free window.
         repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "10:00", "12:00"));
-        // A cancelled booking's occurrence 13:00–14:00 must NOT reduce it (pending demand never leaks).
+        // Late cancellation keeps the scheduled occurrence reserved.
         repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "13:00", "14:00", bookingStatus: BookingStatus.Cancelled));
         // A cancelled *occurrence* of a confirmed booking must NOT reduce it either.
         repo.Occurrences.Add(Occurrence(room.Id, TodayLocal, "15:00", "16:00", occStatus: OccurrenceStatus.Cancelled));
@@ -368,9 +410,10 @@ public class AvailabilityServiceTests
 
         var day = Assert.Single(result.Value!.Days);
         Assert.False(day.IsBlackout);
-        Assert.Equal(2, day.FreeWindows.Count);
+        Assert.Equal(3, day.FreeWindows.Count);
         Assert.Equal(("09:00", "10:00"), (day.FreeWindows[0].StartTime, day.FreeWindows[0].EndTime));
-        Assert.Equal(("12:00", "17:00"), (day.FreeWindows[1].StartTime, day.FreeWindows[1].EndTime));
+        Assert.Equal(("12:00", "13:00"), (day.FreeWindows[1].StartTime, day.FreeWindows[1].EndTime));
+        Assert.Equal(("14:00", "17:00"), (day.FreeWindows[2].StartTime, day.FreeWindows[2].EndTime));
     }
 
     [Fact]
@@ -583,7 +626,7 @@ public class AvailabilityServiceTests
         var from = new DateOnly(2026, 7, 6);
         var to = new DateOnly(2026, 7, 20);
         // 2026-07-10 (Fri) 09:00–11:00 local, confirmed scheduled → "scheduled"; an Occurred one; and a
-        // cancelled booking that must not appear.
+        // late-cancelled booking whose scheduled occurrence still holds time.
         repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 10), "09:00", "11:00", organizerName: "Ollie"));
         repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 13), "14:00", "15:00", occStatus: OccurrenceStatus.Occurred));
         repo.Occurrences.Add(Occurrence(room.Id, new DateOnly(2026, 7, 14), "10:00", "11:00", bookingStatus: BookingStatus.Cancelled));
@@ -593,8 +636,8 @@ public class AvailabilityServiceTests
 
         Assert.Null(result.ErrorCode);
         Assert.Equal(2, result.Value!.Rooms.Count); // both the Published and the Draft room
-        Assert.Equal(2, result.Value.Occurrences.Count); // cancelled excluded
-        var scheduled = result.Value.Occurrences.Single(o => o.Status == "scheduled");
+        Assert.Equal(3, result.Value.Occurrences.Count);
+        var scheduled = result.Value.Occurrences.Single(o => o.OrganizerName == "Ollie");
         Assert.Equal("Ollie", scheduled.OrganizerName);
         Assert.Equal(new DateOnly(2026, 7, 10), scheduled.LocalDate);
         Assert.Equal("09:00", scheduled.StartTime);
@@ -820,7 +863,6 @@ public class AvailabilityServiceTests
                 Occurrences
                     .Where(o => o.RoomId == roomId
                         && o.Status == OccurrenceStatus.Scheduled
-                        && o.Booking!.Status == BookingStatus.Confirmed
                         && o.StartUtc < toUtc
                         && o.EndUtc > fromUtc)
                     .ToList());
@@ -839,7 +881,6 @@ public class AvailabilityServiceTests
                 Occurrences
                     .Where(o => roomIds.Contains(o.RoomId)
                         && o.Status == OccurrenceStatus.Scheduled
-                        && o.Booking!.Status == BookingStatus.Confirmed
                         && o.StartUtc < toUtc
                         && o.EndUtc > fromUtc)
                     .ToList());
@@ -857,7 +898,6 @@ public class AvailabilityServiceTests
                 Occurrences
                     .Where(o => roomIds.Contains(o.RoomId)
                         && (o.Status == OccurrenceStatus.Scheduled || o.Status == OccurrenceStatus.Occurred)
-                        && o.Booking!.Status == BookingStatus.Confirmed
                         && o.StartUtc < toUtc
                         && o.EndUtc > fromUtc)
                     .ToList());
@@ -886,6 +926,7 @@ public class AvailabilityServiceTests
             OpenHours.AddRange(openHours);
             Blackouts.AddRange(blackouts);
             StampedUpdatedAtUtc = updatedAtUtc;
+            _room.AvailabilityConfiguredAtUtc = updatedAtUtc;
             return Task.CompletedTask;
         }
     }

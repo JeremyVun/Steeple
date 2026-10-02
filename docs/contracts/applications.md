@@ -290,3 +290,8 @@ The snapshot remains authoritative; no event guarantees retained/replayed delive
 4. Document the type and payload in this section, same commit.
 Clients that predate the type ignore it silently by design (unknown = unprinted), so the
 server may ship first.
+
+Schedule validation checks every materialized session against the current instant at submission,
+counter proposal, and confirmation. Sessions already started, including earlier today, are rejected
+as `invalid_application`; a recurring approval cannot silently omit earlier sessions. A daylight-saving
+transition that produces a non-positive UTC duration is also rejected before persistence.

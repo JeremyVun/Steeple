@@ -182,3 +182,10 @@ migration/proxy checks: [notification stream runbook](../runbooks/notification-s
 only for bookings that already had a price snapshot. The check constraint requires a price and
 currency for in-app collection. New offline bookings also store a price and currency; old
 unpriced bookings stay unpriced. Price presence is never a charge authorization.
+
+## Availability configuration (025)
+
+`rooms.AvailabilityConfiguredAtUtc` records an explicit availability save, including an empty one.
+Existing rooms with open-hour or blackout rows are backfilled. Null preserves legacy no-rules
+behavior; an explicit empty configuration means closed. Scheduled occurrences retain their
+reservation independently of the parent booking status.

@@ -123,6 +123,22 @@ internal static class ApplicationSchedulePolicy
             TimeOnly.ParseExact(schedule.EndTime, "HH:mm", CultureInfo.InvariantCulture));
     }
 
+    internal static string? UpcomingScheduleProblem(ScheduleDto schedule, string timezone, DateTimeOffset now)
+    {
+        var parsed = Parse(schedule);
+        var instants = ScheduleMaterializer.Materialize(
+            parsed.Frequency, parsed.StartDate, parsed.EndDate ?? parsed.StartDate,
+            parsed.DaysOfWeek, parsed.StartTime, parsed.EndTime,
+            TimeZoneInfo.FindSystemTimeZoneById(timezone));
+        if (schedule.StartDate < VenueLocalToday(timezone, now) || instants.Any(o => o.StartUtc <= now))
+        {
+            return "Every session must start in the future. Choose a later time.";
+        }
+        return instants.Any(o => o.EndUtc <= o.StartUtc)
+            ? "A selected session crosses a daylight-saving change and has no valid duration. Choose different times."
+            : null;
+    }
+
     internal static ActivityType ParseActivity(string token) =>
         Enum.Parse<ActivityType>(token, ignoreCase: true);
 

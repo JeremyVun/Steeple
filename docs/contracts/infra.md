@@ -124,7 +124,7 @@ Stripe Dashboard requirements, and AU platform limitation: [Stripe runbook](../r
 ## Release readiness (2026-09-20)
 
 `GET /health` is process liveness. `GET /health/ready` checks database access and the booking
-schema (including migration 024), with a three-second database deadline. It returns 503 on
+schema (including migration 025), with a three-second database deadline. It returns 503 on
 failure without exposing connection details. Local and deployment API health checks use it.
 The API still never migrates. Deploy schema, API and web as a coordinated release; migration
 024 requires its matching API because older code inferred collection mode from price presence.

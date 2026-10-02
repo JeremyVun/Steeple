@@ -88,7 +88,8 @@ public sealed class AvailabilityService : IAvailabilityService
     public async Task<IReadOnlyList<DayOpenHoursDto>?> GetPublicOpenHoursAsync(Guid roomId, CancellationToken ct = default)
     {
         var hours = await _repository.GetOpenHoursAsync(roomId, ct).ConfigureAwait(false);
-        return hours.Count == 0 ? null : BuildDays(hours);
+        var room = await _repository.GetRoomWithVenueAsync(roomId, ct).ConfigureAwait(false);
+        return hours.Count == 0 && room?.AvailabilityConfiguredAtUtc is null ? null : BuildDays(hours);
     }
 
     /// <summary>Max days a single calendar-feed request may span (CONTRACTS §6).</summary>
@@ -170,7 +171,13 @@ public sealed class AvailabilityService : IAvailabilityService
             return AvailabilityReadResult<ScheduleCheckResultDto>.Fail(AvailabilityErrorCodes.InvalidApplication, invalid);
         }
 
-        var (_, total, conflicts) = await ClassifyScheduleAsync(roomId, timezone, parsed, ct).ConfigureAwait(false);
+        if (ApplicationSchedulePolicy.UpcomingScheduleProblem(schedule!, timezone, _clock.GetUtcNow()) is { } timeProblem)
+        {
+            return AvailabilityReadResult<ScheduleCheckResultDto>.Fail(
+                AvailabilityErrorCodes.InvalidApplication, timeProblem);
+        }
+
+        var (_, total, conflicts) = await ClassifyScheduleAsync(room, timezone, parsed, ct).ConfigureAwait(false);
         return AvailabilityReadResult<ScheduleCheckResultDto>.Ok(
             new ScheduleCheckResultDto(Available: conflicts.Count == 0, TotalOccurrences: total, Conflicts: conflicts));
     }
@@ -179,11 +186,12 @@ public sealed class AvailabilityService : IAvailabilityService
     /// Materializes a (venue-local) schedule and classifies each occurrence against the room's rules
     /// and confirmed bookings — the shared core of the advisory check, the submit-time block, and the
     /// manager-review digest. <c>HasRules</c> is false for a legacy room with no declared
-    /// availability (classification skipped; every occurrence counts as available).
+    /// availability (open-hours classification skipped; booked time still conflicts).
     /// </summary>
     private async Task<(bool HasRules, int Total, IReadOnlyList<ScheduleConflictDto> Conflicts)> ClassifyScheduleAsync(
-        Guid roomId, string timezone, ParsedSchedule parsed, CancellationToken ct)
+        Room room, string timezone, ParsedSchedule parsed, CancellationToken ct)
     {
+        var roomId = room.Id;
         var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
         var instants = ScheduleMaterializer.Materialize(
             parsed.Frequency, parsed.StartDate, parsed.EndDate, parsed.DaysOfWeek, parsed.StartTime, parsed.EndTime, tz);
@@ -192,11 +200,10 @@ public sealed class AvailabilityService : IAvailabilityService
         var blackouts = await _repository.GetBlackoutsAsync(roomId, ct).ConfigureAwait(false);
         var rules = new AvailabilityRules(blackouts.Select(b => b.Date).ToHashSet(), OpenHoursByWeekday(hours));
 
-        // Legacy room with no declared availability, or a schedule that materializes to nothing:
-        // every occurrence is available (no classification).
-        if (!rules.HasRules || instants.Count == 0)
+        var hasRules = room.AvailabilityConfiguredAtUtc is not null || rules.HasRules;
+        if (instants.Count == 0)
         {
-            return (rules.HasRules, instants.Count, []);
+            return (hasRules, instants.Count, []);
         }
 
         var fromUtc = instants.Min(i => i.StartUtc);
@@ -208,15 +215,16 @@ public sealed class AvailabilityService : IAvailabilityService
         foreach (var instant in instants)
         {
             var busy = busyByDate.GetValueOrDefault(instant.LocalDate) ?? [];
-            var reason = AvailabilityCalculator.ClassifyOccurrence(
-                instant.LocalDate, parsed.StartTime, parsed.EndTime, rules, busy);
+            var reason = hasRules
+                ? AvailabilityCalculator.ClassifyOccurrence(instant.LocalDate, parsed.StartTime, parsed.EndTime, rules, busy)
+                : busy.Any(b => parsed.StartTime < b.End && b.Start < parsed.EndTime) ? "booked" : null;
             if (reason is not null)
             {
                 conflicts.Add(new ScheduleConflictDto(instant.LocalDate, reason));
             }
         }
 
-        return (true, instants.Count, conflicts);
+        return (hasRules || conflicts.Count > 0, instants.Count, conflicts);
     }
 
     /// <inheritdoc />
@@ -229,7 +237,7 @@ public sealed class AvailabilityService : IAvailabilityService
             return null;
         }
 
-        var (hasRules, total, conflicts) = await ClassifyScheduleAsync(roomId, room.Venue.Timezone, parsed, ct).ConfigureAwait(false);
+        var (hasRules, total, conflicts) = await ClassifyScheduleAsync(room, room.Venue.Timezone, parsed, ct).ConfigureAwait(false);
         return hasRules ? new StoredScheduleConflicts(total, conflicts) : null;
     }
 

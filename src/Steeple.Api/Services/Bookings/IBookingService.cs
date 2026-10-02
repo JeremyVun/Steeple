@@ -88,7 +88,7 @@ public interface IBookingService
 /// Outcome of a confirmation attempt: the created booking, or <see cref="SlotTaken"/> when the
 /// exclusion constraint rejected an overlap (the caller auto-declines the application).
 /// </summary>
-public sealed record BookingConfirmation(BookingDto? Booking, bool SlotTaken);
+public sealed record BookingConfirmation(BookingDto? Booking, bool SlotTaken, ApplicationError? Error = null);
 
 /// <summary>
 /// A venue-local wall-clock schedule to book, overriding an application's own — the counter-offer

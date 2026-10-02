@@ -42,7 +42,6 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         await _db.BookingOccurrences
             .Where(o => o.RoomId == roomId
                 && o.Status == OccurrenceStatus.Scheduled
-                && o.Booking!.Status == BookingStatus.Confirmed
                 && o.StartUtc < toUtc
                 && o.EndUtc > fromUtc)
             .ToListAsync(ct)
@@ -70,7 +69,6 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         await _db.BookingOccurrences
             .Where(o => roomIds.Contains(o.RoomId)
                 && o.Status == OccurrenceStatus.Scheduled
-                && o.Booking!.Status == BookingStatus.Confirmed
                 && o.StartUtc < toUtc
                 && o.EndUtc > fromUtc)
             .ToListAsync(ct)
@@ -90,7 +88,6 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
             .ThenInclude(b => b.Organizer)
             .Where(o => roomIds.Contains(o.RoomId)
                 && (o.Status == OccurrenceStatus.Scheduled || o.Status == OccurrenceStatus.Occurred)
-                && o.Booking!.Status == BookingStatus.Confirmed
                 && o.StartUtc < toUtc
                 && o.EndUtc > fromUtc)
             .ToListAsync(ct)
@@ -129,6 +126,7 @@ public sealed class EfAvailabilityRepository : IAvailabilityRepository
         if (room is not null)
         {
             room.UpdatedAtUtc = updatedAtUtc;
+            room.AvailabilityConfiguredAtUtc = updatedAtUtc;
         }
 
         // One SaveChanges = one transaction: the delete and the insert land together.

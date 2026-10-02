@@ -19,6 +19,7 @@ public class RoomConfiguration : IEntityTypeConfiguration<Room>
         builder.Property(r => r.Description).HasMaxLength(4000);
         builder.Property(r => r.HouseRules).HasMaxLength(4000);
         builder.Property(r => r.OperatorUnlistedBy).HasMaxLength(320);
+        builder.Property(r => r.AvailabilityConfiguredAtUtc).HasColumnType("timestamp with time zone");
 
         builder.Property(r => r.PricePerHour).IsRequired().HasPrecision(10, 2);
         builder.Property(r => r.Currency).IsRequired().HasMaxLength(3);

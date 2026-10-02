@@ -121,9 +121,8 @@ public class AvailabilityCalculatorTests
             Rules([W("09:00", "17:00")]), [W("09:00", "10:00")]));
 
     [Fact]
-    public void ClassifyOccurrence_SlotSpanningTwoTouchingOpenWindows_IsOutsideOpenHours() =>
-        // Open [09:00,12:00)+[12:00,15:00) touch, but a 11:00–13:00 slot fits neither single window.
-        Assert.Equal("outsideOpenHours", AvailabilityCalculator.ClassifyOccurrence(
+    public void ClassifyOccurrence_SlotSpanningTwoTouchingOpenWindows_IsAvailable() =>
+        Assert.Null( AvailabilityCalculator.ClassifyOccurrence(
             Sunday, TimeOnly.Parse("11:00"), TimeOnly.Parse("13:00"),
             Rules([W("09:00", "12:00"), W("12:00", "15:00")]), []));
 

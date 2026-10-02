@@ -118,6 +118,36 @@ public class ApplicationServiceTests
         await AssertInvalidSubmissionAsync(NewSubmitRequest(
             schedule: NewSchedule(startTime: "11:00", endTime: "11:00")));
 
+    [Theory]
+    [InlineData("oneOff", "06:00", "07:00")]
+    [InlineData("oneOff", "08:00", "10:00")]
+    [InlineData("recurringWeekly", "07:00", "09:00")]
+    public async Task SubmitAsync_ElapsedSessionToday_IsRejected(string frequency, string start, string end)
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+        var date = Today();
+        var schedule = new ScheduleDto(frequency, date,
+            frequency == "oneOff" ? null : date.AddDays(7),
+            frequency == "oneOff" ? null : ["saturday"], start, end);
+        var result = await service.SubmitAsync(room.Id, organizer.Id,
+            NewSubmitRequest(schedule: schedule), null, null);
+        Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
+    [Fact]
+    public async Task SubmitAsync_DaylightSavingCreatesInvalidDuration_IsRejected()
+    {
+        var (repo, managers, _, room, organizer, _) = NewScenario();
+        var service = CreateService(repo, managers, out _, out _, out _);
+        var request = NewSubmitRequest(schedule: NewSchedule(
+            startDate: new DateOnly(2027, 3, 14), startTime: "02:30", endTime: "03:00"));
+        var result = await service.SubmitAsync(room.Id, organizer.Id, request, null, null);
+        Assert.Equal(ApplicationErrorCodes.InvalidApplication, result.Error!.Code);
+        Assert.Empty(repo.Applications);
+    }
+
     [Fact]
     public async Task SubmitAsync_StartDateInThePast_ReturnsInvalidApplication()
     {
@@ -148,7 +178,7 @@ public class ApplicationServiceTests
 
         var result = await service.SubmitAsync(
             room.Id, organizer.Id,
-            NewSubmitRequest(schedule: NewSchedule(startDate: new DateOnly(2026, 7, 4), startTime: "20:00", endTime: "22:00")),
+            NewSubmitRequest(schedule: NewSchedule(startDate: new DateOnly(2026, 7, 4), startTime: "23:00", endTime: "23:59")),
             idempotencyKey: null, remoteIp: null);
 
         Assert.Null(result.Error);

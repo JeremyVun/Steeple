@@ -62,7 +62,7 @@ public static class AvailabilityCalculator
     /// <summary>
     /// Why a proposed occurrence can't happen, or <c>null</c> when it fits. Precedence (highest
     /// first): <c>"blackout"</c> (the date is closed outright), then <c>"outsideOpenHours"</c>
-    /// (the slot doesn't fit entirely within a single open window), then <c>"booked"</c> (the slot
+    /// (the slot doesn't fit entirely within contiguous open hours), then <c>"booked"</c> (the slot
     /// <c>[)</c>-intersects a confirmed busy interval on that date).
     /// </summary>
     public static string? ClassifyOccurrence(
@@ -78,9 +78,8 @@ public static class AvailabilityCalculator
         }
 
         var openWindows = rules.OpenHoursByWeekday.GetValueOrDefault(date.DayOfWeek) ?? [];
-        if (!openWindows.Any(w => start >= w.Start && end <= w.End))
+        if (!Merge(openWindows).Any(w => start >= w.Start && end <= w.End))
         {
-            // Must fit inside ONE window: a slot spanning two touching open windows is still outside.
             return "outsideOpenHours";
         }
 

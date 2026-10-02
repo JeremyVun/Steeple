@@ -88,6 +88,20 @@ public sealed class BookingService : IBookingService
             spec.Frequency, spec.StartDate, endDate,
             spec.DaysOfWeek, spec.StartTime, spec.EndTime, venueZone);
 
+        if (instants.Count == 0 || instants.Any(o => o.StartUtc <= now))
+        {
+            return new BookingConfirmation(null, false, new ApplicationError(
+                ApplicationErrorCodes.InvalidApplication,
+                "Every session must start in the future. Ask the guest to choose a later time."));
+        }
+
+        if (instants.Any(o => o.EndUtc <= o.StartUtc))
+        {
+            return new BookingConfirmation(null, false, new ApplicationError(
+                ApplicationErrorCodes.InvalidApplication,
+                "A selected session crosses a daylight-saving change and has no valid duration. Choose different times."));
+        }
+
         // Freeze both price and collection mode. Enabling payments later must never charge an
         // offline commitment; editing a room's advertised rate must never change its agreed price.
         var paid = _flags.IsEnabled(PaymentService.PaymentsFlag);

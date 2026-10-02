@@ -74,3 +74,6 @@ databaseChangeLog:
   - include:
       file: 024-offline-booking-prices.sql
       relativeToChangelogFile: true
+  - include:
+      file: 025-availability-configured.sql
+      relativeToChangelogFile: true
