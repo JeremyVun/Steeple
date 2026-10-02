@@ -197,6 +197,20 @@ try {
     await assertState(two, null);
     console.log('ok failed sign-in clears the shared identity in sibling tabs');
   } finally { await failedContext.close(); }
+  const replacementContext = await browser.createBrowserContext();
+  try {
+    const one = await pageIn(replacementContext);
+    const two = await pageIn(replacementContext);
+    const arrival = gate('POST');
+    await begin(one, 'first', 'invalid');
+    const release = await arrival;
+    await begin(two, 'second', 'replacement');
+    release();
+    await Promise.all([finish(one), finish(two)]);
+    await assertState(two, 'replacement');
+    await reloadAndAssert(two, 'replacement');
+    console.log('ok failed sibling login preserves a newer queued explicit sign-in');
+  } finally { await replacementContext.close(); }
   console.log(`${checks} real-cookie identity checks passed`);
 } finally {
   if (browser) await browser.close();

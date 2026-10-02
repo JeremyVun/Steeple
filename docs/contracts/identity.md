@@ -111,7 +111,9 @@ The web serializes all cookie-changing requests within a tab and, where availabl
 with the origin-wide `steeple-village-session-cookie` Web Lock. Memory generation guards alone
 cannot discard a `Set-Cookie` header. The lock covers response handling and opaque announcements;
 logout uses the resulting cookie to revoke the current family. A rejected/superseded sign-in
-revokes its cookie before releasing the lock, including when the following sign-in fails. Without Web Locks, cross-tab
+revokes its cookie before releasing the lock, including when the following sign-in fails.
+Its opaque `rejectedSignIn` cleanup announcement clears sibling private state while preserving
+a newer explicit sign-in waiting for the lock. Explicit sign-out still cancels pending sign-ins. Without Web Locks, cross-tab
 mutation ordering is not guaranteed. Server rotation grace remains necessary for raw concurrent
 refresh clients and clients without the coordinator.
 

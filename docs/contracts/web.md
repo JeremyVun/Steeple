@@ -180,7 +180,7 @@ Owns identity and **nothing else reads a token**. The two halves live in two pla
 | refresh token (90d) | httpOnly cookie `steeple_refresh`, set by the API (`refreshTransport:'cookie'`, `identity.md`) | no script can read it; the browser presents it on same-origin `/api` calls by itself |
 | access token (~15m) | this module's **memory**, nowhere else | a reload simply asks for another |
 | fetched person/profile | this module's **memory**, nowhere else | identity/email are private; reload proves the cookie and reads the profile again |
-| cross-tab state | `BroadcastChannel('steeple-village-session')`, opaque `{state:'in'|'out', reason}` only | a sibling learns that it must fetch or drop identity; no profile crosses tabs |
+| cross-tab state | `BroadcastChannel('steeple-village-session')`, opaque `{state:'in'|'out', reason, cause?}` only | a sibling learns that it must fetch or drop identity; no profile crosses tabs |
 
 **No token or profile is written to localStorage/sessionStorage.** Module evaluation and
 sign-out remove the retired `steeple-village-session` key from both stores. With no persisted

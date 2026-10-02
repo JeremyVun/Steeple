@@ -1,6 +1,6 @@
 # Steeple app review 2 October 2026
 
-Initial review completed against `ef2650993745fad74bed092c3f8995797c3c65c6`; remediation and repeated review are in progress in `codex/app-review-fixes`. The findings below preserve the original evidence. Remediation checkpoints at the end record subsequent code changes and verification. No deployment is included.
+Review and remediation completed locally. All 17 original findings and the confirmed follow-up defects are fixed, with no remaining actionable findings in the exercised scope. The findings below preserve the original evidence from `ef2650993745fad74bed092c3f8995797c3c65c6`; the final verification section records the fixes and test results. This is a finite review, not proof that the app has no possible bugs. No deployment occurred.
 
 ## Jeremy's brief verbatim
 
@@ -12,9 +12,9 @@ Follow-up on 2 October 2026:
 
 ## Fix and review work
 
-Status: implementation in progress. Preserve the findings below as the original evidence; record fixes and review results here.
+Status: complete. The app and companion deployment migrations are integrated into clean local main checkouts. No product clarification remains open.
 
-Plan: fix availability and notification transaction correctness; repair web session, HTTP and catalogue recovery; repair native session/paging behavior and review-query scaling; preserve quoted commitments; implement the approved visual fixes with Astra; run regression and adversarial review passes until the exercised scope produces no new actionable findings. Passing a finite review is not proof of an issue-free application.
+Completed plan: fix availability and notification transaction correctness; repair web session, HTTP and catalogue recovery; repair native session/paging behavior and review-query scaling; preserve quoted commitments; implement the approved visual fixes with Astra; run regression and adversarial review passes until the exercised scope produces no new actionable findings. Passing a finite review is not proof of an issue-free application.
 
 Owner decisions on 2 October 2026: “Yes, assign Astra these fixes”; “Keep instant booking preselected”; support address “jvun@steepleapp.co”; “Require review and resubmission” for legacy unquoted requests; “Start with contextual support email”. No product decision is currently pending. No production deployment is included in this fix pass.
 
@@ -207,14 +207,14 @@ Source: [host entry](../src/Steeple.Web.v2/src/ui/host/index.js), lines 401–41
 
 Full [Astra report](/private/tmp/steeple-app-review-web-YfVNHH/visual-review.md) includes reproduction details and capture limitations. Four representative images were opened in Preview. All visual API responses were fixtures; external photos and map tiles were deliberately blocked and their absence is not a finding. This was headless Chromium in light mode with reduced motion, not real-device or screen-reader validation. All owned servers and browsers stopped on completion.
 
-## Verification record and limits
+## Initial verification record and limits
 
 - `dotnet test Steeple.slnx --verbosity minimal --nologo`: **610 unit tests and 166 PostgreSQL integration tests passed**, including booking integrity and the long-running notification stream tests.
 - `npm test`, `npm run lint`, and `npm run typecheck` in the web project: **passed**.
 - Isolated real-keyboard/pointer composer run: **32 behavior checks passed**, covering recurrence totals, validation, availability failure/retry, stale responses, sign-in draft retention, manual/instant outcomes, same-key retry, mock payment continuation and keyboard calendar selection. API responses were deterministic intercepted fixtures. Visual assertions and screenshot capture were removed from the lead's copy; Astra owns visual verification.
 - Focused reproductions: **5 service probes, 1 real-PostgreSQL cancellation probe, and 7 web module probes confirmed the observed defects**. These assertions deliberately record the defective behavior; their passing is not a product health claim.
 - Production web build passed with environment-file loading disabled. Gzip outputs: UI JS **131.69 kB**, entry JS **23.54 kB**, CSS **31.73 kB** combined. Deferred world/journey/engine/Three chunks are separate. These are artifact sizes, not mobile network or frame-rate measurements.
-- Rerunnable web probes: `node tools/app-review-data-probes.mjs`. They use synthetic fetch responses and do not call production or read environment files.
+- Historical defect probes: `node tools/app-review-data-probes.mjs` against the original review commit. They deliberately expect the defective behavior and are not current regression gates. Use `test:review-recovery` and `test:session-cookie-races` on the remediated version. These use isolated synthetic responses and do not call production or read environment files.
 - Astra's full composer run: `/private/tmp/steeple-composer-a-visual-web-W794go/` contains checks, geometry, axe results and screenshots. Additional visual evidence is in `/private/tmp/steeple-app-review-captures-web-dR8c8z/` and `/private/tmp/steeple-app-review-captures-web-rIrSFC/`.
 - API probe sources and the behavioral harness were isolated in `/private/tmp/steeple-app-review-web-YfVNHH` at the reviewed commit. Behavior results: `/private/tmp/steeple-review-behavior-web-bqlGFp/checks.json`.
 - Mobile received a targeted code/contract review; Flutter analysis, native device interaction, real SSO, live email/payment delivery, production recovery and load testing were not performed.
@@ -297,10 +297,10 @@ and browser/native identity races. Jeremy's product choices are preserved: insta
 preselected, legacy unquoted requests require review/resubmission, and booking support uses
 jvun@steepleapp.co. No product clarification remains open.
 
-Astra completed approved web/mobile terms/support work in458d24b. The independent quote
+Astra completed approved web/mobile terms/support work in `458d24b`. The independent quote
 review's mobile null-quote and fixture omissions were resolved by that parcel. Final Astra
-checks:61 composer assertions,24 composer captures with zero axe/runtime errors;26 terms
-assertions and15 captures across320/390/1440 widths; iPhone integration with five reviewed
+checks: 61 composer assertions, 24 composer captures with zero axe/runtime errors; 26 terms
+assertions and 15 captures across 320/390/1440 widths; iPhone integration with five reviewed
 captures. Evidence remains under /private/tmp/steeple-booking-terms-web-mszKaI,
 /private/tmp/steeple-composer-a-visual-web-cyo5fs and
 /private/tmp/steeple-quote-native-ios-66aWfJ. The lead did not inspect pixels.
@@ -318,16 +318,16 @@ fixes, including booking integrity, migration readiness and the five-minute SSE 
 Native storage was then moved to one atomic secure record, with a separate nonsecret logout
 marker; forced logout survives keychain failure and restart. Legacy token/profile identity
 checks, error-response fences and failed browser login fan-out now have regressions.
-Final native validation is in progress. Web npm tests,
-lint, typecheck and production build pass;17 data recovery,3 browser recovery and 34 real-cookie
-checks pass. Real Development API session tests passed39 checks, including concurrent two-tab
+Final native analysis is clean and **140 tests passed**. Web npm tests,
+lint, typecheck and production build pass; 17 data recovery, 3 browser recovery and 36 real-cookie
+checks pass. Real Development API session tests passed 39 checks, including concurrent two-tab
 and four-request refreshes. The exact-cookie suite exercises Web Locks and same-tab fallback;
 cross-tab ordering requires Web Locks. No identity is written to browser storage.
 
-Deployment migration parity passes for23 SQL files. Liquibase4.31 applied all26 production
-changesets to a fresh disposable PostgreSQL18 database; a second update applied zero changes.
-Required schema readiness now rejects missing025/026 columns. Companion infra commit1992f86
-contains025/026; no deployment or production connection occurred.
+Deployment migration parity passes for 23 SQL files. Liquibase 4.31 applied all 26 production
+changesets to a fresh disposable PostgreSQL 18 database; a second update applied zero changes.
+Required schema readiness now rejects missing 025/026 columns. Companion infra commit `1992f86`
+contains 025/026; no deployment or production connection occurred.
 
 Remaining release validation is external: actual Google/Apple/Turnstile, delivered email,
 live payment collection, Android device testing, production recovery/load and pilot operations.
@@ -337,4 +337,18 @@ webv1 journeys were not treated as current regression coverage.
 
 Real API quote smoke passed: a new request sent its reviewed terms, the host edited the room,
 and approval still returned the original saved rate/rules and duration-adjusted amount.
-Infra migration commit1992f86 is fast-forwarded to its clean local main; nothing was deployed.
+Infra migration commit `1992f86` is fast-forwarded to its clean local main; nothing was deployed.
+
+The last independent native/interceptor audit returned no further actionable findings. Its
+remaining web finding (failed sibling login cancelling a newer queued explicit login) is fixed
+with a distinct cleanup announcement and a real-cookie regression. The lead rechecked cleanup,
+explicit sign-out and subsequent successful sign-in behavior in the expanded race suite.
+
+Final result: all confirmed findings from these review passes are addressed. App/API contracts,
+web/mobile implementations, fixtures, email terms, regression harnesses and deployment migrations
+are aligned. Final production web build passes with environment-file loading disabled (UI JS
+134.34 kB gzip, entry JS 24.18 kB gzip, CSS 32.36 kB gzip combined; deferred 3D chunks separate).
+These are build sizes, not measured real-device loading or frame times. The final web cleanup
+fix passed 36 real-cookie checks, 17 recovery checks, lint/typecheck and production build.
+All task-owned servers, browsers, containers and the Astra simulator have stopped. Review
+captures remain available at the evidence paths; no production settings or data were changed.

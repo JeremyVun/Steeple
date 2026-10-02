@@ -67,9 +67,9 @@ function notify(reason) {
   for (const watch of watchers) watch(held, reason);
 }
 
-function broadcast(state, reason) {
+function broadcast(state, reason, cause = null) {
   try {
-    channel?.postMessage({ type: 'session', state, reason });
+    channel?.postMessage({ type: 'session', state, reason, ...(cause ? { cause } : {}) });
   } catch {
     // Closing a document can close its channel before outstanding work settles.
   }
@@ -232,7 +232,7 @@ async function discardSignInCookie() {
   access = null;
   suppressed = true;
   hold(null, REASON.signedOut);
-  broadcast('out', REASON.signedOut);
+  broadcast('out', REASON.signedOut, 'rejectedSignIn');
   try { await api.deleteSession(); } catch { /* Revocation remains best-effort. */ }
 }
 
@@ -425,7 +425,15 @@ if (channel) {
     if (message?.type !== 'session') return;
 
     if (message.state === 'out') {
-      drop(message.reason === REASON.expired ? REASON.expired : REASON.signedOut);
+      if (message.cause === 'rejectedSignIn' && signingInGeneration === generation) {
+        suppressed = true;
+        clearRefreshRetry();
+        refreshing = null;
+        restoring = null;
+        hold(null, REASON.signedOut);
+      } else {
+        drop(message.reason === REASON.expired ? REASON.expired : REASON.signedOut);
+      }
       purgeLegacyProfile();
       return;
     }
