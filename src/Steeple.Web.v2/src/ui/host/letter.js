@@ -428,17 +428,16 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       },
     });
 
-    const weekly = el('div', { class: 'counter__weekly' }, [
-      el('div', { class: 'field__pair' }, [
-        labelled('First week', startDate),
-        labelled('Weekly until', endDate),
-      ]),
-    ]);
+    const firstDateField = labelled('First date', startDate);
+    const lastDateField = labelled('Last date', endDate);
+    const weekdayField = labelled('Weekdays', dayToggles);
+    const dateFields = el('div', { class: 'field__pair' }, [firstDateField, lastDateField]);
 
     function setFrequency(frequency) {
       counter.frequency = frequency;
-      weekly.hidden = frequency !== 'weekly';
-      if (dayToggles.parentElement) dayToggles.parentElement.hidden = frequency !== 'weekly';
+      lastDateField.hidden = frequency !== 'weekly';
+      weekdayField.hidden = frequency !== 'weekly';
+      firstDateField.querySelector('label').textContent = frequency === 'weekly' ? 'First date' : 'Date';
       for (const button of frequencyRow.querySelectorAll('.segment')) {
         const on = button.dataset.frequency === frequency;
         button.classList.toggle('is-on', on);
@@ -482,9 +481,9 @@ export function createLetterPage({ announce, onLeave, onListing, origin = () => 
       }),
       el('div', { class: 'counter__head' }, [
         labelled('How often', frequencyRow),
-        labelled('Weekdays', dayToggles),
+        weekdayField,
       ]),
-      weekly,
+      dateFields,
       el('div', { class: 'field__pair' }, [labelled('From', startTime), labelled('Until', endTime)]),
       labelled('A note with the offer', message),
       note,

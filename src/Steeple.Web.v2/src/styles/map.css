@@ -1340,3 +1340,14 @@
 }
 
 .dm-seg--filters { min-width: var(--touch-target); }
+
+.dm-seg--where .dm-seg__value { overflow: visible; }
+.dm-seg__input {
+  min-height: var(--touch-target);
+  margin-block: calc((1.25em - var(--touch-target)) / 2);
+}
+
+.dm-pop :is(button, input, select) {
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+}

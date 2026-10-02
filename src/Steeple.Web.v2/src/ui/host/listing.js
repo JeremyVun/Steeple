@@ -805,6 +805,7 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       say(local.errors?.status ?? 'That space cannot be published yet.', 'warn');
       return false;
     }
+    upsertPlacedVenue({ id: draft.venueId, bookingMode: draft.bookingMode });
     outcome = { state: kept ? 'kept' : 'published' };
     say('');
     announce?.(
@@ -834,16 +835,13 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       return;
     }
 
-    if (draft.entry === 'venue' || draft.bookingMode !== draft.savedBookingMode) {
-      const saved = await manage.saveBookingMode(draft.remote.venueId, draft.bookingMode);
-      if (!saved.ok) {
-        reportProblem(saved);
-        announce?.(saved.detail);
-        return;
-      }
-      draft.savedBookingMode = saved.value.bookingMode;
-      upsertPlacedVenue({ id: draft.venueId, bookingMode: saved.value.bookingMode });
+    const savedMode = await manage.saveBookingMode(draft.remote.venueId, draft.bookingMode);
+    if (!savedMode.ok) {
+      reportProblem(savedMode);
+      announce?.(savedMode.detail);
+      return;
     }
+    upsertPlacedVenue({ id: draft.venueId, bookingMode: savedMode.value.bookingMode });
     const answer = await manage.askToPublish(draft);
     if (!answer.ok) {
       if (answer.reach === 'offline') {
@@ -1283,7 +1281,6 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       draft = {
         entry: editing ? 'venue-edit' : room ? 'room' : 'add-room',
         bookingMode: venue.bookingMode === 'manual' ? 'manual' : 'instant',
-        savedBookingMode: venue.bookingMode === 'manual' ? 'manual' : 'instant',
         venueId,
         roomId: room ? roomId : null,
         // The five villages steeple seeded have no manager on this API, so a
@@ -1342,7 +1339,6 @@ export function createListingFlow({ announce, onChanged, onClose, askToSignIn })
       draft = {
         entry: 'venue',
         bookingMode: 'instant',
-        savedBookingMode: 'instant',
         venueId: null,
         roomId: null,
         localOnly: false,
