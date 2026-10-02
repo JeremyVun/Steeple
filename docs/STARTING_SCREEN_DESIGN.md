@@ -79,7 +79,7 @@ behavior and runs applicable repository gates, then integrates the verified resu
 
 ### B implementation — 2 October 2026
 
-Astra is implementing the selected direction in
+Astra implemented and visually verified the selected direction in
 `/private/tmp/steeple-starting-screen-build-web-dvrhhj/source`.
 The full-window camera and all seven matched poster variants remain unchanged.
 The chosen phone refinement is Opus's paper-coverage option: the reading area and
@@ -92,9 +92,35 @@ uses without promising currently published gyms, studios or low prices. The loca
 is shortened to “Washington, DC area”. Host stays in the header and the down action
 keeps its native browse destination, now with a 48px target and “Browse spaces” label.
 
-Initial poster checks pass at 1440×900, 390×844 and 320×740, DPR2. Visual iteration
-keeps “by the hour” together as a phrase. Enlarged-text verification and actual input
-checks are in progress; the implementation is not yet integrated or deployed.
+Final frames pass at 1440×900, 390×844 and 320×740, DPR2. Astra inspected the printed
+poster, isolated first live frame, live scene, reduced motion, dark preference, enlarged
+text, keyboard focus, renderer refusal and live resizing. The shipped scheme remains
+warm paper; there is no separate dark theme. The camera and posters still align, with
+no new framing jump. Visual iteration kept “by the hour” together and fixed phone
+gutters/button padding so 200% text wraps without horizontal spill. At that scale the
+opening becomes a native scrolling surface; wheel scrolling leaves the visitor on the
+opening and keyboard focus reaches each action.
+
+Measured targets are at least 44px; both primary phone actions remain above the fold
+at ordinary text size. “Find a space” ends at y411 on the 390px phone and y398 at 320px,
+on solid paper above the church. The down link is 48×48. Text contrast is at least
+5.02:1, including the primary button; the location label is 5.62:1 and body copy 6.97:1.
+
+Verification: production/debug builds with environment-file loading disabled; `npm test`,
+lint and typecheck; arrival visual probes (58), native input/axe checks (33), and native
+route/fallback checks (20). An additional 10-check poster pass supplied contrast samples.
+Find, Host and the down link work with native input and wordmark return, with exactly one
+arrival event per entry. Root/prefix links also navigate with JavaScript disabled;
+middle/Command-click opens browse without altering the source intent. Cold browse, desk,
+journal and letter routes skip scenery. All API responses in this isolated harness are
+503 fixtures, so Host verifies the signed-out guide, and renderer refusal shows the real
+browse error state. No production data was read or changed during the build.
+
+Evidence and rerun instructions:
+[/private/tmp/steeple-starting-screen-build-web-dvrhhj/REPORT.md](/private/tmp/steeple-starting-screen-build-web-dvrhhj/REPORT.md).
+The implementation is ready for the lead's independent boot/route regression and
+integration review; it has not been integrated or deployed. Full authenticated/API
+journeys, physical touch hardware and screen-reader speech were outside this fixture run.
 
 ### Astra's findings and recommendation
 

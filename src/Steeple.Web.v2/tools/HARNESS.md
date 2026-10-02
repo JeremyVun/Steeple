@@ -68,6 +68,25 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   because the headless build does not map the modifier shortcut. No script assigns form
   values or dispatches synthetic form-change events.
 
+- `node tools/arrival-test.mjs` owns strict-port Vite on :5837 and a unique Chrome profile.
+  It verifies the listener's working directory and sets `envDir: false`; no API, database
+  or secrets are needed. Every API response is a deliberate 503 fixture. The anonymous
+  Host action therefore opens the existing host sign-in guide over browse, not a desk.
+  `--visual` captures 1440×900, 390×844 and 320×740 at DPR2: printed poster, isolated first
+  live frame, default-quality live scene, reduced motion, dark preference (the same shipped
+  light scheme), 200% root text and refused WebGL. `--flows` drives pointer, keyboard,
+  wheel, emulated touch, wordmark returns, cold routes, resize and arrival axe. `--contracts`
+  checks native no-JavaScript links at root and a stripped prefix, query retention, native
+  middle/Command-click, and printed/fallback copy parity. `--poster` repeats only the
+  printed frames plus text-hidden backgrounds for contrast measurement. `--motion`
+  drives and samples the normal roll down and back at desktop and phone sizes. Set
+  `STEEPLE_ARRIVAL_OUT` to retain evidence and `STEEPLE_ARRIVAL_DIST=dist-debug` to test
+  the built bundle. Build without environment-file loading using Vite's JS API:
+  `node --input-type=module -e 'import {build} from "vite"; await build({envDir:false,define:{"import.meta.env.VITE_DEBUG":"\"on\""},build:{outDir:"dist-debug"}});'`.
+  The first-frame diagnostic stops the engine at `is-live` and isolates the canvas; it
+  proves framing alignment, not animation timing. Input checks use `q=low`; visual frames
+  and resizing use default quality. All owned processes close in `finally`.
+
 ## Defects only one suite can see
 
 - **`surface-scope-test.mjs` is the only guard on CSS surface scoping.** `postcss.config.js`

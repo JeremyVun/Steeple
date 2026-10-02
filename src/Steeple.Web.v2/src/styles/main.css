@@ -838,7 +838,7 @@ body {
 
 .arrival__down::before {
   content: '↓';
-  font-size: 1.5rem;
+  font-size: 24px;
   line-height: 1;
 }
 
@@ -849,7 +849,7 @@ body {
 
 @media (max-width: 700px) {
   .arrival {
-    --arrival-gutter: 1.5rem;
+    --arrival-gutter: 24px;
   }
 
   .arrival::before {
@@ -905,7 +905,7 @@ body {
 
   .arrival .arrival__cta {
     margin-top: 1.5rem;
-    padding: 0.8125rem 1.125rem;
+    padding: 0.8125rem 18px;
     gap: 1rem;
   }
 
@@ -918,7 +918,7 @@ body {
 
 @media (max-width: 350px) {
   .arrival {
-    --arrival-gutter: 1.25rem;
+    --arrival-gutter: 20px;
   }
 
   .arrival__title {
