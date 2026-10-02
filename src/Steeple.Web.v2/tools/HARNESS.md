@@ -64,7 +64,9 @@ failures. Headless GL runs app-time ~6× slow: suites wait on state, never wall-
   processes stop in `finally`. `--quick` runs only the mobile entry/recurrence smoke. Native
   date-entry ordering follows this macOS Chrome's day/month/year UI; time selects are driven
   through native type-ahead because this headless build ignores arrow navigation on a closed
-  select. No script assigns form values or dispatches synthetic form-change events.
+  select. Text replacement uses the browser's native `selectAll` keyboard edit command
+  because the headless build does not map the modifier shortcut. No script assigns form
+  values or dispatches synthetic form-change events.
 
 ## Defects only one suite can see
 

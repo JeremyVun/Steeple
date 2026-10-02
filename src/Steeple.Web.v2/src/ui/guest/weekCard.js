@@ -484,6 +484,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
   }
 
   function render() {
+    const restoreFocus = grid.contains(document.activeElement);
     if (!venueId || !roomId) return;
     const windows = openWindows;
     if (!windows.length) {
@@ -556,7 +557,7 @@ export function createWeekCard({ announce, onChange, onWeek }) {
       rows.push(el('div', { class: 'week__row', role: 'row' }, cells));
     }
     replaceChildren(grid, rows);
-    moveCursor(cursor.day, cursor.slot, false);
+    moveCursor(cursor.day, cursor.slot, restoreFocus);
     drawMarks();
   }
 

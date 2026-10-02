@@ -518,13 +518,15 @@ The composer sends the same `toWireSchedule` result as submission, after 500ms w
 schedule changes. Its `{available,totalOccurrences,conflicts}` answer is authoritative for
 this advisory display; no free-window inference substitutes for it. Changed schedules
 immediately invalidate the old answer, and generation checks reject stale responses after
-edits or reopening. A failed or conflicting check blocks the UI send and offers correction
+edits or reopening. The venue timezone must load before a full check can be ready; retry
+also retries failed timezone metadata. A failed or conflicting check blocks the UI send and offers correction
 or retry; the submit-time API check still owns the final result. No backend contract changed.
 
 The public `payments.enabled` snapshot controls explanation only. Off says online payments
 are unavailable and to arrange payment with the host. On labels the currently implemented
 mock payment capability as test payments, without claiming real charges. The actual 402
-response still opens the existing method step. Instant confirmation, pending fallback for
+response still opens the existing method step with explicit test-payment copy and sample
+details. Instant confirmation, pending fallback for
 uncarded caps, refusal and retry are determined by the returned application status.
 
 `npm run test:composer-schedule` is the pure arithmetic/validation gate.

@@ -32,6 +32,7 @@ export function createComposer({ announce, onSent, onLeave }) {
   let roomHours = null;
   let bookingMode = null;
   let timezone = null;
+  let timezoneFailed = false;
   let paymentsEnabled = null;
   let opened = null;
   let generation = 0;
@@ -42,11 +43,20 @@ export function createComposer({ announce, onSent, onLeave }) {
   let attempted = false;
   let refusal = '';
   const touched = new Set();
-  const asked = new Set();
+  const asked = new Map();
 
   const identity = createIdentityStep({ announce, onVerify: () => dispatch(), onCancel: () => closeIdentity() });
   identity.element.hidden = true;
-  const card = createCardStep({ announce, onSaved: () => { closeCard(); dispatch(); }, onCancel: () => closeCard() });
+  const card = createCardStep({
+    announce,
+    words: {
+      eyebrow: 'Test payments',
+      title: 'Add a test payment method',
+      blurb: 'This test payment step records a card brand and four digits. No real money is charged. Use sample details to continue.',
+    },
+    onSaved: () => { closeCard(); dispatch(); },
+    onCancel: () => closeCard(),
+  });
   card.element.hidden = true;
   const week = createWeekCard({
     announce,
@@ -64,7 +74,11 @@ export function createComposer({ announce, onSent, onLeave }) {
   const sheet = el('form', { class: 'letter__sheet composer', novalidate: true, tabindex: '-1', 'aria-label': 'Booking details' }, [
     el('div', { class: 'letter__nav' }, [back]), head, columns, identity.element, card.element,
   ]);
-  sheet.addEventListener('submit', (event) => { event.preventDefault(); seal(); });
+  sheet.addEventListener('submit', (event) => {
+    if (event.target !== sheet) return;
+    event.preventDefault();
+    seal();
+  });
   const backdrop = el('div', { class: 'letter__backdrop', 'aria-hidden': 'true' });
   const element = el('div', { class: 'guest__surface guest__surface--letter' }, [backdrop, sheet]);
   const isOpen = () => element.classList.contains('is-open');
@@ -220,14 +234,10 @@ export function createComposer({ announce, onSent, onLeave }) {
         el('option', { value: time, disabled: !allowed, text: formatTime(time) }))]);
       control.value = draft[key] ?? '';
     }
-    timeNote.textContent = timezone ? `Times are local to the venue · ${timezone.replaceAll('_', ' ')}` : 'Times are local to the venue. The timezone is being checked.';
-    week.setSchedule(draft, { resetDates: true }); refreshWeek();
-  }
-
-  function refreshWeek() {
-    const focused = week.element.querySelector('.week__grid')?.contains(document.activeElement);
-    week.render();
-    if (focused) week.element.querySelector('[tabindex="0"]')?.focus({ preventScroll: true });
+    timeNote.textContent = timezone ? `Times are local to the venue · ${timezone.replaceAll('_', ' ')}` : timezoneFailed
+      ? 'Times are local to the venue. The timezone could not be loaded.'
+      : 'Times are local to the venue. The timezone is being checked.';
+    week.setSchedule(draft, { resetDates: true }); week.render();
   }
 
   function renderSummary() {
@@ -273,7 +283,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     else if (state === 'conflict') children = [
       el('strong', { text: `${result.conflicts.length} of ${result.totalOccurrences} dates are unavailable` }),
       el('p', { text: 'Change the dates, weekdays or times. Closed dates are included in your request; they are not skipped.' }),
-      el('ul', {}, result.conflicts.map(({ date, reason }) => el('li', { text: `${formatDate(date)} · ${({ blackout: 'closed that day', booked: 'already booked', outsideOpenHours: 'outside opening hours' })[reason] ?? 'unavailable'}` }))),
+      el('ul', { tabindex: '0', 'aria-label': 'Unavailable dates' }, result.conflicts.map(({ date, reason }) => el('li', { text: `${formatDate(date)} · ${({ blackout: 'closed that day', booked: 'already booked', outsideOpenHours: 'outside opening hours' })[reason] ?? 'unavailable'}` }))),
     ];
     else children = [
       el('strong', { text: 'Availability could not be checked' }),
@@ -323,6 +333,9 @@ export function createComposer({ announce, onSent, onLeave }) {
     const schedule = toWireSchedule(draft);
     checkTimer = setTimeout(async () => {
       try {
+        if (!timezone) await loadWeek(addDays(todayIso(), 1));
+        if (current !== generation || version !== checkVersion) return;
+        if (!timezone) throw new Error('Venue timezone unavailable');
         const result = await checkRoomAvailability(draft.remoteRoomId, schedule);
         if (current !== generation || version !== checkVersion) return;
         if (!result || !Number.isInteger(result.totalOccurrences) || result.totalOccurrences !== estimate()?.sessions || !Array.isArray(result.conflicts)) throw new Error('Incomplete availability answer');
@@ -336,17 +349,27 @@ export function createComposer({ announce, onSent, onLeave }) {
   }
 
   async function loadWeek(from) {
-    if (!draft?.remoteRoomId || asked.has(from)) return;
-    asked.add(from);
+    if (!draft?.remoteRoomId) return;
+    if (asked.has(from)) return asked.get(from);
     const current = generation;
     const today = venueToday(timezone) ?? addDays(todayIso(), 1);
     const start = from < today ? today : from;
-    const answer = await getRoomAvailability(draft.remoteRoomId, { from: start, to: addDays(start, 41) });
-    if (current !== generation) return;
-    if (!answer) { asked.delete(from); return; }
-    timezone = answer.timezone;
-    week.setToday(venueToday(timezone));
-    week.setAvailability(answer.days); renderSchedule(); renderFoot();
+    const work = (async () => {
+      const answer = await getRoomAvailability(draft.remoteRoomId, { from: start, to: addDays(start, 41) });
+      if (current !== generation) return;
+      if (!answer || !venueToday(answer.timezone)) {
+        asked.delete(from);
+        timezoneFailed = !timezone;
+        renderSchedule(); renderFoot();
+        return;
+      }
+      timezone = answer.timezone;
+      timezoneFailed = false;
+      week.setToday(venueToday(timezone));
+      week.setAvailability(answer.days); renderSchedule(); renderFoot();
+    })();
+    asked.set(from, work);
+    return work;
   }
 
   function focusField(key) {
@@ -504,7 +527,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     track('application_started', { roomId: `${venueId}/${roomId}` });
     opened = `${venueId}/${roomId}`; const current = ++generation;
     clearTimeout(checkTimer); ++checkVersion;
-    venue = null; room = null; draft = null; roomHours = null; timezone = null; bookingMode = null; paymentsEnabled = null;
+    venue = null; room = null; draft = null; roomHours = null; timezone = null; timezoneFailed = false; bookingMode = null; paymentsEnabled = null;
     attempted = false; refusal = ''; touched.clear(); asked.clear();
     identity.reset(); identity.element.hidden = true; card.element.hidden = true;
     sheet.classList.remove('is-signing', 'is-away'); columns.removeAttribute('inert');

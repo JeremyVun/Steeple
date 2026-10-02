@@ -52,6 +52,7 @@ async function intercept(request) {
     return answer({ available: state.availability !== 'conflict', totalOccurrences: occurrences.length, conflicts: state.availability === 'conflict' ? [{ date: occurrences[0], reason: 'blackout' }, ...(occurrences.length > 1 ? [{ date: occurrences.at(-1), reason: 'booked' }] : [])] : [] });
   }
   if (pathname === `/listings/${roomId}/availability`) {
+    if (state.feedUnavailable) return answer({}, 503);
     const from = url.searchParams.get('from'), to = url.searchParams.get('to');
     const days = [];
     for (let date = from; date <= to; date = addDays(date, 1)) days.push({ date, isBlackout: false, freeWindows: [{ startTime: '08:00', endTime: '22:00' }] });
@@ -68,7 +69,7 @@ async function intercept(request) {
   if (pathname.startsWith('/applications/')) return answer(lastApplication ?? {}, lastApplication ? 200 : 404);
   if (pathname === '/me/applications') return answer({items: lastApplication ? [lastApplication] : [],totalCount: lastApplication ? 1 : 0,page:1,pageSize:25});
   if (pathname === '/manage/venues') return answer([]);
-  if (pathname === '/me/payments/setup/mock-confirm') { state.submit = 'pending'; return answer({ hasPaymentMethod: true, method: {brand:'visa',last4:'4242'}, mock:true }); }
+  if (pathname === '/me/payments/setup/mock-confirm') { await new Promise(resolve => setTimeout(resolve, 150)); state.submit = 'pending'; return answer({ hasPaymentMethod: true, method: {brand:'visa',last4:'4242'}, mock:true }); }
   if (pathname === '/me/payments/setup') return answer({ clientSecret: 'fixture-secret', publishableKey: 'pk_mock_steeple', mock: true });
   if (pathname === '/me/payments') return answer({ hasPaymentMethod: false, mock: true });
   if (pathname === '/listings') return answer({ items: [], totalCount: 0, page: 1, pageSize: 100 });
@@ -92,7 +93,7 @@ async function start(overrides = {}, width = 390) {
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(`${origin}/apply/grace-community-vienna/youth-activity-room?world=off`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#letter-date', { visible: true });
-  await page.waitForFunction(() => document.querySelector('#composer-timezone')?.textContent.includes('America/New York'));
+  await page.waitForFunction(text => document.querySelector('#composer-timezone')?.textContent.includes(text), {}, state.feedUnavailable ? 'could not be loaded' : 'America/New York');
   await page.evaluate(() => document.fonts.ready);
 }
 async function press(selector) { const target = await page.$(selector); await target.scrollIntoView(); await target.click(); }
@@ -112,7 +113,7 @@ async function choose(selector, value) {
   await page.keyboard.press('Tab');
   assert.equal(await page.$eval(selector, (node) => node.value), value);
 }
-async function type(selector, value) { await press(selector); await page.keyboard.down('Meta'); await page.keyboard.press('KeyA'); await page.keyboard.up('Meta'); await page.keyboard.type(value); await page.keyboard.press('Tab'); }
+async function type(selector, value) { await press(selector); await page.keyboard.down('Meta'); await page.keyboard.press('KeyA', { commands: ['selectAll'] }); await page.keyboard.up('Meta'); await page.keyboard.type(value); await page.keyboard.press('Tab'); assert.equal(await page.$eval(selector, node => node.value), value); }
 async function schedule(recurring = false, expected = 'available right now') {
   if (recurring) await press('label[for="letter-freq-weekly"]');
   await dateInput('#letter-date', dates.first);
@@ -130,10 +131,11 @@ async function shot(name, at = 'top') {
     const controls = [...sheet.querySelectorAll('button,input,select,textarea,summary,[role="gridcell"],.choice > span')].filter((node) => node.checkVisibility() && getComputedStyle(node).opacity !== '0');
     const small = controls.filter((node) => { const r = node.getBoundingClientRect(); return r.width < 43.9 || r.height < 43.9; }).map((node) => ({ tag: node.tagName, id: node.id, cls: node.className, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));
     const spills = [...sheet.querySelectorAll('p,h1,h2,h3,label,select,input,textarea')].filter((node) => node.checkVisibility() && !['TEXTAREA','INPUT'].includes(node.tagName) && node.scrollWidth > node.clientWidth + 1).map((node) => ({ tag: node.tagName, cls: node.className, text: node.textContent.slice(0, 60) }));
-    return { width: innerWidth, height: innerHeight, scroll: sheet.scrollTop, scrollHeight: sheet.scrollHeight, clientHeight: sheet.clientHeight, horizontalOverflow: sheet.scrollWidth > sheet.clientWidth + 1, small, spills };
+    return { width: innerWidth, height: innerHeight, dpr: devicePixelRatio, scroll: sheet.scrollTop, scrollHeight: sheet.scrollHeight, clientHeight: sheet.clientHeight, horizontalOverflow: sheet.scrollWidth > sheet.clientWidth + 1, small, spills };
   });
   if (geometry.small.length || geometry.spills.length) console.log(JSON.stringify(geometry));
-  check(`${name} viewport and geometry`, geometry.width === (name.includes('1440') ? 1440 : 390) && !geometry.horizontalOverflow && !geometry.small.length && !geometry.spills.length);
+  const desktop = name.includes('1440');
+  check(`${name} viewport and geometry`, geometry.width === (desktop ? 1440 : 390) && geometry.height === (desktop ? 900 : 844) && geometry.dpr === 2 && !geometry.horizontalOverflow && !geometry.small.length && !geometry.spills.length);
   recorded.push({ name, ...geometry });
   const filename = path.join(output, `${name}.png`); await page.screenshot({ path: filename });
   console.log(filename);
@@ -224,10 +226,20 @@ try {
     check('enabled mock payments are labelled as test payments', await page.$eval('.letter__foot', (node) => node.textContent.includes('Test payments') && node.textContent.includes('No real money')));
     await shot('payments-enabled-390-deep', 'bottom'); await press('.composer button[type="submit"]');
     await page.waitForSelector('#card-last4', { visible: true });
+    check('payment step keeps test capability explicit', await page.$eval('.identity--card', node => node.textContent.includes('No real money is charged') && node.textContent.includes('Use sample details')));
     await shot('payment-step-390');
+    await press('.identity--card button[type="submit"]');
+    check('invalid nested payment form cannot resubmit the booking', state.posts.length === 1);
     await type('#card-last4', '4242'); await press('.identity--card button[type="submit"]');
     await page.waitForSelector('.sent:not([hidden])', { visible: true });
     check('402 payment step resumes same submission', state.posts.length === 2 && state.posts[0].key === state.posts[1].key);
+
+    await start({ feedUnavailable: true }); await schedule(false, 'could not be checked');
+    check('missing venue timezone does not claim ready availability', state.checks.length === 0 && await page.$eval('#composer-timezone', node => node.textContent.includes('could not be loaded')));
+    await shot('timezone-unavailable-390');
+    state.feedUnavailable = false; await press('.composer__retry');
+    await page.waitForFunction(() => document.querySelector('.composer__availability').textContent.includes('available right now'));
+    check('retry reloads venue timezone before checking schedule', await page.$eval('#composer-timezone', node => node.textContent.includes('America/New York')));
 
     await start({ emptyRules: true });
     check('missing house rules leave no empty rules card', await page.$eval('.composer__rules', (node) => node.hidden));
@@ -266,8 +278,9 @@ try {
     await start({ long: true }); await schedule(true); await event(); await type('#letter-intent', plans.repeat(6));
     await shot('long-390'); await shot('long-390-deep', 'bottom');
     check('long rules and event text remain complete', await page.$eval('.composer__rules p', (node, value) => node.textContent === value, rules.repeat(18)) && await page.$eval('#letter-intent', (node, value) => node.value === value, plans.repeat(6)));
-    await start({ long: true }, 1440); await schedule(true); await event(); await shot('long-1440'); await shot('long-1440-deep', 'bottom');
+    await start({ long: true }, 1440); await schedule(true); await event(); await type('#letter-intent', plans.repeat(6)); await shot('long-1440'); await shot('long-1440-deep', 'bottom');
   }
+  if (pageErrors.length) console.log(pageErrors);
   check('no browser runtime errors', pageErrors.length === 0);
 } finally {
   await fs.writeFile(path.join(output, 'measurements.json'), JSON.stringify(recorded, null, 2));
