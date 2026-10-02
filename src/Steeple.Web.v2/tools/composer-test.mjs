@@ -47,11 +47,13 @@ async function intercept(request) {
   if (pathname === `/listings/${roomId}/availability/check`) {
     const body = JSON.parse(request.postData()); state.checks.push(body.schedule);
     const occurrences = scheduleDates(body.schedule);
+    if (state.availability === 'unsupported') return answer({}, 404);
     if (state.availability === 'failed') return answer({}, 503);
     if (state.availability === 'delayed') { await new Promise((resolve) => setTimeout(resolve, 900)); return answer({ available: false, totalOccurrences: occurrences.length, conflicts: [{ date: occurrences[0], reason: 'blackout' }] }); }
     return answer({ available: state.availability !== 'conflict', totalOccurrences: occurrences.length, conflicts: state.availability === 'conflict' ? [{ date: occurrences[0], reason: 'blackout' }, ...(occurrences.length > 1 ? [{ date: occurrences.at(-1), reason: 'booked' }] : [])] : [] });
   }
   if (pathname === `/listings/${roomId}/availability`) {
+    if (state.availability === 'unsupported') return answer({}, 404);
     if (state.feedUnavailable) return answer({}, 503);
     const from = url.searchParams.get('from'), to = url.searchParams.get('to');
     const days = [];
@@ -93,7 +95,7 @@ async function start(overrides = {}, width = 390) {
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto(`${origin}/apply/grace-community-vienna/youth-activity-room?world=off`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#letter-date', { visible: true });
-  await page.waitForFunction(text => document.querySelector('#composer-timezone')?.textContent.includes(text), {}, state.feedUnavailable ? 'could not be loaded' : 'America/New York');
+  await page.waitForFunction(text => document.querySelector('#composer-timezone')?.textContent.includes(text), {}, state.feedUnavailable || state.availability === 'unsupported' ? 'could not be loaded' : 'America/New York');
   await page.evaluate(() => document.fonts.ready);
 }
 async function press(selector) { const target = await page.$(selector); await target.scrollIntoView(); await target.click(); }
@@ -235,11 +237,20 @@ try {
     check('402 payment step resumes same submission', state.posts.length === 2 && state.posts[0].key === state.posts[1].key);
 
     await start({ feedUnavailable: true }); await schedule(false, 'could not be checked');
-    check('missing venue timezone does not claim ready availability', state.checks.length === 0 && await page.$eval('#composer-timezone', node => node.textContent.includes('could not be loaded')));
+    check('missing venue timezone does not claim ready availability', state.checks.length === 1 && await page.$eval('#composer-timezone', node => node.textContent.includes('could not be loaded')));
     await shot('timezone-unavailable-390');
     state.feedUnavailable = false; await press('.composer__retry');
     await page.waitForFunction(() => document.querySelector('.composer__availability').textContent.includes('available right now'));
-    check('retry reloads venue timezone before checking schedule', await page.$eval('#composer-timezone', node => node.textContent.includes('America/New York')));
+    check('retry restores venue timezone and a successful schedule check', await page.$eval('#composer-timezone', node => node.textContent.includes('America/New York')));
+
+    await start({ availability: 'unsupported', signedIn: true, submit: 'pending' });
+    await schedule(false, 'Availability previews are not available'); await event();
+    await shot('preview-disabled-390');
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
+    await shot('preview-disabled-1440');
+    await press('.composer button[type="submit"]');
+    await page.waitForSelector('.sent:not([hidden])', { visible: true });
+    check('disabled preview leaves submission to the booking API', state.posts.length === 1);
 
     await start({ emptyRules: true });
     check('missing house rules leave no empty rules card', await page.$eval('.composer__rules', (node) => node.hidden));

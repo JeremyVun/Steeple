@@ -11,6 +11,11 @@ assert.equal(estimate.dates.at(-1), '2026-12-22');
 assert.equal(estimateSchedule({ ...weekly, frequency: 'oneOff' }, 15).total, 30);
 assert.equal(estimateSchedule({ ...weekly, endTime: '10:00' }, 15.75).perSession, 7.88);
 assert.equal(estimateSchedule({ ...weekly, endTime: '10:00' }, 15.75).total, 165.48);
+for (const [rate, perSession] of [[15.01, 7.50], [15.03, 7.52], [1.01, 0.50], [1.03, 0.52]]) {
+  const rounded = estimateSchedule({ ...weekly, endTime: '10:00' }, rate);
+  assert.equal(rounded.perSession, perSession);
+  assert.equal(rounded.total, Math.round(perSession * 100) * 21 / 100);
+}
 for (const patch of [{ startDate: null }, { startDate: '2026-13-01' }, { startDate: '2026-02-30' }, { startTime: '24:00' }, { startTime: '09:15' }, { endTime: '09:30' }, { endDate: null }, { endDate: '2027-10-15' }, { daysOfWeekMask: 0 }, { daysOfWeekMask: 128 }, { endDate: '2026-10-14', daysOfWeekMask: 2 }]) {
   assert.ok(Object.keys(scheduleErrors({ ...weekly, ...patch })).length, JSON.stringify(patch));
   assert.equal(estimateSchedule({ ...weekly, ...patch }, 15), null, JSON.stringify(patch));

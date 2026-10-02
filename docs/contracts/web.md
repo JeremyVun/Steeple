@@ -508,7 +508,8 @@ estimates from the exact submitted dates, independent of display timezone/DST. I
 malformed, backward, zero-occurrence and >366-day weekly terms. Past-date validation uses
 venue-local today from the availability response's IANA timezone. The store still owns
 activity, capacity and event-text validation. Estimates use the current listing's currency
-and hourly rate, rounded to currency cents per session, multiplied by every submitted
+and hourly rate, rounded to currency cents per session with midpoint-to-even rounding
+matching `BookingService`, multiplied by every submitted
 date. They are not a locked quote; price is frozen by the API only at confirmation.
 Blackouts are never silently subtracted from estimates or submitted recurrence.
 
@@ -520,7 +521,9 @@ this advisory display; no free-window inference substitutes for it. Changed sche
 immediately invalidate the old answer, and generation checks reject stale responses after
 edits or reopening. The venue timezone must load before a full check can be ready; retry
 also retries failed timezone metadata. A failed or conflicting check blocks the UI send and offers correction
-or retry; the submit-time API check still owns the final result. No backend contract changed.
+or retry. A 404 means the independently flagged preview is absent: explain that dates
+will be checked when sending, retain venue-local inputs without inventing a timezone,
+and allow submission. The submit-time API check still owns the final result. No backend contract changed.
 
 The public `payments.enabled` snapshot controls explanation only. Off says online payments
 are unavailable and to arrange payment with the host. On labels the currently implemented

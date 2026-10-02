@@ -187,6 +187,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     (bookingMode === 'instant' ? 'Sign in to book' : 'Sign in to send request');
   const money = (value) => new Intl.NumberFormat('en-US', { style: 'currency', currency: room.currency ?? 'USD', currencyDisplay: 'code', maximumFractionDigits: 2 }).format(value);
   const scheduleProblems = () => scheduleErrors(draft, { today: venueToday(timezone), windows: roomHours });
+  const canSubmitSchedule = () => availability.state === 'ready' || availability.state === 'unsupported';
   function validate() {
     const errors = { ...validateApplication(draft, { room }).errors };
     for (const key of scheduleFields) delete errors[key];
@@ -279,6 +280,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     if (state === 'empty') return;
     let children;
     if (state === 'checking') children = [el('p', { text: 'Checking all selected dates…' })];
+    else if (state === 'unsupported') children = [el('p', { text: 'Availability previews are not available for this space. Your dates will be checked when you send.' })];
     else if (state === 'ready') children = [el('p', { text: `${plural(result.totalOccurrences, 'session')} ${result.totalOccurrences === 1 ? 'looks' : 'look'} available right now. Availability is checked again when you submit.` })];
     else if (state === 'conflict') children = [
       el('strong', { text: `${result.conflicts.length} of ${result.totalOccurrences} dates are unavailable` }),
@@ -314,7 +316,7 @@ export function createComposer({ announce, onSent, onLeave }) {
     count.classList.toggle('is-over', intent.value.length > 2000);
     const firstScheduleError = Object.values(scheduleProblems())[0];
     unready.textContent = firstScheduleError ?? Object.values(result.errors)[0] ??
-      (availability.state !== 'ready' ? 'Check availability before sending.' : paymentsEnabled === null ? 'Checking payment options.' : '');
+      (!canSubmitSchedule() ? 'Check availability before sending.' : paymentsEnabled === null ? 'Checking payment options.' : '');
     unready.hidden = !unready.textContent;
     send.disabled = sending;
     if (!sending) send.textContent = sendLabel();
@@ -333,16 +335,16 @@ export function createComposer({ announce, onSent, onLeave }) {
     const schedule = toWireSchedule(draft);
     checkTimer = setTimeout(async () => {
       try {
-        if (!timezone) await loadWeek(addDays(todayIso(), 1));
-        if (current !== generation || version !== checkVersion) return;
-        if (!timezone) throw new Error('Venue timezone unavailable');
         const result = await checkRoomAvailability(draft.remoteRoomId, schedule);
         if (current !== generation || version !== checkVersion) return;
         if (!result || !Number.isInteger(result.totalOccurrences) || result.totalOccurrences !== estimate()?.sessions || !Array.isArray(result.conflicts)) throw new Error('Incomplete availability answer');
-        availability = { state: result.available && !result.conflicts.length ? 'ready' : 'conflict', result };
-      } catch {
+        if (!timezone) await loadWeek(addDays(todayIso(), 1));
         if (current !== generation || version !== checkVersion) return;
-        availability = { state: 'failed', result: null };
+        if (!timezone) throw new Error('Venue timezone unavailable');
+        availability = { state: result.available && !result.conflicts.length ? 'ready' : 'conflict', result };
+      } catch (error) {
+        if (current !== generation || version !== checkVersion) return;
+        availability = { state: error?.status === 404 ? 'unsupported' : 'failed', result: null };
       }
       renderFoot();
     }, delay);
@@ -387,7 +389,7 @@ export function createComposer({ announce, onSent, onLeave }) {
       const key = Object.keys(scheduleProblems())[0] ?? Object.keys(result.errors)[0];
       focusField(key); announce?.(result.errors[key]); return;
     }
-    if (availability.state !== 'ready' || paymentsEnabled === null) {
+    if (!canSubmitSchedule() || paymentsEnabled === null) {
       renderFoot(); availabilityBox.focus(); availabilityBox.scrollIntoView({ block: 'center' }); return;
     }
     if (isSignedIn()) dispatch(); else openIdentity();

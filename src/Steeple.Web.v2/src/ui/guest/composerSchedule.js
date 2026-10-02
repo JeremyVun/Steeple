@@ -43,8 +43,11 @@ export function estimateSchedule(draft, rate) {
   const minutes = (time) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
   const hours = (minutes(draft.endTime) - minutes(draft.startTime)) / 60;
   const dates = materializeDates(draft);
-  const perSession = Math.round(rate * hours * 100) / 100;
-  return { dates, hours, sessions: dates.length, perSession, total: Math.round(perSession * dates.length * 100) / 100 };
+  const halfCents = Math.round(rate * 100) * (hours * 2);
+  const wholeCents = Math.floor(halfCents / 2);
+  // BookingService rounds each visit's half-cent ties to even.
+  const perSessionCents = wholeCents + (halfCents % 2 === 1 && wholeCents % 2 === 1 ? 1 : 0);
+  return { dates, hours, sessions: dates.length, perSession: perSessionCents / 100, total: perSessionCents * dates.length / 100 };
 }
 
 export function timeChoices(draft, windows, end = false) {
