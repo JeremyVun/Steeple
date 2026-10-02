@@ -294,6 +294,12 @@ try {
     ));
     await s.page.waitForFunction('__steeple.state.roll === 0', { timeout: 30000 });
     check('the return lands on the arrival', (await s.view()) === 'arrival');
+    check('the arrival announcement describes the service without missing copy', await s.page.evaluate(
+      () => {
+        const spoken = document.getElementById('a11y')?.textContent ?? '';
+        return spoken.includes('Space to rent by the hour.') && !/undefined|null/.test(spoken);
+      }
+    ));
 
     // They may change their mind before the world finishes building. A late
     // engine must adopt the current product position and do zero hidden work.

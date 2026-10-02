@@ -70,7 +70,9 @@ is that loop failing at its first hop.
 - **Site-level metadata** — `index.html` carries the one static title/description,
   `og:*`/`twitter:card=summary` and a `WebSite` JSON-LD block. Deliberately no site-level
   `og:image`/`og:url`: both would lie for a single bundle deployable at `/` or a stripped
-  prefix, and per-listing values need per-URL documents.
+  prefix, and per-listing values need per-URL documents. Site descriptions match the
+  opening's hourly community-space offer without affordability or inventory-category claims;
+  `src/ui/metaText.js` restores the same descriptions after in-app navigation.
 
 ## As-built (✅) — clean-route listing documents (shipped 2026-08-08)
 

@@ -119,7 +119,10 @@ with the world on. Its output is content-hashed into `public/assets/` (served
 immutable by nginx), so after a re-run the `#poster` block in `index.html` must
 be updated to the printed names — the splash copy in `index.html`, the build
 path in `ui/arrival.js` and `ui/copy.js` ARRIVAL likewise say one thing in
-three places; change them together.
+three places; change them together. Check every `ARRIVAL` consumer, including
+`ui/announcer.js`, when removing copy fields so spoken text cannot contain missing
+values. Keep site descriptions in `index.html` and `ui/metaText.js` aligned with
+the opening's claims.
 
 ## URL flags
 

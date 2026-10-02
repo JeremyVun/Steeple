@@ -28,7 +28,7 @@ export function createAnnouncer() {
   function describeView() {
     const { view, venueId, roomId } = state;
 
-    if (view === 'arrival') return `Steeple. ${ARRIVAL.line} ${ARRIVAL.hint}`;
+    if (view === 'arrival') return `${ARRIVAL.wordmark}. ${ARRIVAL.title} ${ARRIVAL.titleEnd} ${ARRIVAL.line}`;
 
     if (view === 'village') {
       return `${HOME_LABEL}. ${resultLine(heldResults())}. Filter by what your group does, or open a venue to see the spaces it rents out.`;

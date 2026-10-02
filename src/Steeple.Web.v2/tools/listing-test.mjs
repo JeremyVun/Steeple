@@ -670,7 +670,7 @@ try {
       check(
         '…in the site’s own words, and indexed',
         said.title === 'Steeple — Community space to rent near Washington, DC'
-          && said.description?.startsWith('Steeple — rent affordable halls, studios and gyms') === true
+          && said.description?.startsWith('Rent community space by the hour in the Washington, DC area') === true
           && said.ogTitle === 'Steeple — community space to rent near Washington, DC'
           && said.robots === 'index,follow',
         JSON.stringify(said)

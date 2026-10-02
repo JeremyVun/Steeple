@@ -61,7 +61,8 @@ navigation meaning. The renderer remains stopped for the whole product act.
 
 The starting screen uses the approved village opening (2026-10-02): header host
 entry, a left service heading and primary guest entry, plus the down link. Markup,
-fallback builder and `ARRIVAL` copy stay equivalent. At enlarged text sizes a
+fallback builder and `ARRIVAL` copy stay equivalent; the live-region announcer uses
+the same service heading and supporting copy. At enlarged text sizes a
 `ResizeObserver` marks an overflowing arrival as a native scroll surface; its wheel
 events stay on that surface so the flat gesture listener cannot unexpectedly enter
 browse. Ordinary frames leave canvas gestures intact. No camera/poster, boot ownership,
@@ -93,7 +94,7 @@ intent timing or analytics seam changes accompany this composition.
   emitted once when the intent settles — never once on the native press and again on hydration.
   `main.js` forwards it to the web batcher as `arrival_settled`.
 - ⚠️ Leaflet's tile layer ships **with** the map, never deferred (`ui/map/atlas.js`).
-- Driven by `tools/boot-priority-test.mjs` (51 checks, §1–§6) against a `build:debug` bundle.
+- Driven by `tools/boot-priority-test.mjs` (63 checks, §1–§6) against a `build:debug` bundle.
 
 ## `src/data/api.js` — the wire
 
@@ -841,7 +842,7 @@ the live ownership gate for guest/host/shared CSS after markup or style changes.
   must load with no route, wait on `__steepleReady`, then drive navigation and
   `__steeple.roll.set(1)`. `tools/world-test.mjs`'s reduced-motion section is the worked
   example.
-- `tools/boot-priority-test.mjs` is Phase 3.5's gate (51 checks, §1–§6). It is the one suite
+- `tools/boot-priority-test.mjs` is Phase 3.5's gate (63 checks, §1–§6). It is the one suite
   that drives a **non-flat built bundle**: `npm run build:debug` then
   `npx vite preview --outDir dist-debug --port 5279 --strictPort`. It holds named chunk
   responses open over CDP (slow-4G + 4× CPU) so "before the interface arrives" is a real

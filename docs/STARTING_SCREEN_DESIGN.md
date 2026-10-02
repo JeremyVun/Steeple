@@ -1,8 +1,7 @@
 # Starting screen design
 
-Status: Jeremy selected B, Village opening, for Astra implementation and visual verification.
-Implement the selected composition with the concrete Opus refinements below. Deployment
-is not part of this implementation pass.
+Status: B, Village opening, is implemented and verified locally with the accepted Opus
+refinements. Not pushed or deployed; deployment is outside this implementation pass.
 
 ## Jeremy's brief verbatim
 
@@ -118,9 +117,27 @@ browse error state. No production data was read or changed during the build.
 
 Evidence and rerun instructions:
 [/private/tmp/steeple-starting-screen-build-web-dvrhhj/REPORT.md](/private/tmp/steeple-starting-screen-build-web-dvrhhj/REPORT.md).
-The implementation is ready for the lead's independent boot/route regression and
-integration review; it has not been integrated or deployed. Full authenticated/API
-journeys, physical touch hardware and screen-reader speech were outside this fixture run.
+Physical touch hardware and screen-reader speech were outside this fixture run.
+
+### Independent integration verification
+
+The lead completed nonvisual verification against a separate Development API with a
+disposable PostgreSQL database and all 26 migrations. The final built debug bundle passes
+all 63 boot-priority checks, all 34 listing/metadata checks and all three shared-style scope
+checks, including a signed-in surface. The repository .NET gate passes 634 unit and 191
+integration tests. Web unit checks, lint, typecheck and final production/debug builds pass.
+Environment-file loading remained disabled. This pass does not claim a new full booking
+journey or physical screen-reader test.
+
+The integration review found and repaired a stale `ARRIVAL.hint` reference in the live-region
+announcer after that field was removed. The boot gate now requires the returned opening to
+announce the service without missing values. Static and restored search/share descriptions
+also match the opening's offer without unsupported price or inventory claims; the listing
+gate verifies that returning home restores the revised metadata exactly once.
+
+Build comparisons and browser logs are retained in
+`/private/tmp/steeple-starting-screen-regression-web-6FZMPi`. The lead did not make visual
+changes or inspect screenshots; Astra owns the visual verdict above.
 
 ### Astra's findings and recommendation
 
@@ -171,7 +188,7 @@ shorten the location label to “Washington, DC area”, keep the desktop text c
 clean paper, and omit unsupported affordability claims. It also prefers one consistent
 body-copy treatment. If A is selected instead, it requests removing the repeated footer
 caption and “Affordable”, fixing the isolated “space,” line, and resolving the desktop
-paper/sky boundary. These are reviewer recommendations, not Jeremy's accepted verdict.
+paper/sky boundary. Jeremy's later B selection and accepted refinements are recorded above.
 
 Engineering caveat: Opus proposes reframing the phone camera as its preferred B fix;
 that would also require matched phone posters and handoff verification. The original
@@ -182,9 +199,11 @@ and did not inspect every scenario or run new probes.
 
 ## Nonvisual implementation constraints checked
 
-The opening content exists in three places: static `index.html`, the fallback builder
-in `src/ui/arrival.js`, and `ARRIVAL` in `src/ui/copy.js`. Any eventual implementation
-must keep those equivalent, including the no-JavaScript links.
+The visible opening content exists in three places: static `index.html`, the fallback
+builder in `src/ui/arrival.js`, and `ARRIVAL` in `src/ui/copy.js`. Keep those equivalent,
+including the no-JavaScript links, and update the live-region announcer when copy fields
+change. Search/share metadata in `index.html` and `src/ui/metaText.js` must reflect the
+same product claims.
 
 The `data-intent` values `village` and `desk` are consumed before the main interface
 loads. Guest and host actions must retain their base-relative `browse` and `desk`
@@ -195,9 +214,11 @@ product. A design must not make either action wait for the scene.
 The poster filenames encode aspect ratios used during the handoff to the renderer.
 If a chosen composition changes the scene framing, regenerate the matching poster
 variants with the existing instrument rather than changing one background in isolation.
-`boot-priority-test.mjs` is the relevant later regression gate for early presses,
-renderer delays and direct product links. No product code changed in this round.
+`boot-priority-test.mjs` is the regression gate for early presses, renderer delays,
+direct product links and the restored arrival announcement.
 
-The current phone poster is 39,722 bytes on disk; the widest referenced poster is
-94,318 bytes. These are asset sizes, not loading-time measurements. A later build
-should compare the selected direction's transfer cost against this baseline.
+The phone poster remains 39,722 bytes on disk; the widest referenced poster remains
+94,318 bytes. These are asset sizes, not loading-time measurements. Against the same
+debug build at `8d94565`, the entry script stays 72,129 bytes, all compressed styles
+grow by 281 bytes and the interface script grows by 26 compressed bytes. No dependency,
+camera or poster was added.
