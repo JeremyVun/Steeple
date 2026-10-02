@@ -1,7 +1,7 @@
 # Starting screen design
 
-Status: B, Village opening, is implemented and verified locally with the accepted Opus
-refinements. Not pushed or deployed; deployment is outside this implementation pass.
+Status: B, Village opening, is implemented, verified, pushed and deployed with the accepted
+Opus refinements. Production follow-up is recorded below.
 
 ## Jeremy's brief verbatim
 
@@ -26,6 +26,28 @@ Implementation assignment question:
 Jeremy's direction:
 
 > i also agree with B
+
+Jeremy's release instruction:
+
+> commit, push, deploy
+
+## Deployment — 3 October 2026
+
+App `b8d14ae` and unchanged infra `1992f86` deployed to `syd1` at approximately 00:03 AEST.
+Both main checkouts were clean and synchronized with their remotes before deployment.
+All three images were built and pushed with the `b8d14ae` tag and full source-revision label.
+Deployctl job `ad195822c2f9fa5eb1276e2b600f77bd` succeeded.
+
+Public HTTPS checks passed for home, browse, host entry, geofence, listing search and sitemap.
+The live root document exactly matches the released web image, and its entry script and
+stylesheet return HTTP 200. Nine native-browser smoke assertions passed: the new headline
+and native links, guest browsing and a listing detail route, wordmark return with correct
+spoken copy and metadata, the host sign-in guide and configured provider choices, and no
+uncaught browser errors. No provider sign-in or booking submission was attempted.
+
+Release logs, image digests and smoke evidence are retained in
+`/private/tmp/steeple-opening-deploy-XWRNdR`. The verification browser and temporary image
+inspection container have stopped. No runtime settings or database migrations changed.
 
 ## Intent and constraints
 
