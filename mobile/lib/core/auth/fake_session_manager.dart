@@ -30,10 +30,10 @@ class FakeSessionManager implements SessionManager {
 
   @override
   Future<void> restore() async {
-    _identityGeneration++;
-    _state.value = startSignedIn
-        ? SignedIn(await _fixtureUser())
-        : const SignedOut();
+    final generation = ++_identityGeneration;
+    final user = startSignedIn ? await _fixtureUser() : null;
+    if (generation != _identityGeneration) return;
+    _state.value = user == null ? const SignedOut() : SignedIn(user);
   }
 
   @override
@@ -47,6 +47,7 @@ class FakeSessionManager implements SessionManager {
       return scripted;
     }
     final user = await _fixtureUser();
+    if (generation != _identityGeneration) return const SignInCancelled();
     _state.value = SignedIn(user);
     return SignInSuccess(user, isNewUser: false);
   }
