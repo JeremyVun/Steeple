@@ -22,27 +22,29 @@ public class EfBookingRepository : IBookingRepository
     public async Task<bool> TrySaveNewAsync(Booking booking, CancellationToken ct = default)
     {
         _db.Bookings.Add(booking);
-        await using var transaction = await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await using var ownedTransaction = _db.Database.CurrentTransaction is null
+            ? await _db.Database.BeginTransactionAsync(ct).ConfigureAwait(false)
+            : null;
+        var transaction = ownedTransaction ?? _db.Database.CurrentTransaction!;
+        var savepoint = $"booking_{Guid.NewGuid():N}";
+        await _db.Database.ExecuteSqlInterpolatedAsync(
+            $"""SELECT 1 FROM rooms WHERE "Id" = {booking.RoomId} FOR UPDATE""", ct).ConfigureAwait(false);
+        await transaction.CreateSavepointAsync(savepoint, ct).ConfigureAwait(false);
         try
         {
-            // Concurrent inserts into a GiST exclusion index can make both transactions wait on
-            // one another, yielding SQLSTATE 40P01 instead of the expected 23P01 loser. Locking the
-            // exact room row first gives every booking path the same order without serializing
-            // unrelated rooms. ExecuteSql is intentional: SELECT still acquires the row lock and
-            // Npgsql reports no affected-row count.
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"""SELECT 1 FROM rooms WHERE "Id" = {booking.RoomId} FOR UPDATE""", ct)
-                .ConfigureAwait(false);
-
             // The booking, its occurrences, and tracked mutations riding along (the application's
             // Approved flip) commit or abort together.
             await _db.SaveChangesAsync(ct).ConfigureAwait(false);
-            await transaction.CommitAsync(ct).ConfigureAwait(false);
+            await transaction.ReleaseSavepointAsync(savepoint, ct).ConfigureAwait(false);
+            if (ownedTransaction is not null)
+            {
+                await transaction.CommitAsync(ct).ConfigureAwait(false);
+            }
             return true;
         }
         catch (Exception ex) when (HasSqlState(ex, PostgresErrorCodes.ExclusionViolation))
         {
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.RollbackToSavepointAsync(savepoint, CancellationToken.None).ConfigureAwait(false);
 
             // Slot already held. Nothing was written; detach the stillborn booking so the
             // caller's follow-up save (auto-decline) doesn't retry the same insert.
@@ -54,7 +56,7 @@ public class EfBookingRepository : IBookingRepository
             // The application's Approved flip rides in this save; its xmin token says another
             // request (withdraw, decline, another decision) committed a transition after the
             // caller loaded the row. The transaction aborted whole — nothing was booked.
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.RollbackToSavepointAsync(savepoint, CancellationToken.None).ConfigureAwait(false);
             DetachStillborn(booking);
             throw new ConcurrentUpdateException(ex);
         }
@@ -67,7 +69,7 @@ public class EfBookingRepository : IBookingRepository
             // Instant-book submit racing its own retry: the application insert riding this save
             // lost to a concurrent request with the same idempotency key. Nothing was written —
             // the caller resolves the winner and answers the replay.
-            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            await transaction.RollbackToSavepointAsync(savepoint, CancellationToken.None).ConfigureAwait(false);
             DetachStillborn(booking);
             throw new DuplicateIdempotencyKeyException(ex);
         }
@@ -85,6 +87,12 @@ public class EfBookingRepository : IBookingRepository
         }
 
         _db.Entry(booking).State = EntityState.Detached;
+        var pendingApplication = _db.ChangeTracker.Entries<Application>()
+            .FirstOrDefault(e => e.Entity.Id == booking.ApplicationId && e.State == EntityState.Added);
+        if (pendingApplication is not null)
+        {
+            pendingApplication.State = EntityState.Detached;
+        }
     }
 
     private static bool HasSqlState(Exception exception, string sqlState)

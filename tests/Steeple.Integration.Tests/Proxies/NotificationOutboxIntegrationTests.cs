@@ -35,7 +35,7 @@ public sealed class NotificationOutboxIntegrationTests
                 new EfNotificationRepository(db),
                 new NullAnalytics(),
                 new MutableTimeProvider(FixedNow),
-                Options.Create(new EmailOptions { WebBaseUrl = "https://steeple.example" }));
+                Options.Create(new EmailOptions { WebBaseUrl = "https://steeple.example" }), new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
             await dispatcher.NotifyAsync(
                 [new NotificationRecipient(user.Id, user.Email)],
@@ -106,7 +106,7 @@ public sealed class NotificationOutboxIntegrationTests
                 new EfNotificationRepository(db),
                 new NullAnalytics(),
                 new MutableTimeProvider(FixedNow),
-                Options.Create(new EmailOptions()));
+                Options.Create(new EmailOptions()), new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
             await dispatcher.NotifyAsync(
                 [new NotificationRecipient(user.Id, user.Email)],
                 NotificationType.ApplicationApproved,

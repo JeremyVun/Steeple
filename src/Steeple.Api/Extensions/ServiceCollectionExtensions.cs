@@ -271,6 +271,7 @@ public static class ServiceCollectionExtensions
             .Validate(options => options.IsValid(), "NotificationStream settings are outside their supported bounds.")
             .ValidateOnStart();
 
+        services.AddScoped<IServiceTransaction, EfServiceTransaction>();
         services.AddScoped<IApplicationService, ApplicationService>();
         services.AddScoped<IApplicationRepository, EfApplicationRepository>();
         services.AddScoped<IVenueManagerRepository, EfVenueManagerRepository>();

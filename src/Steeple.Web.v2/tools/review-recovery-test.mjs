@@ -132,6 +132,18 @@ await check('a stalled rate-limit body keeps its Retry-After for refresh recover
   }
 });
 
+await check('network failures keep the ApiError contract for reads, writes, and uploads', async () => {
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  const calls = [
+    () => api.searchListings(),
+    () => api.createSession({ provider: 'dev', idToken: 'offline@example.com' }),
+    () => api.uploadRoomPhoto('room', new Blob(['image']), { accessToken: 'token' }),
+  ];
+  for (const call of calls) {
+    await assert.rejects(call, (error) => error instanceof api.ApiError && error.status === 0 && error.timedOut === false);
+  }
+});
+
 const person = (id, name = 'Recovery Person') => ({
   accessToken: `access-${id}`,
   user: {
@@ -196,6 +208,44 @@ await check('a rate-limited refresh retains the person and retries after Retry-A
     globalThis.setTimeout = nativeSetTimeout;
   }
 });
+
+for (const delayed of ['profile', 'refresh', 'retried-profile']) {
+  await check(`an old ${delayed} refusal cannot sign out a replacement identity`, async () => {
+    let user = 'old';
+    let release;
+    let armed = false;
+    let profileCalls = 0;
+    globalThis.fetch = async (url, init = {}) => {
+      if (url.endsWith('/auth/sessions') && init.method === 'POST') return json(person(user));
+      if (url.endsWith('/auth/sessions') && init.method === 'DELETE') return new Response(null, { status: 204 });
+      if (url.endsWith('/auth/refresh')) {
+        if (!armed) return json({}, { status: 401 });
+        if (delayed === 'refresh') return new Promise((resolve) => { release = () => resolve(json({}, { status: 401 })); });
+        return json(person('old'));
+      }
+      if (url.endsWith('/me')) {
+        profileCalls += 1;
+        if (delayed === 'retried-profile' && profileCalls === 1) return json({}, { status: 401 });
+        return new Promise((resolve) => { release = () => resolve(json({}, { status: 401 })); });
+      }
+      throw new Error(`unexpected request ${url}`);
+    };
+    const session = await import(`../src/data/session.js?review-generation-${delayed}`);
+    await session.signIn({ email: 'old@example.com' });
+    armed = true;
+    const pending = delayed === 'refresh'
+      ? session.withAccess(async () => { throw new api.ApiError('expired', 401); }).catch((error) => error)
+      : session.fetchCurrentUser();
+    await settled(() => release);
+    user = 'new';
+    await session.signIn({ email: 'new@example.com' });
+    release();
+    await pending;
+    assert.equal(session.currentUser()?.id, 'new');
+    assert.equal(session.accessToken(), 'access-new');
+    await session.signOut();
+  });
+}
 
 function wireRoom(number) {
   return {

@@ -1489,7 +1489,7 @@ public class ApplicationServiceTests
             availability ?? new FakeAvailabilityService(), payments ?? new StubPaymentService(),
             flags ?? new FakeFeatureFlags(),
             notifications, turnstile, analytics,
-            new FixedTimeProvider(now ?? FixedNow));
+            new FixedTimeProvider(now ?? FixedNow), new PassThroughServiceTransaction());
     }
 
     /// <summary>
@@ -1840,6 +1840,8 @@ public class ApplicationServiceTests
 
         /// <summary>When set, the next <see cref="SaveAsync"/> loses the optimistic-concurrency race.</summary>
         public bool NextSaveLosesConcurrencyRace { get; set; }
+
+        public Task ReloadAsync(IReadOnlyList<Application> applications, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task SaveAsync(CancellationToken ct = default)
         {

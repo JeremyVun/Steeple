@@ -44,8 +44,8 @@ public class CancelledAvailabilityTests
             AddressLine = "1 Test Way",
             Suburb = "Vienna",
             Postcode = "22180",
-            Latitude = 38.9012,
-            Longitude = -77.2653,
+            Latitude = 0,
+            Longitude = 0,
             Timezone = "America/New_York",
             CreatedAtUtc = FixedNow,
             UpdatedAtUtc = FixedNow,
@@ -143,7 +143,7 @@ public class CancelledAvailabilityTests
         {
             var bookingService = new BookingService(new EfBookingRepository(db), new NullVenueManagers(),
                 new NullRatings(), new NullPaymentService(), new TestFeatureFlags(), new NullNotifications(),
-                new NullAnalytics(), new FixedTimeProvider(FixedNow), PaymentTestOptions.Payments());
+                new NullAnalytics(), new FixedTimeProvider(FixedNow), PaymentTestOptions.Payments(), new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
             var result = await bookingService.CancelAsync(booking.Id, organizer.Id,
                 new Steeple.Api.Contracts.Bookings.CancelBookingRequest("Cannot attend"));
             Assert.Null(result.Error);

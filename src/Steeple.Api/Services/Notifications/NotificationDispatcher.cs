@@ -14,6 +14,7 @@ public sealed class NotificationDispatcher : INotificationDispatcher
     private readonly INotificationRepository _repository;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly IServiceTransaction _transactions;
     private readonly EmailOptions _emailOptions;
 
     /// <summary>Creates the dispatcher from its ports.</summary>
@@ -21,11 +22,13 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         INotificationRepository repository,
         IAnalyticsSink analytics,
         TimeProvider clock,
-        IOptions<EmailOptions> emailOptions)
+        IOptions<EmailOptions> emailOptions,
+        IServiceTransaction transactions)
     {
         _repository = repository;
         _analytics = analytics;
         _clock = clock;
+        _transactions = transactions;
         _emailOptions = emailOptions.Value;
     }
 
@@ -97,7 +100,7 @@ public sealed class NotificationDispatcher : INotificationDispatcher
         // One SaveChanges call is the transaction boundary: an inbox row can never commit without
         // all delivery work decided for it, and failed provider calls happen later in the worker.
         await _repository.AddRangeAsync(rows, deliveries, ct).ConfigureAwait(false);
-        await TrackSafelyAsync(type, recipients.Count, email is not null).ConfigureAwait(false);
+        await _transactions.AfterCommitAsync(() => TrackSafelyAsync(type, recipients.Count, email is not null)).ConfigureAwait(false);
     }
 
     private static NotificationOutbox NewDelivery(

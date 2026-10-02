@@ -224,3 +224,24 @@ Only review documentation and reproduction tooling were added to the shared chec
 Owner clarification: "Require review and resubmission" for pending requests with no saved quote; "Start with contextual support email" using jvun@steepleapp.co.
 
 Remediation checkpoint: availability configuration persists explicit closure (migration025); all availability reads honor scheduled occurrences after late cancellation; touching windows are contiguous; submission/counter/confirmation reject elapsed sessions and invalid DST durations. Focused checks passed195 service tests and13 PostgreSQL tests before the final DST regression additions. Temporary Flutter SDK checkout: /private/tmp/steeple-review-flutter-sdk-a5lIke/flutter (official3.41.1 tag).
+
+Remediation checkpoint2: Astra committed visual fixes13–17 and explicit instant/manual setup
+(instant preselected), plus a one-off counter-offer date input defect: commits4446609/5753fba.
+59 real-input checks and56 composer checks passed;36 visual captures and22 composer geometry
+captures, zero axe issues. Evidence /private/tmp/steeple-review-visual-fixes-web-qMSTy2 and
+/private/tmp/steeple-composer-a-visual-web-q3sBwx. Lead has not inspected pixels.
+
+Terra web recovery commit8f180b0 covers4,5,6,9,10web; independent Sol review found remaining
+Retry wiring, stale profile failure and transport normalization bugs. Lead fixed those, expanded
+recovery coverage to12 data checks and3 production-behavior browser flows; all passed. The old
+Playtest suites are archived webv1 (playtest/README.md) and are not current validation.
+
+Atomic transaction checkpoint:619 unit tests passed;33 focused database tests and the added
+renewal/first-charge recovery cases passed. Mutation+notification faults roll back together;
+charges/refunds/analytics defer until commit. Further full regression is pending.
+
+Owner approved additional Astra assignment verbatim: "Yes, assign Astra this remaining UI work"
+for saved price/rules display, legacy request resubmission guidance, contextual support email,
+and web/mobile visual verification. Dispatch once a build-agent slot is free and wire contracts
+are concrete. Flutter runtime ready at /private/tmp/steeple-review-flutter-sdk-a5lIke/flutter,
+official3.41.5/Dart3.11.3. Mobile recovery and rating scalability parcels are currently independent.

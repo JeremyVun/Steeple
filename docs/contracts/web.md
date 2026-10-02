@@ -958,3 +958,5 @@ opt-out. Provider reason tokens are not rendered as product prose. Stripe destin
 HTTPS `connect.stripe.com`, with no credentials/non-default port. State and ready copy make no
 claim that live bookings or cross-border payouts are enabled. Web never loads the secret key.
 Test invocation and disposable-stack requirements: `tools/HARNESS.md`, `test:host-onboarding`.
+
+Review regression follow-up (2026-10-02): explicit discovery Retry passes `retry:true`, overriding outage cooldowns while preserving `Retry-After`. Session generation is checked before handling delayed `/me` and refresh failures so stale identities cannot expire a replacement sign-in. Transport failures from reads, writes and uploads remain `ApiError(status:0)`, distinct from successful-response parsing errors.

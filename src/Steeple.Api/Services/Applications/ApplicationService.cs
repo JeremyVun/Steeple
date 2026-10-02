@@ -34,6 +34,7 @@ public sealed class ApplicationService : IApplicationService
     private readonly ITurnstileVerifier _turnstile;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly IServiceTransaction _transactions;
 
     /// <summary>Creates the service from its ports.</summary>
     public ApplicationService(
@@ -47,7 +48,8 @@ public sealed class ApplicationService : IApplicationService
         INotificationDispatcher notifications,
         ITurnstileVerifier turnstile,
         IAnalyticsSink analytics,
-        TimeProvider clock)
+        TimeProvider clock,
+        IServiceTransaction transactions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
@@ -60,9 +62,9 @@ public sealed class ApplicationService : IApplicationService
         _turnstile = turnstile;
         _analytics = analytics;
         _clock = clock;
+        _transactions = transactions;
     }
 
-    /// <inheritdoc />
     public async Task<ApplicationResult<SubmitOutcome>> SubmitAsync(
         Guid roomId, Guid organizerId, SubmitApplicationRequest request, Guid? idempotencyKey, string? remoteIp, CancellationToken ct = default)
     {
@@ -72,6 +74,22 @@ public sealed class ApplicationService : IApplicationService
                 ApplicationErrorCodes.TurnstileFailed, "Turnstile verification failed.");
         }
 
+        try
+        {
+            return await _transactions.RunAsync(
+                () => SubmitCoreAsync(roomId, organizerId, request, idempotencyKey, remoteIp, ct), ct).ConfigureAwait(false);
+        }
+        catch (DuplicateIdempotencyKeyException)
+        {
+            var winner = await _repository.FindByIdempotencyKeyAsync(organizerId, idempotencyKey!.Value, ct).ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The idempotent request winner was not found.");
+            return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(winner.ToDto(includeThread: true), Created: false));
+        }
+    }
+
+    private async Task<ApplicationResult<SubmitOutcome>> SubmitCoreAsync(
+        Guid roomId, Guid organizerId, SubmitApplicationRequest request, Guid? idempotencyKey, string? remoteIp, CancellationToken ct = default)
+    {
         // Replays return the original application — the whole point of the idempotency key
         // (CONTRACTS §2): a retried POST must not put a second request in front of the church.
         if (idempotencyKey is { } key
@@ -152,26 +170,12 @@ public sealed class ApplicationService : IApplicationService
             ExpiresAtUtc = now + ApplicationExpiryPolicy.Window,
         };
 
-        try
+        if (instant)
         {
-            if (instant)
-            {
-                return await ConfirmInstantAsync(application, room, now, ct).ConfigureAwait(false);
-            }
-
-            await _repository.AddAsync(application, ct).ConfigureAwait(false);
+            return await ConfirmInstantAsync(application, room, now, ct).ConfigureAwait(false);
         }
-        catch (DuplicateIdempotencyKeyException)
-        {
-            // A concurrent retry with the same key won the insert race after the replay lookup
-            // above missed. The winner is the application this submit means — answer the replay.
-            // (The filtered unique index only fires when a key was supplied.)
-            var winner = await _repository.FindByIdempotencyKeyAsync(organizerId, idempotencyKey!.Value, ct).ConfigureAwait(false)
-                ?? throw new InvalidOperationException("The idempotent application vanished between conflict and read-back.");
-            return ApplicationResult<SubmitOutcome>.Ok(new SubmitOutcome(winner.ToDto(includeThread: true), Created: false));
-        }
+        await _repository.AddAsync(application, ct).ConfigureAwait(false);
 
-        // Re-load for the display graph (room/venue/organizer) the DTO and notifications need.
         var created = await _repository.GetAsync(application.Id, ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The application vanished between insert and read-back.");
 
@@ -250,7 +254,7 @@ public sealed class ApplicationService : IApplicationService
 
         // Post-commit charge kick (booking-modes.md charge timing): one-off → its only occurrence
         // in full, now; recurring → the first occurrence now, the rest at T−48h via the sweeper.
-        await _payments.ChargeAtConfirmationAsync(booking.Id, ct).ConfigureAwait(false);
+        await _transactions.AfterCommitAsync(() => _payments.ChargeAtConfirmationAsync(booking.Id, CancellationToken.None)).ConfigureAwait(false);
 
         var venue = room.Venue!;
         var deepLink = $"/bookings/{booking.Id}";
@@ -468,7 +472,7 @@ public sealed class ApplicationService : IApplicationService
     /// <inheritdoc />
     public Task<ApplicationResult<ApplicationDto>> AddMessageAsync(
         Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct = default) =>
-        GuardTransitionAsync(() => AddMessageCoreAsync(applicationId, callerId, request, ct));
+        GuardTransitionAsync(() => _transactions.RunAsync(() => AddMessageCoreAsync(applicationId, callerId, request, ct), ct));
 
     private async Task<ApplicationResult<ApplicationDto>> AddMessageCoreAsync(
         Guid applicationId, Guid callerId, ApplicationMessageRequest request, CancellationToken ct)
@@ -542,7 +546,7 @@ public sealed class ApplicationService : IApplicationService
     /// <inheritdoc />
     public Task<ApplicationResult<ApplicationDto>> DecideAsync(
         Guid applicationId, Guid callerId, ApplicationDecisionRequest request, CancellationToken ct = default) =>
-        GuardTransitionAsync(() => DecideCoreAsync(applicationId, callerId, request, ct));
+        GuardTransitionAsync(() => _transactions.RunAsync(() => DecideCoreAsync(applicationId, callerId, request, ct), ct));
 
     private async Task<ApplicationResult<ApplicationDto>> DecideCoreAsync(
         Guid applicationId, Guid callerId, ApplicationDecisionRequest request, CancellationToken ct)
@@ -614,7 +618,7 @@ public sealed class ApplicationService : IApplicationService
             // Post-commit charge kick (booking-modes.md): the first occurrence charges at
             // confirmation — approval and instant book share the same machinery. No-op for
             // bookings without a price snapshot (payments disabled at confirmation).
-            await _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, ct).ConfigureAwait(false);
+            await _transactions.AfterCommitAsync(() => _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, CancellationToken.None)).ConfigureAwait(false);
         }
 
         if (request.Message is { Length: > 0 } note)
@@ -666,7 +670,7 @@ public sealed class ApplicationService : IApplicationService
 
     /// <inheritdoc />
     public Task<ApplicationResult<ApplicationDto>> WithdrawAsync(Guid applicationId, Guid organizerId, CancellationToken ct = default) =>
-        GuardTransitionAsync(() => WithdrawCoreAsync(applicationId, organizerId, ct));
+        GuardTransitionAsync(() => _transactions.RunAsync(() => WithdrawCoreAsync(applicationId, organizerId, ct), ct));
 
     private async Task<ApplicationResult<ApplicationDto>> WithdrawCoreAsync(Guid applicationId, Guid organizerId, CancellationToken ct)
     {
@@ -703,7 +707,7 @@ public sealed class ApplicationService : IApplicationService
     /// <inheritdoc />
     public Task<ApplicationResult<ApplicationDto>> CounterOfferAsync(
         Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct = default) =>
-        GuardTransitionAsync(() => CounterOfferCoreAsync(applicationId, callerId, request, ct));
+        GuardTransitionAsync(() => _transactions.RunAsync(() => CounterOfferCoreAsync(applicationId, callerId, request, ct), ct));
 
     private async Task<ApplicationResult<ApplicationDto>> CounterOfferCoreAsync(
         Guid applicationId, Guid callerId, CounterOfferRequest request, CancellationToken ct)
@@ -820,7 +824,7 @@ public sealed class ApplicationService : IApplicationService
     /// <inheritdoc />
     public Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferAsync(
         Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct = default) =>
-        GuardTransitionAsync(() => RespondToCounterOfferCoreAsync(applicationId, callerId, request, ct));
+        GuardTransitionAsync(() => _transactions.RunAsync(() => RespondToCounterOfferCoreAsync(applicationId, callerId, request, ct), ct));
 
     private async Task<ApplicationResult<ApplicationDto>> RespondToCounterOfferCoreAsync(
         Guid applicationId, Guid callerId, CounterOfferResponseRequest request, CancellationToken ct)
@@ -892,7 +896,7 @@ public sealed class ApplicationService : IApplicationService
             }
 
             // Same post-commit charge kick as approval (no-op without a price snapshot).
-            await _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, ct).ConfigureAwait(false);
+            await _transactions.AfterCommitAsync(() => _payments.ChargeAtConfirmationAsync(confirmation.Booking!.Id, CancellationToken.None)).ConfigureAwait(false);
 
             await _applicationNotifications.NotifyManagersAsync(
                 application,
@@ -1069,9 +1073,7 @@ public sealed class ApplicationService : IApplicationService
         }
         catch (ConcurrentUpdateException)
         {
-            // A concurrent transition beat the sweep's flip — theirs is the truth, and the next
-            // read re-judges expiry against it. A read must not fail over this; a mutation
-            // following this sweep conflicts again on its own save and answers there.
+            await _repository.ReloadAsync(lapsed, ct).ConfigureAwait(false);
         }
     }
 
@@ -1127,7 +1129,7 @@ public sealed class ApplicationService : IApplicationService
     {
         try
         {
-            await _analytics.TrackAsync(eventType, payload, sessionId: null, ct).ConfigureAwait(false);
+            await _transactions.AfterCommitAsync(() => _analytics.TrackAsync(eventType, payload, sessionId: null, CancellationToken.None)).ConfigureAwait(false);
         }
         catch
         {

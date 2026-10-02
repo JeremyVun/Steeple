@@ -169,7 +169,7 @@ async function get(path, params, { notFoundAsNull = false, accessToken = null, s
     return await response.json();
   } catch (cause) {
     if (cause instanceof ApiError) throw cause;
-    if (request.controller.signal.aborted) {
+    if (!response || cause instanceof TypeError || request.controller.signal.aborted) {
       throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
     }
     throw cause;
@@ -221,7 +221,7 @@ async function send(method, path, body, { accessToken = null, headers = {}, time
     return document;
   } catch (cause) {
     if (cause instanceof ApiError) throw cause;
-    if (request.controller.signal.aborted) {
+    if (!response || cause instanceof TypeError || request.controller.signal.aborted) {
       throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
     }
     throw cause;
@@ -263,7 +263,7 @@ async function upload(path, form, { accessToken = null, timeoutMs = 20000, signa
     return document;
   } catch (cause) {
     if (cause instanceof ApiError) throw cause;
-    if (request.controller.signal.aborted) {
+    if (!response || cause instanceof TypeError || request.controller.signal.aborted) {
       throw request.failed(path, cause, { retryAfterMs: responseRetryAfterMs });
     }
     throw cause;

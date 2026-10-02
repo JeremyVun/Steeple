@@ -103,7 +103,7 @@ public class CounterOfferRaceTests
         new NullNotifications(),
         new NullAnalytics(),
         new FixedTimeProvider(FixedNow),
-        PaymentTestOptions.Payments());
+        PaymentTestOptions.Payments(), new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
     private async Task<Guid> SeedApplicationAsync(
         Guid roomId, ScheduleFrequency frequency, DateOnly date, TimeOnly startTime, TimeOnly endTime, ApplicationStatus status)

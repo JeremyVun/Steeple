@@ -174,7 +174,7 @@ public class NotificationDispatcherTests
             repository,
             analytics,
             new FixedTimeProvider(FixedNow),
-            Options.Create(new EmailOptions { WebBaseUrl = webBaseUrl }));
+            Options.Create(new EmailOptions { WebBaseUrl = webBaseUrl }), new PassThroughServiceTransaction());
         return (dispatcher, repository, analytics);
     }
 

@@ -195,3 +195,5 @@ Extend the existing account-only webhook ledger/edge with durable payment-event 
 commission (column exists, 0 today); Stripe email receipts; disputes; reconciliation report;
 ToS/refund-policy pages. `payments` rows keep `ProviderPaymentId` only on success — a failed
 attempt's provider id is not retained (the failure code is the history).
+
+The sweep also recovers the first uncharged occurrence of a confirmed in-app booking before T−48h. The confirmation kick always targets the first occurrence, so repeating it cannot charge a later session early. Application/booking transactions enqueue charge/refund callbacks only after their notification records have committed.

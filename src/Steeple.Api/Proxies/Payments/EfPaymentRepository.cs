@@ -203,7 +203,9 @@ public class EfPaymentRepository : IPaymentRepository
         DateTimeOffset nowUtc, DateTimeOffset windowEndUtc, CancellationToken ct = default)
     {
         var occurrences = await ChargeableOccurrences()
-            .Where(o => o.StartUtc > nowUtc && o.StartUtc <= windowEndUtc)
+            .Where(o => o.StartUtc > nowUtc
+                && (o.StartUtc <= windowEndUtc
+                    || !o.Booking!.Occurrences.Any(previous => previous.StartUtc < o.StartUtc)))
             .OrderBy(o => o.StartUtc)
             .ToListAsync(ct)
             .ConfigureAwait(false);
@@ -215,7 +217,8 @@ public class EfPaymentRepository : IPaymentRepository
     public async Task<ChargeCandidate?> GetFirstChargeCandidateForBookingAsync(Guid bookingId, CancellationToken ct = default)
     {
         var occurrence = await ChargeableOccurrences()
-            .Where(o => o.BookingId == bookingId)
+            .Where(o => o.BookingId == bookingId
+                && !o.Booking!.Occurrences.Any(previous => previous.StartUtc < o.StartUtc))
             .OrderBy(o => o.StartUtc)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);

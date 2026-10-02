@@ -34,6 +34,7 @@ public sealed class BookingService : IBookingService
     private readonly INotificationDispatcher _notifications;
     private readonly IAnalyticsSink _analytics;
     private readonly TimeProvider _clock;
+    private readonly IServiceTransaction _transactions;
     private readonly TimeSpan _chargeWindow;
 
     /// <summary>Creates the service from its ports.</summary>
@@ -46,7 +47,8 @@ public sealed class BookingService : IBookingService
         INotificationDispatcher notifications,
         IAnalyticsSink analytics,
         TimeProvider clock,
-        IOptions<PaymentsOptions> paymentsOptions)
+        IOptions<PaymentsOptions> paymentsOptions,
+        IServiceTransaction transactions)
     {
         _repository = repository;
         _venueManagers = venueManagers;
@@ -56,6 +58,7 @@ public sealed class BookingService : IBookingService
         _notifications = notifications;
         _analytics = analytics;
         _clock = clock;
+        _transactions = transactions;
         _chargeWindow = TimeSpan.FromHours(paymentsOptions.Value.ChargeWindowHours);
     }
 
@@ -65,7 +68,10 @@ public sealed class BookingService : IBookingService
         _repository.CountUpcomingForOrganizerAsync(organizerId, venueId, _clock.GetUtcNow(), ct);
 
     /// <inheritdoc />
-    public async Task<BookingConfirmation> ConfirmFromApplicationAsync(
+    public Task<BookingConfirmation> ConfirmFromApplicationAsync(Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default) =>
+        _transactions.RunAsync(() => ConfirmFromApplicationCoreAsync(application, schedule, instant, ct), ct);
+
+    private async Task<BookingConfirmation> ConfirmFromApplicationCoreAsync(
         Application application, ScheduleSpec? schedule = null, bool instant = false, CancellationToken ct = default)
     {
         var room = application.Room ?? throw new InvalidOperationException("Application passed without its room.");
@@ -248,6 +254,13 @@ public sealed class BookingService : IBookingService
     public async Task<BookingResult<BookingDto>> CancelAsync(
         Guid bookingId, Guid callerId, CancelBookingRequest request, CancellationToken ct = default)
     {
+        var result = await _transactions.RunAsync(() => CancelCoreAsync(bookingId, callerId, request, ct), ct).ConfigureAwait(false);
+        return result.Error is null ? await GetAsync(bookingId, callerId, ct).ConfigureAwait(false) : result;
+    }
+
+    private async Task<BookingResult<BookingDto>> CancelCoreAsync(
+        Guid bookingId, Guid callerId, CancelBookingRequest request, CancellationToken ct = default)
+    {
         var reason = request.Reason?.Trim();
         if (reason is { Length: > MaxReasonLength })
         {
@@ -293,7 +306,7 @@ public sealed class BookingService : IBookingService
         // Post-commit: return any charges now sitting on cancelled occurrences (full refund —
         // guest ≥48h cancels and host rescinds both reduce to this rule). The sweeper re-runs the
         // same rule every pass, so a failure here only delays the refund, never loses it.
-        await _payments.RefundCancelledForBookingAsync(booking.Id, ct).ConfigureAwait(false);
+        await _transactions.AfterCommitAsync(() => _payments.RefundCancelledForBookingAsync(booking.Id, CancellationToken.None)).ConfigureAwait(false);
 
         var email = BuildCancellationEmail(booking, cancelledByOrganizer);
         if (cancelledByOrganizer)
@@ -322,7 +335,10 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
-    public async Task<BookingResult<BookingDto>> MarkNoShowAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default)
+    public Task<BookingResult<BookingDto>> MarkNoShowAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default) =>
+        _transactions.RunAsync(() => MarkNoShowCoreAsync(occurrenceId, callerId, ct), ct);
+
+    private async Task<BookingResult<BookingDto>> MarkNoShowCoreAsync(Guid occurrenceId, Guid callerId, CancellationToken ct = default)
     {
         var occurrence = await _repository.GetOccurrenceAsync(occurrenceId, ct).ConfigureAwait(false);
         var booking = occurrence?.Booking;
@@ -377,7 +393,11 @@ public sealed class BookingService : IBookingService
     }
 
     /// <inheritdoc />
-    public async Task CancelOccurrencesForPaymentFailureAsync(
+    public Task CancelOccurrencesForPaymentFailureAsync(
+        Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default) =>
+        _transactions.RunAsync(() => CancelOccurrencesForPaymentFailureCoreAsync(bookingId, occurrenceIds, cancelRemainingTerm, ct), ct);
+
+    private async Task CancelOccurrencesForPaymentFailureCoreAsync(
         Guid bookingId, IReadOnlyList<Guid> occurrenceIds, bool cancelRemainingTerm, CancellationToken ct = default)
     {
         var booking = await _repository.GetAsync(bookingId, ct).ConfigureAwait(false);
@@ -514,7 +534,10 @@ public sealed class BookingService : IBookingService
     /// <see cref="RenewalNudgeWindow"/> gets its one renewal-due nudge. Returns the sweep's
     /// "now" so callers project DTOs against the same instant.
     /// </summary>
-    private async Task<DateTimeOffset> SweepAsync(IReadOnlyList<Booking> bookings, CancellationToken ct)
+    private Task<DateTimeOffset> SweepAsync(IReadOnlyList<Booking> bookings, CancellationToken ct) =>
+        _transactions.RunAsync(() => SweepCoreAsync(bookings, ct), ct);
+
+    private async Task<DateTimeOffset> SweepCoreAsync(IReadOnlyList<Booking> bookings, CancellationToken ct)
     {
         var now = _clock.GetUtcNow();
         var today = DateOnly.FromDateTime(now.UtcDateTime);
@@ -685,7 +708,7 @@ public sealed class BookingService : IBookingService
     {
         try
         {
-            await _analytics.TrackAsync(eventType, payload, sessionId: null, ct).ConfigureAwait(false);
+            await _transactions.AfterCommitAsync(() => _analytics.TrackAsync(eventType, payload, sessionId: null, CancellationToken.None)).ConfigureAwait(false);
         }
         catch
         {

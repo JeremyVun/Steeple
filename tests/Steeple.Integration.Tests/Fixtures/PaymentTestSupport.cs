@@ -11,6 +11,7 @@ namespace Steeple.Integration.Tests.Fixtures;
 public sealed class NullPaymentService : IPaymentService
 {
     public bool HasMethod { get; set; } = true;
+    public Action? BeforeKick { get; set; }
 
     public List<Guid> ChargeKicks { get; } = [];
 
@@ -30,6 +31,7 @@ public sealed class NullPaymentService : IPaymentService
 
     public Task ChargeAtConfirmationAsync(Guid bookingId, CancellationToken ct = default)
     {
+        BeforeKick?.Invoke();
         ChargeKicks.Add(bookingId);
         return Task.CompletedTask;
     }
@@ -39,6 +41,7 @@ public sealed class NullPaymentService : IPaymentService
 
     public Task RefundCancelledForBookingAsync(Guid bookingId, CancellationToken ct = default)
     {
+        BeforeKick?.Invoke();
         RefundKicks.Add(bookingId);
         return Task.CompletedTask;
     }

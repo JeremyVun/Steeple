@@ -131,7 +131,7 @@ public class PaymentIntegrationTests
         {
             // A recurring instant booking: the first occurrence charges at confirmation, the
             // SECOND is the sweeper's to charge when it enters the window.
-            var (applications, _, _) = CreateStack(db);
+            var (applications, _, payments) = CreateStack(db);
             var result = await applications.SubmitAsync(
                 ClassroomBId, organizerId,
                 SubmitRequest(new DateOnly(2027, 8, 3), new TimeOnly(18, 0), new TimeOnly(20, 0),
@@ -146,6 +146,7 @@ public class PaymentIntegrationTests
             occurrenceId = second.Id;
             occurrenceStart = second.StartUtc;
 
+            await payments.ChargeAtConfirmationAsync(booking.Id);
             Assert.Equal(1, await db.Payments.CountAsync(p => p.BookingId == booking.Id)); // first occurrence only
         }
 
@@ -309,12 +310,12 @@ public class PaymentIntegrationTests
 
         var bookings = new BookingService(
             new EfBookingRepository(db), venueManagers, new NullRatings(), payments, flags,
-            new NullNotifications(), new NullAnalytics(), clock, options);
+            new NullNotifications(), new NullAnalytics(), clock, options, new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
         var applications = new ApplicationService(
             new EfApplicationRepository(db), venueManagers, bookings, new NullRatings(),
             new AvailabilityService(new EfAvailabilityRepository(db), venueManagers, new NullAnalytics(), clock),
-            payments, flags, new NullNotifications(), new PassTurnstile(), new NullAnalytics(), clock);
+            payments, flags, new NullNotifications(), new PassTurnstile(), new NullAnalytics(), clock, new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
         return (applications, bookings, payments);
     }

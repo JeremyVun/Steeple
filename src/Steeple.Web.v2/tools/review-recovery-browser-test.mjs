@@ -19,7 +19,15 @@ const origin = `http://127.0.0.1:${port}`;
 const profile = await mkdtemp(join(tmpdir(), 'steeple-review-recovery-browser-'));
 const vite = spawn(
   process.execPath,
-  ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+  ['--input-type=module', '-e', `
+    import { createServer } from 'vite';
+    const server = await createServer({
+      envDir: false,
+      define: { 'import.meta.env.DEV': 'false' },
+      server: { host: '127.0.0.1', port: ${port}, strictPort: true },
+    });
+    await server.listen();
+  `],
   { env: { ...process.env, VITE_WORLD: 'off', VITE_DEBUG: 'on' }, stdio: ['ignore', 'ignore', 'pipe'] }
 );
 let viteError = '';
@@ -78,7 +86,7 @@ async function intercept(request) {
   if (path === '/listings/search') {
     const page = Number(url.searchParams.get('page') ?? '1');
     searches.push(page);
-    if (mode === 'outage') return response(request, { code: 'temporarily_unavailable' }, 500);
+    if (mode === 'outage') return response(request, { code: 'temporarily_unavailable' }, 503);
     if (mode === 'rate-limited') {
       return response(request, { code: 'rate_limited' }, 429, { 'retry-after': '60' });
     }

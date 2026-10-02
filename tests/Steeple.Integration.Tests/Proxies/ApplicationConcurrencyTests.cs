@@ -185,7 +185,8 @@ public class ApplicationConcurrencyTests
             var service = CreateBookingService(db);
             var past = await repo.GetAsync(pastAppId);
             past!.Status = ApplicationStatus.Approved;
-            pastBookingId = (await service.ConfirmFromApplicationAsync(past)).Booking!.Id;
+            pastBookingId = (await CreateBookingService(db, new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero))
+                .ConfirmFromApplicationAsync(past)).Booking!.Id;
             var future = await repo.GetAsync(futureAppId);
             future!.Status = ApplicationStatus.Approved;
             futureBookingId = (await service.ConfirmFromApplicationAsync(future)).Booking!.Id;
@@ -211,7 +212,7 @@ public class ApplicationConcurrencyTests
             .Options);
 
     /// <summary>The real service over the real repository; notification/analytics/payment ports are inert.</summary>
-    private static BookingService CreateBookingService(SteepleDbContext db) => new(
+    private static BookingService CreateBookingService(SteepleDbContext db, DateTimeOffset? now = null) => new(
         new EfBookingRepository(db),
         new NullVenueManagers(),
         new NullRatings(),
@@ -219,8 +220,8 @@ public class ApplicationConcurrencyTests
         new TestFeatureFlags(),
         new NullNotifications(),
         new NullAnalytics(),
-        new FixedTimeProvider(FixedNow),
-        PaymentTestOptions.Payments());
+        new FixedTimeProvider(now ?? FixedNow),
+        PaymentTestOptions.Payments(), new EfServiceTransaction(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<EfServiceTransaction>.Instance));
 
     private async Task<(Guid ApplicationId, Guid OrganizerId)> SeedOneOffAsync(
         Guid roomId, DateOnly date, TimeOnly startTime, TimeOnly endTime,

@@ -86,6 +86,11 @@ public class EfApplicationRepository : IApplicationRepository
     /// <inheritdoc />
     public Task AddMessageAsync(ApplicationMessage message, CancellationToken ct = default)
     {
+        var application = _db.Applications.Local.FirstOrDefault(a => a.Id == message.ApplicationId);
+        if (application is not null)
+        {
+            _db.Entry(application).Property(a => a.Status).IsModified = true;
+        }
         _db.ApplicationMessages.Add(message);
         return SaveAsync(ct);
     }
@@ -105,6 +110,18 @@ public class EfApplicationRepository : IApplicationRepository
             // The application's xmin token says another request committed a transition after this
             // one loaded the row — surface the conflict instead of overwriting their decision.
             throw new ConcurrentUpdateException(ex);
+        }
+    }
+
+    public async Task ReloadAsync(IReadOnlyList<Application> applications, CancellationToken ct = default)
+    {
+        foreach (var application in applications)
+        {
+            await _db.Entry(application).ReloadAsync(ct).ConfigureAwait(false);
+            foreach (var counter in application.CounterOffers.ToList())
+            {
+                await _db.Entry(counter).ReloadAsync(ct).ConfigureAwait(false);
+            }
         }
     }
 

@@ -32,13 +32,13 @@ const ANYWHERE = 'Anywhere nearby';
 
 // .NET's DayOfWeek, which is what the API speaks: Sunday is 0.
 const DAYS = [
+  { n: 0, short: 'Sun', long: 'Sunday' },
   { n: 1, short: 'Mon', long: 'Monday' },
   { n: 2, short: 'Tue', long: 'Tuesday' },
   { n: 3, short: 'Wed', long: 'Wednesday' },
   { n: 4, short: 'Thu', long: 'Thursday' },
   { n: 5, short: 'Fri', long: 'Friday' },
   { n: 6, short: 'Sat', long: 'Saturday' },
-  { n: 0, short: 'Sun', long: 'Sunday' },
 ];
 
 const BANDS = [

@@ -282,6 +282,7 @@ export async function withAccess(work) {
   let token = access;
   if (!token) {
     token = await refresh();
+    if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
     if (!token) {
       expireIfHeld();
       throw new api.ApiError('not signed in', 401);
@@ -299,6 +300,7 @@ export async function withAccess(work) {
 
   access = null;
   const fresh = await refresh();
+  if (started !== generation || suppressed) throw new api.ApiError('session changed', 401);
   if (!fresh) {
     expireIfHeld();
     throw new api.ApiError('not signed in', 401);
@@ -337,16 +339,19 @@ export function fetchCurrentUser(reason = REASON.refreshed) {
       try {
         me = await api.getMe(token);
       } catch (error) {
+        if (started !== generation || suppressed) return currentUser();
         if (error?.status !== 401) return currentUser();
         access = null;
         token = await refresh();
-        if (!token || started !== generation || suppressed) {
+        if (started !== generation || suppressed) return currentUser();
+        if (!token) {
           expireIfHeld();
           return currentUser();
         }
         try {
           me = await api.getMe(token);
         } catch (retryError) {
+          if (started !== generation || suppressed) return currentUser();
           if (retryError?.status === 401) expireIfHeld();
           return currentUser();
         }

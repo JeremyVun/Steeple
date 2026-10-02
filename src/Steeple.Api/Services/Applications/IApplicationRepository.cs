@@ -70,4 +70,6 @@ public interface IApplicationRepository
     /// to the same application after this one loaded it (optimistic concurrency).
     /// </summary>
     Task SaveAsync(CancellationToken ct = default);
+
+    Task ReloadAsync(IReadOnlyList<Application> applications, CancellationToken ct = default);
 }

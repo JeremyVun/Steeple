@@ -347,3 +347,5 @@ are free client libraries; provider Connect usage fees remain separate. No new v
 Host opt-in records future intent only. Live AU-to-US fund flow and merchant responsibilities
 remain undecided. Account webhooks reconcile inline with a minimal ledger and provider retries;
 general payment-event background recovery remains in the payments backlog.
+
+| 2026-10-02 | Application and booking mutations commit with inbox/outbox rows through a nested service transaction; provider calls stay post-commit. Booking exclusion losses use a savepoint, preserving atomic auto-decline and notification. | Prevents saved actions without notifications after dispatcher failures, including direct service and worker paths. Missed first-charge kicks are recoverable by the sweep. |

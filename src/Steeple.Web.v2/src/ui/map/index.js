@@ -31,7 +31,7 @@ import { createSheet } from './sheet.js';
 export function createDiscovery({ announce = () => {} } = {}) {
   // `search` is built below, out of this: the way back from a refused search is
   // to ask it again.
-  const results = createResults({ onRetry: () => search.search() });
+  const results = createResults({ onRetry: () => search.search({ retry: true }) });
 
   // ── head ───────────────────────────────────────────────────────────────────
   //
