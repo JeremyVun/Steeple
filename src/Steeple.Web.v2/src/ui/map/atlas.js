@@ -67,11 +67,7 @@ const churchIcon = (venue) =>
     iconAnchor: [15, 38],
   });
 
-/**
- * How much more map a gesture buys than it used to (CONTRACT5 §2.3). One
- * number, applied to the drag; the wheel is tuned to the same figure by
- * measurement below, because Leaflet will not take a multiplier for it.
- */
+// Leaflet's drag handler has no gain option.
 const FASTER = 1.3;
 
 // A compass mark for the near-me control: ringed dot, four ticks.
@@ -85,19 +81,12 @@ const LOCATE_ICON =
 export function createAtlas() {
   const element = el('div', { class: 'dm-map', role: 'application', 'aria-label': 'Map of the five venues. Drag to pan, scroll to zoom.' });
 
-  // Pace, measured in what actually happens rather than in what the number
-  // says. Leaflet puts the wheel through a sigmoid and then rounds the result
-  // *up* to the nearest zoomSnap, so the snap, not wheelPxPerZoomLevel, was
-  // setting the pace: at 0.25 the smallest possible scroll still moved a
-  // quarter of a level, and a 60px notch — raw value 0.35 — was rounded up to
-  // 0.5. A finer snap hands the rate back to the wheel, and 21px per level puts
-  // a notch at 0.65: the 30% asked for, and no more lurching on a small scroll.
-  // + and − still take a whole level each. Numbers verified with real wheel
-  // input by tools/map-feel.mjs; re-run it after touching either of them.
+  // Leaflet applies a sigmoid before snapping; keep the snap fine so small
+  // trackpad gestures stay precise as the wheel sensitivity increases.
   const map = L.map(element, {
     zoomSnap: 0.05,
     zoomDelta: 1,
-    wheelPxPerZoomLevel: 21,
+    wheelPxPerZoomLevel: 14,
     keyboardPanDelta: 104,
     zoomControl: false,
     attributionControl: true,
@@ -106,7 +95,7 @@ export function createAtlas() {
     doubleClickZoom: false,
   });
 
-  // The drag, at the same pace. Leaflet's drag is 1:1 with the pointer and has
+  // Leaflet's drag is 1:1 with the pointer and has
   // no option to be anything else, so the gain is applied at the one seam it
   // offers: `predrag` fires with the pane's next position already worked out
   // and still writable — the same hook Leaflet's own bounds-viscosity and

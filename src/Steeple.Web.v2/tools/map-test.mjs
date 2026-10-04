@@ -342,9 +342,7 @@ check('...and re-asked as a search', (await text('.dm-count')).startsWith('1 spa
 
 // ── 9. zoom, with some pace in it ───────────────────────────────────────────
 // Measured the way it is felt: how many zoom levels one gesture actually moves.
-// Wave 4 doubled it — + from half a level to a whole one, a 60px notch of the
-// wheel from a quarter to a half. Wave 6 took the notch 30% further again, to
-// 0.65 (CONTRACT5 §2.3); tools/map-feel.mjs is where that number is measured.
+// Buttons and a 60px wheel notch each move about one level.
 await ready(at(url, routes.browse()));
 const beforeButton = await pinSpread();
 await realClick('.leaflet-control-zoom-in');
@@ -358,7 +356,7 @@ await page.mouse.move(mapBox.cx, mapBox.cy);
 await page.mouse.wheel({ deltaY: -60 });
 await wait(1400);
 const wheelLevels = Math.log2((await pinSpread()) / beforeWheel);
-check('one notch of the wheel moves 0.65 of a level, where it moved half', wheelLevels > 0.62 && wheelLevels < 0.68, `${wheelLevels.toFixed(2)} levels`);
+check('one notch of the wheel moves about 0.95 levels', wheelLevels > 0.92 && wheelLevels < 0.98, `${wheelLevels.toFixed(2)} levels`);
 
 // ── 10. a church placed but not published: shown, never clickable ───────────
 // The wheel gesture above deliberately clips the result list to the visible

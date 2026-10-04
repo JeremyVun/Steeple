@@ -424,6 +424,12 @@ venue's rooms against its new sitemap and listing reads; removed rooms leave the
 cache-owning read captures the generation that began it, so an older sitemap, detail or search
 answer cannot restore data after invalidation.
 
+**Map wheel sensitivity** (`ui/map/atlas.js`, 2026-10-04). A 60px wheel gesture moves
+about 0.95 zoom levels in either direction (previously 0.65), anchored at the pointer.
+`wheelPxPerZoomLevel: 14` retains `zoomSnap: 0.05` for fine trackpad gestures; buttons
+still move one level and drag gain remains 1.3. `tools/map-test.mjs` guards the normal
+wheel gesture. The archived v1 Playtest suites are not applicable to this v2 surface.
+
 **One question per settled gesture** (`ui/map/search.js`). Every control calls `ask()`, which
 waits **150ms** for the hand to stop before going to steeple; `search()` — the boot read, the
 **Try again** press, a filter set from elsewhere — goes immediately. Each run aborts whatever is
